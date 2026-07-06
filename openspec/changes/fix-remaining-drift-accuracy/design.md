@@ -8,13 +8,16 @@ The design focuses on practical completion, not new features.
 
 ```text
 migrations
-feature status taxonomy
+explicit repository writes
+feature status taxonomy and precedence
+skipped feature-row policy
 lineage propagation
 historical quality as-of lookup
 filter fail-closed semantics
 assistant date consistency
-outcome aggregate versioning
-metric policy selection
+outcome aggregate versioning and history policy
+metric policy selection and fallback
+range evaluation semantics
 regression tests
 ```
 
@@ -76,9 +79,45 @@ risk_flag_performance.metric_policy_version VARCHAR
 
 `outcome_evaluation_run` should be created through normal DDL and should also be safe when introduced to an old DB.
 
+### Repository write rule
+
+All repository writes to migrated tables SHALL use explicit column lists.
+
+Do not use:
+
+```sql
+INSERT INTO candidate_outcome VALUES (...)
+```
+
+Use:
+
+```sql
+INSERT INTO candidate_outcome (
+  symbol,
+  watchlist_date,
+  horizon_sessions,
+  ...
+) VALUES (...)
+```
+
+This applies to:
+
+```text
+feature_snapshot
+rejected_symbol
+candidate_score
+daily_watchlist
+candidate_outcome
+watchlist_outcome
+score_bucket_performance
+setup_type_performance
+risk_flag_performance
+outcome_evaluation_run
+```
+
 ### Migration test
 
-Create an old-schema in-memory DuckDB, run migrations, and verify all columns exist.
+Create an old-schema in-memory DuckDB, run migrations, and verify all columns exist. Run migrations twice to prove idempotency.
 
 ## 2. Feature status taxonomy
 
@@ -95,18 +134,60 @@ CURRENT -> EXACT_DATE
 STALE   -> STALE_DATE
 ```
 
-Add benchmark-sensitive status rules:
+Approved persisted `feature_data_status` values:
 
 ```text
-EXACT_DATE           symbol as_of_bar_date == target_date and benchmark exact or not required
-STALE_DATE           symbol as_of_bar_date < target_date
-MISSING_BENCHMARK    benchmark is required but unavailable
-PARTIAL_BENCHMARK    benchmark exists but benchmark_as_of_bar_date < target_date
-INSUFFICIENT_HISTORY  symbol has canonical rows but too few to build features
-MISSING_CANONICAL    no symbol canonical rows exist
+EXACT_DATE
+STALE_DATE
+MISSING_BENCHMARK
+PARTIAL_BENCHMARK
 ```
 
-Skipped symbols may remain only in logs for MVP, but any persisted feature row must use approved values.
+Diagnostic statuses for skipped symbols:
+
+```text
+INSUFFICIENT_HISTORY
+MISSING_CANONICAL
+```
+
+### Status precedence
+
+When multiple conditions apply, use this precedence:
+
+```text
+MISSING_CANONICAL
+> INSUFFICIENT_HISTORY
+> MISSING_BENCHMARK
+> PARTIAL_BENCHMARK
+> STALE_DATE
+> EXACT_DATE
+```
+
+MVP persistence policy:
+
+```text
+- feature_snapshot SHALL persist only successfully built feature rows.
+- MISSING_CANONICAL and INSUFFICIENT_HISTORY SHALL be reported in build summary/skipped reasons, not persisted as null feature rows.
+- If a future implementation persists skipped rows, it must add a dedicated nullable-feature schema and tests before enabling that behavior.
+```
+
+Persisted feature rows therefore use one of:
+
+```text
+EXACT_DATE
+STALE_DATE
+MISSING_BENCHMARK
+PARTIAL_BENCHMARK
+```
+
+Skipped rows may report:
+
+```text
+INSUFFICIENT_HISTORY
+MISSING_CANONICAL
+```
+
+but they are not written to `feature_snapshot` in the MVP.
 
 ## 3. Complete lineage propagation
 
@@ -130,7 +211,7 @@ scored.source_quality_status
 
 `daily_watchlist.lineage_json` should copy the candidate score lineage unchanged.
 
-### Optional hardening
+### Missing lineage behavior
 
 If lineage is missing, include:
 
@@ -139,7 +220,17 @@ lineage_status
 lineage_warnings
 ```
 
-and expose this in `/lineage` and `/explain`.
+Allowed `lineage_status` values:
+
+```text
+COMPLETE
+PARTIAL
+MISSING_PROVIDER
+MISSING_INGESTION_RUN
+MISSING_FEATURE_SOURCE
+```
+
+`/lineage` and `/explain` must surface missing lineage warnings.
 
 ## 4. True as-of-date quality lookup
 
@@ -206,11 +297,22 @@ Recommended behavior:
 validate_filters(...) raises FilterValidationError
 watchlist.filter does not catch it, or wraps it as ToolExecutionError
 TracedLocalToolExecutor records tool_trace.status = FAILED
-CommandExecutor returns VALIDATION_ERROR if mapped from filter validation
-Assistant refuses/fails with a validation response, not empty result
+CommandExecutor maps FilterValidationError to VALIDATION_ERROR
+Assistant marks assistant_session as VALIDATION_ERROR or REFUSED according to policy
+Assistant answer must not present invalid-filter output as an empty valid result
 ```
 
 The tool must not silently return an empty result for invalid fields.
+
+### Mapping rule
+
+Filter validation failures are user/input validation failures, not runtime failures.
+
+```text
+CLI/TUI command result: VALIDATION_ERROR
+assistant_session status: VALIDATION_ERROR, or REFUSED if policy classifies the prompt as unsafe before tool execution
+tool_trace status: FAILED
+```
 
 ## 6. Assistant explain date consistency
 
@@ -228,7 +330,7 @@ quality.get_status arguments = {symbol, date}
 
 If date is missing, AssistantApp should inject the resolved target date before planning or normalize entities consistently.
 
-## 7. Outcome aggregate versioning
+## 7. Outcome aggregate versioning and history policy
 
 ### Problem
 
@@ -254,7 +356,27 @@ evaluator_version
 metric_policy_version
 ```
 
-If aggregates are recomputed manually outside an evaluation run, use a new evaluation run or persist an explicit `MANUAL_RECOMPUTE` run id.
+### History policy
+
+Preferred policy: preserve aggregate history.
+
+```text
+watchlist_outcome primary key:
+  evaluation_run_id, watchlist_date, horizon_sessions
+
+score_bucket_performance primary key:
+  evaluation_run_id, as_of_date, horizon_sessions, score_bucket
+
+setup_type_performance primary key:
+  evaluation_run_id, as_of_date, horizon_sessions, setup_type
+
+risk_flag_performance primary key:
+  evaluation_run_id, as_of_date, horizon_sessions, risk_flag
+```
+
+If the implementation keeps latest-only aggregate tables with existing keys, it must add separate historical aggregate snapshot tables and document the latest-only behavior. It must not silently overwrite the only copy of aggregate results without preserving a run-linked history.
+
+Manual aggregate recompute outside an evaluation run must create a new evaluation run with reason `MANUAL_RECOMPUTE` or equivalent.
 
 ## 8. Configurable outcome metric policy
 
@@ -267,7 +389,7 @@ If aggregates are recomputed manually outside an evaluation run, use a new evalu
 Add a metric policy parameter:
 
 ```python
- evaluate_watchlist_date(conn, watchlist_date, horizons=None, metric_policy=CLOSE_ONLY_V1)
+evaluate_watchlist_date(conn, watchlist_date, horizons=None, metric_policy=CLOSE_ONLY_V1)
 ```
 
 CLI:
@@ -288,13 +410,26 @@ OHLC_HIGH_LOW_V1:
   max_drawdown = min(low / entry_close - 1)
 ```
 
-If high/low is missing under `OHLC_HIGH_LOW_V1`, fallback should be explicit:
+If high/low is missing under `OHLC_HIGH_LOW_V1`, fallback must be explicit.
+
+Allowed policies:
 
 ```text
-fallback_to_close_only = true
-metric_policy_effective = CLOSE_ONLY_V1_FALLBACK
-warning recorded in error_json or result summary
+OHLC_HIGH_LOW_V1_STRICT:
+  missing high/low => outcome_status = PARTIAL and warning persisted
+
+OHLC_HIGH_LOW_V1_FALLBACK:
+  missing high/low => use close-only for affected metric and persist metric_policy_effective = CLOSE_ONLY_V1_FALLBACK
 ```
+
+MVP recommended behavior:
+
+```text
+Use OHLC_HIGH_LOW_V1_FALLBACK as the CLI default only if high/low coverage is incomplete.
+Otherwise keep CLOSE_ONLY_V1 as default and require explicit --metric-policy OHLC_HIGH_LOW_V1.
+```
+
+The selected behavior must be documented and tested.
 
 ## 9. DB-aware assistant CLI date resolution
 
@@ -315,7 +450,39 @@ assistant.ask(..., date=resolved_date)
 
 This makes `ask` consistent with `build features`, `score`, and `watchlist` commands.
 
-## 10. Tests
+## 10. Range evaluation semantics
+
+### Problem
+
+Range evaluation can be represented either as multiple single-date runs or as a parent batch run. The current code path appears closer to multiple single-date runs.
+
+### Design
+
+MVP policy:
+
+```text
+evaluate_date_range(from_date, to_date) SHALL create one evaluation_run per watchlist date.
+```
+
+CLI output must list the run ids:
+
+```text
+2026-07-01 -> evaluation_run_id A
+2026-07-02 -> evaluation_run_id B
+...
+```
+
+If a future parent batch run is added, it must add:
+
+```text
+outcome_evaluation_batch_run
+batch_run_id
+child evaluation_run_id references
+```
+
+The range behavior must be documented and tested.
+
+## 11. Tests
 
 Add tests for each completion requirement.
 
@@ -330,6 +497,7 @@ tests/test_filter_fail_closed.py
 tests/test_assistant_date_and_quality.py
 tests/test_outcome_versioning.py
 tests/test_metric_policy.py
+tests/test_outcome_range_runs.py
 ```
 
 Each test should use in-memory DuckDB fixtures and fake/stub dependencies where needed.
