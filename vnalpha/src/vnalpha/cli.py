@@ -35,26 +35,68 @@ def sync_symbols_cmd(
 @sync_app.command("ohlcv")
 def sync_ohlcv_cmd(
     symbols: Optional[str] = typer.Option(
-        None, "--symbols", help="Comma-separated symbols, default: all active"
+        None,
+        "--symbols",
+        help="Comma-separated symbols (takes precedence over --universe)",
+    ),
+    universe: Optional[str] = typer.Option(
+        None, "--universe", help="Named universe (e.g. VN30). Resolved to symbol list."
     ),
     start: Optional[str] = typer.Option(None, "--start"),
     end: Optional[str] = typer.Option(None, "--end"),
     interval: str = typer.Option("1D", "--interval"),
     source: Optional[str] = typer.Option(None, "--source"),
 ):
-    """Sync OHLCV data from vnstock-service."""
+    """Sync equity OHLCV data from vnstock-service.
+
+    Resolution order: --symbols > --universe > all active symbols.
+    """
+    from vnalpha.core.universe import parse_symbols_or_universe
     from vnalpha.ingestion.sync_ohlcv import sync_ohlcv
     from vnalpha.warehouse.connection import get_connection
     from vnalpha.warehouse.migrations import run_migrations
 
     conn = get_connection()
     run_migrations(conn=conn)
-    universe = symbols.split(",") if symbols else None
+    try:
+        resolved = parse_symbols_or_universe(symbols, universe)
+    except ValueError as err:
+        typer.echo(f"Error: {err}", err=True)
+        raise typer.Exit(code=1) from err
+
     result = sync_ohlcv(
-        conn, universe=universe, start=start, end=end, interval=interval, source=source
+        conn, universe=resolved, start=start, end=end, interval=interval, source=source
     )
     typer.echo(
         f"OHLCV sync complete: {result['inserted']} inserted, {result['skipped']} skipped"
+    )
+
+
+@sync_app.command("index")
+def sync_index_cmd(
+    symbol: str = typer.Option(
+        "VNINDEX", "--symbol", help="Index symbol (e.g. VNINDEX)"
+    ),
+    start: Optional[str] = typer.Option(None, "--start"),
+    end: Optional[str] = typer.Option(None, "--end"),
+    interval: str = typer.Option("1D", "--interval"),
+    source: Optional[str] = typer.Option(None, "--source"),
+):
+    """Sync index/benchmark OHLCV data from vnstock-service.
+
+    Example: vnalpha sync index --symbol VNINDEX --start 2024-01-01
+    """
+    from vnalpha.ingestion.sync_index import sync_index_ohlcv
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+    result = sync_index_ohlcv(
+        conn, symbol=symbol, start=start, end=end, interval=interval, source=source
+    )
+    typer.echo(
+        f"Index sync complete ({symbol}): {result['inserted']} inserted, {result['skipped']} skipped"
     )
 
 
@@ -76,7 +118,9 @@ def build_canonical_cmd(
 
     conn = get_connection()
     result = build_canonical_ohlcv(conn, symbol=symbol, interval=interval)
-    typer.echo(f"Canonical build complete: {result['upserted']} rows")
+    typer.echo(
+        f"Canonical build complete: {result['upserted']} rows, {result.get('rejected', 0)} symbols rejected"
+    )
 
 
 @build_app.command("features")
@@ -197,6 +241,9 @@ def watchlist(
                 ", ".join(flags) if flags else "—",
             )
         console.print(table)
+        console.print(
+            f"[dim]Score range: 0.0–1.0 | For evidence details run: vnalpha tui --date {target_date}[/dim]"
+        )
     except ImportError:
         # Fallback if rich not available
         typer.echo(f"{'#':<4} {'Symbol':<8} {'Score':>7}  {'Class':<18}  {'Setup'}")
@@ -205,6 +252,9 @@ def watchlist(
             typer.echo(
                 f"{row['rank']:<4} {row['symbol']:<8} {row['score']:>7.3f}  {row.get('candidate_class', ''):<18}  {row.get('setup_type', '')}"
             )
+        typer.echo(
+            f"Score range: 0.0-1.0 | For evidence: vnalpha tui --date {target_date}"
+        )
 
 
 @app.command("tui")

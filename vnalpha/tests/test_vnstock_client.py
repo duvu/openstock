@@ -1,4 +1,5 @@
 """Tests for the vnstock-service client using respx mock."""
+
 import httpx
 import pytest
 import respx
@@ -28,7 +29,15 @@ SYMBOLS_RESPONSE = {
 
 OHLCV_RESPONSE = {
     "data": [
-        {"symbol": "FPT", "time": "2024-01-02", "open": 90.0, "high": 92.0, "low": 89.0, "close": 91.5, "volume": 1_000_000},
+        {
+            "symbol": "FPT",
+            "time": "2024-01-02",
+            "open": 90.0,
+            "high": 92.0,
+            "low": 89.0,
+            "close": 91.5,
+            "volume": 1_000_000,
+        },
     ],
     "meta": {
         "dataset": "equity.ohlcv",
@@ -42,7 +51,9 @@ OHLCV_RESPONSE = {
 
 @respx.mock(base_url=MOCK_BASE)
 def test_get_symbols(respx_mock):
-    respx_mock.get("/v1/reference/symbols").mock(return_value=httpx.Response(200, json=SYMBOLS_RESPONSE))
+    respx_mock.get("/v1/reference/symbols").mock(
+        return_value=httpx.Response(200, json=SYMBOLS_RESPONSE)
+    )
     client = VnstockClient(base_url=MOCK_BASE)
     result = client.get_symbols()
     assert isinstance(result, SymbolsResponse)
@@ -52,7 +63,9 @@ def test_get_symbols(respx_mock):
 
 @respx.mock(base_url=MOCK_BASE)
 def test_get_equity_ohlcv(respx_mock):
-    respx_mock.get("/v1/equity/ohlcv").mock(return_value=httpx.Response(200, json=OHLCV_RESPONSE))
+    respx_mock.get("/v1/equity/ohlcv").mock(
+        return_value=httpx.Response(200, json=OHLCV_RESPONSE)
+    )
     client = VnstockClient(base_url=MOCK_BASE)
     result = client.get_equity_ohlcv("FPT", start="2024-01-01")
     assert isinstance(result, OHLCVResponse)
@@ -61,7 +74,9 @@ def test_get_equity_ohlcv(respx_mock):
 
 @respx.mock(base_url=MOCK_BASE)
 def test_http_error_raises(respx_mock):
-    respx_mock.get("/v1/equity/ohlcv").mock(return_value=httpx.Response(503, text="Service unavailable"))
+    respx_mock.get("/v1/equity/ohlcv").mock(
+        return_value=httpx.Response(503, text="Service unavailable")
+    )
     client = VnstockClient(base_url=MOCK_BASE)
     with pytest.raises(VnstockHTTPError) as exc_info:
         client.get_equity_ohlcv("FPT")
@@ -70,7 +85,9 @@ def test_http_error_raises(respx_mock):
 
 @respx.mock(base_url=MOCK_BASE)
 def test_response_preserves_meta(respx_mock):
-    respx_mock.get("/v1/reference/symbols").mock(return_value=httpx.Response(200, json=SYMBOLS_RESPONSE))
+    respx_mock.get("/v1/reference/symbols").mock(
+        return_value=httpx.Response(200, json=SYMBOLS_RESPONSE)
+    )
     client = VnstockClient(base_url=MOCK_BASE)
     result = client.get_symbols()
     assert result.meta.dataset == "reference.symbols"
@@ -81,7 +98,9 @@ def test_response_preserves_meta(respx_mock):
 @respx.mock(base_url=MOCK_BASE)
 def test_provider_health(respx_mock):
     health_response = {"providers": [{"provider": "kbs", "status": "HEALTHY"}]}
-    respx_mock.get("/v1/providers/health").mock(return_value=httpx.Response(200, json=health_response))
+    respx_mock.get("/v1/providers/health").mock(
+        return_value=httpx.Response(200, json=health_response)
+    )
     client = VnstockClient(base_url=MOCK_BASE)
     result = client.get_provider_health()
     assert len(result.providers) == 1
@@ -93,6 +112,7 @@ def test_no_provider_specific_logic():
     import inspect
 
     import vnalpha.clients.vnstock.client as mod
+
     src = inspect.getsource(mod)
     # Ensure no direct imports of vnstock provider internals
     assert "from vnstock.providers" not in src

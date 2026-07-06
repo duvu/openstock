@@ -115,6 +115,13 @@ def build_features(
     """
     # Load benchmark
     benchmark_df = load_canonical_ohlcv(conn, benchmark_symbol, target_date)
+    if benchmark_df.empty:
+        logger.warning(
+            "Benchmark '%s' not found in canonical_ohlcv — relative strength features will be NaN. "
+            "Run 'vnalpha sync index --symbol %s' to fix this.",
+            benchmark_symbol,
+            benchmark_symbol,
+        )
 
     if universe is None:
         rows = conn.execute(
@@ -125,19 +132,25 @@ def build_features(
 
     built = 0
     skipped = 0
+    skipped_reasons: list[dict] = []
     for symbol in universe:
         df = load_canonical_ohlcv(conn, symbol, target_date)
         if df.empty:
             skipped += 1
+            skipped_reasons.append({"symbol": symbol, "reason": "NO_CANONICAL_DATA"})
             continue
         features_df = build_features_for_symbol(df, benchmark_df)
         if features_df.empty:
             skipped += 1
+            skipped_reasons.append(
+                {"symbol": symbol, "reason": "INSUFFICIENT_HISTORY", "rows": len(df)}
+            )
             continue
         # Get the row for target_date (last available row up to target_date)
         row = features_df[features_df.index <= target_date]
         if row.empty:
             skipped += 1
+            skipped_reasons.append({"symbol": symbol, "reason": "NO_ROW_FOR_DATE"})
             continue
         last_row = row.iloc[-1]
         features = {
@@ -154,4 +167,6 @@ def build_features(
         built += 1
 
     logger.info("Features built=%d skipped=%d for date=%s", built, skipped, target_date)
+    if skipped_reasons:
+        logger.debug("Skipped reasons: %s", skipped_reasons)
     return {"built": built, "skipped": skipped}

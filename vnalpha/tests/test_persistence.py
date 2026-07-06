@@ -8,9 +8,8 @@ Covers:
 - Evidence includes scoring_version, generated_at in lineage
 - Taxonomy: candidate_class is in the canonical set
 """
-from __future__ import annotations
 
-import json
+from __future__ import annotations
 
 import pytest
 
@@ -150,7 +149,9 @@ class TestUpsertBehavior:
     def test_different_dates_are_separate_rows(self, conn):
         save_candidate_score(conn, "FPT", "2024-06-27", _make_score_result(score=0.70))
         save_candidate_score(conn, "FPT", "2024-06-28", _make_score_result(score=0.75))
-        count = conn.execute("SELECT COUNT(*) FROM candidate_score WHERE symbol = 'FPT'").fetchone()[0]
+        count = conn.execute(
+            "SELECT COUNT(*) FROM candidate_score WHERE symbol = 'FPT'"
+        ).fetchone()[0]
         assert count == 2
 
 
@@ -195,7 +196,9 @@ class TestCandidateTaxonomyConformance:
             assert cls in CANONICAL_CLASSES
 
     def test_save_all_canonical_classes(self, conn):
-        for i, cls in enumerate(["STRONG_CANDIDATE", "WATCH_CANDIDATE", "WEAK_CANDIDATE", "IGNORE"]):
+        for i, cls in enumerate(
+            ["STRONG_CANDIDATE", "WATCH_CANDIDATE", "WEAK_CANDIDATE", "IGNORE"]
+        ):
             result = _make_score_result(candidate_class=cls)
             save_candidate_score(conn, f"SYM{i}", "2024-06-28", result)
             record = get_candidate_score(conn, f"SYM{i}", "2024-06-28")
@@ -208,6 +211,7 @@ class TestWatchlistFromPersistedScores:
     def test_watchlist_derives_from_candidate_score(self, conn):
         """Watchlist rows should come from candidate_score not fresh computation."""
         from vnalpha.scoring.generate_watchlist import save_watchlist
+
         # Insert candidate scores directly (bypassing score computation)
         save_candidate_score(conn, "FPT", "2024-06-28", _make_score_result(score=0.80))
         save_candidate_score(conn, "VNM", "2024-06-28", _make_score_result(score=0.65))
@@ -216,6 +220,7 @@ class TestWatchlistFromPersistedScores:
         assert saved == 2
         # Verify watchlist entries match candidate scores
         from vnalpha.warehouse.repositories import get_watchlist
+
         wl_rows = get_watchlist(conn, "2024-06-28")
         assert len(wl_rows) == 2
         assert wl_rows[0]["symbol"] == "FPT"  # higher score first
@@ -224,13 +229,20 @@ class TestWatchlistFromPersistedScores:
     def test_ignore_class_excluded_from_watchlist(self, conn):
         """IGNORE candidates should not appear in daily_watchlist."""
         from vnalpha.scoring.generate_watchlist import save_watchlist
-        save_candidate_score(conn, "FPT", "2024-06-28", _make_score_result(score=0.80, candidate_class="IGNORE"))
+
+        save_candidate_score(
+            conn,
+            "FPT",
+            "2024-06-28",
+            _make_score_result(score=0.80, candidate_class="IGNORE"),
+        )
         save_candidate_score(conn, "VNM", "2024-06-28", _make_score_result(score=0.75))
         saved = save_watchlist(conn, "2024-06-28", top_n=10, min_score=0.40)
         assert saved == 1  # Only VNM (not FPT which is IGNORE)
 
     def test_empty_watchlist_when_no_candidates_qualify(self, conn):
         from vnalpha.scoring.generate_watchlist import save_watchlist
+
         # All below min_score
         save_candidate_score(conn, "FPT", "2024-06-28", _make_score_result(score=0.20))
         saved = save_watchlist(conn, "2024-06-28", top_n=10, min_score=0.40)

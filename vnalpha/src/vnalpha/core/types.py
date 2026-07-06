@@ -83,3 +83,28 @@ class DataQualityStatus(str, Enum):
     WARN = "warn"
     FAIL = "fail"
     UNKNOWN = "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Canonical ontology constants for Phase 5 persistence guards
+# ---------------------------------------------------------------------------
+
+CANONICAL_CANDIDATE_CLASSES: frozenset[str] = frozenset(
+    {
+        "STRONG_CANDIDATE",
+        "WATCH_CANDIDATE",
+        "WEAK_CANDIDATE",
+        "IGNORE",
+    }
+)
+
+CANONICAL_SETUP_TYPES: frozenset[str] = frozenset(
+    {
+        "ACCUMULATION_BASE",
+        "BREAKOUT_ATTEMPT",
+        "MOMENTUM_CONTINUATION",
+        "PULLBACK_TO_TREND",
+        "MEAN_REVERSION",
+        "UNCLASSIFIED",
+    }
+)

@@ -6,6 +6,7 @@ Tests the full research pipeline:
 
 All tests use an isolated in-memory DuckDB database.
 """
+
 from __future__ import annotations
 
 import json
@@ -56,15 +57,17 @@ def _make_ohlcv_rows(
         d = start + timedelta(days=i)
         price = price * (1.0 + trend + (0.005 if i % 7 == 0 else -0.002))
         close = round(price, 2)
-        rows.append({
-            "time": str(d),
-            "interval": "1D",
-            "open": round(close * 0.99, 2),
-            "high": round(close * 1.01, 2),
-            "low": round(close * 0.98, 2),
-            "close": close,
-            "volume": volume_base * (1.0 + 0.1 * (i % 5)),
-        })
+        rows.append(
+            {
+                "time": str(d),
+                "interval": "1D",
+                "open": round(close * 0.99, 2),
+                "high": round(close * 1.01, 2),
+                "low": round(close * 0.98, 2),
+                "close": close,
+                "volume": volume_base * (1.0 + 0.1 * (i % 5)),
+            }
+        )
     return rows
 
 
@@ -82,20 +85,24 @@ def _build_fixture_db():
         ("HPG", "HOSE", "Hoa Phat Group", "Materials", "Steel"),
     ]
     for sym, exch, name, sector, industry in symbol_configs:
-        upsert_symbol(conn, sym, exchange=exch, name=name, sector=sector, industry=industry)
+        upsert_symbol(
+            conn, sym, exchange=exch, name=name, sector=sector, industry=industry
+        )
 
     finish_ingestion_run(conn, run_id, status="SUCCESS")
 
     # Insert OHLCV for each symbol (FPT with strong uptrend, VNM moderate, HPG weak)
     ohlcv_configs = [
-        ("FPT", 120, 100.0, 0.003),   # strong uptrend
-        ("VNM", 120, 80.0, 0.0005),   # mild uptrend
-        ("HPG", 120, 60.0, -0.001),   # slight downtrend
+        ("FPT", 120, 100.0, 0.003),  # strong uptrend
+        ("VNM", 120, 80.0, 0.0005),  # mild uptrend
+        ("HPG", 120, 60.0, -0.001),  # slight downtrend
     ]
     for sym, n, base, trend in ohlcv_configs:
         ohlcv_run_id = create_ingestion_run(conn, "vnstock-service", "/v1/equity/ohlcv")
         rows = _make_ohlcv_rows(sym, n_days=n, base_price=base, trend=trend)
-        insert_raw_ohlcv(conn, ohlcv_run_id, sym, rows, provider="kbs", quality_status="pass")
+        insert_raw_ohlcv(
+            conn, ohlcv_run_id, sym, rows, provider="kbs", quality_status="pass"
+        )
         finish_ingestion_run(conn, ohlcv_run_id, status="SUCCESS")
 
     # Build canonical OHLCV
@@ -110,6 +117,7 @@ def _build_fixture_db():
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def e2e_conn():
@@ -224,6 +232,7 @@ class TestCLICommandsNotStubs:
         import inspect
 
         from vnalpha.cli import build_features_cmd
+
         src = inspect.getsource(build_features_cmd)
         assert "not yet implemented" not in src
         assert "build_features" in src
@@ -233,6 +242,7 @@ class TestCLICommandsNotStubs:
         import inspect
 
         from vnalpha.cli import score
+
         src = inspect.getsource(score)
         assert "not yet implemented" not in src
         assert "generate_watchlist" in src
@@ -242,6 +252,7 @@ class TestCLICommandsNotStubs:
         import inspect
 
         from vnalpha.cli import watchlist
+
         src = inspect.getsource(watchlist)
         assert "not yet implemented" not in src
         assert "get_watchlist" in src
@@ -251,6 +262,7 @@ class TestCLICommandsNotStubs:
         import inspect
 
         from vnalpha.cli import tui
+
         src = inspect.getsource(tui)
         assert "not yet implemented" not in src
         assert "VnAlphaApp" in src

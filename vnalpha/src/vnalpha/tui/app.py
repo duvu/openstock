@@ -9,6 +9,9 @@ from textual.binding import Binding
 
 from vnalpha.core.dates import resolve_date
 from vnalpha.tui.screens.detail import DetailScreen
+from vnalpha.tui.screens.home import HomeScreen
+from vnalpha.tui.screens.quality import QualityScreen
+from vnalpha.tui.screens.rejected import RejectedScreen
 from vnalpha.tui.screens.watchlist import WatchlistScreen
 
 
@@ -18,8 +21,9 @@ class VnAlphaApp(App):
     Keyboard navigation:
         h - Home
         w - Watchlist
+        r - Rejected symbols
+        p - Data quality
         q - Quit
-        ? - Help
     """
 
     CSS_PATH = None  # inline styles only for portability
@@ -43,16 +47,16 @@ class VnAlphaApp(App):
         self.push_screen(WatchlistScreen(target_date=self.target_date))
 
     def action_show_home(self) -> None:
-        self.push_screen("home")
+        self.push_screen(HomeScreen())
 
     def action_show_watchlist(self) -> None:
         self.push_screen(WatchlistScreen(target_date=self.target_date))
 
     def action_show_rejected(self) -> None:
-        self.push_screen("rejected")
+        self.push_screen(RejectedScreen(target_date=self.target_date))
 
     def action_show_quality(self) -> None:
-        self.push_screen("quality")
+        self.push_screen(QualityScreen())
 
     def show_detail(self, symbol: str) -> None:
         self.push_screen(DetailScreen(symbol=symbol, target_date=self.target_date))

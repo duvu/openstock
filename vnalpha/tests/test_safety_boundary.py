@@ -2,10 +2,20 @@
 
 Ensures the library uses research-only language throughout.
 """
+
 import inspect
 import os
 
-FORBIDDEN_TERMS = ["buy signal", "sell signal", "buy order", "sell order", "portfolio", "investment advice", "place order", "execute order"]
+FORBIDDEN_TERMS = [
+    "buy signal",
+    "sell signal",
+    "buy order",
+    "sell order",
+    "portfolio",
+    "investment advice",
+    "place order",
+    "execute order",
+]
 SOFT_FORBIDDEN = ["buy", "sell", "order", "recommend", "portfolio"]
 
 
@@ -14,6 +24,7 @@ def get_all_source_modules():
     import pkgutil
 
     import vnalpha
+
     modules = []
     for _importer, modname, _ispkg in pkgutil.walk_packages(
         path=vnalpha.__path__,
@@ -22,6 +33,7 @@ def get_all_source_modules():
     ):
         try:
             import importlib
+
             mod = importlib.import_module(modname)
             modules.append((modname, mod))
         except ImportError:
@@ -67,9 +79,8 @@ def test_static_scan_source_files_for_forbidden_terms():
             if term in src_lower:
                 violations.append((fpath, term))
 
-    assert not violations, (
-        "Forbidden terms found in source files:\n"
-        + "\n".join(f"  {fp}: {term!r}" for fp, term in violations)
+    assert not violations, "Forbidden terms found in source files:\n" + "\n".join(
+        f"  {fp}: {term!r}" for fp, term in violations
     )
 
 
@@ -90,14 +101,26 @@ def test_cli_help_uses_research_language():
 def test_candidate_output_includes_evidence():
     """Composite score output includes sub-score evidence."""
     from vnalpha.scoring.score import compute_composite_score
+
     features = {
-        "close": 100.0, "ma20": 97.0, "ma50": 94.0, "ma100": 88.0,
-        "ma20_slope": 0.002, "ma50_slope": 0.001,
-        "volume_ma20": 1_000_000.0, "volume_ratio": 1.8,
-        "atr14": 1.5, "return_20d": 0.08, "return_60d": 0.12,
-        "rs_20d_vs_vnindex": 0.03, "rs_60d_vs_vnindex": 0.05,
-        "distance_to_ma20": 0.031, "distance_to_52w_high": -0.02,
-        "base_range_30d": 0.05, "close_strength": 0.75, "volatility_20d": 0.012,
+        "close": 100.0,
+        "ma20": 97.0,
+        "ma50": 94.0,
+        "ma100": 88.0,
+        "ma20_slope": 0.002,
+        "ma50_slope": 0.001,
+        "volume_ma20": 1_000_000.0,
+        "volume_ratio": 1.8,
+        "atr14": 1.5,
+        "return_20d": 0.08,
+        "return_60d": 0.12,
+        "rs_20d_vs_vnindex": 0.03,
+        "rs_60d_vs_vnindex": 0.05,
+        "distance_to_ma20": 0.031,
+        "distance_to_52w_high": -0.02,
+        "base_range_30d": 0.05,
+        "close_strength": 0.75,
+        "volatility_20d": 0.012,
     }
     result = compute_composite_score(features)
     assert "trend_score" in result
@@ -132,12 +155,17 @@ def test_candidate_output_includes_lineage():
     save_candidate_score(conn, "FPT", "2024-01-02", score_result)
     save_watchlist(conn, "2024-01-02", top_n=10, min_score=0.0)
 
-    rows = conn.execute("SELECT lineage_json FROM daily_watchlist WHERE date = '2024-01-02'").fetchall()
+    rows = conn.execute(
+        "SELECT lineage_json FROM daily_watchlist WHERE date = '2024-01-02'"
+    ).fetchall()
     assert len(rows) == 1
     import json
+
     lineage = json.loads(rows[0][0])
     # Lineage should include scoring metadata
-    assert "scoring_version" in lineage or "trend_score" in lineage or lineage is not None
+    assert (
+        "scoring_version" in lineage or "trend_score" in lineage or lineage is not None
+    )
     conn.close()
 
 

@@ -58,6 +58,7 @@ WEAK_FEATURES = {
 
 # --- Rules ---
 
+
 def test_rule_price_above_ma20_true():
     assert rule_price_above_ma20(STRONG_FEATURES) is True
 
@@ -84,6 +85,7 @@ def test_rule_base_compression_rejects_wide():
 
 # --- Risk flags ---
 
+
 def test_no_risk_flags_for_strong():
     flags = compute_risk_flags(STRONG_FEATURES)
     assert RiskFlag.THIN_VOLUME not in flags
@@ -105,6 +107,7 @@ def test_overbought_not_flagged_for_strong():
 
 
 # --- Scores ---
+
 
 def test_trend_score_strong_is_high():
     score = compute_trend_score(STRONG_FEATURES)
@@ -135,6 +138,7 @@ def test_composite_score_range():
 def test_composite_score_uses_canonical_candidate_class():
     """compute_composite_score returns canonical CandidateClass values."""
     from vnalpha.core.types import CandidateClass, SetupType
+
     canonical_classes = {c.value for c in CandidateClass}
     canonical_setups = {s.value for s in SetupType}
 
@@ -172,6 +176,7 @@ def test_composite_score_handles_none_features():
 
 # --- Watchlist integration ---
 
+
 def test_generate_watchlist():
     from vnalpha.scoring.generate_watchlist import save_watchlist, score_universe
     from vnalpha.warehouse.connection import in_memory_connection
@@ -197,6 +202,7 @@ def test_generate_watchlist():
 
     # Verify candidate_score rows were persisted
     from vnalpha.warehouse.repositories import get_candidate_scores
+
     persisted = get_candidate_scores(conn, "2024-01-02")
     assert len(persisted) == 2
     assert persisted[0]["symbol"] == "FPT"  # highest score first
@@ -206,6 +212,7 @@ def test_generate_watchlist():
     assert saved >= 1
 
     from vnalpha.warehouse.repositories import get_watchlist
+
     wl = get_watchlist(conn, "2024-01-02")
     assert len(wl) >= 1
     assert wl[0]["symbol"] == "FPT"

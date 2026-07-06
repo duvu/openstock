@@ -13,5 +13,6 @@ def tmp_warehouse(tmp_path):
 def reset_vnalpha_config():
     """Reset config singleton between tests."""
     from vnalpha.core.config import reset_config
+
     yield
     reset_config()

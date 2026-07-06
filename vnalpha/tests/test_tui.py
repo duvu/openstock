@@ -1,4 +1,5 @@
 """Smoke tests for the TUI — ensure screens mount without errors."""
+
 import pytest
 
 textual_available = True
@@ -17,6 +18,7 @@ skip_if_no_textual = pytest.mark.skipif(
 async def test_app_can_be_created():
     """VnAlphaApp can be instantiated without errors."""
     from vnalpha.tui.app import VnAlphaApp
+
     app = VnAlphaApp()
     assert app is not None
     assert app.TITLE == "vnalpha | Research Discovery"
@@ -26,6 +28,7 @@ async def test_app_can_be_created():
 def test_watchlist_screen_exists():
     """WatchlistScreen is importable."""
     from vnalpha.tui.screens.watchlist import WatchlistScreen
+
     assert WatchlistScreen.TITLE == "Daily Watchlist"
 
 
@@ -33,6 +36,7 @@ def test_watchlist_screen_exists():
 def test_detail_screen_exists():
     """DetailScreen is importable."""
     from vnalpha.tui.screens.detail import DetailScreen
+
     s = DetailScreen(symbol="FPT")
     assert s._symbol == "FPT"
 
@@ -40,12 +44,14 @@ def test_detail_screen_exists():
 @skip_if_no_textual
 def test_rejected_screen_exists():
     from vnalpha.tui.screens.rejected import RejectedScreen
+
     assert RejectedScreen.TITLE == "Rejected Symbols"
 
 
 @skip_if_no_textual
 def test_quality_screen_exists():
     from vnalpha.tui.screens.quality import QualityScreen
+
     assert QualityScreen.TITLE == "Data Quality"
 
 
@@ -79,11 +85,17 @@ def test_tui_source_files_have_no_forbidden_terms():
     """Check TUI source files for forbidden terms without importing (no textual dep)."""
     import os
 
-    tui_dir = os.path.join(
-        os.path.dirname(__file__), "..", "src", "vnalpha", "tui"
-    )
-    forbidden = ["buy signal", "sell signal", "buy order", "sell order",
-                 "place order", "execute order", "portfolio", "investment advice"]
+    tui_dir = os.path.join(os.path.dirname(__file__), "..", "src", "vnalpha", "tui")
+    forbidden = [
+        "buy signal",
+        "sell signal",
+        "buy order",
+        "sell order",
+        "place order",
+        "execute order",
+        "portfolio",
+        "investment advice",
+    ]
 
     for root, _dirs, files in os.walk(tui_dir):
         # Skip __pycache__
@@ -101,8 +113,15 @@ def test_tui_source_files_have_no_forbidden_terms():
 def test_tui_source_has_research_language():
     """Watchlist source file contains 'research' language."""
     import os
+
     wl_path = os.path.join(
-        os.path.dirname(__file__), "..", "src", "vnalpha", "tui", "screens", "watchlist.py"
+        os.path.dirname(__file__),
+        "..",
+        "src",
+        "vnalpha",
+        "tui",
+        "screens",
+        "watchlist.py",
     )
     with open(wl_path) as f:
         src = f.read()

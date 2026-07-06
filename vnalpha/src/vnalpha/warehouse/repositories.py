@@ -10,6 +10,7 @@ from typing import Any, Optional
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.core.types import CANONICAL_CANDIDATE_CLASSES, CANONICAL_SETUP_TYPES
 
 logger = get_logger("warehouse.repositories")
 
@@ -152,6 +153,19 @@ def save_candidate_score(
     Persists full evidence, risk flags, and lineage including scoring version
     and generated timestamp for auditability.
     """
+    # Persistence guard: enforce canonical ontology
+    candidate_class_val = score_result.get("candidate_class")
+    if candidate_class_val not in CANONICAL_CANDIDATE_CLASSES:
+        raise ValueError(
+            f"Cannot persist candidate_class '{candidate_class_val}'. "
+            f"Must be one of {sorted(CANONICAL_CANDIDATE_CLASSES)}."
+        )
+    setup_type_val = score_result.get("setup_type")
+    if setup_type_val is not None and setup_type_val not in CANONICAL_SETUP_TYPES:
+        raise ValueError(
+            f"Cannot persist setup_type '{setup_type_val}'. "
+            f"Must be one of {sorted(CANONICAL_SETUP_TYPES)}."
+        )
     generated_at = _now_utc().isoformat()
     evidence = {
         "trend_score": score_result.get("trend_score"),
@@ -321,3 +335,63 @@ def get_watchlist(conn: duckdb.DuckDBPyConnection, date: str) -> list[dict[str, 
         "lineage_json",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
+
+
+def get_watchlist_rich(
+    conn: duckdb.DuckDBPyConnection,
+    date: str,
+) -> list[dict[str, Any]]:
+    """Return rich watchlist view joining daily_watchlist with candidate_score.
+
+    Returns all fields required for Phase 5 review surface:
+    rank, symbol, score, candidate_class, setup_type,
+    evidence_json, risk_flags_json, lineage_json, data_quality_status.
+    """
+    rows = conn.execute(
+        """
+        SELECT
+            dw.rank,
+            dw.symbol,
+            dw.score,
+            dw.candidate_class,
+            dw.setup_type,
+            cs.evidence_json,
+            dw.risk_flags_json,
+            cs.lineage_json,
+            COALESCE(co.quality_status, 'unknown') AS data_quality_status
+        FROM daily_watchlist dw
+        LEFT JOIN candidate_score cs
+            ON cs.symbol = dw.symbol AND cs.date = dw.date
+        LEFT JOIN (
+            SELECT symbol, quality_status,
+                ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY time DESC) AS rn
+            FROM canonical_ohlcv
+            WHERE interval = '1D'
+        ) co ON co.symbol = dw.symbol AND co.rn = 1
+        WHERE dw.date = ?
+        ORDER BY dw.rank
+        """,
+        [date],
+    ).fetchall()
+
+    cols = [
+        "rank",
+        "symbol",
+        "score",
+        "candidate_class",
+        "setup_type",
+        "evidence_json",
+        "risk_flags_json",
+        "lineage_json",
+        "data_quality_status",
+    ]
+    results = []
+    for row in rows:
+        record = dict(zip(cols, row, strict=True))
+        for field in ("evidence_json", "risk_flags_json", "lineage_json"):
+            if isinstance(record[field], str):
+                import json as _json
+
+                record[field] = _json.loads(record[field])
+        results.append(record)
+    return results

@@ -25,9 +25,10 @@ down-vnstock: ## Stop vnstock-service (Docker)
 
 # ── vnalpha pipeline ──────────────────────────
 
-sync: ## Sync symbols + OHLCV for VN30 and build canonical dataset
+sync: ## Sync symbols + OHLCV for VN30 + VNINDEX benchmark and build canonical dataset
 	vnalpha sync symbols
 	vnalpha sync ohlcv --universe VN30 --start 2024-01-01
+	vnalpha sync index --symbol VNINDEX --start 2024-01-01
 	vnalpha build canonical
 
 features: ## Build features for today

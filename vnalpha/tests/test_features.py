@@ -1,4 +1,5 @@
 """Tests for feature computations using synthetic data."""
+
 import numpy as np
 import pandas as pd
 
@@ -23,16 +24,20 @@ def make_ohlcv(n: int = 200, seed: int = 42) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     prices = 100 * np.cumprod(1 + rng.normal(0, 0.01, n))
     idx = pd.date_range("2023-01-01", periods=n, freq="B")
-    return pd.DataFrame({
-        "open": prices * (1 - rng.uniform(0, 0.005, n)),
-        "high": prices * (1 + rng.uniform(0, 0.01, n)),
-        "low": prices * (1 - rng.uniform(0, 0.01, n)),
-        "close": prices,
-        "volume": rng.integers(500_000, 2_000_000, n).astype(float),
-    }, index=idx)
+    return pd.DataFrame(
+        {
+            "open": prices * (1 - rng.uniform(0, 0.005, n)),
+            "high": prices * (1 + rng.uniform(0, 0.01, n)),
+            "low": prices * (1 - rng.uniform(0, 0.01, n)),
+            "close": prices,
+            "volume": rng.integers(500_000, 2_000_000, n).astype(float),
+        },
+        index=idx,
+    )
 
 
 # --- Price features ---
+
 
 def test_compute_ma():
     df = make_ohlcv(50)
@@ -77,12 +82,23 @@ def test_close_strength_bounds():
 def test_compute_price_features_columns():
     df = make_ohlcv(200)
     result = compute_price_features(df)
-    for col in ["ma20", "ma50", "ma100", "ma20_slope", "ma50_slope",
-                "distance_to_ma20", "return_20d", "return_60d", "close_strength", "base_range_30d"]:
+    for col in [
+        "ma20",
+        "ma50",
+        "ma100",
+        "ma20_slope",
+        "ma50_slope",
+        "distance_to_ma20",
+        "return_20d",
+        "return_60d",
+        "close_strength",
+        "base_range_30d",
+    ]:
         assert col in result.columns
 
 
 # --- Volume features ---
+
 
 def test_volume_ma():
     df = make_ohlcv(50)
@@ -100,6 +116,7 @@ def test_volume_ratio_near_one():
 
 # --- Volatility features ---
 
+
 def test_atr14_positive():
     df = make_ohlcv(50)
     atr = compute_atr(df["high"], df["low"], df["close"])
@@ -113,6 +130,7 @@ def test_volatility_20d_positive():
 
 
 # --- Relative strength ---
+
 
 def test_relative_strength_zero_when_equal():
     df = make_ohlcv(100, seed=1)
@@ -131,8 +149,10 @@ def test_relative_strength_features():
 
 # --- Integration ---
 
+
 def test_build_features_for_symbol_integration():
     from vnalpha.features.build_features import build_features_for_symbol
+
     df = make_ohlcv(200)
     bench = make_ohlcv(200, seed=99)
     result = build_features_for_symbol(df, bench)
@@ -143,6 +163,7 @@ def test_build_features_for_symbol_integration():
 
 def test_build_features_insufficient_history():
     from vnalpha.features.build_features import build_features_for_symbol
+
     df = make_ohlcv(15)  # < 20 bars
     result = build_features_for_symbol(df)
     assert result.empty

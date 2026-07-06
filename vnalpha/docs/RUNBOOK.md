@@ -40,32 +40,16 @@ cp .env.example .env
 ## First-Time Setup
 
 ```bash
-# 1. Initialize the warehouse (creates DuckDB schema)
+# Full pipeline
 vnalpha init
-
-# 2. Start vnstock-service (via Docker):
-make up-vnstock
-
-# 3. Sync symbols
 vnalpha sync symbols
-
-# 4. Sync OHLCV (last 365 days)
-vnalpha sync ohlcv --start 2023-06-01 --end 2024-06-28
-
-# 5. Build canonical OHLCV
+vnalpha sync ohlcv --universe VN30 --start 2024-01-01
+vnalpha sync index --symbol VNINDEX --start 2024-01-01
 vnalpha build canonical
-
-# 6. Build feature snapshots
-vnalpha build features --date 2024-06-28
-
-# 7. Score and generate watchlist
-vnalpha score --date 2024-06-28
-
-# 8. Show watchlist table
-vnalpha watchlist --date 2024-06-28
-
-# 9. Launch TUI
-vnalpha tui
+vnalpha build features --date today
+vnalpha score --date today
+vnalpha watchlist --date today
+vnalpha tui --date today
 ```
 
 ## Running with Fixture Data (CI / Offline)
@@ -81,6 +65,12 @@ cd vnalpha && python -m pytest tests/ -v
 The E2E tests in `tests/test_e2e_pipeline.py` generate synthetic OHLCV data
 for 3 symbols (FPT, VNM, HPG) and exercise the full pipeline without any
 external dependencies.
+
+**Fixture-mode E2E test:**
+```bash
+cd vnalpha && pytest tests/test_phase5_e2e.py -q
+```
+This test runs the full pipeline in an isolated in-memory DuckDB — no network access required.
 
 ## Running with Live vnstock-service
 
@@ -99,6 +89,72 @@ make tui
 ```
 
 ## CLI Command Reference
+
+### Universe support
+
+`vnalpha sync ohlcv` supports two ways to specify symbols:
+
+- `--universe VN30` — resolves to the 32 VN30 index constituents (static list)
+- `--symbols FPT,VNM,HPG` — explicit comma-separated symbols
+
+Resolution order: `--symbols` takes precedence over `--universe`. If neither is given, all active symbols from the warehouse are synced.
+
+**Phase 5 supported universes:** `VN30`
+
+### Benchmark data (VNINDEX)
+
+Relative strength features require benchmark OHLCV in `canonical_ohlcv`. Sync it explicitly:
+
+    vnalpha sync index --symbol VNINDEX --start 2024-01-01
+    vnalpha build canonical
+
+If VNINDEX data is missing, features will compute with NaN relative strength values (a warning is logged).
+
+### Score scale and thresholds
+
+Scores are in the range **0.0 – 1.0**.
+
+| Candidate class  | Score threshold |
+|-----------------|----------------|
+| STRONG_CANDIDATE | >= 0.70        |
+| WATCH_CANDIDATE  | >= 0.50        |
+| WEAK_CANDIDATE   | >= 0.30        |
+| IGNORE           | < 0.30         |
+
+Sub-score weights:
+- Trend: 30%
+- Relative strength: 25%
+- Volume: 15%
+- Base: 10%
+- Breakout: 10%
+- Risk quality: 10%
+
+### Candidate class and setup type ontology
+
+**Phase 5 canonical candidate classes:**
+- `STRONG_CANDIDATE` — score >= 0.70
+- `WATCH_CANDIDATE` — score >= 0.50
+- `WEAK_CANDIDATE` — score >= 0.30
+- `IGNORE` — score < 0.30 (excluded from watchlist)
+
+**Phase 5 canonical setup types:**
+- `ACCUMULATION_BASE` — tight base near 52-week high
+- `BREAKOUT_ATTEMPT` — near 52-week high with volume expansion
+- `MOMENTUM_CONTINUATION` — uptrend + price above MA
+- `PULLBACK_TO_TREND` — uptrend + close near MA20
+- `MEAN_REVERSION` — price below MA with volume expansion
+- `UNCLASSIFIED` — no clear pattern
+
+Legacy aliases (`STAGE1`, `STAGE2`, `BREAKOUT`, etc.) exist in code for backward compatibility but are **not accepted** in persisted data. The persistence guard raises `ValueError` if a non-canonical value is written.
+
+### Known limitations and deferred work
+
+**Phase 5 scope:**
+- VN30 universe resolved from a static list. Dynamic resolution from vnstock-service planned for Phase 5.8+.
+- VNINDEX benchmark must be synced separately before feature build.
+- TUI requires `textual` to be installed (`pip install textual`).
+- No backtesting, ML ranking, or outcome tracking (planned for Phase 6+).
+- No broker/order/portfolio integration (research-only, by design).
 
 | Command | Description |
 |---|---|
