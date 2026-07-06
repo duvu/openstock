@@ -39,6 +39,11 @@ def test_all_tables_created(conn):
         "research_note",
         "assistant_session",
         "llm_trace",
+        "candidate_outcome",
+        "watchlist_outcome",
+        "score_bucket_performance",
+        "setup_type_performance",
+        "risk_flag_performance",
     }
     assert expected == names
 
@@ -104,7 +109,7 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 13
+    assert len(tables) == 18
 
 
 def test_get_watchlist_empty(conn):

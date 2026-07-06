@@ -276,6 +276,278 @@ def tui(
     VnAlphaApp(date=date).run()
 
 
+# ---------------------------------------------------------------------------
+# outcome sub-app
+# ---------------------------------------------------------------------------
+outcome_app = typer.Typer(name="outcome", help="Outcome tracking commands.")
+app.add_typer(outcome_app, name="outcome")
+
+
+@outcome_app.command("evaluate")
+def outcome_evaluate(
+    date: Optional[str] = typer.Option(None, "--date", help="Evaluate a single watchlist date"),
+    from_date: Optional[str] = typer.Option(None, "--from", help="Start date for range evaluation"),
+    to_date: Optional[str] = typer.Option(None, "--to", help="End date for range evaluation"),
+):
+    """Evaluate candidate outcomes for a date or date range."""
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.outcomes.evaluator import evaluate_watchlist_date, evaluate_date_range
+    from vnalpha.core.dates import resolve_date
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+
+    if date:
+        target = resolve_date(date)
+        result = evaluate_watchlist_date(conn, target)
+        typer.echo(f"Evaluated {result['evaluated']} candidate-horizon pairs for {target}.")
+        typer.echo(f"Persisted: {result['persisted']}, Errors: {result['errors']}")
+    elif from_date and to_date:
+        results = evaluate_date_range(conn, from_date, to_date)
+        total = sum(r["evaluated"] for r in results)
+        persisted = sum(r["persisted"] for r in results)
+        typer.echo(f"Evaluated {len(results)} dates, {total} pairs, {persisted} persisted.")
+    else:
+        typer.echo("Provide --date or --from/--to.", err=True)
+        raise typer.Exit(code=1)
+    conn.close()
+
+
+@outcome_app.command("candidates")
+def outcome_candidates(
+    date: str = typer.Option(..., "--date", help="Watchlist date"),
+    horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
+):
+    """Show candidate outcomes for a date and horizon."""
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.outcomes.repositories import get_candidate_outcomes
+    from vnalpha.core.dates import resolve_date
+    from rich.console import Console
+    from rich.table import Table
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+    rows = get_candidate_outcomes(conn, resolve_date(date), horizon)
+    conn.close()
+
+    console = Console()
+    if not rows:
+        console.print(f"[dim]No candidate outcomes for {date} horizon={horizon}[/dim]")
+        return
+
+    table = Table(title=f"Candidate Outcomes — {date} | Horizon {horizon}d")
+    table.add_column("Symbol")
+    table.add_column("Status")
+    table.add_column("Score")
+    table.add_column("Forward Rtn")
+    table.add_column("Excess Rtn")
+    table.add_column("Hit")
+    table.add_column("Failure")
+
+    for row in rows:
+        fwd = f"{row['forward_return']:.2%}" if row["forward_return"] is not None else "—"
+        exc = f"{row['excess_return_vs_vnindex']:.2%}" if row["excess_return_vs_vnindex"] is not None else "—"
+        score = f"{row['score']:.2f}" if row["score"] is not None else "—"
+        table.add_row(
+            row["symbol"],
+            row["outcome_status"],
+            score,
+            fwd,
+            exc,
+            str(row["hit"]) if row["hit"] is not None else "—",
+            str(row["failure"]) if row["failure"] is not None else "—",
+        )
+    console.print(table)
+
+
+@outcome_app.command("watchlist")
+def outcome_watchlist(
+    date: str = typer.Option(..., "--date", help="Watchlist date"),
+    horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
+):
+    """Show watchlist outcome summary for a date and horizon."""
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.outcomes.repositories import get_watchlist_outcome
+    from vnalpha.core.dates import resolve_date
+    from rich.console import Console
+    from rich.panel import Panel
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+    result = get_watchlist_outcome(conn, resolve_date(date), horizon)
+    conn.close()
+
+    console = Console()
+    if result is None:
+        console.print(f"[dim]No watchlist outcome for {date} horizon={horizon}[/dim]")
+        return
+
+    avg_fwd = f"{result['avg_forward_return']:.2%}" if result["avg_forward_return"] is not None else "—"
+    avg_exc = f"{result['avg_excess_return']:.2%}" if result["avg_excess_return"] is not None else "—"
+    hit_rate = f"{result['hit_rate']:.1%}" if result["hit_rate"] is not None else "—"
+    fail_rate = f"{result['failure_rate']:.1%}" if result["failure_rate"] is not None else "—"
+    lines = [
+        f"Candidates: {result.get('candidate_count')}",
+        f"Complete: {result.get('complete_count')} | Pending: {result.get('pending_count')} | Missing: {result.get('missing_data_count')}",
+        f"Avg Forward Return: {avg_fwd}",
+        f"Avg Excess Return: {avg_exc}",
+        f"Hit Rate: {hit_rate}",
+        f"Failure Rate: {fail_rate}",
+    ]
+    console.print(Panel("\n".join(lines), title=f"Watchlist Outcome — {date} | Horizon {horizon}d"))
+
+
+@outcome_app.command("buckets")
+def outcome_buckets(
+    horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
+):
+    """Show score bucket performance."""
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.outcomes.repositories import list_score_bucket_performance
+    from rich.console import Console
+    from rich.table import Table
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+    rows = list_score_bucket_performance(conn, horizon)
+    conn.close()
+
+    console = Console()
+    if not rows:
+        console.print(f"[dim]No score bucket data for horizon={horizon}[/dim]")
+        return
+
+    table = Table(title=f"Score Bucket Performance — Horizon {horizon}d")
+    table.add_column("Bucket")
+    table.add_column("Count")
+    table.add_column("Avg Fwd Rtn")
+    table.add_column("Hit Rate")
+    table.add_column("Failure Rate")
+    for row in rows:
+        fwd = f"{row['avg_forward_return']:.2%}" if row["avg_forward_return"] is not None else "—"
+        hit = f"{row['hit_rate']:.1%}" if row["hit_rate"] is not None else "—"
+        fail = f"{row['failure_rate']:.1%}" if row["failure_rate"] is not None else "—"
+        table.add_row(row["score_bucket"], str(row["candidate_count"] or 0), fwd, hit, fail)
+    console.print(table)
+
+
+@outcome_app.command("setups")
+def outcome_setups(
+    horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
+):
+    """Show setup type performance."""
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.outcomes.repositories import list_setup_type_performance
+    from rich.console import Console
+    from rich.table import Table
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+    rows = list_setup_type_performance(conn, horizon)
+    conn.close()
+
+    console = Console()
+    if not rows:
+        console.print(f"[dim]No setup type data for horizon={horizon}[/dim]")
+        return
+
+    table = Table(title=f"Setup Type Performance — Horizon {horizon}d")
+    table.add_column("Setup Type")
+    table.add_column("Count")
+    table.add_column("Avg Fwd Rtn")
+    table.add_column("Hit Rate")
+    table.add_column("Failure Rate")
+    for row in rows:
+        fwd = f"{row['avg_forward_return']:.2%}" if row["avg_forward_return"] is not None else "—"
+        hit = f"{row['hit_rate']:.1%}" if row["hit_rate"] is not None else "—"
+        fail = f"{row['failure_rate']:.1%}" if row["failure_rate"] is not None else "—"
+        table.add_row(row["setup_type"], str(row["candidate_count"] or 0), fwd, hit, fail)
+    console.print(table)
+
+
+@outcome_app.command("risks")
+def outcome_risks(
+    horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
+):
+    """Show risk flag performance."""
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.outcomes.repositories import list_risk_flag_performance
+    from rich.console import Console
+    from rich.table import Table
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+    rows = list_risk_flag_performance(conn, horizon)
+    conn.close()
+
+    console = Console()
+    if not rows:
+        console.print(f"[dim]No risk flag data for horizon={horizon}[/dim]")
+        return
+
+    table = Table(title=f"Risk Flag Performance — Horizon {horizon}d")
+    table.add_column("Risk Flag")
+    table.add_column("Count")
+    table.add_column("Avg Fwd Rtn")
+    table.add_column("Hit Rate")
+    table.add_column("Failure Rate")
+    for row in rows:
+        fwd = f"{row['avg_forward_return']:.2%}" if row["avg_forward_return"] is not None else "—"
+        hit = f"{row['hit_rate']:.1%}" if row["hit_rate"] is not None else "—"
+        fail = f"{row['failure_rate']:.1%}" if row["failure_rate"] is not None else "—"
+        table.add_row(row["risk_flag"], str(row["candidate_count"] or 0), fwd, hit, fail)
+    console.print(table)
+
+
+@outcome_app.command("report")
+def outcome_report(
+    horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
+    date: Optional[str] = typer.Option(None, "--date", help="As-of date (default: latest)"),
+):
+    """Generate calibration report."""
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.outcomes.calibration import generate_calibration_report
+    from vnalpha.core.dates import resolve_date
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+    as_of = resolve_date(date) if date else None
+    report = generate_calibration_report(conn, horizon, as_of_date=as_of)
+    conn.close()
+
+    console = Console()
+    console.print(Panel(
+        f"As-of date: {report['as_of_date']} | Horizon: {horizon} sessions\n"
+        f"Pending: {report['pending_count']} | Missing: {report['missing_count']}\n"
+        f"Score bucket monotone: {report['score_bucket_monotone']}\n"
+        f"Best setup: {report.get('best_setup') or '—'} | Worst setup: {report.get('worst_setup') or '—'}\n"
+        f"Worst risk flag: {report.get('worst_risk_flag') or '—'}\n\n"
+        f"[dim]{report['interpretation_note']}[/dim]",
+        title="Calibration Report",
+    ))
+    """Launch the interactive research TUI."""
+    try:
+        from vnalpha.tui.app import VnAlphaApp
+    except ImportError as err:
+        typer.echo(
+            "Error: 'textual' is required for the TUI. Install it with: pip install textual",
+            err=True,
+        )
+        raise typer.Exit(code=1) from err
+
+    VnAlphaApp(date=date).run()
+
+
 @app.command("cmd")
 def cmd_runner(
     command: str = typer.Argument(..., help="Slash command to run, e.g. '/scan VN30'"),

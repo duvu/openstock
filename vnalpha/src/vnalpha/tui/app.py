@@ -14,6 +14,7 @@ from vnalpha.tui.screens.detail import DetailScreen
 from vnalpha.tui.screens.home import HomeScreen
 from vnalpha.tui.screens.quality import QualityScreen
 from vnalpha.tui.screens.rejected import RejectedScreen
+from vnalpha.tui.screens.outcomes import OutcomeScreen
 from vnalpha.tui.screens.watchlist import WatchlistScreen
 
 
@@ -41,6 +42,7 @@ class VnAlphaApp(App):
         Binding("a", "show_assistant", "Ask"),
         Binding("r", "show_rejected", "Rejected"),
         Binding("p", "show_quality", "Quality"),
+        Binding("o", "show_outcomes", "Outcomes"),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -68,6 +70,9 @@ class VnAlphaApp(App):
 
     def action_show_quality(self) -> None:
         self.push_screen(QualityScreen())
+
+    def action_show_outcomes(self) -> None:
+        self.push_screen(OutcomeScreen(target_date=self.target_date))
 
     def show_detail(self, symbol: str) -> None:
         self.push_screen(DetailScreen(symbol=symbol, target_date=self.target_date))

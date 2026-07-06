@@ -200,8 +200,6 @@ ALL_DDL_PHASE58 = [
     RESEARCH_NOTE_DDL,
 ]
 
-ALL_DDL_COMBINED = ALL_DDL + ALL_DDL_PHASE58
-
 # Phase 5.9 assistant-layer tables
 ASSISTANT_SESSION_DDL = """
 CREATE TABLE IF NOT EXISTS assistant_session (
@@ -239,3 +237,116 @@ ALL_DDL_PHASE59 = [
     ASSISTANT_SESSION_DDL,
     LLM_TRACE_DDL,
 ]
+
+# Phase 6 outcome-tracking tables
+CANDIDATE_OUTCOME_DDL = """
+CREATE TABLE IF NOT EXISTS candidate_outcome (
+    symbol                   VARCHAR NOT NULL,
+    watchlist_date           DATE NOT NULL,
+    horizon_sessions         INTEGER NOT NULL,
+    rank                     INTEGER,
+    score                    DOUBLE,
+    candidate_class          VARCHAR,
+    setup_type               VARCHAR,
+    risk_flags_json          VARCHAR,
+    entry_close              DOUBLE,
+    exit_close               DOUBLE,
+    benchmark_entry_close    DOUBLE,
+    benchmark_exit_close     DOUBLE,
+    forward_return           DOUBLE,
+    benchmark_return         DOUBLE,
+    excess_return_vs_vnindex DOUBLE,
+    max_gain                 DOUBLE,
+    max_drawdown             DOUBLE,
+    hit                      BOOLEAN,
+    failure                  BOOLEAN,
+    outcome_status           VARCHAR NOT NULL,
+    bars_available           INTEGER,
+    required_bars            INTEGER,
+    computed_at              TIMESTAMPTZ,
+    error_json               VARCHAR,
+    PRIMARY KEY (symbol, watchlist_date, horizon_sessions)
+)
+"""
+
+WATCHLIST_OUTCOME_DDL = """
+CREATE TABLE IF NOT EXISTS watchlist_outcome (
+    watchlist_date           DATE NOT NULL,
+    horizon_sessions         INTEGER NOT NULL,
+    candidate_count          INTEGER,
+    complete_count           INTEGER,
+    pending_count            INTEGER,
+    missing_data_count       INTEGER,
+    avg_forward_return       DOUBLE,
+    median_forward_return    DOUBLE,
+    avg_excess_return        DOUBLE,
+    median_excess_return     DOUBLE,
+    avg_max_gain             DOUBLE,
+    avg_max_drawdown         DOUBLE,
+    hit_rate                 DOUBLE,
+    failure_rate             DOUBLE,
+    computed_at              TIMESTAMPTZ,
+    PRIMARY KEY (watchlist_date, horizon_sessions)
+)
+"""
+
+SCORE_BUCKET_PERFORMANCE_DDL = """
+CREATE TABLE IF NOT EXISTS score_bucket_performance (
+    as_of_date               DATE NOT NULL,
+    horizon_sessions         INTEGER NOT NULL,
+    score_bucket             VARCHAR NOT NULL,
+    candidate_count          INTEGER,
+    avg_forward_return       DOUBLE,
+    median_forward_return    DOUBLE,
+    avg_excess_return        DOUBLE,
+    hit_rate                 DOUBLE,
+    failure_rate             DOUBLE,
+    avg_max_drawdown         DOUBLE,
+    computed_at              TIMESTAMPTZ,
+    PRIMARY KEY (as_of_date, horizon_sessions, score_bucket)
+)
+"""
+
+SETUP_TYPE_PERFORMANCE_DDL = """
+CREATE TABLE IF NOT EXISTS setup_type_performance (
+    as_of_date               DATE NOT NULL,
+    horizon_sessions         INTEGER NOT NULL,
+    setup_type               VARCHAR NOT NULL,
+    candidate_count          INTEGER,
+    avg_forward_return       DOUBLE,
+    median_forward_return    DOUBLE,
+    avg_excess_return        DOUBLE,
+    hit_rate                 DOUBLE,
+    failure_rate             DOUBLE,
+    avg_max_drawdown         DOUBLE,
+    computed_at              TIMESTAMPTZ,
+    PRIMARY KEY (as_of_date, horizon_sessions, setup_type)
+)
+"""
+
+RISK_FLAG_PERFORMANCE_DDL = """
+CREATE TABLE IF NOT EXISTS risk_flag_performance (
+    as_of_date               DATE NOT NULL,
+    horizon_sessions         INTEGER NOT NULL,
+    risk_flag                VARCHAR NOT NULL,
+    candidate_count          INTEGER,
+    avg_forward_return       DOUBLE,
+    median_forward_return    DOUBLE,
+    avg_excess_return        DOUBLE,
+    hit_rate                 DOUBLE,
+    failure_rate             DOUBLE,
+    avg_max_drawdown         DOUBLE,
+    computed_at              TIMESTAMPTZ,
+    PRIMARY KEY (as_of_date, horizon_sessions, risk_flag)
+)
+"""
+
+ALL_DDL_PHASE6 = [
+    CANDIDATE_OUTCOME_DDL,
+    WATCHLIST_OUTCOME_DDL,
+    SCORE_BUCKET_PERFORMANCE_DDL,
+    SETUP_TYPE_PERFORMANCE_DDL,
+    RISK_FLAG_PERFORMANCE_DDL,
+]
+
+ALL_DDL_COMBINED = ALL_DDL + ALL_DDL_PHASE58 + ALL_DDL_PHASE59 + ALL_DDL_PHASE6
