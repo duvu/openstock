@@ -29,9 +29,15 @@ def handle_explain(
     symbol = normalize_symbol(parsed.positional[0])
     date = normalize_date(parsed.options.get("date"))
 
-    from vnalpha.tools.scoring import explain_candidate
-
-    output = explain_candidate(conn, symbol=symbol, date=date)
+    tool_executor = kwargs.get("tool_executor")
+    if tool_executor is not None:
+        output = tool_executor.call("candidate.explain", symbol=symbol, date=date)
+        quality_output = tool_executor.call("quality.get_status", symbol=symbol, date=date)
+    else:
+        from vnalpha.tools.quality import get_quality_status
+        from vnalpha.tools.scoring import explain_candidate
+        output = explain_candidate(conn, symbol=symbol, date=date)
+        quality_output = get_quality_status(conn, symbol=symbol, date=date)
 
     if output.data is None:
         return CommandResult(
@@ -57,6 +63,7 @@ def handle_explain(
         ResultPanel(title="Score Summary", content=score_info),
         ResultPanel(title="Score Breakdown", content=evidence),
         ResultPanel(title="Risk Flags", content={"flags": risk_flags}),
+        ResultPanel(title="Data Quality", content={"rows": quality_output.data or []}),
         ResultPanel(title="Lineage", content=lineage),
     ]
     return CommandResult(

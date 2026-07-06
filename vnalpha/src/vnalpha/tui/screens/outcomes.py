@@ -29,7 +29,7 @@ if _TEXTUAL_AVAILABLE:
         def compose(self) -> ComposeResult:
             yield Header()
             yield Label(
-                f"Outcome Review — {self.target_date} | Horizon {self.horizon}d",
+                f"Outcome Review — {self.target_date} | Horizon {self.horizon} sessions",
                 id="outcome-title",
             )
             yield Static(self._build_summary(), id="outcome-summary")
@@ -106,7 +106,12 @@ if _TEXTUAL_AVAILABLE:
                 rows = get_candidate_outcomes(conn, self.target_date, self.horizon)
                 conn.close()
                 table = self.query_one("#outcome-candidates-table", DataTable)
-                table.add_columns("Symbol", "Status", "Score", "Fwd Rtn", "Excess Rtn", "Hit", "Failure")
+                self._reset_table(
+                    table, "Symbol", "Status", "Score", "Fwd Rtn", "Excess Rtn", "Hit", "Failure"
+                )
+                if not rows:
+                    table.add_row("No candidate outcome data available.", "—", "—", "—", "—", "—", "—")
+                    return
                 for row in rows:
                     fwd = f"{row['forward_return']:.2%}" if row["forward_return"] is not None else "—"
                     exc = f"{row['excess_return_vs_vnindex']:.2%}" if row["excess_return_vs_vnindex"] is not None else "—"
@@ -116,9 +121,6 @@ if _TEXTUAL_AVAILABLE:
                         str(row["hit"]) if row["hit"] is not None else "—",
                         str(row["failure"]) if row["failure"] is not None else "—",
                     )
-                if not rows:
-                    table.add_columns("Info")
-                    table.add_row("No candidate outcome data available.")
             except Exception as exc:
                 logger.warning(f"Error populating candidates table: {exc}")
 
@@ -132,7 +134,10 @@ if _TEXTUAL_AVAILABLE:
                 rows = list_score_bucket_performance(conn, self.horizon)
                 conn.close()
                 table = self.query_one("#outcome-buckets-table", DataTable)
-                table.add_columns("Bucket", "Count", "Avg Fwd Rtn", "Hit Rate", "Failure Rate")
+                self._reset_table(table, "Bucket", "Count", "Avg Fwd Rtn", "Hit Rate", "Failure Rate")
+                if not rows:
+                    table.add_row("No score bucket data available.", "—", "—", "—", "—")
+                    return
                 for row in rows:
                     fwd = f"{row['avg_forward_return']:.2%}" if row["avg_forward_return"] is not None else "—"
                     hit_rate_str = f"{row['hit_rate']:.1%}" if row["hit_rate"] is not None else "—"
@@ -154,7 +159,10 @@ if _TEXTUAL_AVAILABLE:
                 rows = list_setup_type_performance(conn, self.horizon)
                 conn.close()
                 table = self.query_one("#outcome-setups-table", DataTable)
-                table.add_columns("Setup Type", "Count", "Avg Fwd Rtn", "Hit Rate", "Failure Rate")
+                self._reset_table(table, "Setup Type", "Count", "Avg Fwd Rtn", "Hit Rate", "Failure Rate")
+                if not rows:
+                    table.add_row("No setup type data available.", "—", "—", "—", "—")
+                    return
                 for row in rows:
                     fwd = f"{row['avg_forward_return']:.2%}" if row["avg_forward_return"] is not None else "—"
                     hit_rate_str = f"{row['hit_rate']:.1%}" if row["hit_rate"] is not None else "—"
@@ -176,7 +184,10 @@ if _TEXTUAL_AVAILABLE:
                 rows = list_risk_flag_performance(conn, self.horizon)
                 conn.close()
                 table = self.query_one("#outcome-risks-table", DataTable)
-                table.add_columns("Risk Flag", "Count", "Avg Fwd Rtn", "Hit Rate", "Failure Rate")
+                self._reset_table(table, "Risk Flag", "Count", "Avg Fwd Rtn", "Hit Rate", "Failure Rate")
+                if not rows:
+                    table.add_row("No risk flag data available.", "—", "—", "—", "—")
+                    return
                 for row in rows:
                     fwd = f"{row['avg_forward_return']:.2%}" if row["avg_forward_return"] is not None else "—"
                     hit_rate_str = f"{row['hit_rate']:.1%}" if row["hit_rate"] is not None else "—"
@@ -187,6 +198,10 @@ if _TEXTUAL_AVAILABLE:
                     )
             except Exception as exc:
                 logger.warning(f"Error populating risks table: {exc}")
+
+        def _reset_table(self, table, *columns: str) -> None:
+            table.clear(columns=True)
+            table.add_columns(*columns)
 
 else:
     # Stub for environments without textual

@@ -76,12 +76,14 @@ def _parse_classifier_response(response_text: str, user_prompt: str) -> IntentRe
 class IntentClassifier:
     def __init__(self, llm_client: "LLMGatewayClient"):
         self._client = llm_client
+        self.last_usage: dict | None = None
 
     def classify(self, user_prompt: str) -> IntentResult:
         """Classify user intent. Applies deterministic pre-rules first."""
         # Pre-check
         unsafe_category = _deterministic_precheck(user_prompt)
         if unsafe_category:
+            self.last_usage = None
             return IntentResult(
                 intent="unsupported_or_unsafe",
                 confidence=1.0,
@@ -91,7 +93,8 @@ class IntentClassifier:
         # LLM classification
         messages = _build_classifier_messages(user_prompt)
         try:
-            response_text, _usage = self._client.chat(messages, stage="classify")
+            response_text, usage = self._client.chat(messages, stage="classify")
         except Exception as exc:
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
+        self.last_usage = usage
         return _parse_classifier_response(response_text, user_prompt)

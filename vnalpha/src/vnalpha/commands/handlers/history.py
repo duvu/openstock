@@ -25,9 +25,12 @@ def handle_history(
     except (TypeError, ValueError):
         limit = 20
 
-    from vnalpha.tools.notes import list_sessions
-
-    output = list_sessions(conn, limit=limit)
+    tool_executor = kwargs.get("tool_executor")
+    if tool_executor is not None:
+        output = tool_executor.call("history.list_sessions", limit=limit)
+    else:
+        from vnalpha.tools.notes import list_sessions
+        output = list_sessions(conn, limit=limit)
     sessions = output.data or []
 
     if not sessions:

@@ -28,9 +28,18 @@ def handle_note(
     tags_raw = parsed.options.get("tags")
     tags = [t.strip() for t in str(tags_raw).split(",")] if tags_raw else []
 
-    from vnalpha.tools.notes import create_note
-
-    output = create_note(conn, symbol=symbol, note_text=note_text, session_id=session_id, tags=tags)
+    tool_executor = kwargs.get("tool_executor")
+    if tool_executor is not None:
+        output = tool_executor.call(
+            "note.create",
+            symbol=symbol,
+            note_text=note_text,
+            session_id=session_id,
+            tags=tags,
+        )
+    else:
+        from vnalpha.tools.notes import create_note
+        output = create_note(conn, symbol=symbol, note_text=note_text, session_id=session_id, tags=tags)
 
     return CommandResult(
         status="SUCCESS",

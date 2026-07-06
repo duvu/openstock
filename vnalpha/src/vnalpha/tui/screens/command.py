@@ -45,9 +45,8 @@ class CommandScreen(Screen):
         result_panel = self.query_one("#cmd-result", CommandResultPanel)
 
         try:
-            from vnalpha.commands.parser import parse as parse_command
+            from vnalpha.commands.executor import CommandExecutor
             from vnalpha.commands.renderers.textual_renderer import result_to_markup
-            from vnalpha.commands.setup import build_default_registry
 
             # Get warehouse connection (may not be available in TUI context without conn)
             conn = None
@@ -59,9 +58,11 @@ class CommandScreen(Screen):
             except Exception:
                 pass
 
-            parsed = parse_command(text)
-            registry = build_default_registry()
-            result = registry.execute(parsed, conn=conn, registry=registry)
+            result = CommandExecutor(
+                conn,
+                surface="tui",
+                default_date=self.target_date,
+            ).execute(text)
             markup = result_to_markup(result)
             result_panel.show_result(markup)
 

@@ -82,8 +82,11 @@ def parse(text: str) -> ParsedCommand:
         m = _FILTER_RE.match(tok)
         if m:
             fkey, fop, fval = m.group(1), m.group(2), m.group(3)
+            fval = fval.strip()
+            if fval.startswith((">", "<", "=", "!")):
+                raise CommandParseError(f"Malformed filter expression: {tok!r}")
             filters.append(
-                CommandFilter(key=fkey, op=_validate_op(fop), value=fval.strip())
+                CommandFilter(key=fkey, op=_validate_op(fop), value=fval)
             )
             i += 1
             continue

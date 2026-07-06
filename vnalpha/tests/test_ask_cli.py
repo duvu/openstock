@@ -160,6 +160,19 @@ class TestAskFunctional:
         assert result.exit_code == 0
         assert "persisted candidate_score" in result.output
 
+    def test_ask_assistant_error_renders_without_console_type_error(self):
+        """Assistant errors must render cleanly and exit non-zero."""
+        from vnalpha.assistant.errors import AssistantError
+
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask",
+            side_effect=AssistantError("LLM unavailable"),
+        ):
+            result = runner.invoke(app, ["ask", "Show watchlist"])
+        assert result.exit_code == 1
+        assert "Assistant error" in result.output
+        assert "unexpected keyword argument 'err'" not in result.output
+
 
 # ---------------------------------------------------------------------------
 # TUI binding and screen tests

@@ -30,9 +30,12 @@ def handle_compare(
     symbols = normalize_symbols(parsed.positional)
     date = normalize_date(parsed.options.get("date"))
 
-    from vnalpha.tools.scoring import compare_candidates
-
-    output = compare_candidates(conn, symbols=symbols, date=date)
+    tool_executor = kwargs.get("tool_executor")
+    if tool_executor is not None:
+        output = tool_executor.call("candidate.compare", symbols=symbols, date=date)
+    else:
+        from vnalpha.tools.scoring import compare_candidates
+        output = compare_candidates(conn, symbols=symbols, date=date)
     records = output.data or []
 
     if not records:
@@ -52,6 +55,8 @@ def handle_compare(
             f"{r.get('trend_score', 0):.2f}" if r.get("trend_score") is not None else "—",
             f"{r.get('relative_strength_score', 0):.2f}" if r.get("relative_strength_score") is not None else "—",
             f"{r.get('volume_score', 0):.2f}" if r.get("volume_score") is not None else "—",
+            _format_risk_flags(r.get("risk_flags_json")),
+            r.get("data_quality_status", "unknown"),
         ]
         for r in records
     ]
@@ -65,6 +70,8 @@ def handle_compare(
             ResultColumn("trend", "Trend"),
             ResultColumn("rs", "RS"),
             ResultColumn("volume", "Volume"),
+            ResultColumn("risk_flags", "Risk Flags"),
+            ResultColumn("quality", "Quality"),
         ],
         rows=rows,
     )
@@ -75,3 +82,9 @@ def handle_compare(
         tables=[table],
         warnings=output.warnings,
     )
+
+
+def _format_risk_flags(value) -> str:
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value) or "—"
+    return str(value) if value else "—"

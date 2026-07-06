@@ -171,7 +171,9 @@ CREATE TABLE IF NOT EXISTS research_session (
 TOOL_TRACE_DDL = """
 CREATE TABLE IF NOT EXISTS tool_trace (
     tool_trace_id         VARCHAR PRIMARY KEY,
-    session_id            VARCHAR NOT NULL,
+    session_id            VARCHAR,
+    assistant_session_id  VARCHAR,
+    trace_parent_type     VARCHAR,
     tool_name             VARCHAR NOT NULL,
     started_at            TIMESTAMPTZ NOT NULL,
     finished_at           TIMESTAMPTZ,

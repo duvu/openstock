@@ -9,7 +9,12 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
-from vnalpha.warehouse.schema import ALL_DDL, ALL_DDL_PHASE58, ALL_DDL_PHASE59, ALL_DDL_PHASE6
+from vnalpha.warehouse.schema import (
+    ALL_DDL,
+    ALL_DDL_PHASE6,
+    ALL_DDL_PHASE58,
+    ALL_DDL_PHASE59,
+)
 
 logger = get_logger("warehouse.migrations")
 
@@ -31,8 +36,15 @@ def run_migrations(
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE58:
         conn.execute(ddl)
+    _migrate_tool_trace_parent_columns(conn)
     for ddl in ALL_DDL_PHASE59:
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE6:
         conn.execute(ddl)
     logger.info("Warehouse migrations complete.")
+
+
+def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add explicit parent columns for existing Phase 5.8 databases."""
+    conn.execute("ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS assistant_session_id VARCHAR")
+    conn.execute("ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS trace_parent_type VARCHAR")

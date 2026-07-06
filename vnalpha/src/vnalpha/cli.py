@@ -290,10 +290,10 @@ def outcome_evaluate(
     to_date: Optional[str] = typer.Option(None, "--to", help="End date for range evaluation"),
 ):
     """Evaluate candidate outcomes for a date or date range."""
+    from vnalpha.core.dates import resolve_date
+    from vnalpha.outcomes.evaluator import evaluate_date_range, evaluate_watchlist_date
     from vnalpha.warehouse.connection import get_connection
     from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.outcomes.evaluator import evaluate_watchlist_date, evaluate_date_range
-    from vnalpha.core.dates import resolve_date
 
     conn = get_connection()
     run_migrations(conn=conn)
@@ -303,11 +303,17 @@ def outcome_evaluate(
         result = evaluate_watchlist_date(conn, target)
         typer.echo(f"Evaluated {result['evaluated']} candidate-horizon pairs for {target}.")
         typer.echo(f"Persisted: {result['persisted']}, Errors: {result['errors']}")
+        if result.get("aggregates"):
+            typer.echo(f"Aggregates: {len(result['aggregates'])} horizons")
     elif from_date and to_date:
         results = evaluate_date_range(conn, from_date, to_date)
         total = sum(r["evaluated"] for r in results)
         persisted = sum(r["persisted"] for r in results)
-        typer.echo(f"Evaluated {len(results)} dates, {total} pairs, {persisted} persisted.")
+        aggregate_horizons = sum(len(r.get("aggregates", {})) for r in results)
+        typer.echo(
+            f"Evaluated {len(results)} dates, {total} pairs, {persisted} persisted, "
+            f"{aggregate_horizons} aggregate horizons."
+        )
     else:
         typer.echo("Provide --date or --from/--to.", err=True)
         raise typer.Exit(code=1)
@@ -320,12 +326,13 @@ def outcome_candidates(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show candidate outcomes for a date and horizon."""
-    from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.outcomes.repositories import get_candidate_outcomes
-    from vnalpha.core.dates import resolve_date
     from rich.console import Console
     from rich.table import Table
+
+    from vnalpha.core.dates import resolve_date
+    from vnalpha.outcomes.repositories import get_candidate_outcomes
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
 
     conn = get_connection()
     run_migrations(conn=conn)
@@ -337,7 +344,7 @@ def outcome_candidates(
         console.print(f"[dim]No candidate outcomes for {date} horizon={horizon}[/dim]")
         return
 
-    table = Table(title=f"Candidate Outcomes — {date} | Horizon {horizon}d")
+    table = Table(title=f"Candidate Outcomes — {date} | Horizon {horizon} sessions")
     table.add_column("Symbol")
     table.add_column("Status")
     table.add_column("Score")
@@ -368,12 +375,13 @@ def outcome_watchlist(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show watchlist outcome summary for a date and horizon."""
-    from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.outcomes.repositories import get_watchlist_outcome
-    from vnalpha.core.dates import resolve_date
     from rich.console import Console
     from rich.panel import Panel
+
+    from vnalpha.core.dates import resolve_date
+    from vnalpha.outcomes.repositories import get_watchlist_outcome
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
 
     conn = get_connection()
     run_migrations(conn=conn)
@@ -397,7 +405,7 @@ def outcome_watchlist(
         f"Hit Rate: {hit_rate}",
         f"Failure Rate: {fail_rate}",
     ]
-    console.print(Panel("\n".join(lines), title=f"Watchlist Outcome — {date} | Horizon {horizon}d"))
+    console.print(Panel("\n".join(lines), title=f"Watchlist Outcome — {date} | Horizon {horizon} sessions"))
 
 
 @outcome_app.command("buckets")
@@ -405,11 +413,12 @@ def outcome_buckets(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show score bucket performance."""
-    from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.outcomes.repositories import list_score_bucket_performance
     from rich.console import Console
     from rich.table import Table
+
+    from vnalpha.outcomes.repositories import list_score_bucket_performance
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
 
     conn = get_connection()
     run_migrations(conn=conn)
@@ -421,7 +430,7 @@ def outcome_buckets(
         console.print(f"[dim]No score bucket data for horizon={horizon}[/dim]")
         return
 
-    table = Table(title=f"Score Bucket Performance — Horizon {horizon}d")
+    table = Table(title=f"Score Bucket Performance — Horizon {horizon} sessions")
     table.add_column("Bucket")
     table.add_column("Count")
     table.add_column("Avg Fwd Rtn")
@@ -440,11 +449,12 @@ def outcome_setups(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show setup type performance."""
-    from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.outcomes.repositories import list_setup_type_performance
     from rich.console import Console
     from rich.table import Table
+
+    from vnalpha.outcomes.repositories import list_setup_type_performance
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
 
     conn = get_connection()
     run_migrations(conn=conn)
@@ -456,7 +466,7 @@ def outcome_setups(
         console.print(f"[dim]No setup type data for horizon={horizon}[/dim]")
         return
 
-    table = Table(title=f"Setup Type Performance — Horizon {horizon}d")
+    table = Table(title=f"Setup Type Performance — Horizon {horizon} sessions")
     table.add_column("Setup Type")
     table.add_column("Count")
     table.add_column("Avg Fwd Rtn")
@@ -475,11 +485,12 @@ def outcome_risks(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show risk flag performance."""
-    from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.outcomes.repositories import list_risk_flag_performance
     from rich.console import Console
     from rich.table import Table
+
+    from vnalpha.outcomes.repositories import list_risk_flag_performance
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
 
     conn = get_connection()
     run_migrations(conn=conn)
@@ -491,7 +502,7 @@ def outcome_risks(
         console.print(f"[dim]No risk flag data for horizon={horizon}[/dim]")
         return
 
-    table = Table(title=f"Risk Flag Performance — Horizon {horizon}d")
+    table = Table(title=f"Risk Flag Performance — Horizon {horizon} sessions")
     table.add_column("Risk Flag")
     table.add_column("Count")
     table.add_column("Avg Fwd Rtn")
@@ -511,13 +522,13 @@ def outcome_report(
     date: Optional[str] = typer.Option(None, "--date", help="As-of date (default: latest)"),
 ):
     """Generate calibration report."""
-    from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.outcomes.calibration import generate_calibration_report
-    from vnalpha.core.dates import resolve_date
     from rich.console import Console
     from rich.panel import Panel
-    from rich.table import Table
+
+    from vnalpha.core.dates import resolve_date
+    from vnalpha.outcomes.calibration import generate_calibration_report
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
 
     conn = get_connection()
     run_migrations(conn=conn)
@@ -529,23 +540,15 @@ def outcome_report(
     console.print(Panel(
         f"As-of date: {report['as_of_date']} | Horizon: {horizon} sessions\n"
         f"Pending: {report['pending_count']} | Missing: {report['missing_count']}\n"
+        f"Score buckets: {len(report.get('score_buckets', []))} | "
+        f"Setups: {len(report.get('setup_types', []))} | "
+        f"Risk flags: {len(report.get('risk_flags', []))}\n"
         f"Score bucket monotone: {report['score_bucket_monotone']}\n"
         f"Best setup: {report.get('best_setup') or '—'} | Worst setup: {report.get('worst_setup') or '—'}\n"
         f"Worst risk flag: {report.get('worst_risk_flag') or '—'}\n\n"
         f"[dim]{report['interpretation_note']}[/dim]",
         title="Calibration Report",
     ))
-    """Launch the interactive research TUI."""
-    try:
-        from vnalpha.tui.app import VnAlphaApp
-    except ImportError as err:
-        typer.echo(
-            "Error: 'textual' is required for the TUI. Install it with: pip install textual",
-            err=True,
-        )
-        raise typer.Exit(code=1) from err
-
-    VnAlphaApp(date=date).run()
 
 
 @app.command("cmd")
@@ -564,88 +567,15 @@ def cmd_runner(
         vnalpha cmd "/filter score>=0.70"
         vnalpha cmd "/history --limit 20"
     """
-    from vnalpha.commands.errors import (
-        CommandError,
-        CommandParseError,
-        UnknownCommandError,
-    )
-    from vnalpha.commands.parser import parse as parse_command
+    from vnalpha.commands.executor import CommandExecutor
     from vnalpha.commands.renderers.rich_renderer import render_result
-    from vnalpha.commands.setup import build_default_registry
     from vnalpha.warehouse.connection import get_connection
     from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.warehouse.session_repo import (
-        create_research_session,
-        finish_research_session,
-    )
-
-    # Parse command
-    try:
-        parsed = parse_command(command)
-    except CommandParseError as exc:
-        typer.echo(f"Parse error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    # Override date option if --date passed to CLI
-    if date:
-        parsed.options["date"] = date
 
     # Open warehouse connection
     conn = get_connection()
     run_migrations(conn=conn)
-
-    # Create research session
-    session_id = create_research_session(
-        conn,
-        surface="cli",
-        command_text=command,
-        command_name=parsed.command_name,
-        parsed_args={
-            "positional": parsed.positional,
-            "filters": [(f.key, f.op, f.value) for f in parsed.filters],
-            "options": dict(parsed.options),
-        },
-    )
-
-    # Build registry and run
-    registry = build_default_registry()
-    try:
-        result = registry.execute(parsed, conn=conn, registry=registry, session_id=session_id)
-    except UnknownCommandError as exc:
-        finish_research_session(
-            conn, session_id, status="FAILED",
-            error={"error_type": "UnknownCommandError", "message": str(exc)},
-        )
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc
-    except CommandError as exc:
-        finish_research_session(
-            conn, session_id, status="FAILED",
-            error={"error_type": type(exc).__name__, "message": str(exc)},
-        )
-        typer.echo(f"Command error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-    except Exception as exc:
-        finish_research_session(
-            conn, session_id, status="FAILED",
-            error={"error_type": "RuntimeError", "message": str(exc)},
-        )
-        typer.echo(f"Unexpected error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    # Persist session result
-    session_status = result.status if result.status == "SUCCESS" else "FAILED"
-    if result.status == "VALIDATION_ERROR":
-        session_status = "VALIDATION_ERROR"
-    finish_research_session(
-        conn,
-        session_id,
-        status=session_status,
-        result_summary={"title": result.title, "summary": result.summary},
-        error={"error_type": result.error.error_type, "message": result.error.message}
-        if result.error
-        else None,
-    )
+    result = CommandExecutor(conn, surface="cli").execute(command, date_override=date)
 
     # Render result
     try:
@@ -689,10 +619,9 @@ def ask_runner(
     from vnalpha.warehouse.migrations import run_migrations
 
     console = Console()
+    error_console = Console(stderr=True)
 
-    resolved_date = None
-    if date:
-        resolved_date = resolve_date(date)
+    resolved_date = resolve_date(date)
 
     conn = get_connection()
     run_migrations(conn=conn)
@@ -703,10 +632,10 @@ def ask_runner(
         assistant = AssistantApp(conn, surface="cli", llm_client=llm_client)
         result, plan = assistant.ask(question, date=resolved_date, no_execute=no_execute)
     except AssistantError as exc:
-        console.print(f"[red]Assistant error: {exc}[/red]", err=True)
+        error_console.print(f"[red]Assistant error: {exc}[/red]")
         raise typer.Exit(code=1) from exc
     except Exception as exc:
-        console.print(f"[red]Unexpected error: {exc}[/red]", err=True)
+        error_console.print(f"[red]Unexpected error: {exc}[/red]")
         raise typer.Exit(code=1) from exc
 
     # Show plan if requested (or if no_execute)

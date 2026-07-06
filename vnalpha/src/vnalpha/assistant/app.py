@@ -112,12 +112,17 @@ class AssistantApp:
 
         # 2. Classify intent
         llm_trace_id = create_llm_trace(
-            self._conn, assistant_session_id=session_id, stage="classify"
+            self._conn,
+            assistant_session_id=session_id,
+            stage="classify",
+            model=self._llm_model(),
+            input_summary={"prompt_chars": len(user_prompt)},
         )
         try:
             intent_result = self._classifier.classify(user_prompt)
             finish_llm_trace(self._conn, llm_trace_id, status="SUCCESS",
-                             output_summary={"intent": intent_result.intent})
+                             output_summary={"intent": intent_result.intent},
+                             usage=self._classifier.last_usage)
         except Exception as exc:
             finish_llm_trace(self._conn, llm_trace_id, status="FAILED",
                              error={"message": str(exc)})
@@ -152,12 +157,17 @@ class AssistantApp:
 
         # 6. Synthesize answer
         llm_trace_id2 = create_llm_trace(
-            self._conn, assistant_session_id=session_id, stage="synthesize"
+            self._conn,
+            assistant_session_id=session_id,
+            stage="synthesize",
+            model=self._llm_model(),
+            input_summary={"steps": len(plan.steps)},
         )
         try:
             answer = self._synthesizer.synthesize(user_prompt, plan, tool_outputs)
             finish_llm_trace(self._conn, llm_trace_id2, status="SUCCESS",
-                             output_summary={"summary_length": len(answer.summary)})
+                             output_summary={"summary_length": len(answer.summary)},
+                             usage=self._synthesizer.last_usage)
         except Exception as exc:
             finish_llm_trace(self._conn, llm_trace_id2, status="FAILED",
                              error={"message": str(exc)})
@@ -171,3 +181,8 @@ class AssistantApp:
             answer=answer.to_dict(),
         )
         return answer, plan
+
+    def _llm_model(self) -> str:
+        config = getattr(self._llm, "config", None)
+        model = getattr(config, "model", None)
+        return str(model or type(self._llm).__name__)

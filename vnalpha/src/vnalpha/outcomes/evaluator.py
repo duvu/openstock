@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.outcomes.aggregations import aggregate_all
 from vnalpha.outcomes.horizons import (
     BENCHMARK_SYMBOL,
     DEFAULT_HORIZONS,
@@ -90,7 +91,15 @@ def _get_ohlcv_bars(conn: duckdb.DuckDBPyConnection, symbol: str) -> List[Dict]:
         """,
         [symbol],
     ).fetchall()
-    return [{"time": r[0][:10], "close": float(r[1])} for r in rows]
+    bars = []
+    for time_value, close in rows:
+        if close is None:
+            continue
+        try:
+            bars.append({"time": time_value[:10], "close": float(close)})
+        except (TypeError, ValueError):
+            logger.warning(f"Skipping malformed close for {symbol}: {close!r}")
+    return bars
 
 
 def _evaluate_single_candidate(
@@ -184,7 +193,13 @@ def evaluate_watchlist_date(
     candidates = _get_watchlist_rows(conn, watchlist_date)
     if not candidates:
         logger.info(f"No watchlist rows found for {watchlist_date}")
-        return {"evaluated": 0, "persisted": 0, "errors": 0, "watchlist_date": watchlist_date}
+        return {
+            "evaluated": 0,
+            "persisted": 0,
+            "errors": 0,
+            "watchlist_date": watchlist_date,
+            "aggregates": {},
+        }
 
     # Preload benchmark
     benchmark_bars = _get_ohlcv_bars(conn, BENCHMARK_SYMBOL)
@@ -222,6 +237,14 @@ def evaluate_watchlist_date(
                 except Exception:
                     pass
 
+    aggregates: dict[int, dict[str, Any]] = {}
+    for horizon in horizons:
+        try:
+            aggregates[horizon] = aggregate_all(conn, watchlist_date, horizon)
+        except Exception as exc:
+            errors += 1
+            logger.warning(f"Error aggregating {watchlist_date}/h{horizon}: {exc}")
+
     logger.info(
         f"Outcome evaluation {watchlist_date}: "
         f"evaluated={evaluated}, persisted={persisted}, errors={errors}"
@@ -231,6 +254,7 @@ def evaluate_watchlist_date(
         "evaluated": evaluated,
         "persisted": persisted,
         "errors": errors,
+        "aggregates": aggregates,
     }
 
 

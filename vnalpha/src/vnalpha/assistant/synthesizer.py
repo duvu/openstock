@@ -84,6 +84,7 @@ def _parse_synthesis_response(response_text: str) -> AssistantAnswer:
 class AnswerSynthesizer:
     def __init__(self, llm_client: "LLMGatewayClient"):
         self._client = llm_client
+        self.last_usage: dict | None = None
 
     def synthesize(
         self,
@@ -94,7 +95,8 @@ class AnswerSynthesizer:
         """Synthesize a grounded answer from tool outputs."""
         messages = _build_synthesis_messages(user_prompt, plan, tool_outputs)
         try:
-            response_text, _usage = self._client.chat(messages, stage="synthesize")
+            response_text, usage = self._client.chat(messages, stage="synthesize")
         except Exception as exc:
             raise SynthesisError(f"LLM synthesis call failed: {exc}") from exc
+        self.last_usage = usage
         return _parse_synthesis_response(response_text)

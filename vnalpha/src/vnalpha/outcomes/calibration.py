@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.outcomes.aggregations import aggregate_all
 from vnalpha.outcomes.repositories import (
     get_watchlist_outcome,
     list_risk_flag_performance,
@@ -33,6 +34,9 @@ def generate_calibration_report(
         ).fetchone()
         as_of_date = row[0] if row and row[0] else "N/A"
 
+    if as_of_date == "N/A":
+        return _empty_report(horizon, as_of_date)
+
     # Score bucket performance
     bucket_rows = list_score_bucket_performance(conn, horizon, as_of_date)
 
@@ -44,6 +48,21 @@ def generate_calibration_report(
 
     # Watchlist outcome summary
     wl_row = get_watchlist_outcome(conn, as_of_date, horizon)
+    if wl_row is None and not bucket_rows and not setup_rows and not flag_rows:
+        outcome_count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM candidate_outcome
+            WHERE watchlist_date = ? AND horizon_sessions = ?
+            """,
+            [as_of_date, horizon],
+        ).fetchone()[0]
+        if outcome_count:
+            aggregate_all(conn, as_of_date, horizon)
+            bucket_rows = list_score_bucket_performance(conn, horizon, as_of_date)
+            setup_rows = list_setup_type_performance(conn, horizon, as_of_date)
+            flag_rows = list_risk_flag_performance(conn, horizon, as_of_date)
+            wl_row = get_watchlist_outcome(conn, as_of_date, horizon)
 
     # Pending/missing counts
     pending_count = 0
@@ -68,6 +87,9 @@ def generate_calibration_report(
         "score_bucket_performance": bucket_rows,
         "setup_type_performance": setup_rows,
         "risk_flag_performance": flag_rows,
+        "score_buckets": bucket_rows,
+        "setup_types": setup_rows,
+        "risk_flags": flag_rows,
         "watchlist_summary": wl_row,
         "pending_count": pending_count,
         "missing_count": missing_count,
@@ -81,6 +103,27 @@ def generate_calibration_report(
         ),
     }
     return report
+
+
+def _empty_report(horizon: int, as_of_date: str) -> Dict[str, Any]:
+    return {
+        "as_of_date": as_of_date,
+        "horizon_sessions": horizon,
+        "score_bucket_performance": [],
+        "setup_type_performance": [],
+        "risk_flag_performance": [],
+        "score_buckets": [],
+        "setup_types": [],
+        "risk_flags": [],
+        "watchlist_summary": None,
+        "pending_count": 0,
+        "missing_count": 0,
+        "score_bucket_monotone": None,
+        "best_setup": None,
+        "worst_setup": None,
+        "worst_risk_flag": None,
+        "interpretation_note": "No outcome data available for retrospective research evaluation.",
+    }
 
 
 def _check_bucket_monotonicity(bucket_rows: List[Dict]) -> Optional[bool]:

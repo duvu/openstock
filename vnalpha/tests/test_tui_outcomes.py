@@ -1,12 +1,10 @@
 """TUI smoke tests for the Outcome Review screen."""
 
+import importlib.util
+
 import pytest
 
-try:
-    import textual
-    HAS_TEXTUAL = True
-except ImportError:
-    HAS_TEXTUAL = False
+HAS_TEXTUAL = importlib.util.find_spec("textual") is not None
 
 
 class TestOutcomeScreenImport:
@@ -22,6 +20,7 @@ class TestOutcomeScreenImport:
 
     def test_outcome_screen_no_trading_language(self):
         import inspect
+
         from vnalpha.tui.screens import outcomes
         src = inspect.getsource(outcomes)
         for term in ["buy signal", "sell signal", "place order", "portfolio action"]:

@@ -77,6 +77,23 @@ def finish_research_session(
     )
 
 
+def update_research_session_parse(
+    conn: duckdb.DuckDBPyConnection,
+    session_id: str,
+    command_name: Optional[str],
+    parsed_args: Optional[dict[str, Any]] = None,
+) -> None:
+    """Store parsed command details after a session was created."""
+    conn.execute(
+        """
+        UPDATE research_session
+        SET command_name = ?, parsed_args_json = ?
+        WHERE session_id = ?
+        """,
+        [command_name, json.dumps(parsed_args or {}), session_id],
+    )
+
+
 def list_research_sessions(
     conn: duckdb.DuckDBPyConnection,
     limit: int = 20,
@@ -114,19 +131,33 @@ def list_research_sessions(
 
 def create_tool_trace(
     conn: duckdb.DuckDBPyConnection,
-    session_id: str,
+    session_id: Optional[str],
     tool_name: str,
     input_data: Optional[dict[str, Any]] = None,
+    *,
+    assistant_session_id: Optional[str] = None,
+    trace_parent_type: Optional[str] = None,
 ) -> str:
     """Insert a new tool_trace row with status RUNNING. Returns tool_trace_id."""
     trace_id = str(uuid.uuid4())
+    if trace_parent_type is None:
+        trace_parent_type = "assistant" if assistant_session_id else "command"
     conn.execute(
         """
         INSERT INTO tool_trace
-        (tool_trace_id, session_id, tool_name, started_at, status, input_json)
-        VALUES (?, ?, ?, ?, 'RUNNING', ?)
+        (tool_trace_id, session_id, assistant_session_id, trace_parent_type,
+         tool_name, started_at, status, input_json)
+        VALUES (?, ?, ?, ?, ?, ?, 'RUNNING', ?)
         """,
-        [trace_id, session_id, tool_name, _now_utc(), json.dumps(input_data or {})],
+        [
+            trace_id,
+            session_id,
+            assistant_session_id,
+            trace_parent_type,
+            tool_name,
+            _now_utc(),
+            json.dumps(input_data or {}),
+        ],
     )
     return trace_id
 

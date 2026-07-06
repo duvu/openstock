@@ -29,9 +29,12 @@ def handle_lineage(
     symbol = normalize_symbol(parsed.positional[0])
     date = normalize_date(parsed.options.get("date"))
 
-    from vnalpha.tools.lineage import get_symbol_lineage
-
-    output = get_symbol_lineage(conn, symbol=symbol, date=date)
+    tool_executor = kwargs.get("tool_executor")
+    if tool_executor is not None:
+        output = tool_executor.call("lineage.get_symbol_lineage", symbol=symbol, date=date)
+    else:
+        from vnalpha.tools.lineage import get_symbol_lineage
+        output = get_symbol_lineage(conn, symbol=symbol, date=date)
 
     if output.data is None:
         return CommandResult(
