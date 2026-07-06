@@ -55,8 +55,10 @@ def aggregate_watchlist_outcome(
     conn: duckdb.DuckDBPyConnection,
     watchlist_date: str,
     horizon: int,
+    evaluation_run_id: Optional[str] = None,
+    evaluator_version: Optional[str] = None,
+    metric_policy_version: Optional[str] = None,
 ) -> WatchlistOutcomeRecord:
-    """Aggregate candidate_outcome rows for a date+horizon into watchlist_outcome."""
     rows = get_candidate_outcomes(conn, watchlist_date, horizon)
 
     complete = [r for r in rows if r["outcome_status"] == OutcomeStatus.COMPLETE.value]
@@ -91,6 +93,9 @@ def aggregate_watchlist_outcome(
         hit_rate=_safe_rate(sum(1 for h in hits if h), len(hits)),
         failure_rate=_safe_rate(sum(1 for f in failures if f), len(failures)),
         computed_at=_now_utc(),
+        evaluation_run_id=evaluation_run_id,
+        evaluator_version=evaluator_version,
+        metric_policy_version=metric_policy_version,
     )
     upsert_watchlist_outcome(conn, rec)
     return rec
@@ -100,8 +105,10 @@ def aggregate_score_bucket_performance(
     conn: duckdb.DuckDBPyConnection,
     as_of_date: str,
     horizon: int,
+    evaluation_run_id: Optional[str] = None,
+    evaluator_version: Optional[str] = None,
+    metric_policy_version: Optional[str] = None,
 ) -> List[ScoreBucketPerformanceRecord]:
-    """Aggregate complete candidate outcomes by score bucket."""
     rows = conn.execute(
         """
         SELECT score, forward_return, excess_return_vs_vnindex,
@@ -141,6 +148,9 @@ def aggregate_score_bucket_performance(
             failure_rate=_safe_rate(sum(1 for f in failures if f), len(failures)),
             avg_max_drawdown=_safe_mean(dds),
             computed_at=_now_utc(),
+            evaluation_run_id=evaluation_run_id,
+            evaluator_version=evaluator_version,
+            metric_policy_version=metric_policy_version,
         )
         upsert_score_bucket_performance(conn, rec)
         records.append(rec)
@@ -151,8 +161,10 @@ def aggregate_setup_type_performance(
     conn: duckdb.DuckDBPyConnection,
     as_of_date: str,
     horizon: int,
+    evaluation_run_id: Optional[str] = None,
+    evaluator_version: Optional[str] = None,
+    metric_policy_version: Optional[str] = None,
 ) -> List[SetupTypePerformanceRecord]:
-    """Aggregate complete candidate outcomes by setup type."""
     rows = conn.execute(
         """
         SELECT setup_type, forward_return, excess_return_vs_vnindex,
@@ -192,6 +204,9 @@ def aggregate_setup_type_performance(
             failure_rate=_safe_rate(sum(1 for f in failures if f), len(failures)),
             avg_max_drawdown=_safe_mean(dds),
             computed_at=_now_utc(),
+            evaluation_run_id=evaluation_run_id,
+            evaluator_version=evaluator_version,
+            metric_policy_version=metric_policy_version,
         )
         upsert_setup_type_performance(conn, rec)
         records.append(rec)
@@ -202,8 +217,10 @@ def aggregate_risk_flag_performance(
     conn: duckdb.DuckDBPyConnection,
     as_of_date: str,
     horizon: int,
+    evaluation_run_id: Optional[str] = None,
+    evaluator_version: Optional[str] = None,
+    metric_policy_version: Optional[str] = None,
 ) -> List[RiskFlagPerformanceRecord]:
-    """Aggregate complete candidate outcomes by risk flag (expands risk_flags_json)."""
     rows = conn.execute(
         """
         SELECT risk_flags_json, forward_return, excess_return_vs_vnindex,
@@ -248,6 +265,9 @@ def aggregate_risk_flag_performance(
             failure_rate=_safe_rate(sum(1 for f in failures if f), len(failures)),
             avg_max_drawdown=_safe_mean(dds),
             computed_at=_now_utc(),
+            evaluation_run_id=evaluation_run_id,
+            evaluator_version=evaluator_version,
+            metric_policy_version=metric_policy_version,
         )
         upsert_risk_flag_performance(conn, rec)
         records.append(rec)
@@ -258,15 +278,34 @@ def aggregate_all(
     conn: duckdb.DuckDBPyConnection,
     watchlist_date: str,
     horizon: int,
+    evaluation_run_id: Optional[str] = None,
+    evaluator_version: Optional[str] = None,
+    metric_policy_version: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Run all aggregations for one watchlist_date and horizon.
-
-    Returns summary of what was aggregated.
-    """
-    wl_rec = aggregate_watchlist_outcome(conn, watchlist_date, horizon)
-    bucket_recs = aggregate_score_bucket_performance(conn, watchlist_date, horizon)
-    setup_recs = aggregate_setup_type_performance(conn, watchlist_date, horizon)
-    flag_recs = aggregate_risk_flag_performance(conn, watchlist_date, horizon)
+    wl_rec = aggregate_watchlist_outcome(
+        conn, watchlist_date, horizon,
+        evaluation_run_id=evaluation_run_id,
+        evaluator_version=evaluator_version,
+        metric_policy_version=metric_policy_version,
+    )
+    bucket_recs = aggregate_score_bucket_performance(
+        conn, watchlist_date, horizon,
+        evaluation_run_id=evaluation_run_id,
+        evaluator_version=evaluator_version,
+        metric_policy_version=metric_policy_version,
+    )
+    setup_recs = aggregate_setup_type_performance(
+        conn, watchlist_date, horizon,
+        evaluation_run_id=evaluation_run_id,
+        evaluator_version=evaluator_version,
+        metric_policy_version=metric_policy_version,
+    )
+    flag_recs = aggregate_risk_flag_performance(
+        conn, watchlist_date, horizon,
+        evaluation_run_id=evaluation_run_id,
+        evaluator_version=evaluator_version,
+        metric_policy_version=metric_policy_version,
+    )
     return {
         "watchlist_date": watchlist_date,
         "horizon": horizon,

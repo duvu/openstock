@@ -51,12 +51,22 @@ excess_return_vs_vnindex = forward_return - benchmark_return
 
 ## Max Gain and Max Drawdown
 
-Calculated over the forward window using close prices only (MVP):
+Calculated over the forward window using the active metric policy (see [Metric Policy](#metric-policy)).
+
+**CLOSE_ONLY_V1** (default):
 
 ```text
 max_gain = max(window_close / entry_close - 1)
 
 max_drawdown = min(window_close / entry_close - 1)
+```
+
+**OHLC_HIGH_LOW_V1**:
+
+```text
+max_gain = max(window_high / entry_close - 1)
+
+max_drawdown = min(window_low / entry_close - 1)
 ```
 
 Max drawdown is typically negative (e.g., -0.05 = 5% loss).
@@ -147,4 +157,46 @@ vnalpha/src/vnalpha/outcomes/
 ├── aggregations.py    # aggregate_watchlist_outcome, score/setup/risk aggregations
 ├── calibration.py     # generate_calibration_report
 └── repositories.py    # DuckDB upsert/query helpers for outcome tables
+```
+
+## Metric Policy
+
+`metric_policy` controls how `max_gain` and `max_drawdown` are calculated. Pass
+it to `evaluate_watchlist_date()` or `evaluate_date_range()`.
+
+| Policy | Source | `max_gain` uses | `max_drawdown` uses |
+|--------|--------|-----------------|---------------------|
+| `CLOSE_ONLY_V1` (default) | close prices only | `max(window_close / entry - 1)` | `min(window_close / entry - 1)` |
+| `OHLC_HIGH_LOW_V1` | high/low prices | `max(window_high / entry - 1)` | `min(window_low / entry - 1)` |
+
+The policy name is stamped on every `candidate_outcome`, `watchlist_outcome`,
+`score_bucket_performance`, `setup_type_performance`, and
+`risk_flag_performance` row as `metric_policy_version`.
+
+**Changing policy does not re-evaluate old rows.** Each evaluation run stamps
+its own policy version. Compare results only within the same policy.
+
+## Evaluation Runs
+
+Every call to `evaluate_watchlist_date()` creates one row in
+`outcome_evaluation_run` and stamps all outcome and aggregate rows with
+`evaluation_run_id`. This enables:
+
+- auditing which rows were produced by which run;
+- detecting stale or duplicate evaluations;
+- correlating outcomes with the evaluator and metric policy versions used.
+
+**One run per date**: `evaluate_date_range()` calls `evaluate_watchlist_date()`
+once per distinct date found in `daily_watchlist`. Each date gets its own
+`evaluation_run_id`.
+
+**CLI output** includes the run id for traceability:
+
+```text
+# Single date
+Evaluation run: a1b2c3d4-...
+
+# Date range
+  2026-01-01: run_id=a1b2c3d4-..., evaluated=12, errors=0
+  2026-01-02: run_id=b5c6d7e8-..., evaluated=11, errors=0
 ```

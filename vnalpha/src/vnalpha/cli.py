@@ -303,6 +303,8 @@ def outcome_evaluate(
         result = evaluate_watchlist_date(conn, target)
         typer.echo(f"Evaluated {result['evaluated']} candidate-horizon pairs for {target}.")
         typer.echo(f"Persisted: {result['persisted']}, Errors: {result['errors']}")
+        if result.get("evaluation_run_id"):
+            typer.echo(f"Evaluation run: {result['evaluation_run_id']}")
         if result.get("aggregates"):
             typer.echo(f"Aggregates: {len(result['aggregates'])} horizons")
     elif from_date and to_date:
@@ -314,6 +316,9 @@ def outcome_evaluate(
             f"Evaluated {len(results)} dates, {total} pairs, {persisted} persisted, "
             f"{aggregate_horizons} aggregate horizons."
         )
+        for r in results:
+            run_id = r.get("evaluation_run_id") or "none"
+            typer.echo(f"  {r['watchlist_date']}: run_id={run_id}, evaluated={r['evaluated']}, errors={r['errors']}")
     else:
         typer.echo("Provide --date or --from/--to.", err=True)
         raise typer.Exit(code=1)
@@ -621,10 +626,10 @@ def ask_runner(
     console = Console()
     error_console = Console(stderr=True)
 
-    resolved_date = resolve_date(date)
-
     conn = get_connection()
     run_migrations(conn=conn)
+
+    resolved_date = resolve_date(date, conn=conn)
 
     try:
         llm_config = LLMGatewayConfig.from_env()

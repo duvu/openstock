@@ -33,9 +33,15 @@ from vnalpha.outcomes.metrics import (
 )
 from vnalpha.outcomes.metrics import (
     max_drawdown as calc_max_drawdown,
+    max_drawdown_from_lows as calc_max_drawdown_from_lows,
 )
 from vnalpha.outcomes.metrics import (
     max_gain as calc_max_gain,
+    max_gain_from_highs as calc_max_gain_from_highs,
+)
+from vnalpha.outcomes.metrics import (
+    CLOSE_ONLY_V1,
+    OHLC_HIGH_LOW_V1,
 )
 from vnalpha.outcomes.models import (
     CandidateOutcomeRecord,
@@ -53,8 +59,6 @@ try:
     _EVALUATOR_VERSION: str = importlib.metadata.version("vnalpha")
 except importlib.metadata.PackageNotFoundError:
     _EVALUATOR_VERSION = "dev"
-
-METRIC_POLICY_VERSION: str = "CLOSE_ONLY_V1"
 
 
 def _now_utc() -> str:
@@ -130,8 +134,8 @@ def _evaluate_single_candidate(
     symbol_bars: List[Dict],
     benchmark_bars: List[Dict],
     evaluation_run_id: Optional[str] = None,
+    metric_policy: str = CLOSE_ONLY_V1,
 ) -> CandidateOutcomeRecord:
-    """Evaluate one candidate for one horizon. Returns a CandidateOutcomeRecord."""
     symbol = candidate["symbol"]
     watchlist_date = candidate["watchlist_date"]
     computed_at = _now_utc()
@@ -149,12 +153,11 @@ def _evaluate_single_candidate(
         computed_at=computed_at,
         evaluation_run_id=evaluation_run_id,
         evaluator_version=_EVALUATOR_VERSION,
-        metric_policy_version=METRIC_POLICY_VERSION,
+        metric_policy_version=metric_policy,
         symbol_bar_count=len(symbol_bars),
         benchmark_bar_count=len(benchmark_bars),
     )
 
-    # Entry close
     entry_close = select_entry_close(symbol_bars, watchlist_date)
     if entry_close is None:
         rec.outcome_status = OutcomeStatus.MISSING_DATA.value
@@ -171,32 +174,35 @@ def _evaluate_single_candidate(
     exit_close = select_exit_close(future_bars, horizon)
     rec.exit_close = exit_close
 
-    # Benchmark
     bench_entry = select_entry_close(benchmark_bars, watchlist_date)
     _, bench_future = split_bars(benchmark_bars, watchlist_date)
     bench_exit = select_exit_close(bench_future, horizon)
     rec.benchmark_entry_close = bench_entry
     rec.benchmark_exit_close = bench_exit
 
-    # Metrics
     fwd = calc_forward_return(entry_close, exit_close)
     bench = calc_benchmark_return(bench_entry, bench_exit)
     excess = excess_return_vs_vnindex(fwd, bench)
 
     window = get_forward_window(future_bars, horizon)
-    window_closes = [b["close"] for b in window]
-
     rec.forward_return = fwd
     rec.benchmark_return = bench
     rec.excess_return_vs_vnindex = excess
-    rec.max_gain = calc_max_gain(window_closes, entry_close)
-    rec.max_drawdown = calc_max_drawdown(window_closes, entry_close)
+
+    if metric_policy == OHLC_HIGH_LOW_V1:
+        window_highs = [b["high"] for b in window if b.get("high") is not None]
+        window_lows = [b["low"] for b in window if b.get("low") is not None]
+        rec.max_gain = calc_max_gain_from_highs(window_highs, entry_close)
+        rec.max_drawdown = calc_max_drawdown_from_lows(window_lows, entry_close)
+    else:
+        window_closes = [b["close"] for b in window]
+        rec.max_gain = calc_max_gain(window_closes, entry_close)
+        rec.max_drawdown = calc_max_drawdown(window_closes, entry_close)
 
     hit, failure = classify_hit_failure(fwd, excess)
     rec.hit = hit
     rec.failure = failure
 
-    # Status
     if bench_entry is None or bench_exit is None:
         rec.outcome_status = OutcomeStatus.PARTIAL.value
     else:
@@ -209,11 +215,8 @@ def evaluate_watchlist_date(
     conn: duckdb.DuckDBPyConnection,
     watchlist_date: str,
     horizons: Optional[List[int]] = None,
+    metric_policy: str = CLOSE_ONLY_V1,
 ) -> Dict[str, Any]:
-    """Evaluate all candidates on watchlist_date for configured horizons.
-
-    Returns a summary dict: {evaluated, persisted, errors, evaluation_run_id, ...}.
-    """
     if horizons is None:
         horizons = DEFAULT_HORIZONS
 
@@ -229,16 +232,14 @@ def evaluate_watchlist_date(
             "evaluation_run_id": None,
         }
 
-    # Create evaluation run record
     run_id = create_evaluation_run(
         conn,
         watchlist_date=watchlist_date,
         evaluator_version=_EVALUATOR_VERSION,
-        metric_policy_version=METRIC_POLICY_VERSION,
+        metric_policy_version=metric_policy,
         horizons=horizons,
     )
 
-    # Preload benchmark
     benchmark_bars = _get_ohlcv_bars(conn, BENCHMARK_SYMBOL)
 
     persisted = 0
@@ -257,13 +258,13 @@ def evaluate_watchlist_date(
                 rec = _evaluate_single_candidate(
                     conn, candidate, horizon, symbol_bars, benchmark_bars,
                     evaluation_run_id=run_id,
+                    metric_policy=metric_policy,
                 )
                 upsert_candidate_outcome(conn, rec)
                 persisted += 1
             except Exception as exc:
                 errors += 1
                 logger.warning(f"Error evaluating {symbol}/{watchlist_date}/h{horizon}: {exc}")
-                # Persist error record
                 try:
                     err_rec = CandidateOutcomeRecord(
                         symbol=symbol,
@@ -274,7 +275,7 @@ def evaluate_watchlist_date(
                         computed_at=_now_utc(),
                         evaluation_run_id=run_id,
                         evaluator_version=_EVALUATOR_VERSION,
-                        metric_policy_version=METRIC_POLICY_VERSION,
+                        metric_policy_version=metric_policy,
                     )
                     upsert_candidate_outcome(conn, err_rec)
                 except Exception:
@@ -283,12 +284,16 @@ def evaluate_watchlist_date(
     aggregates: dict[int, dict[str, Any]] = {}
     for horizon in horizons:
         try:
-            aggregates[horizon] = aggregate_all(conn, watchlist_date, horizon)
+            aggregates[horizon] = aggregate_all(
+                conn, watchlist_date, horizon,
+                evaluation_run_id=run_id,
+                evaluator_version=_EVALUATOR_VERSION,
+                metric_policy_version=metric_policy,
+            )
         except Exception as exc:
             errors += 1
             logger.warning(f"Error aggregating {watchlist_date}/h{horizon}: {exc}")
 
-    # Finish run record
     finish_evaluation_run(
         conn,
         run_id=run_id,
@@ -319,8 +324,8 @@ def evaluate_date_range(
     from_date: str,
     to_date: str,
     horizons: Optional[List[int]] = None,
+    metric_policy: str = CLOSE_ONLY_V1,
 ) -> List[Dict[str, Any]]:
-    """Evaluate all watchlist dates in [from_date, to_date]."""
     rows = conn.execute(
         """
         SELECT DISTINCT date::VARCHAR
@@ -333,6 +338,6 @@ def evaluate_date_range(
     dates = [r[0] for r in rows]
     results = []
     for d in dates:
-        result = evaluate_watchlist_date(conn, d, horizons=horizons)
+        result = evaluate_watchlist_date(conn, d, horizons=horizons, metric_policy=metric_policy)
         results.append(result)
     return results

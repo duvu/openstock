@@ -383,11 +383,12 @@ def get_watchlist_rich(
                 ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY time DESC) AS rn
             FROM canonical_ohlcv
             WHERE interval = '1D'
+              AND CAST(time AS DATE) <= ?
         ) co ON co.symbol = dw.symbol AND co.rn = 1
         WHERE dw.date = ?
         ORDER BY dw.rank
         """,
-        [date],
+        [date, date],
     ).fetchall()
 
     cols = [

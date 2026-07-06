@@ -303,6 +303,9 @@ CREATE TABLE IF NOT EXISTS watchlist_outcome (
     hit_rate                 DOUBLE,
     failure_rate             DOUBLE,
     computed_at              TIMESTAMPTZ,
+    evaluation_run_id        VARCHAR,
+    evaluator_version        VARCHAR,
+    metric_policy_version    VARCHAR,
     PRIMARY KEY (watchlist_date, horizon_sessions)
 )
 """
@@ -320,6 +323,9 @@ CREATE TABLE IF NOT EXISTS score_bucket_performance (
     failure_rate             DOUBLE,
     avg_max_drawdown         DOUBLE,
     computed_at              TIMESTAMPTZ,
+    evaluation_run_id        VARCHAR,
+    evaluator_version        VARCHAR,
+    metric_policy_version    VARCHAR,
     PRIMARY KEY (as_of_date, horizon_sessions, score_bucket)
 )
 """
@@ -337,6 +343,9 @@ CREATE TABLE IF NOT EXISTS setup_type_performance (
     failure_rate             DOUBLE,
     avg_max_drawdown         DOUBLE,
     computed_at              TIMESTAMPTZ,
+    evaluation_run_id        VARCHAR,
+    evaluator_version        VARCHAR,
+    metric_policy_version    VARCHAR,
     PRIMARY KEY (as_of_date, horizon_sessions, setup_type)
 )
 """
@@ -354,6 +363,9 @@ CREATE TABLE IF NOT EXISTS risk_flag_performance (
     failure_rate             DOUBLE,
     avg_max_drawdown         DOUBLE,
     computed_at              TIMESTAMPTZ,
+    evaluation_run_id        VARCHAR,
+    evaluator_version        VARCHAR,
+    metric_policy_version    VARCHAR,
     PRIMARY KEY (as_of_date, horizon_sessions, risk_flag)
 )
 """

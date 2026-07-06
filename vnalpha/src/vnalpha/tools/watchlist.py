@@ -38,13 +38,10 @@ def filter_watchlist(
 
     Raises FilterValidationError if any filter is invalid.
     """
-    from vnalpha.tools.filter_validation import FilterValidationError, validate_filters
+    from vnalpha.tools.filter_validation import validate_filters
     from vnalpha.warehouse.repositories import get_candidate_scores
 
-    try:
-        validate_filters(filters)
-    except FilterValidationError as e:
-        return ToolOutput(data=None, summary=str(e), warnings=[str(e)])
+    validate_filters(filters)
 
     all_scores = get_candidate_scores(conn, date)
     result = _apply_filters(all_scores, filters)

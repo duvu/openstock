@@ -104,6 +104,10 @@ class WatchlistOutcomeRecord:
     hit_rate: Optional[float] = None
     failure_rate: Optional[float] = None
     computed_at: Optional[str] = None
+    # Versioning / traceability
+    evaluation_run_id: Optional[str] = None
+    evaluator_version: Optional[str] = None
+    metric_policy_version: Optional[str] = None
 
 
 @dataclass
@@ -121,6 +125,10 @@ class ScoreBucketPerformanceRecord:
     failure_rate: Optional[float] = None
     avg_max_drawdown: Optional[float] = None
     computed_at: Optional[str] = None
+    # Versioning / traceability
+    evaluation_run_id: Optional[str] = None
+    evaluator_version: Optional[str] = None
+    metric_policy_version: Optional[str] = None
 
 
 @dataclass
@@ -138,6 +146,10 @@ class SetupTypePerformanceRecord:
     failure_rate: Optional[float] = None
     avg_max_drawdown: Optional[float] = None
     computed_at: Optional[str] = None
+    # Versioning / traceability
+    evaluation_run_id: Optional[str] = None
+    evaluator_version: Optional[str] = None
+    metric_policy_version: Optional[str] = None
 
 
 @dataclass
@@ -155,3 +167,7 @@ class RiskFlagPerformanceRecord:
     failure_rate: Optional[float] = None
     avg_max_drawdown: Optional[float] = None
     computed_at: Optional[str] = None
+    # Versioning / traceability
+    evaluation_run_id: Optional[str] = None
+    evaluator_version: Optional[str] = None
+    metric_policy_version: Optional[str] = None

@@ -98,6 +98,9 @@ def score_universe(
         # Propagate lineage from feature_snapshot into scored result
         scored["provider"] = feature_lineage.get("provider")
         scored["ingestion_run_id"] = feature_lineage.get("ingestion_run_id")
+        scored["feature_build_version"] = feature_lineage.get("feature_build_version")
+        scored["as_of_bar_date"] = feature_lineage.get("as_of_bar_date")
+        scored["source_quality_status"] = feature_lineage.get("source_quality_status")
         if scored.get("provider") is None:
             logger.warning(
                 "Lineage: provider missing for symbol=%s date=%s — score lineage incomplete",

@@ -338,10 +338,10 @@ class TestFilterValidation:
 
         validate_filters([{"key": "risk_flags", "op": "==", "value": "ok"}])
 
-    def test_filter_watchlist_returns_error_output_on_bad_filter(self):
-        """filter_watchlist returns ToolOutput with warning on invalid filter (no exception raised)."""
+    def test_filter_watchlist_raises_on_bad_filter(self):
         import duckdb
 
+        from vnalpha.tools.filter_validation import FilterValidationError
         from vnalpha.tools.watchlist import filter_watchlist
 
         conn = duckdb.connect(":memory:")
@@ -351,7 +351,5 @@ class TestFilterValidation:
         )
         conn.execute("INSERT INTO daily_watchlist VALUES ('2024-06-20', 1, 'FPT', 0.8, 'A', 'B', 'low')")
 
-        result = filter_watchlist(conn, "2024-06-20", [{"key": "BAD_FIELD", "op": ">=", "value": 1}])
-        assert result.data is None
-        assert len(result.warnings) > 0
-        assert "BAD_FIELD" in result.warnings[0] or "BAD_FIELD" in result.summary
+        with pytest.raises(FilterValidationError, match="BAD_FIELD"):
+            filter_watchlist(conn, "2024-06-20", [{"key": "BAD_FIELD", "op": ">=", "value": 1}])

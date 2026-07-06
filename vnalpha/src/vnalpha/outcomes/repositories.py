@@ -116,7 +116,16 @@ def upsert_candidate_outcome(conn: duckdb.DuckDBPyConnection, rec: CandidateOutc
         rec.computed_at = _now_utc()
     conn.execute(
         """
-        INSERT INTO candidate_outcome VALUES (
+        INSERT INTO candidate_outcome (
+            symbol, watchlist_date, horizon_sessions,
+            rank, score, candidate_class, setup_type, risk_flags_json,
+            entry_close, exit_close, benchmark_entry_close, benchmark_exit_close,
+            forward_return, benchmark_return, excess_return_vs_vnindex,
+            max_gain, max_drawdown, hit, failure, outcome_status,
+            bars_available, required_bars, computed_at, error_json,
+            evaluation_run_id, evaluator_version, metric_policy_version,
+            symbol_bar_count, benchmark_bar_count
+        ) VALUES (
             ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
         )
         ON CONFLICT (symbol, watchlist_date, horizon_sessions)
@@ -200,7 +209,14 @@ def upsert_watchlist_outcome(conn: duckdb.DuckDBPyConnection, rec: WatchlistOutc
         rec.computed_at = _now_utc()
     conn.execute(
         """
-        INSERT INTO watchlist_outcome VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO watchlist_outcome (
+            watchlist_date, horizon_sessions,
+            candidate_count, complete_count, pending_count, missing_data_count,
+            avg_forward_return, median_forward_return,
+            avg_excess_return, median_excess_return,
+            avg_max_gain, avg_max_drawdown, hit_rate, failure_rate, computed_at,
+            evaluation_run_id, evaluator_version, metric_policy_version
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (watchlist_date, horizon_sessions)
         DO UPDATE SET
             candidate_count=excluded.candidate_count,
@@ -215,7 +231,10 @@ def upsert_watchlist_outcome(conn: duckdb.DuckDBPyConnection, rec: WatchlistOutc
             avg_max_drawdown=excluded.avg_max_drawdown,
             hit_rate=excluded.hit_rate,
             failure_rate=excluded.failure_rate,
-            computed_at=excluded.computed_at
+            computed_at=excluded.computed_at,
+            evaluation_run_id=excluded.evaluation_run_id,
+            evaluator_version=excluded.evaluator_version,
+            metric_policy_version=excluded.metric_policy_version
         """,
         [
             rec.watchlist_date, rec.horizon_sessions,
@@ -225,6 +244,7 @@ def upsert_watchlist_outcome(conn: duckdb.DuckDBPyConnection, rec: WatchlistOutc
             rec.avg_excess_return, rec.median_excess_return,
             rec.avg_max_gain, rec.avg_max_drawdown,
             rec.hit_rate, rec.failure_rate, rec.computed_at,
+            rec.evaluation_run_id, rec.evaluator_version, rec.metric_policy_version,
         ],
     )
 
@@ -266,7 +286,12 @@ def upsert_score_bucket_performance(conn: duckdb.DuckDBPyConnection, rec: ScoreB
         rec.computed_at = _now_utc()
     conn.execute(
         """
-        INSERT INTO score_bucket_performance VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO score_bucket_performance (
+            as_of_date, horizon_sessions, score_bucket,
+            candidate_count, avg_forward_return, median_forward_return,
+            avg_excess_return, hit_rate, failure_rate, avg_max_drawdown, computed_at,
+            evaluation_run_id, evaluator_version, metric_policy_version
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (as_of_date, horizon_sessions, score_bucket)
         DO UPDATE SET
             candidate_count=excluded.candidate_count,
@@ -276,13 +301,17 @@ def upsert_score_bucket_performance(conn: duckdb.DuckDBPyConnection, rec: ScoreB
             hit_rate=excluded.hit_rate,
             failure_rate=excluded.failure_rate,
             avg_max_drawdown=excluded.avg_max_drawdown,
-            computed_at=excluded.computed_at
+            computed_at=excluded.computed_at,
+            evaluation_run_id=excluded.evaluation_run_id,
+            evaluator_version=excluded.evaluator_version,
+            metric_policy_version=excluded.metric_policy_version
         """,
         [
             rec.as_of_date, rec.horizon_sessions, rec.score_bucket,
             rec.candidate_count, rec.avg_forward_return, rec.median_forward_return,
             rec.avg_excess_return, rec.hit_rate, rec.failure_rate,
             rec.avg_max_drawdown, rec.computed_at,
+            rec.evaluation_run_id, rec.evaluator_version, rec.metric_policy_version,
         ],
     )
 
@@ -320,7 +349,12 @@ def upsert_setup_type_performance(conn: duckdb.DuckDBPyConnection, rec: SetupTyp
         rec.computed_at = _now_utc()
     conn.execute(
         """
-        INSERT INTO setup_type_performance VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO setup_type_performance (
+            as_of_date, horizon_sessions, setup_type,
+            candidate_count, avg_forward_return, median_forward_return,
+            avg_excess_return, hit_rate, failure_rate, avg_max_drawdown, computed_at,
+            evaluation_run_id, evaluator_version, metric_policy_version
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (as_of_date, horizon_sessions, setup_type)
         DO UPDATE SET
             candidate_count=excluded.candidate_count,
@@ -330,13 +364,17 @@ def upsert_setup_type_performance(conn: duckdb.DuckDBPyConnection, rec: SetupTyp
             hit_rate=excluded.hit_rate,
             failure_rate=excluded.failure_rate,
             avg_max_drawdown=excluded.avg_max_drawdown,
-            computed_at=excluded.computed_at
+            computed_at=excluded.computed_at,
+            evaluation_run_id=excluded.evaluation_run_id,
+            evaluator_version=excluded.evaluator_version,
+            metric_policy_version=excluded.metric_policy_version
         """,
         [
             rec.as_of_date, rec.horizon_sessions, rec.setup_type,
             rec.candidate_count, rec.avg_forward_return, rec.median_forward_return,
             rec.avg_excess_return, rec.hit_rate, rec.failure_rate,
             rec.avg_max_drawdown, rec.computed_at,
+            rec.evaluation_run_id, rec.evaluator_version, rec.metric_policy_version,
         ],
     )
 
@@ -374,7 +412,12 @@ def upsert_risk_flag_performance(conn: duckdb.DuckDBPyConnection, rec: RiskFlagP
         rec.computed_at = _now_utc()
     conn.execute(
         """
-        INSERT INTO risk_flag_performance VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO risk_flag_performance (
+            as_of_date, horizon_sessions, risk_flag,
+            candidate_count, avg_forward_return, median_forward_return,
+            avg_excess_return, hit_rate, failure_rate, avg_max_drawdown, computed_at,
+            evaluation_run_id, evaluator_version, metric_policy_version
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (as_of_date, horizon_sessions, risk_flag)
         DO UPDATE SET
             candidate_count=excluded.candidate_count,
@@ -384,13 +427,17 @@ def upsert_risk_flag_performance(conn: duckdb.DuckDBPyConnection, rec: RiskFlagP
             hit_rate=excluded.hit_rate,
             failure_rate=excluded.failure_rate,
             avg_max_drawdown=excluded.avg_max_drawdown,
-            computed_at=excluded.computed_at
+            computed_at=excluded.computed_at,
+            evaluation_run_id=excluded.evaluation_run_id,
+            evaluator_version=excluded.evaluator_version,
+            metric_policy_version=excluded.metric_policy_version
         """,
         [
             rec.as_of_date, rec.horizon_sessions, rec.risk_flag,
             rec.candidate_count, rec.avg_forward_return, rec.median_forward_return,
             rec.avg_excess_return, rec.hit_rate, rec.failure_rate,
             rec.avg_max_drawdown, rec.computed_at,
+            rec.evaluation_run_id, rec.evaluator_version, rec.metric_policy_version,
         ],
     )
 

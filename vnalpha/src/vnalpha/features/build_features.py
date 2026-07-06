@@ -196,7 +196,7 @@ def build_features(
             skipped += 1
             skipped_reasons.append({"symbol": symbol, "reason": "NO_CANONICAL_DATA"})
             continue
-        features_df = build_features_for_symbol(df, benchmark_df)
+        features_df = build_features_for_symbol(df, benchmark_df if not benchmark_df.empty else None)
         if features_df.empty:
             skipped += 1
             skipped_reasons.append(
@@ -214,11 +214,12 @@ def build_features(
         as_of_bar_date = str(last_row.name.date()) if hasattr(last_row.name, "date") else str(last_row.name)
         source_row_count = len(df)
 
-        # Determine data status
-        if as_of_bar_date < target_date:
-            data_status = "STALE"
+        if benchmark_df.empty:
+            data_status = "MISSING_BENCHMARK"
+        elif as_of_bar_date < target_date:
+            data_status = "STALE_DATE"
         else:
-            data_status = "CURRENT"
+            data_status = "EXACT_DATE"
 
         # Fetch lineage from canonical_ohlcv for the actual bar used
         bar_lineage = _get_bar_lineage(conn, symbol, as_of_bar_date)

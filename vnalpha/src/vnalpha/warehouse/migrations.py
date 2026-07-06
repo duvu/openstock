@@ -41,6 +41,11 @@ def run_migrations(
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE6:
         conn.execute(ddl)
+    _migrate_feature_snapshot_columns(conn)
+    _migrate_rejected_symbol_columns(conn)
+    _migrate_candidate_outcome_columns(conn)
+    _migrate_aggregate_outcome_columns(conn)
+    _migrate_outcome_evaluation_run_columns(conn)
     logger.info("Warehouse migrations complete.")
 
 
@@ -48,3 +53,64 @@ def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:
     """Add explicit parent columns for existing Phase 5.8 databases."""
     conn.execute("ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS assistant_session_id VARCHAR")
     conn.execute("ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS trace_parent_type VARCHAR")
+
+
+def _migrate_feature_snapshot_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add metadata columns to feature_snapshot for existing databases."""
+    cols = [
+        ("as_of_bar_date", "DATE"),
+        ("benchmark_as_of_bar_date", "DATE"),
+        ("source_row_count", "INTEGER"),
+        ("benchmark_row_count", "INTEGER"),
+        ("feature_data_status", "VARCHAR"),
+        ("feature_build_version", "VARCHAR"),
+        ("feature_generated_at", "TIMESTAMPTZ"),
+        ("lineage_json", "VARCHAR"),
+    ]
+    for col, col_type in cols:
+        conn.execute(f"ALTER TABLE feature_snapshot ADD COLUMN IF NOT EXISTS {col} {col_type}")
+
+
+def _migrate_rejected_symbol_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add lineage columns to rejected_symbol for existing databases."""
+    cols = [
+        ("ingestion_run_id", "VARCHAR"),
+        ("provider", "VARCHAR"),
+    ]
+    for col, col_type in cols:
+        conn.execute(f"ALTER TABLE rejected_symbol ADD COLUMN IF NOT EXISTS {col} {col_type}")
+
+
+def _migrate_candidate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add versioning columns to candidate_outcome for existing databases."""
+    cols = [
+        ("evaluation_run_id", "VARCHAR"),
+        ("evaluator_version", "VARCHAR"),
+        ("metric_policy_version", "VARCHAR"),
+        ("symbol_bar_count", "INTEGER"),
+        ("benchmark_bar_count", "INTEGER"),
+    ]
+    for col, col_type in cols:
+        conn.execute(f"ALTER TABLE candidate_outcome ADD COLUMN IF NOT EXISTS {col} {col_type}")
+
+
+def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add versioning columns to aggregate outcome tables for existing databases."""
+    aggregate_tables = [
+        "watchlist_outcome",
+        "score_bucket_performance",
+        "setup_type_performance",
+        "risk_flag_performance",
+    ]
+    cols = [
+        ("evaluation_run_id", "VARCHAR"),
+        ("evaluator_version", "VARCHAR"),
+        ("metric_policy_version", "VARCHAR"),
+    ]
+    for table in aggregate_tables:
+        for col, col_type in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}")
+
+
+def _migrate_outcome_evaluation_run_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """No-op: outcome_evaluation_run was created fresh in Phase 6 DDL."""

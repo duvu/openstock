@@ -255,7 +255,7 @@ def test_build_features_exact_date_metadata():
     assert row is not None
     as_of_bar_date, status, src_count, build_ver, gen_at = row
     assert str(as_of_bar_date) == target
-    assert status == "CURRENT"
+    assert status == "EXACT_DATE"
     assert src_count == 200
     assert build_ver is not None
     assert gen_at is not None
@@ -282,7 +282,7 @@ def test_build_features_stale_date_metadata():
     assert row is not None
     as_of_bar_date, status = row
     assert str(as_of_bar_date) < target
-    assert status == "STALE"
+    assert status == "STALE_DATE"
 
 
 def test_build_features_missing_benchmark():

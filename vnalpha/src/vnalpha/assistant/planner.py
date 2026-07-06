@@ -90,7 +90,7 @@ def _build_explain_plan(entities: dict) -> AssistantPlan:
     steps = [
         _step("candidate.explain", args, "Explain candidate score and evidence", "READ_SCORE"),
         _step("lineage.get_symbol_lineage", args, "Retrieve data lineage", "READ_LINEAGE"),
-        _step("quality.get_status", {"symbol": symbol}, "Check data quality status", "READ_QUALITY"),
+        _step("quality.get_status", {"symbol": symbol, **({"date": date} if date else {})}, "Check data quality status", "READ_QUALITY"),
     ]
     return AssistantPlan(
         intent="explain_symbol",

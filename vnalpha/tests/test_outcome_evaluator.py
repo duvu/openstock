@@ -14,7 +14,8 @@ from vnalpha.outcomes.aggregations import (
     aggregate_setup_type_performance,
     aggregate_watchlist_outcome,
 )
-from vnalpha.outcomes.evaluator import METRIC_POLICY_VERSION, evaluate_watchlist_date
+from vnalpha.outcomes.evaluator import evaluate_date_range, evaluate_watchlist_date
+from vnalpha.outcomes.metrics import CLOSE_ONLY_V1 as METRIC_POLICY_VERSION
 from vnalpha.outcomes.models import OutcomeStatus
 from vnalpha.outcomes.repositories import get_candidate_outcomes, get_evaluation_run, get_watchlist_outcome
 from vnalpha.warehouse.connection import in_memory_connection
@@ -340,3 +341,43 @@ class TestEvaluationRunVersioning:
         """When no watchlist rows, evaluation_run_id is None (no run created)."""
         result = evaluate_watchlist_date(conn, "2026-01-01")
         assert result["evaluation_run_id"] is None
+
+
+class TestRangeEvaluation:
+    """Tests for evaluate_date_range() range semantics and run_id reporting."""
+
+    @pytest.fixture
+    def conn(self):
+        c = in_memory_connection()
+        run_migrations(conn=c)
+        yield c
+        c.close()
+
+    def test_distinct_run_ids_per_date(self, conn):
+        """Each date in a range gets its own evaluation_run_id."""
+        for sym_date in ["2026-01-01", "2026-01-02"]:
+            bars = _make_bars(100.0, 80, sym_date)
+            _insert_ohlcv(conn, "FPT", bars)
+            _insert_ohlcv(conn, "VNINDEX", _make_bars(1200.0, 80, sym_date))
+            _insert_watchlist(conn, "FPT", sym_date)
+
+        results = evaluate_date_range(conn, "2026-01-01", "2026-01-02", horizons=[20])
+        run_ids = [r["evaluation_run_id"] for r in results if r["evaluation_run_id"]]
+        assert len(run_ids) == 2
+        assert run_ids[0] != run_ids[1]
+
+    def test_all_results_include_run_id_key(self, conn):
+        """All result dicts from evaluate_date_range have evaluation_run_id key."""
+        bars = _make_bars(100.0, 80, "2026-01-01")
+        _insert_ohlcv(conn, "FPT", bars)
+        _insert_ohlcv(conn, "VNINDEX", _make_bars(1200.0, 80, "2026-01-01"))
+        _insert_watchlist(conn, "FPT", "2026-01-01")
+
+        results = evaluate_date_range(conn, "2026-01-01", "2026-01-01", horizons=[20])
+        assert len(results) == 1
+        assert "evaluation_run_id" in results[0]
+
+    def test_empty_date_range_returns_empty_list(self, conn):
+        """evaluate_date_range with from_date > to_date returns empty list."""
+        results = evaluate_date_range(conn, "2026-01-05", "2026-01-01", horizons=[20])
+        assert results == []
