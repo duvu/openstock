@@ -7,8 +7,9 @@ from typing import Optional
 from vnalpha.core.dates import resolve_date
 
 try:
-    from textual.app import App
+    from textual.app import App, ComposeResult
     from textual.binding import Binding
+    from textual.containers import Vertical
 
     from vnalpha.tui.screens.assistant import AssistantScreen
     from vnalpha.tui.screens.command import CommandScreen
@@ -18,6 +19,7 @@ try:
     from vnalpha.tui.screens.quality import QualityScreen
     from vnalpha.tui.screens.rejected import RejectedScreen
     from vnalpha.tui.screens.watchlist import WatchlistScreen
+    from vnalpha.tui.widgets.chat_panel import ChatPanel
 
     _TEXTUAL_AVAILABLE = True
 except ImportError:
@@ -25,10 +27,17 @@ except ImportError:
 
 
 if _TEXTUAL_AVAILABLE:
+
     class VnAlphaApp(App):
-        """vnalpha research discovery TUI."""
+        """vnalpha research discovery TUI — split-pane with persistent chat panel."""
 
         CSS_PATH = None  # inline styles only for portability
+
+        CSS = """
+        VnAlphaApp > Vertical {
+            height: 1fr;
+        }
+        """
 
         TITLE = "vnalpha | Research Discovery"
         SUB_TITLE = "Vietnamese Market Research Tool"
@@ -42,11 +51,18 @@ if _TEXTUAL_AVAILABLE:
             Binding("p", "show_quality", "Quality"),
             Binding("o", "show_outcomes", "Outcomes"),
             Binding("q", "quit", "Quit"),
+            Binding("ctrl+backslash", "toggle_chat", "Toggle chat"),
+            Binding("ctrl+slash", "focus_chat", "Focus chat"),
         ]
 
         def __init__(self, date: Optional[str] = None, **kwargs):
             super().__init__(**kwargs)
             self.target_date: str = resolve_date(date)
+
+        def compose(self) -> ComposeResult:
+            """Yield screen area (70%) then persistent ChatPanel (30%)."""
+            with Vertical():
+                yield ChatPanel(target_date=self.target_date, id="chat-panel")
 
         def on_mount(self) -> None:
             self.push_screen(WatchlistScreen(target_date=self.target_date))
@@ -75,13 +91,23 @@ if _TEXTUAL_AVAILABLE:
         def show_detail(self, symbol: str) -> None:
             self.push_screen(DetailScreen(symbol=symbol, target_date=self.target_date))
 
+        def action_toggle_chat(self) -> None:
+            """Toggle ChatPanel visibility."""
+            panel = self.query_one("#chat-panel", ChatPanel)
+            panel.display = not panel.display
+
+        def action_focus_chat(self) -> None:
+            """Focus the chat input widget."""
+            panel = self.query_one("#chat-panel", ChatPanel)
+            panel.action_focus_input()
+
 else:
+
     class _FallbackBinding:
         def __init__(self, key: str, action: str, description: str) -> None:
             self.key = key
             self.action = action
             self.description = description
-
 
     class VnAlphaApp:  # type: ignore[no-redef]
         """Importable fallback used when textual is unavailable."""
@@ -97,6 +123,8 @@ else:
             _FallbackBinding("p", "show_quality", "Quality"),
             _FallbackBinding("o", "show_outcomes", "Outcomes"),
             _FallbackBinding("q", "quit", "Quit"),
+            _FallbackBinding("ctrl+backslash", "toggle_chat", "Toggle chat"),
+            _FallbackBinding("ctrl+slash", "focus_chat", "Focus chat"),
         ]
 
         def __init__(self, date: Optional[str] = None, **kwargs):
