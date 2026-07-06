@@ -139,10 +139,10 @@ def build_features_cmd(
     from vnalpha.features.build_features import build_features
     from vnalpha.warehouse.connection import get_connection
 
-    target_date = resolve_date(date)
+    conn = get_connection()
+    target_date = resolve_date(date, conn=conn)
     universe = symbols.split(",") if symbols else None
 
-    conn = get_connection()
     result = build_features(
         conn, target_date=target_date, universe=universe, benchmark_symbol=benchmark
     )
@@ -183,10 +183,10 @@ def score(
     from vnalpha.scoring.generate_watchlist import generate_watchlist
     from vnalpha.warehouse.connection import get_connection
 
-    target_date = resolve_date(date)
+    conn = get_connection()
+    target_date = resolve_date(date, conn=conn)
     universe = symbols.split(",") if symbols else None
 
-    conn = get_connection()
     result = generate_watchlist(
         conn, date=target_date, universe=universe, top_n=top_n, min_score=min_score
     )
@@ -205,8 +205,8 @@ def watchlist(
     from vnalpha.warehouse.connection import get_connection
     from vnalpha.warehouse.repositories import get_watchlist as _get_watchlist
 
-    target_date = resolve_date(date)
     conn = get_connection()
+    target_date = resolve_date(date, conn=conn)
     rows = _get_watchlist(conn, target_date)
 
     if not rows:

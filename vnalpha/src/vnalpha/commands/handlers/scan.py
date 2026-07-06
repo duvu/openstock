@@ -37,11 +37,9 @@ def handle_scan(
             )
 
     tool_executor = kwargs.get("tool_executor")
-    if tool_executor is not None:
-        output = tool_executor.call("watchlist.scan", date=date)
-    else:
-        from vnalpha.tools.watchlist import scan_watchlist
-        output = scan_watchlist(conn, date=date)
+    if tool_executor is None:
+        return CommandResult(status="FAILED", title="/scan", summary="No tool executor available.")
+    output = tool_executor.call("watchlist.scan", date=date)
     rows_data = output.data or []
     if universe_symbols is not None:
         rows_data = [r for r in rows_data if r.get("symbol") in universe_symbols]

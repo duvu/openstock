@@ -159,7 +159,23 @@ class TestPlanBuilder:
         assert len(plan.steps) == 2
         tool_names = [s.tool_name for s in plan.steps]
         assert "candidate.compare" in tool_names
+        # Multi-symbol compare uses get_many_status
+        assert "quality.get_many_status" in tool_names
+
+    def test_plan_compare_single_symbol_uses_get_status(self):
+        """Single-symbol compare uses quality.get_status, not get_many_status."""
+        intent = _make_intent("compare_symbols", {"symbols": ["FPT"]})
+        plan = self.builder.build(intent)
+        tool_names = [s.tool_name for s in plan.steps]
         assert "quality.get_status" in tool_names
+        assert "quality.get_many_status" not in tool_names
+
+    def test_plan_compare_multi_symbol_passes_symbols_list(self):
+        """Multi-symbol compare passes full symbols list to get_many_status."""
+        intent = _make_intent("compare_symbols", {"symbols": ["FPT", "VNM", "HPG"]})
+        plan = self.builder.build(intent)
+        quality_step = next(s for s in plan.steps if s.tool_name == "quality.get_many_status")
+        assert quality_step.arguments.get("symbols") == ["FPT", "VNM", "HPG"]
 
     def test_plan_explain_has_three_steps(self):
         intent = _make_intent("explain_symbol", {"symbol": "FPT"})

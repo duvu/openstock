@@ -24,6 +24,7 @@ ASSISTANT_TOOL_ALLOWLIST: frozenset[str] = frozenset(
         "candidate.compare",
         "candidate.explain",
         "quality.get_status",
+        "quality.get_many_status",
         "lineage.get_symbol_lineage",
         "note.create",
         "history.list_sessions",
@@ -49,7 +50,7 @@ class AssistantExecutor:
         self._tool_executor = TracedLocalToolExecutor(
             conn,
             self._registry,
-            session_id=assistant_session_id,
+            session_id=None,  # assistant traces have no command session parent
             assistant_session_id=assistant_session_id,
             trace_parent_type="assistant",
         )

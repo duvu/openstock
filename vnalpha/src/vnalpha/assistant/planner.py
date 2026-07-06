@@ -17,6 +17,7 @@ TOOL_ALLOWLIST: frozenset[str] = frozenset({
     "candidate.compare",
     "candidate.explain",
     "quality.get_status",
+    "quality.get_many_status",
     "lineage.get_symbol_lineage",
     "note.create",
     "history.list_sessions",
@@ -64,9 +65,14 @@ def _build_compare_plan(entities: dict) -> AssistantPlan:
     args: dict[str, Any] = {"symbols": symbols}
     if date:
         args["date"] = date
+    # Use multi-symbol quality tool when comparing 2+ symbols
+    quality_tool = "quality.get_many_status" if len(symbols) > 1 else "quality.get_status"
+    quality_args: dict[str, Any] = {"symbols": symbols, **({"date": date} if date else {})}
+    if quality_tool == "quality.get_status" and symbols:
+        quality_args = {"symbol": symbols[0], **({"date": date} if date else {})}
     steps = [
         _step("candidate.compare", args, "Compare candidate scores and evidence", "READ_SCORE"),
-        _step("quality.get_status", {"symbols": symbols, **({"date": date} if date else {})},
+        _step(quality_tool, quality_args,
               "Check data quality for each symbol", "READ_QUALITY"),
     ]
     return AssistantPlan(

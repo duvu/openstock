@@ -77,6 +77,12 @@ class CandidateOutcomeRecord:
     required_bars: Optional[int] = None
     computed_at: Optional[str] = None
     error_json: Optional[str] = None
+    # Versioning / traceability
+    evaluation_run_id: Optional[str] = None
+    evaluator_version: Optional[str] = None
+    metric_policy_version: Optional[str] = None
+    symbol_bar_count: Optional[int] = None
+    benchmark_bar_count: Optional[int] = None
 
 
 @dataclass

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -40,9 +41,20 @@ from vnalpha.outcomes.models import (
     CandidateOutcomeRecord,
     OutcomeStatus,
 )
-from vnalpha.outcomes.repositories import upsert_candidate_outcome
+from vnalpha.outcomes.repositories import (
+    create_evaluation_run,
+    finish_evaluation_run,
+    upsert_candidate_outcome,
+)
 
 logger = get_logger("outcomes.evaluator")
+
+try:
+    _EVALUATOR_VERSION: str = importlib.metadata.version("vnalpha")
+except importlib.metadata.PackageNotFoundError:
+    _EVALUATOR_VERSION = "dev"
+
+METRIC_POLICY_VERSION: str = "CLOSE_ONLY_V1"
 
 
 def _now_utc() -> str:
@@ -81,10 +93,14 @@ def _get_watchlist_rows(conn: duckdb.DuckDBPyConnection, watchlist_date: str) ->
 
 
 def _get_ohlcv_bars(conn: duckdb.DuckDBPyConnection, symbol: str) -> List[Dict]:
-    """Load canonical_ohlcv bars for a symbol, sorted ascending by time."""
+    """Load canonical_ohlcv bars for a symbol, sorted ascending by time.
+
+    Returns bars with 'time', 'close', 'high', 'low' — supporting both
+    CLOSE_ONLY_V1 and OHLC_HIGH_LOW_V1 metric policies.
+    """
     rows = conn.execute(
         """
-        SELECT time::VARCHAR, close
+        SELECT time::VARCHAR, close, high, low
         FROM canonical_ohlcv
         WHERE symbol = ? AND interval = '1D'
         ORDER BY time ASC
@@ -92,13 +108,18 @@ def _get_ohlcv_bars(conn: duckdb.DuckDBPyConnection, symbol: str) -> List[Dict]:
         [symbol],
     ).fetchall()
     bars = []
-    for time_value, close in rows:
+    for time_value, close, high, low in rows:
         if close is None:
             continue
         try:
-            bars.append({"time": time_value[:10], "close": float(close)})
+            bar: Dict[str, Any] = {"time": time_value[:10], "close": float(close)}
+            if high is not None:
+                bar["high"] = float(high)
+            if low is not None:
+                bar["low"] = float(low)
+            bars.append(bar)
         except (TypeError, ValueError):
-            logger.warning(f"Skipping malformed close for {symbol}: {close!r}")
+            logger.warning(f"Skipping malformed bar for {symbol}: {close!r}")
     return bars
 
 
@@ -108,6 +129,7 @@ def _evaluate_single_candidate(
     horizon: int,
     symbol_bars: List[Dict],
     benchmark_bars: List[Dict],
+    evaluation_run_id: Optional[str] = None,
 ) -> CandidateOutcomeRecord:
     """Evaluate one candidate for one horizon. Returns a CandidateOutcomeRecord."""
     symbol = candidate["symbol"]
@@ -125,6 +147,11 @@ def _evaluate_single_candidate(
         risk_flags_json=candidate.get("risk_flags_json"),
         required_bars=horizon,
         computed_at=computed_at,
+        evaluation_run_id=evaluation_run_id,
+        evaluator_version=_EVALUATOR_VERSION,
+        metric_policy_version=METRIC_POLICY_VERSION,
+        symbol_bar_count=len(symbol_bars),
+        benchmark_bar_count=len(benchmark_bars),
     )
 
     # Entry close
@@ -185,7 +212,7 @@ def evaluate_watchlist_date(
 ) -> Dict[str, Any]:
     """Evaluate all candidates on watchlist_date for configured horizons.
 
-    Returns a summary dict: {evaluated, persisted, errors}.
+    Returns a summary dict: {evaluated, persisted, errors, evaluation_run_id, ...}.
     """
     if horizons is None:
         horizons = DEFAULT_HORIZONS
@@ -199,7 +226,17 @@ def evaluate_watchlist_date(
             "errors": 0,
             "watchlist_date": watchlist_date,
             "aggregates": {},
+            "evaluation_run_id": None,
         }
+
+    # Create evaluation run record
+    run_id = create_evaluation_run(
+        conn,
+        watchlist_date=watchlist_date,
+        evaluator_version=_EVALUATOR_VERSION,
+        metric_policy_version=METRIC_POLICY_VERSION,
+        horizons=horizons,
+    )
 
     # Preload benchmark
     benchmark_bars = _get_ohlcv_bars(conn, BENCHMARK_SYMBOL)
@@ -207,16 +244,19 @@ def evaluate_watchlist_date(
     persisted = 0
     errors = 0
     evaluated = 0
+    symbol_bar_counts: Dict[str, int] = {}
 
     for candidate in candidates:
         symbol = candidate["symbol"]
         symbol_bars = _get_ohlcv_bars(conn, symbol)
+        symbol_bar_counts[symbol] = len(symbol_bars)
 
         for horizon in horizons:
             evaluated += 1
             try:
                 rec = _evaluate_single_candidate(
-                    conn, candidate, horizon, symbol_bars, benchmark_bars
+                    conn, candidate, horizon, symbol_bars, benchmark_bars,
+                    evaluation_run_id=run_id,
                 )
                 upsert_candidate_outcome(conn, rec)
                 persisted += 1
@@ -232,6 +272,9 @@ def evaluate_watchlist_date(
                         outcome_status=OutcomeStatus.ERROR.value,
                         error_json=json.dumps({"error": str(exc)}),
                         computed_at=_now_utc(),
+                        evaluation_run_id=run_id,
+                        evaluator_version=_EVALUATOR_VERSION,
+                        metric_policy_version=METRIC_POLICY_VERSION,
                     )
                     upsert_candidate_outcome(conn, err_rec)
                 except Exception:
@@ -245,9 +288,21 @@ def evaluate_watchlist_date(
             errors += 1
             logger.warning(f"Error aggregating {watchlist_date}/h{horizon}: {exc}")
 
+    # Finish run record
+    finish_evaluation_run(
+        conn,
+        run_id=run_id,
+        evaluated=evaluated,
+        persisted=persisted,
+        errors=errors,
+        symbol_bar_count_json=json.dumps(symbol_bar_counts),
+        benchmark_bar_count=len(benchmark_bars),
+    )
+
     logger.info(
         f"Outcome evaluation {watchlist_date}: "
-        f"evaluated={evaluated}, persisted={persisted}, errors={errors}"
+        f"evaluated={evaluated}, persisted={persisted}, errors={errors}, "
+        f"run_id={run_id}"
     )
     return {
         "watchlist_date": watchlist_date,
@@ -255,6 +310,7 @@ def evaluate_watchlist_date(
         "persisted": persisted,
         "errors": errors,
         "aggregates": aggregates,
+        "evaluation_run_id": run_id,
     }
 
 

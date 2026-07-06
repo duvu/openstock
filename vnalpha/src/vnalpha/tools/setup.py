@@ -12,6 +12,7 @@ TOOL_PERMISSIONS: dict[str, ToolPermission] = {
     "candidate.explain": ToolPermission.READ_SCORE,
     "candidate.compare": ToolPermission.READ_SCORE,
     "quality.get_status": ToolPermission.READ_QUALITY,
+    "quality.get_many_status": ToolPermission.READ_QUALITY,
     "lineage.get_symbol_lineage": ToolPermission.READ_LINEAGE,
     "note.create": ToolPermission.WRITE_NOTE,
     "history.list_sessions": ToolPermission.READ_HISTORY,
@@ -22,7 +23,7 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
     """Build a LocalToolRegistry wired to a live DuckDB connection."""
     from vnalpha.tools.lineage import get_symbol_lineage
     from vnalpha.tools.notes import create_note, list_sessions
-    from vnalpha.tools.quality import get_quality_status
+    from vnalpha.tools.quality import get_many_quality_status, get_quality_status
     from vnalpha.tools.scoring import compare_candidates, explain_candidate
     from vnalpha.tools.watchlist import filter_watchlist, scan_watchlist
 
@@ -69,6 +70,18 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
         lambda **kwargs: get_quality_status(
             conn,
             symbol=kwargs.get("symbol"),
+            date=kwargs.get("date"),
+        ),
+    )
+    registry.register(
+        ToolSpec(
+            name="quality.get_many_status",
+            description="Get data quality status for multiple symbols",
+            permission=ToolPermission.READ_QUALITY,
+        ),
+        lambda **kwargs: get_many_quality_status(
+            conn,
+            symbols=kwargs.get("symbols", []),
             date=kwargs.get("date"),
         ),
     )

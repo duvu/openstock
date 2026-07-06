@@ -176,13 +176,29 @@ def save_candidate_score(
         "risk_quality_score": score_result.get("risk_quality_score"),
         "rule_outcomes": score_result.get("rule_outcomes"),
     }
+    provider = score_result.get("provider")
+    ingestion_run_id = score_result.get("ingestion_run_id")
+    # Compute lineage_status based on completeness of upstream metadata
+    if provider is not None and ingestion_run_id is not None:
+        lineage_status = "COMPLETE"
+    elif provider is None and ingestion_run_id is None:
+        lineage_status = "MISSING_PROVIDER"
+    elif provider is not None and ingestion_run_id is None:
+        lineage_status = "MISSING_INGESTION_RUN"
+    else:
+        lineage_status = "PARTIAL"
     lineage = {
         "scoring_version": SCORING_VERSION,
-        "generated_at": generated_at,
+        "feature_build_version": score_result.get("feature_build_version"),
         "feature_date": date,
+        "as_of_bar_date": score_result.get("as_of_bar_date"),
+        "selected_provider": provider,
+        "ingestion_run_id": ingestion_run_id,
+        "source_quality_status": score_result.get("source_quality_status"),
+        "lineage_status": lineage_status,
+        "generated_at": generated_at,
+        # legacy fields kept for backward compat
         "feature_snapshot_id": score_result.get("feature_snapshot_id"),
-        "provider": score_result.get("provider"),
-        "ingestion_run_id": score_result.get("ingestion_run_id"),
     }
     conn.execute(
         """

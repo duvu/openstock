@@ -11,12 +11,16 @@ from vnalpha.outcomes.horizons import (
     split_bars,
 )
 from vnalpha.outcomes.metrics import (
+    CLOSE_ONLY_V1,
+    OHLC_HIGH_LOW_V1,
     benchmark_return,
     classify_hit_failure,
     excess_return_vs_vnindex,
     forward_return,
     max_drawdown,
+    max_drawdown_from_lows,
     max_gain,
+    max_gain_from_highs,
 )
 
 # ---- horizons tests ----
@@ -182,3 +186,72 @@ class TestClassifyHitFailure:
         hit, failure = classify_hit_failure(None, 0.03)
         assert hit is True  # excess is not None
         assert failure is None  # forward is None
+
+
+class TestMetricPolicyConstants:
+    def test_close_only_v1_defined(self):
+        assert CLOSE_ONLY_V1 == "CLOSE_ONLY_V1"
+
+    def test_ohlc_high_low_v1_defined(self):
+        assert OHLC_HIGH_LOW_V1 == "OHLC_HIGH_LOW_V1"
+
+    def test_policies_are_distinct(self):
+        assert CLOSE_ONLY_V1 != OHLC_HIGH_LOW_V1
+
+
+class TestMaxGainFromHighs:
+    """OHLC_HIGH_LOW_V1: max_gain uses intrabar highs."""
+
+    def test_higher_than_close_based(self):
+        closes = [102.0, 103.0, 104.0]
+        highs = [105.0, 106.0, 107.0]  # highs always above close
+        entry = 100.0
+        gain_close = max_gain(closes, entry)
+        gain_high = max_gain_from_highs(highs, entry)
+        assert gain_high > gain_close
+
+    def test_calculation(self):
+        highs = [110.0, 108.0, 112.0]
+        result = max_gain_from_highs(highs, 100.0)
+        assert abs(result - 0.12) < 1e-9
+
+    def test_empty_highs(self):
+        assert max_gain_from_highs([], 100.0) is None
+
+    def test_none_entry(self):
+        assert max_gain_from_highs([110.0], None) is None
+
+    def test_zero_entry(self):
+        assert max_gain_from_highs([110.0], 0.0) is None
+
+
+class TestMaxDrawdownFromLows:
+    """OHLC_HIGH_LOW_V1: max_drawdown uses intrabar lows."""
+
+    def test_lower_than_close_based(self):
+        closes = [98.0, 97.0, 96.0]
+        lows = [95.0, 94.0, 93.0]  # lows always below close
+        entry = 100.0
+        dd_close = max_drawdown(closes, entry)
+        dd_low = max_drawdown_from_lows(lows, entry)
+        assert dd_low < dd_close  # more negative
+
+    def test_calculation(self):
+        lows = [90.0, 92.0, 88.0]
+        result = max_drawdown_from_lows(lows, 100.0)
+        assert abs(result - (-0.12)) < 1e-9
+
+    def test_empty_lows(self):
+        assert max_drawdown_from_lows([], 100.0) is None
+
+    def test_none_entry(self):
+        assert max_drawdown_from_lows([90.0], None) is None
+
+    def test_zero_entry(self):
+        assert max_drawdown_from_lows([90.0], 0.0) is None
+
+    def test_no_drawdown(self):
+        # All lows above entry
+        lows = [105.0, 110.0]
+        result = max_drawdown_from_lows(lows, 100.0)
+        assert result >= 0.0

@@ -129,12 +129,16 @@ class TestExplainGrounded:
         )
 
     def test_explain_handler_delegates_to_tool(self):
-        """Verify explain handler delegates to the scoring tool, not direct DB queries."""
+        """Verify explain handler delegates through tool_executor, not direct DB queries."""
         import inspect
 
         from vnalpha.commands.handlers.explain import handle_explain
         source = inspect.getsource(handle_explain)
-        assert "explain_candidate" in source
+        # Must use tool_executor, not call scoring tools directly
+        assert "tool_executor" in source, "explain handler must use tool_executor"
+        assert "explain_candidate" not in source, (
+            "explain handler must not bypass tool_executor by calling explain_candidate directly"
+        )
 
 
 class TestUnsupportedCommandsFail:

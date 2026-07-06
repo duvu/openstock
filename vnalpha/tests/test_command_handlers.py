@@ -8,7 +8,15 @@ import pytest
 
 from vnalpha.commands.parser import parse
 from vnalpha.commands.setup import build_default_registry
+from vnalpha.tools.executor import TracedLocalToolExecutor
+from vnalpha.tools.setup import build_local_tool_registry
 from vnalpha.warehouse.migrations import run_migrations
+
+
+def _make_tool_executor(conn):
+    """Build a TracedLocalToolExecutor wired to the given connection (session-scoped)."""
+    registry = build_local_tool_registry(conn)
+    return TracedLocalToolExecutor(conn, registry, session_id="test-session")
 
 
 @pytest.fixture
@@ -91,21 +99,21 @@ class TestScanHandler:
     def test_scan_returns_watchlist(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse(f"/scan --date {today}")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert len(result.tables) == 1
         assert len(result.tables[0].rows) == 2
 
     def test_scan_empty_watchlist(self, conn, reg):
         parsed = parse("/scan --date 2000-01-01")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert "empty" in result.summary.lower() or "No candidates" in result.summary
 
     def test_scan_with_universe_hint(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse(f"/scan VN30 --date {today}")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
 
 
@@ -118,7 +126,7 @@ class TestFilterHandler:
     def test_filter_by_score(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse(f"/filter score>=0.70 --date {today}")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         # Only FPT qualifies
         assert len(result.tables[0].rows) == 1
@@ -127,7 +135,7 @@ class TestFilterHandler:
     def test_filter_by_class(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse(f"/filter class=STRONG_CANDIDATE --date {today}")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert any("FPT" in str(row) for row in result.tables[0].rows)
 
@@ -141,7 +149,7 @@ class TestCompareHandler:
     def test_compare_returns_table(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse(f"/compare FPT VNM --date {today}")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert len(result.tables) == 1
         assert len(result.tables[0].rows) == 2
@@ -149,7 +157,7 @@ class TestCompareHandler:
     def test_compare_no_symbols_validation_error(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse("/compare")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "VALIDATION_ERROR"
 
 
@@ -162,7 +170,7 @@ class TestExplainHandler:
     def test_explain_returns_panels(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse(f"/explain FPT --date {today}")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         panel_titles = [p.title for p in result.panels]
         assert "Score Summary" in panel_titles
@@ -172,12 +180,12 @@ class TestExplainHandler:
 
     def test_explain_no_symbol_validation_error(self, conn, reg):
         parsed = parse("/explain")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "VALIDATION_ERROR"
 
     def test_explain_missing_score_graceful(self, conn, reg):
         parsed = parse("/explain FPT --date 2000-01-01")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert result.summary is not None
 
@@ -191,12 +199,12 @@ class TestQualityHandler:
     def test_quality_watchlist_level(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse(f"/quality --date {today}")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
 
     def test_quality_symbol_level_missing(self, conn, reg):
         parsed = parse("/quality FPT --date 2000-01-01")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert result.summary is not None
 
@@ -210,14 +218,14 @@ class TestLineageHandler:
     def test_lineage_returns_panel(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse(f"/lineage FPT --date {today}")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert len(result.panels) == 1
         assert "scoring_version" in str(result.panels[0].content)
 
     def test_lineage_no_symbol_validation_error(self, conn, reg):
         parsed = parse("/lineage")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "VALIDATION_ERROR"
 
 
@@ -230,7 +238,7 @@ class TestNoteHandler:
     def test_note_persists(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse('/note FPT "watch RS persistence"')
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert "FPT" in result.title
 
@@ -241,7 +249,7 @@ class TestNoteHandler:
 
     def test_note_missing_text_validation_error(self, conn, reg):
         parsed = parse("/note FPT")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "VALIDATION_ERROR"
 
 
@@ -254,13 +262,13 @@ class TestHistoryHandler:
     def test_history_returns_sessions(self, conn_with_data, reg):
         conn, today = conn_with_data
         parsed = parse("/history --limit 10")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert len(result.tables) == 1
 
     def test_history_empty(self, conn, reg):
         parsed = parse("/history")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert "No research sessions" in result.summary
 
@@ -273,7 +281,7 @@ class TestHistoryHandler:
 class TestHelpHandler:
     def test_help_lists_all_commands(self, conn, reg):
         parsed = parse("/help")
-        result = reg.execute(parsed, conn=conn, registry=reg)
+        result = reg.execute(parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn))
         assert result.status == "SUCCESS"
         assert len(result.tables) == 1
         # Should include all 9 commands

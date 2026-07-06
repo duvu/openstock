@@ -10,19 +10,7 @@ from vnalpha.commands.models import (
     ResultTable,
 )
 from vnalpha.commands.normalizers import normalize_date
-
-_SUPPORTED_FILTER_FIELDS = {
-    "score",
-    "candidate_class",
-    "class",
-    "setup_type",
-    "setup",
-    "rank",
-    "risk_flags",
-    "data_quality_status",
-    "symbol",
-}
-_NUMERIC_FIELDS = {"score", "rank"}
+from vnalpha.tools.filter_validation import FilterValidationError, validate_filters
 
 
 def handle_filter(
@@ -41,21 +29,21 @@ def handle_filter(
         {"key": f.key, "op": f.op, "value": f.value}
         for f in parsed.filters
     ]
-    validation_error = _validate_filters(filter_dicts)
-    if validation_error:
+    try:
+        validate_filters(filter_dicts)
+    except FilterValidationError as e:
+        msg = str(e)
         return CommandResult(
             status="VALIDATION_ERROR",
             title="/filter",
-            summary=validation_error,
-            error=CommandError(error_type="CommandValidationError", message=validation_error),
+            summary=msg,
+            error=CommandError(error_type="CommandValidationError", message=msg),
         )
 
     tool_executor = kwargs.get("tool_executor")
-    if tool_executor is not None:
-        output = tool_executor.call("watchlist.filter", date=date, filters=filter_dicts)
-    else:
-        from vnalpha.tools.watchlist import filter_watchlist
-        output = filter_watchlist(conn, date=date, filters=filter_dicts)
+    if tool_executor is None:
+        return CommandResult(status="FAILED", title="/filter", summary="No tool executor available.")
+    output = tool_executor.call("watchlist.filter", date=date, filters=filter_dicts)
     rows_data = output.data or []
 
     if not rows_data:
@@ -90,18 +78,3 @@ def handle_filter(
         summary=output.summary,
         tables=[table],
     )
-
-
-def _validate_filters(filters: list[dict]) -> str | None:
-    for item in filters:
-        key = str(item.get("key", ""))
-        op = str(item.get("op", ""))
-        value = str(item.get("value", ""))
-        if key not in _SUPPORTED_FILTER_FIELDS:
-            return f"Unsupported filter field: {key}"
-        if key in _NUMERIC_FIELDS and op in {">", ">=", "<", "<="}:
-            try:
-                float(value)
-            except ValueError:
-                return f"Filter {key}{op}{value} requires a numeric value."
-    return None

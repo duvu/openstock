@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.metadata
+import json
+from datetime import datetime, timezone
 from typing import Optional
 
 import duckdb
@@ -14,6 +17,11 @@ from vnalpha.features.volatility import compute_volatility_features
 from vnalpha.features.volume import compute_volume_features
 
 logger = get_logger("features.build")
+
+try:
+    _FEATURE_BUILD_VERSION: str = importlib.metadata.version("vnalpha")
+except importlib.metadata.PackageNotFoundError:
+    _FEATURE_BUILD_VERSION = "dev"
 
 FEATURE_COLUMNS = [
     "close",
@@ -35,6 +43,41 @@ FEATURE_COLUMNS = [
     "close_strength",
     "volatility_20d",
 ]
+
+METADATA_COLUMNS = [
+    "as_of_bar_date",
+    "benchmark_as_of_bar_date",
+    "source_row_count",
+    "benchmark_row_count",
+    "feature_data_status",
+    "feature_build_version",
+    "feature_generated_at",
+    "lineage_json",
+]
+
+
+def _get_bar_lineage(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    bar_date: str,
+) -> dict:
+    """Query lineage metadata from canonical_ohlcv for a given symbol/bar_date."""
+    row = conn.execute(
+        """
+        SELECT selected_provider, quality_status, ingestion_run_id
+        FROM canonical_ohlcv
+        WHERE symbol = ? AND interval = '1D' AND CAST(time AS DATE) = ?
+        LIMIT 1
+        """,
+        [symbol, bar_date],
+    ).fetchone()
+    if row is None:
+        return {"provider": None, "quality_status": None, "ingestion_run_id": None}
+    return {
+        "provider": row[0],
+        "quality_status": row[1],
+        "ingestion_run_id": row[2],
+    }
 
 
 def load_canonical_ohlcv(
@@ -85,13 +128,18 @@ def save_feature_snapshot(
     symbol: str,
     date_str: str,
     features: dict,
+    metadata: dict | None = None,
 ) -> None:
     """Upsert a feature snapshot row."""
-    cols = ["symbol", "date"] + FEATURE_COLUMNS
-    values = [symbol, date_str] + [features.get(c) for c in FEATURE_COLUMNS]
+    all_data_columns = FEATURE_COLUMNS + METADATA_COLUMNS
+    cols = ["symbol", "date"] + all_data_columns
+    row_meta = metadata or {}
+    values = [symbol, date_str] + [features.get(c) for c in FEATURE_COLUMNS] + [
+        row_meta.get(c) for c in METADATA_COLUMNS
+    ]
     placeholders = ", ".join(["?"] * len(cols))
     col_names = ", ".join(cols)
-    update_set = ", ".join(f"{c} = excluded.{c}" for c in FEATURE_COLUMNS)
+    update_set = ", ".join(f"{c} = excluded.{c}" for c in all_data_columns)
     conn.execute(
         f"""
         INSERT INTO feature_snapshot ({col_names})
@@ -113,8 +161,12 @@ def build_features(
     Returns:
         dict with "built" and "skipped" counts.
     """
+    generated_at = datetime.now(timezone.utc).isoformat()
+
     # Load benchmark
     benchmark_df = load_canonical_ohlcv(conn, benchmark_symbol, target_date)
+    benchmark_as_of: str | None = None
+    benchmark_row_count: int = 0
     if benchmark_df.empty:
         logger.warning(
             "Benchmark '%s' not found in canonical_ohlcv — relative strength features will be NaN. "
@@ -122,6 +174,11 @@ def build_features(
             benchmark_symbol,
             benchmark_symbol,
         )
+    else:
+        benchmark_row_count = len(benchmark_df)
+        bm_row = benchmark_df[benchmark_df.index <= target_date]
+        if not bm_row.empty:
+            benchmark_as_of = str(bm_row.index[-1].date())
 
     if universe is None:
         rows = conn.execute(
@@ -153,6 +210,39 @@ def build_features(
             skipped_reasons.append({"symbol": symbol, "reason": "NO_ROW_FOR_DATE"})
             continue
         last_row = row.iloc[-1]
+        # Record the actual bar date (index) of the last row used
+        as_of_bar_date = str(last_row.name.date()) if hasattr(last_row.name, "date") else str(last_row.name)
+        source_row_count = len(df)
+
+        # Determine data status
+        if as_of_bar_date < target_date:
+            data_status = "STALE"
+        else:
+            data_status = "CURRENT"
+
+        # Fetch lineage from canonical_ohlcv for the actual bar used
+        bar_lineage = _get_bar_lineage(conn, symbol, as_of_bar_date)
+        if bar_lineage.get("provider") is None:
+            logger.warning(
+                "Feature lineage: provider is missing for symbol=%s bar_date=%s",
+                symbol,
+                as_of_bar_date,
+            )
+        if bar_lineage.get("ingestion_run_id") is None:
+            logger.debug(
+                "Feature lineage: ingestion_run_id is missing for symbol=%s bar_date=%s",
+                symbol,
+                as_of_bar_date,
+            )
+
+        lineage = {
+            "provider": bar_lineage.get("provider"),
+            "ingestion_run_id": bar_lineage.get("ingestion_run_id"),
+            "source_quality_status": bar_lineage.get("quality_status"),
+            "as_of_bar_date": as_of_bar_date,
+            "feature_build_version": _FEATURE_BUILD_VERSION,
+        }
+
         features = {
             c: (None if pd.isna(last_row.get(c, float("nan"))) else float(last_row[c]))
             for c in FEATURE_COLUMNS
@@ -163,7 +253,17 @@ def build_features(
             if "close" in last_row.index and not pd.isna(last_row["close"])
             else None
         )
-        save_feature_snapshot(conn, symbol, target_date, features)
+        metadata = {
+            "as_of_bar_date": as_of_bar_date,
+            "benchmark_as_of_bar_date": benchmark_as_of,
+            "source_row_count": source_row_count,
+            "benchmark_row_count": benchmark_row_count,
+            "feature_data_status": data_status,
+            "feature_build_version": _FEATURE_BUILD_VERSION,
+            "feature_generated_at": generated_at,
+            "lineage_json": json.dumps(lineage),
+        }
+        save_feature_snapshot(conn, symbol, target_date, features, metadata)
         built += 1
 
     logger.info("Features built=%d skipped=%d for date=%s", built, skipped, target_date)

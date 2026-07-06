@@ -30,14 +30,10 @@ def handle_explain(
     date = normalize_date(parsed.options.get("date"))
 
     tool_executor = kwargs.get("tool_executor")
-    if tool_executor is not None:
-        output = tool_executor.call("candidate.explain", symbol=symbol, date=date)
-        quality_output = tool_executor.call("quality.get_status", symbol=symbol, date=date)
-    else:
-        from vnalpha.tools.quality import get_quality_status
-        from vnalpha.tools.scoring import explain_candidate
-        output = explain_candidate(conn, symbol=symbol, date=date)
-        quality_output = get_quality_status(conn, symbol=symbol, date=date)
+    if tool_executor is None:
+        return CommandResult(status="FAILED", title=f"/explain {symbol}", summary="No tool executor available.")
+    output = tool_executor.call("candidate.explain", symbol=symbol, date=date)
+    quality_output = tool_executor.call("quality.get_status", symbol=symbol, date=date)
 
     if output.data is None:
         return CommandResult(

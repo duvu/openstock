@@ -14,9 +14,9 @@ from vnalpha.outcomes.aggregations import (
     aggregate_setup_type_performance,
     aggregate_watchlist_outcome,
 )
-from vnalpha.outcomes.evaluator import evaluate_watchlist_date
+from vnalpha.outcomes.evaluator import METRIC_POLICY_VERSION, evaluate_watchlist_date
 from vnalpha.outcomes.models import OutcomeStatus
-from vnalpha.outcomes.repositories import get_candidate_outcomes, get_watchlist_outcome
+from vnalpha.outcomes.repositories import get_candidate_outcomes, get_evaluation_run, get_watchlist_outcome
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -244,3 +244,99 @@ class TestAggregations:
         summary = aggregate_all(conn, "2026-01-01", 20)
         assert summary["watchlist_outcome"] == 2
         assert summary["score_buckets"] >= 1
+
+
+class TestEvaluationRunVersioning:
+    """Tests for evaluation run creation and versioning (task 9.6)."""
+
+    def test_evaluate_creates_evaluation_run(self, conn):
+        """evaluate_watchlist_date creates and finishes an evaluation_run record."""
+        bars = _make_bars(100.0, 80, "2026-01-01")
+        _insert_ohlcv(conn, "FPT", bars)
+        _insert_ohlcv(conn, "VNINDEX", _make_bars(1200.0, 80, "2026-01-01"))
+        _insert_watchlist(conn, "FPT", "2026-01-01")
+
+        result = evaluate_watchlist_date(conn, "2026-01-01", horizons=[20])
+        run_id = result["evaluation_run_id"]
+        assert run_id is not None
+
+        run = get_evaluation_run(conn, run_id)
+        assert run is not None
+        assert run["watchlist_date"] == "2026-01-01"
+        assert run["status"] == "COMPLETE"
+        assert run["evaluated"] == 1
+        assert run["persisted"] == 1
+        assert run["errors"] == 0
+
+    def test_evaluate_run_has_version_fields(self, conn):
+        """Evaluation run stores evaluator and metric policy versions."""
+        bars = _make_bars(100.0, 80, "2026-01-01")
+        _insert_ohlcv(conn, "FPT", bars)
+        _insert_ohlcv(conn, "VNINDEX", _make_bars(1200.0, 80, "2026-01-01"))
+        _insert_watchlist(conn, "FPT", "2026-01-01")
+
+        result = evaluate_watchlist_date(conn, "2026-01-01", horizons=[20])
+        run = get_evaluation_run(conn, result["evaluation_run_id"])
+        assert run["evaluator_version"] is not None
+        assert run["metric_policy_version"] == METRIC_POLICY_VERSION
+
+    def test_candidate_outcome_carries_run_id(self, conn):
+        """Persisted candidate outcome rows carry evaluation_run_id."""
+        bars = _make_bars(100.0, 80, "2026-01-01")
+        _insert_ohlcv(conn, "FPT", bars)
+        _insert_ohlcv(conn, "VNINDEX", _make_bars(1200.0, 80, "2026-01-01"))
+        _insert_watchlist(conn, "FPT", "2026-01-01")
+
+        result = evaluate_watchlist_date(conn, "2026-01-01", horizons=[20])
+        run_id = result["evaluation_run_id"]
+
+        row = conn.execute(
+            "SELECT evaluation_run_id FROM candidate_outcome WHERE symbol='FPT' AND horizon_sessions=20"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == run_id
+
+    def test_candidate_outcome_carries_metric_policy(self, conn):
+        """Candidate outcome rows store metric_policy_version."""
+        bars = _make_bars(100.0, 80, "2026-01-01")
+        _insert_ohlcv(conn, "FPT", bars)
+        _insert_ohlcv(conn, "VNINDEX", _make_bars(1200.0, 80, "2026-01-01"))
+        _insert_watchlist(conn, "FPT", "2026-01-01")
+
+        evaluate_watchlist_date(conn, "2026-01-01", horizons=[20])
+        row = conn.execute(
+            "SELECT metric_policy_version FROM candidate_outcome WHERE symbol='FPT' AND horizon_sessions=20"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == METRIC_POLICY_VERSION
+
+    def test_recomputation_creates_new_run_id(self, conn):
+        """Running evaluation twice creates two distinct run IDs."""
+        bars = _make_bars(100.0, 80, "2026-01-01")
+        _insert_ohlcv(conn, "FPT", bars)
+        _insert_ohlcv(conn, "VNINDEX", _make_bars(1200.0, 80, "2026-01-01"))
+        _insert_watchlist(conn, "FPT", "2026-01-01")
+
+        result1 = evaluate_watchlist_date(conn, "2026-01-01", horizons=[20])
+        result2 = evaluate_watchlist_date(conn, "2026-01-01", horizons=[20])
+        assert result1["evaluation_run_id"] != result2["evaluation_run_id"]
+
+    def test_evaluate_run_stores_symbol_bar_counts(self, conn):
+        """Evaluation run records symbol bar counts for audit."""
+        bars = _make_bars(100.0, 80, "2026-01-01")
+        _insert_ohlcv(conn, "FPT", bars)
+        _insert_ohlcv(conn, "VNINDEX", _make_bars(1200.0, 80, "2026-01-01"))
+        _insert_watchlist(conn, "FPT", "2026-01-01")
+
+        result = evaluate_watchlist_date(conn, "2026-01-01", horizons=[20])
+        run = get_evaluation_run(conn, result["evaluation_run_id"])
+        assert run["symbol_bar_count_json"] is not None
+        counts = json.loads(run["symbol_bar_count_json"])
+        assert "FPT" in counts
+        assert counts["FPT"] == 80
+        assert run["benchmark_bar_count"] == 80
+
+    def test_no_watchlist_returns_no_run_id(self, conn):
+        """When no watchlist rows, evaluation_run_id is None (no run created)."""
+        result = evaluate_watchlist_date(conn, "2026-01-01")
+        assert result["evaluation_run_id"] is None

@@ -89,6 +89,14 @@ CREATE TABLE IF NOT EXISTS feature_snapshot (
     base_range_30d        DOUBLE,
     close_strength        DOUBLE,
     volatility_20d        DOUBLE,
+    as_of_bar_date        DATE,
+    benchmark_as_of_bar_date DATE,
+    source_row_count      INTEGER,
+    benchmark_row_count   INTEGER,
+    feature_data_status   VARCHAR,
+    feature_build_version VARCHAR,
+    feature_generated_at  TIMESTAMPTZ,
+    lineage_json          VARCHAR,
     PRIMARY KEY (symbol, date)
 )
 """
@@ -136,10 +144,12 @@ CREATE TABLE IF NOT EXISTS rejected_symbol (
     reason           VARCHAR NOT NULL,
     details_json     VARCHAR,
     ingestion_run_id VARCHAR,
+    provider         VARCHAR,
     created_at       TIMESTAMPTZ DEFAULT current_timestamp,
     PRIMARY KEY (symbol, date, stage)
 )
 """
+# Note: `date` is the affected data/bar date; `created_at` is the detection timestamp.
 
 ALL_DDL = [
     INGESTION_RUN_DDL,
@@ -267,6 +277,11 @@ CREATE TABLE IF NOT EXISTS candidate_outcome (
     required_bars            INTEGER,
     computed_at              TIMESTAMPTZ,
     error_json               VARCHAR,
+    evaluation_run_id        VARCHAR,
+    evaluator_version        VARCHAR,
+    metric_policy_version    VARCHAR,
+    symbol_bar_count         INTEGER,
+    benchmark_bar_count      INTEGER,
     PRIMARY KEY (symbol, watchlist_date, horizon_sessions)
 )
 """
@@ -343,7 +358,27 @@ CREATE TABLE IF NOT EXISTS risk_flag_performance (
 )
 """
 
+OUTCOME_EVALUATION_RUN_DDL = """
+CREATE TABLE IF NOT EXISTS outcome_evaluation_run (
+    evaluation_run_id     VARCHAR PRIMARY KEY,
+    watchlist_date        DATE NOT NULL,
+    started_at            TIMESTAMPTZ NOT NULL,
+    finished_at           TIMESTAMPTZ,
+    status                VARCHAR NOT NULL,
+    evaluator_version     VARCHAR,
+    metric_policy_version VARCHAR,
+    horizons_json         VARCHAR,
+    symbol_bar_count_json VARCHAR,
+    benchmark_bar_count   INTEGER,
+    evaluated             INTEGER,
+    persisted             INTEGER,
+    errors                INTEGER,
+    error_json            VARCHAR
+)
+"""
+
 ALL_DDL_PHASE6 = [
+    OUTCOME_EVALUATION_RUN_DDL,
     CANDIDATE_OUTCOME_DDL,
     WATCHLIST_OUTCOME_DDL,
     SCORE_BUCKET_PERFORMANCE_DDL,

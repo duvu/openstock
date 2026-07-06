@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -20,6 +21,93 @@ def _now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# ---- outcome_evaluation_run ----
+
+def create_evaluation_run(
+    conn: duckdb.DuckDBPyConnection,
+    watchlist_date: str,
+    evaluator_version: Optional[str],
+    metric_policy_version: Optional[str],
+    horizons: List[int],
+) -> str:
+    """Insert a new RUNNING evaluation run record; return its ID."""
+    run_id = str(uuid.uuid4())
+    conn.execute(
+        """
+        INSERT INTO outcome_evaluation_run
+            (evaluation_run_id, watchlist_date, started_at, status,
+             evaluator_version, metric_policy_version, horizons_json)
+        VALUES (?, ?, ?, 'RUNNING', ?, ?, ?)
+        """,
+        [
+            run_id, watchlist_date, _now_utc(),
+            evaluator_version, metric_policy_version,
+            str(horizons),
+        ],
+    )
+    return run_id
+
+
+def finish_evaluation_run(
+    conn: duckdb.DuckDBPyConnection,
+    run_id: str,
+    evaluated: int,
+    persisted: int,
+    errors: int,
+    symbol_bar_count_json: Optional[str] = None,
+    benchmark_bar_count: Optional[int] = None,
+    error_json: Optional[str] = None,
+) -> None:
+    """Mark an evaluation run as COMPLETE (or FAILED if error_json set)."""
+    status = "FAILED" if error_json else "COMPLETE"
+    conn.execute(
+        """
+        UPDATE outcome_evaluation_run SET
+            finished_at=?,
+            status=?,
+            evaluated=?,
+            persisted=?,
+            errors=?,
+            symbol_bar_count_json=?,
+            benchmark_bar_count=?,
+            error_json=?
+        WHERE evaluation_run_id=?
+        """,
+        [
+            _now_utc(), status, evaluated, persisted, errors,
+            symbol_bar_count_json, benchmark_bar_count,
+            error_json, run_id,
+        ],
+    )
+
+
+def get_evaluation_run(
+    conn: duckdb.DuckDBPyConnection,
+    run_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Fetch one evaluation run by ID."""
+    row = conn.execute(
+        """
+        SELECT evaluation_run_id, watchlist_date::VARCHAR, started_at::VARCHAR,
+               finished_at::VARCHAR, status, evaluator_version, metric_policy_version,
+               horizons_json, symbol_bar_count_json, benchmark_bar_count,
+               evaluated, persisted, errors, error_json
+        FROM outcome_evaluation_run
+        WHERE evaluation_run_id = ?
+        """,
+        [run_id],
+    ).fetchone()
+    if row is None:
+        return None
+    cols = [
+        "evaluation_run_id", "watchlist_date", "started_at", "finished_at",
+        "status", "evaluator_version", "metric_policy_version",
+        "horizons_json", "symbol_bar_count_json", "benchmark_bar_count",
+        "evaluated", "persisted", "errors", "error_json",
+    ]
+    return dict(zip(cols, row, strict=True))
+
+
 # ---- candidate_outcome ----
 
 def upsert_candidate_outcome(conn: duckdb.DuckDBPyConnection, rec: CandidateOutcomeRecord) -> None:
@@ -29,7 +117,7 @@ def upsert_candidate_outcome(conn: duckdb.DuckDBPyConnection, rec: CandidateOutc
     conn.execute(
         """
         INSERT INTO candidate_outcome VALUES (
-            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
         )
         ON CONFLICT (symbol, watchlist_date, horizon_sessions)
         DO UPDATE SET
@@ -50,7 +138,12 @@ def upsert_candidate_outcome(conn: duckdb.DuckDBPyConnection, rec: CandidateOutc
             bars_available=excluded.bars_available,
             required_bars=excluded.required_bars,
             computed_at=excluded.computed_at,
-            error_json=excluded.error_json
+            error_json=excluded.error_json,
+            evaluation_run_id=excluded.evaluation_run_id,
+            evaluator_version=excluded.evaluator_version,
+            metric_policy_version=excluded.metric_policy_version,
+            symbol_bar_count=excluded.symbol_bar_count,
+            benchmark_bar_count=excluded.benchmark_bar_count
         """,
         [
             rec.symbol, rec.watchlist_date, rec.horizon_sessions,
@@ -62,6 +155,9 @@ def upsert_candidate_outcome(conn: duckdb.DuckDBPyConnection, rec: CandidateOutc
             rec.hit, rec.failure, rec.outcome_status,
             rec.bars_available, rec.required_bars,
             rec.computed_at, rec.error_json,
+            rec.evaluation_run_id, rec.evaluator_version,
+            rec.metric_policy_version,
+            rec.symbol_bar_count, rec.benchmark_bar_count,
         ],
     )
 

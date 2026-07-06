@@ -26,11 +26,9 @@ def handle_history(
         limit = 20
 
     tool_executor = kwargs.get("tool_executor")
-    if tool_executor is not None:
-        output = tool_executor.call("history.list_sessions", limit=limit)
-    else:
-        from vnalpha.tools.notes import list_sessions
-        output = list_sessions(conn, limit=limit)
+    if tool_executor is None:
+        return CommandResult(status="FAILED", title="/history", summary="No tool executor available.")
+    output = tool_executor.call("history.list_sessions", limit=limit)
     sessions = output.data or []
 
     if not sessions:

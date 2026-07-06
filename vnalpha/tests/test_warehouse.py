@@ -39,6 +39,7 @@ def test_all_tables_created(conn):
         "research_note",
         "assistant_session",
         "llm_trace",
+        "outcome_evaluation_run",
         "candidate_outcome",
         "watchlist_outcome",
         "score_bucket_performance",
@@ -109,9 +110,57 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 18
+    assert len(tables) == 19
 
 
 def test_get_watchlist_empty(conn):
     result = get_watchlist(conn, "2024-01-02")
     assert result == []
+
+
+# ── Rejected-symbol date semantics tests ─────────────────────────────────────
+
+
+def test_build_canonical_rejected_uses_bar_date(conn):
+    """Invalid OHLCV bars should be rejected with their actual bar date, not job run date."""
+    from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
+
+    run_id = create_ingestion_run(conn, "test-service", "/test")
+    # Insert a raw row with invalid close (close <= 0 triggers rejection)
+    conn.execute("""
+        INSERT INTO market_ohlcv_raw
+        (ingestion_run_id, symbol, time, interval, open, high, low, close, volume, provider, fetched_at)
+        VALUES (?, 'BADFPT', '2024-03-15', '1D', 10.0, 11.0, 9.0, -1.0, 1000.0, 'KBS', current_timestamp)
+    """, [run_id])
+    build_canonical_ohlcv(conn, interval="1D", symbol="BADFPT")
+
+    rows = conn.execute(
+        "SELECT symbol, date, stage, reason, provider FROM rejected_symbol WHERE symbol = 'BADFPT'"
+    ).fetchall()
+    assert len(rows) >= 1, "Expected at least one rejected_symbol row"
+    _, rej_date, _, reason, _ = rows[0]
+    # The rejected date must be the bar date (2024-03-15), NOT today's date
+    assert str(rej_date) == "2024-03-15", (
+        f"rejected_symbol.date should be the bar date '2024-03-15', got '{rej_date}'"
+    )
+    assert reason == "INVALID_OHLCV"
+
+
+def test_build_canonical_rejected_carries_provider(conn):
+    """Rejected rows should include the provider that sourced the bad bar."""
+    from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
+
+    run_id = create_ingestion_run(conn, "test-service", "/test")
+    conn.execute("""
+        INSERT INTO market_ohlcv_raw
+        (ingestion_run_id, symbol, time, interval, open, high, low, close, volume, provider, fetched_at)
+        VALUES (?, 'PROVTEST', '2024-04-01', '1D', 10.0, 5.0, 11.0, 10.0, 1000.0, 'VCI', current_timestamp)
+    """, [run_id])
+    # high < low → invalid
+    build_canonical_ohlcv(conn, interval="1D", symbol="PROVTEST")
+
+    row = conn.execute(
+        "SELECT provider FROM rejected_symbol WHERE symbol = 'PROVTEST'"
+    ).fetchone()
+    assert row is not None
+    assert row[0] == "VCI"

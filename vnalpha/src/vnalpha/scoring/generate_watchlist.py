@@ -43,7 +43,8 @@ def score_universe(
                ma20_slope, ma50_slope, volume_ma20, volume_ratio,
                atr14, return_20d, return_60d, rs_20d_vs_vnindex,
                rs_60d_vs_vnindex, distance_to_ma20, distance_to_52w_high,
-               base_range_30d, close_strength, volatility_20d
+               base_range_30d, close_strength, volatility_20d,
+               lineage_json
         FROM feature_snapshot
         WHERE date = ?
     """
@@ -75,6 +76,7 @@ def score_universe(
         "base_range_30d",
         "close_strength",
         "volatility_20d",
+        "lineage_json",
     ]
 
     scored_count = 0
@@ -82,9 +84,26 @@ def score_universe(
         features = dict(zip(cols, row, strict=True))
         symbol = features.pop("symbol")
         date_val = features.pop("date")
+        lineage_raw = features.pop("lineage_json", None)
+        # Parse feature lineage to propagate provider/ingestion_run to score
+        feature_lineage: dict = {}
+        if lineage_raw:
+            try:
+                feature_lineage = json.loads(lineage_raw)
+            except (ValueError, TypeError):
+                pass
         scored = compute_composite_score(features)
         scored["symbol"] = symbol
         scored["date"] = str(date_val)
+        # Propagate lineage from feature_snapshot into scored result
+        scored["provider"] = feature_lineage.get("provider")
+        scored["ingestion_run_id"] = feature_lineage.get("ingestion_run_id")
+        if scored.get("provider") is None:
+            logger.warning(
+                "Lineage: provider missing for symbol=%s date=%s — score lineage incomplete",
+                symbol,
+                date_val,
+            )
         # Persist to candidate_score table — single authoritative record
         save_candidate_score(conn, symbol, str(date_val), scored)
         scored_count += 1

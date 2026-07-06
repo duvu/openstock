@@ -72,10 +72,10 @@ def build_canonical_ohlcv(
         conn.execute(query, params)
 
         # --- Data quality validation: insert rejected rows for symbols with severe issues ---
-        # Check for symbols with invalid canonical data: negative close, high < low
+        # Query per-bar bad rows to record the actual bar date (not the job run date)
         bad_rows_result = conn.execute(
             f"""
-            SELECT symbol, COUNT(*) as bad_count
+            SELECT symbol, CAST(time AS DATE) AS bar_date, selected_provider, ingestion_run_id
             FROM canonical_ohlcv
             WHERE interval = ?
               AND (
@@ -85,28 +85,34 @@ def build_canonical_ohlcv(
                   OR volume < 0
               )
             {(" AND symbol = ?" if symbol else "")}
-            GROUP BY symbol
-            HAVING COUNT(*) > 0
+            ORDER BY symbol, time
             """,
             [interval] + ([symbol] if symbol else []),
         ).fetchall()
 
         rejected = 0
         import json as _json
-        from datetime import date as _date
 
-        today_str = _date.today().isoformat()
-        for bad_symbol, bad_count in bad_rows_result:
+        for bad_symbol, bar_date, provider, ing_run_id in bad_rows_result:
             try:
                 conn.execute(
                     """
-                    INSERT INTO rejected_symbol (symbol, date, stage, reason, details_json, created_at)
-                    VALUES (?, ?, 'canonical', 'INVALID_OHLCV', ?, current_timestamp)
+                    INSERT INTO rejected_symbol
+                        (symbol, date, stage, reason, details_json, provider, ingestion_run_id, created_at)
+                    VALUES (?, ?, 'canonical', 'INVALID_OHLCV', ?, ?, ?, current_timestamp)
                     ON CONFLICT (symbol, date, stage) DO UPDATE SET
                         reason = excluded.reason,
-                        details_json = excluded.details_json
+                        details_json = excluded.details_json,
+                        provider = excluded.provider,
+                        ingestion_run_id = excluded.ingestion_run_id
                     """,
-                    [bad_symbol, today_str, _json.dumps({"bad_rows": bad_count})],
+                    [
+                        bad_symbol,
+                        str(bar_date),
+                        _json.dumps({"bar_date": str(bar_date)}),
+                        provider,
+                        ing_run_id,
+                    ],
                 )
                 rejected += 1
             except Exception as e_rej:

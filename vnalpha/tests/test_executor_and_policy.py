@@ -234,12 +234,32 @@ class TestExecutorPersistsToolTrace:
         executor.execute(plan)
 
         rows = conn.execute(
-            "SELECT tool_name, status FROM tool_trace WHERE session_id = ?",
+            "SELECT tool_name, status FROM tool_trace WHERE assistant_session_id = ?",
             [session_id],
         ).fetchall()
         assert len(rows) == 1
         assert rows[0][0] == "watchlist.scan"
         assert rows[0][1] == "SUCCESS"
+
+    def test_executor_assistant_trace_has_null_session_id(self, conn, session_id):
+        """Assistant tool traces must have session_id=NULL, not the assistant session id."""
+        executor = AssistantExecutor(conn, assistant_session_id=session_id)
+        step = _make_step("watchlist.scan", {"date": "2024-01-15"})
+        plan = _make_plan(step)
+        executor.execute(plan)
+
+        rows = conn.execute(
+            "SELECT session_id, assistant_session_id, trace_parent_type FROM tool_trace "
+            "WHERE assistant_session_id = ?",
+            [session_id],
+        ).fetchall()
+        assert len(rows) == 1
+        row_session_id, row_asst_id, parent_type = rows[0]
+        assert row_session_id is None, (
+            f"Assistant trace session_id must be NULL, got {row_session_id!r}"
+        )
+        assert row_asst_id == session_id
+        assert parent_type == "assistant"
 
     def test_executor_persists_failed_trace_on_error(self, conn, session_id):
         """When a tool step raises, a FAILED tool_trace row should be persisted."""
@@ -251,7 +271,7 @@ class TestExecutorPersistsToolTrace:
             executor.execute(plan)
 
         rows = conn.execute(
-            "SELECT tool_name, status FROM tool_trace WHERE session_id = ?",
+            "SELECT tool_name, status FROM tool_trace WHERE assistant_session_id = ?",
             [session_id],
         ).fetchall()
         assert len(rows) == 1

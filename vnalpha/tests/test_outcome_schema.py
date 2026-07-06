@@ -28,6 +28,7 @@ from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
 OUTCOME_TABLES = {
+    "outcome_evaluation_run",
     "candidate_outcome",
     "watchlist_outcome",
     "score_bucket_performance",
@@ -59,12 +60,12 @@ class TestMigrations:
 
     def test_total_table_count(self, conn):
         tables = conn.execute("SHOW TABLES").fetchall()
-        assert len(tables) == 18
+        assert len(tables) == 19
 
     def test_migrations_idempotent(self, conn):
         run_migrations(conn=conn)
         tables = conn.execute("SHOW TABLES").fetchall()
-        assert len(tables) == 18
+        assert len(tables) == 19
 
 
 class TestOutcomeModels:

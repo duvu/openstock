@@ -31,11 +31,9 @@ def handle_compare(
     date = normalize_date(parsed.options.get("date"))
 
     tool_executor = kwargs.get("tool_executor")
-    if tool_executor is not None:
-        output = tool_executor.call("candidate.compare", symbols=symbols, date=date)
-    else:
-        from vnalpha.tools.scoring import compare_candidates
-        output = compare_candidates(conn, symbols=symbols, date=date)
+    if tool_executor is None:
+        return CommandResult(status="FAILED", title="/compare", summary="No tool executor available.")
+    output = tool_executor.call("candidate.compare", symbols=symbols, date=date)
     records = output.data or []
 
     if not records:
