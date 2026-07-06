@@ -66,9 +66,21 @@ def _build_synthesis_messages(user_prompt: str, plan: AssistantPlan, tool_output
         {"role": "user", "content": json.dumps(context, default=str, ensure_ascii=False)},
     ]
 
+def _strip_markdown_fence(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines)
+    return text.strip()
+
+
 def _parse_synthesis_response(response_text: str) -> AssistantAnswer:
+    cleaned = _strip_markdown_fence(response_text)
     try:
-        data = json.loads(response_text)
+        data = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         raise SynthesisError(f"Invalid JSON from synthesizer: {response_text[:100]}") from exc
     return AssistantAnswer(

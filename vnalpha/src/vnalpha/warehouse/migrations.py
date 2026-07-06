@@ -50,9 +50,12 @@ def run_migrations(
 
 
 def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:
-    """Add explicit parent columns for existing Phase 5.8 databases."""
     conn.execute("ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS assistant_session_id VARCHAR")
     conn.execute("ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS trace_parent_type VARCHAR")
+    try:
+        conn.execute("ALTER TABLE tool_trace ALTER COLUMN session_id DROP NOT NULL")
+    except Exception:
+        pass
 
 
 def _migrate_feature_snapshot_columns(conn: duckdb.DuckDBPyConnection) -> None:
