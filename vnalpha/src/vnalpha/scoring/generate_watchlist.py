@@ -1,4 +1,11 @@
-"""Generate daily watchlist from scored candidates."""
+"""Generate daily watchlist from persisted candidate scores.
+
+Design:
+- `score_universe()` computes scores from feature_snapshot and persists to candidate_score.
+- `save_watchlist()` reads from candidate_score (not in-memory results) and writes daily_watchlist.
+- `generate_watchlist()` runs the full pipeline: compute → persist → derive watchlist from persisted data.
+"""
+
 from __future__ import annotations
 
 import json
@@ -8,22 +15,28 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.scoring.score import compute_composite_score
-from vnalpha.warehouse.repositories import save_candidate_score
+from vnalpha.warehouse.repositories import (
+    get_candidate_scores,
+    save_candidate_score,
+)
 
 logger = get_logger("scoring.generate_watchlist")
 
 DEFAULT_MIN_SCORE = 0.40
 DEFAULT_TOP_N = 30
 
+# Canonical candidate classes that qualify for the watchlist
+WATCHLIST_CLASSES = {"STRONG_CANDIDATE", "WATCH_CANDIDATE", "WEAK_CANDIDATE"}
+
 
 def score_universe(
     conn: duckdb.DuckDBPyConnection,
     date: str,
     universe: Optional[List[str]] = None,
-) -> List[dict]:
+) -> int:
     """Score all symbols for a given date using feature_snapshot.
 
-    Returns list of scored dicts sorted by score descending.
+    Persists each result to candidate_score and returns the count of scored symbols.
     """
     query = """
         SELECT symbol, date, close, ma20, ma50, ma100,
@@ -42,14 +55,29 @@ def score_universe(
 
     rows = conn.execute(query, params).fetchall()
     cols = [
-        "symbol", "date", "close", "ma20", "ma50", "ma100",
-        "ma20_slope", "ma50_slope", "volume_ma20", "volume_ratio",
-        "atr14", "return_20d", "return_60d", "rs_20d_vs_vnindex",
-        "rs_60d_vs_vnindex", "distance_to_ma20", "distance_to_52w_high",
-        "base_range_30d", "close_strength", "volatility_20d",
+        "symbol",
+        "date",
+        "close",
+        "ma20",
+        "ma50",
+        "ma100",
+        "ma20_slope",
+        "ma50_slope",
+        "volume_ma20",
+        "volume_ratio",
+        "atr14",
+        "return_20d",
+        "return_60d",
+        "rs_20d_vs_vnindex",
+        "rs_60d_vs_vnindex",
+        "distance_to_ma20",
+        "distance_to_52w_high",
+        "base_range_30d",
+        "close_strength",
+        "volatility_20d",
     ]
 
-    results = []
+    scored_count = 0
     for row in rows:
         features = dict(zip(cols, row, strict=True))
         symbol = features.pop("symbol")
@@ -57,31 +85,40 @@ def score_universe(
         scored = compute_composite_score(features)
         scored["symbol"] = symbol
         scored["date"] = str(date_val)
-        # Persist to candidate_score table for full evidence trail
+        # Persist to candidate_score table — single authoritative record
         save_candidate_score(conn, symbol, str(date_val), scored)
-        results.append(scored)
+        scored_count += 1
 
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results
+    logger.info("Scored and persisted %d symbols for %s", scored_count, date)
+    return scored_count
 
 
 def save_watchlist(
     conn: duckdb.DuckDBPyConnection,
     date: str,
-    candidates: List[dict],
     top_n: int = DEFAULT_TOP_N,
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> int:
-    """Save top candidates to daily_watchlist table.
+    """Derive and save daily_watchlist FROM persisted candidate_score rows.
+
+    Reads the authoritative candidate_score table (no recomputation) and
+    writes the top-N ranked candidates to daily_watchlist.
 
     Returns number of entries saved.
     """
-    filtered = [c for c in candidates if c["score"] >= min_score][:top_n]
+    # Read from persisted candidate_score — not in-memory scores
+    candidates = get_candidate_scores(conn, date, min_score=min_score)
+    # Filter to watchlist-eligible classes (IGNORE excluded)
+    candidates = [
+        c for c in candidates if c.get("candidate_class") in WATCHLIST_CLASSES
+    ][:top_n]
 
     # Clear existing entries for this date
     conn.execute("DELETE FROM daily_watchlist WHERE date = ?", [date])
 
-    for rank, candidate in enumerate(filtered, start=1):
+    for rank, candidate in enumerate(candidates, start=1):
+        risk_flags = candidate.get("risk_flags_json", [])
+        lineage = candidate.get("lineage_json", {})
         conn.execute(
             """
             INSERT INTO daily_watchlist
@@ -95,16 +132,16 @@ def save_watchlist(
                 candidate["score"],
                 candidate["candidate_class"],
                 candidate["setup_type"],
-                json.dumps(candidate.get("risk_flags", [])),
-                json.dumps({
-                    "trend_score": candidate["trend_score"],
-                    "rs_score": candidate["relative_strength_score"],
-                    "volume_score": candidate["volume_score"],
-                }),
+                json.dumps(risk_flags) if isinstance(risk_flags, list) else risk_flags,
+                json.dumps(lineage) if isinstance(lineage, dict) else lineage,
             ],
         )
-    logger.info("Saved %d watchlist entries for %s", len(filtered), date)
-    return len(filtered)
+    logger.info(
+        "Saved %d watchlist entries for %s (from persisted scores)",
+        len(candidates),
+        date,
+    )
+    return len(candidates)
 
 
 def generate_watchlist(
@@ -114,12 +151,12 @@ def generate_watchlist(
     top_n: int = DEFAULT_TOP_N,
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> dict:
-    """Full pipeline: score → filter → save watchlist.
+    """Full pipeline: compute scores → persist → derive watchlist from persisted data.
 
     Returns:
-        dict with "scored", "saved" counts.
+        dict with "scored" count (all symbols scored) and "saved" count (watchlist entries).
     """
     scored = score_universe(conn, date, universe=universe)
-    saved = save_watchlist(conn, date, scored, top_n=top_n, min_score=min_score)
-    logger.info("Watchlist for %s: scored=%d saved=%d", date, len(scored), saved)
-    return {"scored": len(scored), "saved": saved}
+    saved = save_watchlist(conn, date, top_n=top_n, min_score=min_score)
+    logger.info("Watchlist for %s: scored=%d saved=%d", date, scored, saved)
+    return {"scored": scored, "saved": saved}

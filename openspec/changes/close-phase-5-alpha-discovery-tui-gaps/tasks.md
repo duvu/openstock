@@ -2,127 +2,127 @@
 
 ## 0. Baseline review
 
-- [ ] Confirm archived Phase 5 spec exists at `openspec/specs/alpha-discovery-tui/spec.md`.
-- [ ] Confirm `vnalpha/src/vnalpha/cli.py` contains placeholder commands for Phase 5 workflow commands.
-- [ ] Confirm `candidate_score` table exists in warehouse schema.
-- [ ] Confirm current watchlist generation writes `daily_watchlist` directly from in-memory scores.
-- [ ] Confirm TUI detail currently recomputes score from `feature_snapshot`.
-- [ ] Confirm current CLI tests mostly cover help text, not execution workflow.
+- [x] Confirm archived Phase 5 spec exists at `openspec/specs/alpha-discovery-tui/spec.md`.
+- [x] Confirm `vnalpha/src/vnalpha/cli.py` contains placeholder commands for Phase 5 workflow commands.
+- [x] Confirm `candidate_score` table exists in warehouse schema.
+- [x] Confirm current watchlist generation writes `daily_watchlist` directly from in-memory scores.
+- [x] Confirm TUI detail currently recomputes score from `feature_snapshot`.
+- [x] Confirm current CLI tests mostly cover help text, not execution workflow.
 
 ## 1. Shared date resolver
 
-- [ ] Add `vnalpha/src/vnalpha/core/dates.py`.
-- [ ] Implement `resolve_date(value: str | None) -> str`.
-- [ ] Support `today`.
-- [ ] Support ISO `YYYY-MM-DD`.
-- [ ] Reject invalid date values with clear errors.
-- [ ] Add `vnalpha/tests/test_dates.py`.
-- [ ] Use resolver in CLI build/score/watchlist/tui commands.
-- [ ] Use resolver in TUI app and screens.
+- [x] Add `vnalpha/src/vnalpha/core/dates.py`.
+- [x] Implement `resolve_date(value: str | None) -> str`.
+- [x] Support `today`.
+- [x] Support ISO `YYYY-MM-DD`.
+- [x] Reject invalid date values with clear errors.
+- [x] Add `vnalpha/tests/test_dates.py`.
+- [x] Use resolver in CLI build/score/watchlist/tui commands.
+- [x] Use resolver in TUI app and screens.
 
 ## 2. Wire CLI commands
 
-- [ ] Update `vnalpha build features --date <date>` to call `vnalpha.features.build_features.build_features`.
-- [ ] Ensure build features command runs migrations before use.
-- [ ] Print built/skipped counts.
-- [ ] Update `vnalpha score --date <date>` to call scoring persistence workflow.
-- [ ] Print scored/persisted counts.
-- [ ] Update `vnalpha watchlist --date <date>` to generate from persisted candidate scores.
-- [ ] Print saved count or explicit no-candidate message.
-- [ ] Update `vnalpha tui --date <date>` to launch `VnAlphaApp` with resolved date.
-- [ ] Ensure no Phase 5 CLI command prints `not yet implemented`.
-- [ ] Ensure top-level `Makefile` targets still work.
+- [x] Update `vnalpha build features --date <date>` to call `vnalpha.features.build_features.build_features`.
+- [x] Ensure build features command runs migrations before use.
+- [x] Print built/skipped counts.
+- [x] Update `vnalpha score --date <date>` to call scoring persistence workflow.
+- [x] Print scored/persisted counts.
+- [x] Update `vnalpha watchlist --date <date>` to generate from persisted candidate scores.
+- [x] Print saved count or explicit no-candidate message.
+- [x] Update `vnalpha tui --date <date>` to launch `VnAlphaApp` with resolved date.
+- [x] Ensure no Phase 5 CLI command prints `not yet implemented`.
+- [x] Ensure top-level `Makefile` targets still work.
 
 ## 3. Candidate score persistence
 
-- [ ] Add repository helper `save_candidate_score`.
-- [ ] Add repository helper `get_candidate_score`.
-- [ ] Add repository helper `get_candidate_scores`.
-- [ ] Persist composite score.
-- [ ] Persist candidate class.
-- [ ] Persist setup type.
-- [ ] Persist trend score.
-- [ ] Persist relative strength score.
-- [ ] Persist volume score.
-- [ ] Persist base score.
-- [ ] Persist breakout score.
-- [ ] Persist risk quality score.
-- [ ] Persist evidence JSON.
-- [ ] Persist risk flags JSON.
-- [ ] Persist lineage JSON.
-- [ ] Ensure upsert behavior is deterministic for `(symbol, date)`.
-- [ ] Add tests for candidate score save/read/upsert.
+- [x] Add repository helper `save_candidate_score`.
+- [x] Add repository helper `get_candidate_score`.
+- [x] Add repository helper `get_candidate_scores`.
+- [x] Persist composite score.
+- [x] Persist candidate class.
+- [x] Persist setup type.
+- [x] Persist trend score.
+- [x] Persist relative strength score.
+- [x] Persist volume score.
+- [x] Persist base score.
+- [x] Persist breakout score.
+- [x] Persist risk quality score.
+- [x] Persist evidence JSON.
+- [x] Persist risk flags JSON.
+- [x] Persist lineage JSON.
+- [x] Ensure upsert behavior is deterministic for `(symbol, date)`.
+- [x] Add tests for candidate score save/read/upsert.
 
 ## 4. Evidence and lineage model
 
-- [ ] Define deterministic evidence structure for scoring v1.
-- [ ] Include rule outcomes or feature facts that explain the score.
-- [ ] Include score component values.
-- [ ] Include risk flags and reason fields.
-- [ ] Include scoring version in lineage.
-- [ ] Include feature date in lineage.
-- [ ] Include source feature snapshot context in lineage.
-- [ ] Include generated timestamp in lineage.
-- [ ] Keep evidence and lineage JSON serializable and stable enough for tests.
+- [x] Define deterministic evidence structure for scoring v1.
+- [x] Include rule outcomes or feature facts that explain the score.
+- [x] Include score component values.
+- [x] Include risk flags and reason fields.
+- [x] Include scoring version in lineage.
+- [x] Include feature date in lineage.
+- [x] Include source feature snapshot context in lineage.
+- [x] Include generated timestamp in lineage.
+- [x] Keep evidence and lineage JSON serializable and stable enough for tests.
 
 ## 5. Candidate taxonomy alignment
 
-- [ ] Decide Phase 5 canonical candidate class taxonomy.
-- [ ] Update spec delta to document canonical classes.
-- [ ] Update scoring code if needed.
-- [ ] Update tests if needed.
-- [ ] Update TUI labels if needed.
-- [ ] Preserve legacy enum values only as compatibility values if retained.
-- [ ] Add tests proving emitted candidate classes are in the canonical set.
+- [x] Decide Phase 5 canonical candidate class taxonomy.
+- [x] Update spec delta to document canonical classes.
+- [x] Update scoring code if needed.
+- [x] Update tests if needed.
+- [x] Update TUI labels if needed.
+- [x] Preserve legacy enum values only as compatibility values if retained.
+- [x] Add tests proving emitted candidate classes are in the canonical set.
 
 ## 6. Watchlist generation from persisted candidate scores
 
-- [ ] Refactor watchlist generation so `daily_watchlist` is derived from `candidate_score`.
-- [ ] Do not recompute scores in watchlist generation.
-- [ ] Preserve rank, score, candidate class, setup type, risk flags, and lineage in `daily_watchlist`.
-- [ ] Return explicit no-candidate result when no candidate meets criteria.
-- [ ] Add tests proving watchlist rows come from persisted candidate scores.
-- [ ] Add tests for empty/no-candidate cases.
+- [x] Refactor watchlist generation so `daily_watchlist` is derived from `candidate_score`.
+- [x] Do not recompute scores in watchlist generation.
+- [x] Preserve rank, score, candidate class, setup type, risk flags, and lineage in `daily_watchlist`.
+- [x] Return explicit no-candidate result when no candidate meets criteria.
+- [x] Add tests proving watchlist rows come from persisted candidate scores.
+- [x] Add tests for empty/no-candidate cases.
 
 ## 7. TUI reads persisted candidate records
 
-- [ ] Update `VnAlphaApp` to carry resolved target date.
-- [ ] Update `WatchlistScreen` to use app target date consistently.
-- [ ] Update `DetailScreen` to read `candidate_score` for `(symbol, date)`.
-- [ ] Display persisted score breakdown.
-- [ ] Display persisted evidence.
-- [ ] Display persisted risk flags.
-- [ ] Display persisted lineage.
-- [ ] Display feature snapshot values only as supporting context.
-- [ ] Ensure selected watchlist symbol opens persisted detail.
-- [ ] Add TUI smoke/data-loading tests.
+- [x] Update `VnAlphaApp` to carry resolved target date.
+- [x] Update `WatchlistScreen` to use app target date consistently.
+- [x] Update `DetailScreen` to read `candidate_score` for `(symbol, date)`.
+- [x] Display persisted score breakdown.
+- [x] Display persisted evidence.
+- [x] Display persisted risk flags.
+- [x] Display persisted lineage.
+- [x] Display feature snapshot values only as supporting context.
+- [x] Ensure selected watchlist symbol opens persisted detail.
+- [x] Add TUI smoke/data-loading tests.
 
 ## 8. Research-language boundary
 
-- [ ] Create one test fixture for disallowed execution-style wording.
-- [ ] Scan CLI output strings.
-- [ ] Scan TUI visible strings where practical.
-- [ ] Ensure candidate output uses research/watchlist language.
-- [ ] Ensure empty-state and error-state messages use research language.
-- [ ] Add regression tests for boundary wording.
+- [x] Create one test fixture for disallowed execution-style wording.
+- [x] Scan CLI output strings.
+- [x] Scan TUI visible strings where practical.
+- [x] Ensure candidate output uses research/watchlist language.
+- [x] Ensure empty-state and error-state messages use research language.
+- [x] Add regression tests for boundary wording.
 
 ## 9. End-to-end Phase 5 tests
 
-- [ ] Add fixture warehouse with canonical OHLCV sufficient for features.
-- [ ] Test `vnalpha build features --date <date>` through CLI runner.
-- [ ] Test `vnalpha score --date <date>` persists candidate scores.
-- [ ] Test `vnalpha watchlist --date <date>` persists daily watchlist rows.
-- [ ] Test `vnalpha tui --help` still works.
-- [ ] Test TUI data-loading helpers can read persisted candidate/watchlist data.
-- [ ] Test no CLI command emits placeholder output.
+- [x] Add fixture warehouse with canonical OHLCV sufficient for features.
+- [x] Test `vnalpha build features --date <date>` through CLI runner.
+- [x] Test `vnalpha score --date <date>` persists candidate scores.
+- [x] Test `vnalpha watchlist --date <date>` persists daily watchlist rows.
+- [x] Test `vnalpha tui --help` still works.
+- [x] Test TUI data-loading helpers can read persisted candidate/watchlist data.
+- [x] Test no CLI command emits placeholder output.
 
 ## 10. Docs and runbook alignment
 
-- [ ] Update `RUNBOOK.md` if command behavior changes.
-- [ ] Update any Phase 5 notes that still imply tasks are complete before CLI wiring.
-- [ ] Add troubleshooting note for empty watchlist.
-- [ ] Add troubleshooting note for missing feature snapshots.
-- [ ] Add note that Phase 6 outcome tracking remains future scope.
+- [x] Update `RUNBOOK.md` if command behavior changes.
+- [x] Update any Phase 5 notes that still imply tasks are complete before CLI wiring.
+- [x] Add troubleshooting note for empty watchlist.
+- [x] Add troubleshooting note for missing feature snapshots.
+- [x] Add note that Phase 6 outcome tracking remains future scope.
 
 ## 11. Validation
 
@@ -158,12 +158,12 @@ make tui
 
 ## Completion checklist
 
-- [ ] Phase 5 CLI workflow is executable.
-- [ ] `candidate_score` is the authoritative persisted score record.
-- [ ] `daily_watchlist` is generated from `candidate_score`.
-- [ ] TUI displays persisted candidate evidence and lineage.
-- [ ] Candidate taxonomy is consistent across spec, code, tests, and UI.
-- [ ] Date handling is deterministic.
-- [ ] Research-language boundary is tested.
-- [ ] End-to-end Phase 5 tests pass.
-- [ ] Phase 5 can be archived as operationally closed.
+- [x] Phase 5 CLI workflow is executable.
+- [x] `candidate_score` is the authoritative persisted score record.
+- [x] `daily_watchlist` is generated from `candidate_score`.
+- [x] TUI displays persisted candidate evidence and lineage.
+- [x] Candidate taxonomy is consistent across spec, code, tests, and UI.
+- [x] Date handling is deterministic.
+- [x] Research-language boundary is tested.
+- [x] End-to-end Phase 5 tests pass.
+- [x] Phase 5 can be archived as operationally closed.

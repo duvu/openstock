@@ -1,4 +1,5 @@
 """Rejected symbols screen."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -39,6 +40,7 @@ class RejectedScreen(Screen):
     def _load_data(self) -> None:
         try:
             from vnalpha.warehouse.connection import get_connection
+
             conn = get_connection()
             rows = conn.execute(
                 "SELECT symbol, stage, reason FROM rejected_symbol WHERE date = ? ORDER BY symbol",

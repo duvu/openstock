@@ -1,4 +1,5 @@
 """vnalpha configuration."""
+
 from __future__ import annotations
 
 import os
@@ -9,7 +10,9 @@ from pathlib import Path
 @dataclass
 class VnstockServiceConfig:
     base_url: str = field(
-        default_factory=lambda: os.getenv("VNSTOCK_SERVICE_URL", "http://127.0.0.1:6900")
+        default_factory=lambda: os.getenv(
+            "VNSTOCK_SERVICE_URL", "http://127.0.0.1:6900"
+        )
     )
     timeout: float = 30.0
 
@@ -28,9 +31,7 @@ class WarehouseConfig:
 
 @dataclass
 class AppConfig:
-    universe: str = field(
-        default_factory=lambda: os.getenv("VNALPHA_UNIVERSE", "VN30")
-    )
+    universe: str = field(default_factory=lambda: os.getenv("VNALPHA_UNIVERSE", "VN30"))
     log_level: str = field(
         default_factory=lambda: os.getenv("VNALPHA_LOG_LEVEL", "INFO")
     )

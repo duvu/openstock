@@ -1,4 +1,5 @@
 """Sync equity OHLCV from vnstock-service."""
+
 from __future__ import annotations
 
 from typing import List, Optional
@@ -89,8 +90,14 @@ def sync_ohlcv(
     try:
         for symbol in universe:
             count = sync_ohlcv_for_symbol(
-                conn, client, run_id, symbol,
-                start=start, end=end, interval=interval, source=source,
+                conn,
+                client,
+                run_id,
+                symbol,
+                start=start,
+                end=end,
+                interval=interval,
+                source=source,
             )
             if count > 0:
                 inserted += count
@@ -98,7 +105,12 @@ def sync_ohlcv(
                 skipped += 1
 
         finish_ingestion_run(conn, run_id, "SUCCESS")
-        logger.info("OHLCV sync complete: total=%d inserted=%d skipped=%d", total, inserted, skipped)
+        logger.info(
+            "OHLCV sync complete: total=%d inserted=%d skipped=%d",
+            total,
+            inserted,
+            skipped,
+        )
     except Exception as e:
         finish_ingestion_run(conn, run_id, "FAILED", error={"error": str(e)})
         raise

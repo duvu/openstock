@@ -1,4 +1,5 @@
 """Data quality / provider health screen."""
+
 from __future__ import annotations
 
 from textual.app import ComposeResult
@@ -33,6 +34,7 @@ class QualityScreen(Screen):
         try:
             from vnalpha.clients.vnstock.client import VnstockClient
             from vnalpha.core.config import get_config
+
             cfg = get_config()
             client = VnstockClient(base_url=cfg.vnstock.base_url, timeout=5.0)
             try:

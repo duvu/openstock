@@ -1,4 +1,5 @@
 """Errors for the vnstock-service client."""
+
 from __future__ import annotations
 
 

@@ -1,4 +1,5 @@
 """Score table widget — renders sorted research candidates."""
+
 from __future__ import annotations
 
 from typing import Any, List
@@ -16,6 +17,7 @@ class ScoreTable(DataTable):
         self.clear()
         for i, c in enumerate(candidates, start=1):
             import json
+
             flags = c.get("risk_flags", [])
             if isinstance(flags, str):
                 flags = json.loads(flags)

@@ -1,4 +1,5 @@
 """Core scoring logic: compute composite score for a symbol."""
+
 from __future__ import annotations
 
 import math
@@ -172,6 +173,8 @@ def _detect_setup(features: dict[str, Any]) -> str:
         if abs(dist) < 0.03:
             return SetupType.PULLBACK_TO_TREND.value
         return SetupType.MOMENTUM_CONTINUATION.value
-    if not rule_price_above_ma20(features) and rule_volume_expansion(features, threshold=1.5):
+    if not rule_price_above_ma20(features) and rule_volume_expansion(
+        features, threshold=1.5
+    ):
         return SetupType.MEAN_REVERSION.value
     return SetupType.UNCLASSIFIED.value

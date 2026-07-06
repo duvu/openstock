@@ -1,4 +1,5 @@
 """vnalpha TUI application — research-only daily discovery interface."""
+
 from __future__ import annotations
 
 from typing import Optional
@@ -6,10 +7,8 @@ from typing import Optional
 from textual.app import App
 from textual.binding import Binding
 
+from vnalpha.core.dates import resolve_date
 from vnalpha.tui.screens.detail import DetailScreen
-from vnalpha.tui.screens.home import HomeScreen
-from vnalpha.tui.screens.quality import QualityScreen
-from vnalpha.tui.screens.rejected import RejectedScreen
 from vnalpha.tui.screens.watchlist import WatchlistScreen
 
 
@@ -36,25 +35,18 @@ class VnAlphaApp(App):
         Binding("q", "quit", "Quit"),
     ]
 
-    SCREENS = {
-        "home": HomeScreen,
-        "watchlist": WatchlistScreen,
-        "rejected": RejectedScreen,
-        "quality": QualityScreen,
-    }
-
     def __init__(self, date: Optional[str] = None, **kwargs):
         super().__init__(**kwargs)
-        self.target_date = date
+        self.target_date: str = resolve_date(date)
 
     def on_mount(self) -> None:
-        self.push_screen("watchlist")
+        self.push_screen(WatchlistScreen(target_date=self.target_date))
 
     def action_show_home(self) -> None:
         self.push_screen("home")
 
     def action_show_watchlist(self) -> None:
-        self.push_screen("watchlist")
+        self.push_screen(WatchlistScreen(target_date=self.target_date))
 
     def action_show_rejected(self) -> None:
         self.push_screen("rejected")
@@ -63,4 +55,4 @@ class VnAlphaApp(App):
         self.push_screen("quality")
 
     def show_detail(self, symbol: str) -> None:
-        self.push_screen(DetailScreen(symbol=symbol))
+        self.push_screen(DetailScreen(symbol=symbol, target_date=self.target_date))

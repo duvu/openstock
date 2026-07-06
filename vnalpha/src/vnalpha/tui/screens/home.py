@@ -1,4 +1,5 @@
 """Home screen — status overview."""
+
 from __future__ import annotations
 
 from textual.app import ComposeResult
@@ -27,6 +28,7 @@ class HomeScreen(Screen):
     def _load_status(self) -> None:
         try:
             from vnalpha.core.config import get_config
+
             cfg = get_config()
             status_lines = [
                 f"[cyan]Warehouse:[/cyan] {cfg.warehouse.path}",
@@ -37,4 +39,6 @@ class HomeScreen(Screen):
             ]
             self.query_one("#status", Static).update("\n".join(status_lines))
         except Exception as e:
-            self.query_one("#status", Static).update(f"[red]Error loading config: {e}[/red]")
+            self.query_one("#status", Static).update(
+                f"[red]Error loading config: {e}[/red]"
+            )

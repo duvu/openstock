@@ -1,4 +1,5 @@
 """vnalpha shared types and enums."""
+
 from __future__ import annotations
 
 from enum import Enum
@@ -13,6 +14,7 @@ class CandidateClass(str, Enum):
     Research-only: used for watchlist filtering and display.
     Do not use as trade signals.
     """
+
     # Canonical values (current)
     STRONG_CANDIDATE = "STRONG_CANDIDATE"
     WATCH_CANDIDATE = "WATCH_CANDIDATE"
@@ -31,6 +33,7 @@ class SetupType(str, Enum):
 
     Describes the observed chart pattern for research purposes.
     """
+
     # Canonical values (current)
     ACCUMULATION_BASE = "ACCUMULATION_BASE"
     BREAKOUT_ATTEMPT = "BREAKOUT_ATTEMPT"

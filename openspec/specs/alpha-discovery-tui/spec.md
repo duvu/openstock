@@ -197,3 +197,73 @@ Then it SHALL have date, symbol, setup type, score, evidence, and lineage suffic
 Given a watchlist is generated  
 When it is persisted  
 Then rank, score, candidate class, and generated timestamp SHALL be stored.
+
+---
+
+## CLARIFIED Requirements (gap closure)
+
+### Requirement: date handling is deterministic
+
+`vnalpha` CLI and TUI commands SHALL resolve dates via a shared `core.dates.resolve_date()` function.
+
+#### Scenario: today keyword accepted
+
+Given `--date today` is passed to any CLI command  
+When the command executes  
+Then `today` SHALL resolve to the current ISO date (YYYY-MM-DD).
+
+#### Scenario: invalid date rejected
+
+Given an invalid date string is passed to `--date`  
+When the command executes  
+Then a `ValueError` SHALL be raised with a clear message.
+
+---
+
+### Requirement: candidate_score is the authoritative score record
+
+`candidate_score` SHALL be the single source of truth for scored research candidates.
+`daily_watchlist` SHALL be derived from `candidate_score` and SHALL NOT recompute scores.
+
+#### Scenario: daily_watchlist derives from candidate_score
+
+Given `vnalpha score --date <date>` has been run  
+When `vnalpha watchlist --date <date>` is executed  
+Then the watchlist SHALL read from persisted `candidate_score` rows with no recomputation.
+
+#### Scenario: IGNORE class excluded from watchlist
+
+Given a symbol is scored as IGNORE  
+When the daily watchlist is generated  
+Then that symbol SHALL NOT appear in `daily_watchlist`.
+
+---
+
+### Requirement: TUI detail reads persisted candidate record
+
+The TUI DetailScreen SHALL read the authoritative `candidate_score` record for (symbol, date).
+It SHALL NOT recompute scores from `feature_snapshot`.
+
+#### Scenario: persisted detail displayed
+
+Given a candidate_score row exists for (symbol, date)  
+When the user selects the symbol in the TUI  
+Then the detail view SHALL display the persisted score, evidence, risk flags, and lineage.
+
+#### Scenario: no persisted score shown as empty state
+
+Given no candidate_score row exists for (symbol, date)  
+When the user selects the symbol  
+Then the detail view SHALL show an explicit "no persisted score" message with instructions.
+
+---
+
+### Requirement: scoring lineage includes audit metadata
+
+Each `candidate_score` row SHALL include a `lineage_json` field with scoring version and generated timestamp.
+
+#### Scenario: lineage fields are present
+
+Given a score is persisted  
+When `lineage_json` is read  
+Then it SHALL contain `scoring_version` (e.g., `v1.0`) and `generated_at` (ISO timestamp).

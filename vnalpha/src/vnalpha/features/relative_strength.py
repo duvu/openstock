@@ -1,4 +1,5 @@
 """Relative strength vs benchmark."""
+
 from __future__ import annotations
 
 import pandas as pd

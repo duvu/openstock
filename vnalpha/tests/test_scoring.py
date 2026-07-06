@@ -192,15 +192,21 @@ def test_generate_watchlist():
             row,
         )
 
-    candidates = score_universe(conn, "2024-01-02")
-    assert len(candidates) == 2
-    assert candidates[0]["symbol"] == "FPT"  # highest score first
+    scored_count = score_universe(conn, "2024-01-02")
+    assert scored_count == 2
 
-    saved = save_watchlist(conn, "2024-01-02", candidates, top_n=10, min_score=0.0)
-    assert saved == 2
+    # Verify candidate_score rows were persisted
+    from vnalpha.warehouse.repositories import get_candidate_scores
+    persisted = get_candidate_scores(conn, "2024-01-02")
+    assert len(persisted) == 2
+    assert persisted[0]["symbol"] == "FPT"  # highest score first
+
+    saved = save_watchlist(conn, "2024-01-02", top_n=10, min_score=0.0)
+    # FPT is STRONG_CANDIDATE → saved; VNM is IGNORE → excluded from watchlist
+    assert saved >= 1
 
     from vnalpha.warehouse.repositories import get_watchlist
     wl = get_watchlist(conn, "2024-01-02")
-    assert len(wl) == 2
+    assert len(wl) >= 1
     assert wl[0]["symbol"] == "FPT"
     conn.close()

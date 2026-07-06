@@ -1,4 +1,5 @@
 """Price trend features: moving averages and slopes."""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -11,10 +12,12 @@ def compute_ma(series: pd.Series, window: int) -> pd.Series:
 
 def compute_ma_slope(ma_series: pd.Series, period: int = 5) -> pd.Series:
     """Compute slope as (last - first) / first over a rolling period."""
+
     def _slope(x: pd.Series) -> float:
         if x.isna().any() or x.iloc[0] == 0:
             return float("nan")
         return (x.iloc[-1] - x.iloc[0]) / x.iloc[0]
+
     return ma_series.rolling(period, min_periods=period).apply(_slope, raw=False)
 
 
@@ -49,7 +52,9 @@ def compute_base_range(close: pd.Series, period: int = 30) -> pd.Series:
     rolling_max = close.rolling(period, min_periods=period).max()
     rolling_min = close.rolling(period, min_periods=period).min()
     rolling_mean = close.rolling(period, min_periods=period).mean()
-    return (rolling_max - rolling_min) / rolling_mean.where(rolling_mean != 0, other=float("nan"))
+    return (rolling_max - rolling_min) / rolling_mean.where(
+        rolling_mean != 0, other=float("nan")
+    )
 
 
 def compute_price_features(df: pd.DataFrame) -> pd.DataFrame:

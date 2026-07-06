@@ -1,4 +1,5 @@
 """vnstock-service HTTP client for vnalpha."""
+
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -44,7 +45,9 @@ class VnstockClient:
     def __exit__(self, *_: Any) -> None:
         self.close()
 
-    def _get(self, path: str, params: Optional[dict[str, str]] = None) -> dict[str, Any]:
+    def _get(
+        self, path: str, params: Optional[dict[str, str]] = None
+    ) -> dict[str, Any]:
         url = path
         if params:
             url = f"{path}?{urlencode({k: v for k, v in params.items() if v is not None})}"

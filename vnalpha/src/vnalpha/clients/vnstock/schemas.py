@@ -1,4 +1,5 @@
 """Pydantic schemas for vnstock-service responses."""
+
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -17,6 +18,7 @@ class ResponseMeta(BaseModel):
 
 class VnstockResponse(BaseModel):
     """Generic vnstock-service response envelope."""
+
     data: list[dict[str, Any]]
     meta: ResponseMeta
     diagnostics: dict[str, Any] = Field(default_factory=dict)
@@ -68,6 +70,7 @@ class OHLCVResponse(VnstockResponse):
 
 class ProviderHealthResponse(BaseModel):
     """Provider health is not wrapped in data/meta/diagnostics."""
+
     providers: list[dict[str, Any]] = Field(default_factory=list)
 
     @classmethod

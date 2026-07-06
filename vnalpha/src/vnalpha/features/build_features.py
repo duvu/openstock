@@ -1,4 +1,5 @@
 """Build feature snapshots for a given date from canonical_ohlcv."""
+
 from __future__ import annotations
 
 from typing import Optional
@@ -15,11 +16,24 @@ from vnalpha.features.volume import compute_volume_features
 logger = get_logger("features.build")
 
 FEATURE_COLUMNS = [
-    "close", "ma20", "ma50", "ma100", "ma20_slope", "ma50_slope",
-    "volume_ma20", "volume_ratio", "atr14", "return_20d", "return_60d",
-    "rs_20d_vs_vnindex", "rs_60d_vs_vnindex",
-    "distance_to_ma20", "distance_to_52w_high",
-    "base_range_30d", "close_strength", "volatility_20d",
+    "close",
+    "ma20",
+    "ma50",
+    "ma100",
+    "ma20_slope",
+    "ma50_slope",
+    "volume_ma20",
+    "volume_ratio",
+    "atr14",
+    "return_20d",
+    "return_60d",
+    "rs_20d_vs_vnindex",
+    "rs_60d_vs_vnindex",
+    "distance_to_ma20",
+    "distance_to_52w_high",
+    "base_range_30d",
+    "close_strength",
+    "volatility_20d",
 ]
 
 
@@ -126,9 +140,16 @@ def build_features(
             skipped += 1
             continue
         last_row = row.iloc[-1]
-        features = {c: (None if pd.isna(last_row.get(c, float("nan"))) else float(last_row[c]))
-                    for c in FEATURE_COLUMNS if c != "close"}
-        features["close"] = float(last_row["close"]) if "close" in last_row.index and not pd.isna(last_row["close"]) else None
+        features = {
+            c: (None if pd.isna(last_row.get(c, float("nan"))) else float(last_row[c]))
+            for c in FEATURE_COLUMNS
+            if c != "close"
+        }
+        features["close"] = (
+            float(last_row["close"])
+            if "close" in last_row.index and not pd.isna(last_row["close"])
+            else None
+        )
         save_feature_snapshot(conn, symbol, target_date, features)
         built += 1
 

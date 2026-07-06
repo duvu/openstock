@@ -107,9 +107,11 @@ make tui
 | `vnalpha sync ohlcv` | Fetch OHLCV data → `market_ohlcv_raw` |
 | `vnalpha build canonical` | Promote raw → `canonical_ohlcv` |
 | `vnalpha build features --date DATE` | Compute features → `feature_snapshot` |
-| `vnalpha score --date DATE` | Score symbols → `candidate_score` + `daily_watchlist` |
-| `vnalpha watchlist --date DATE` | Display watchlist as Rich table |
-| `vnalpha tui` | Launch Textual TUI |
+| `vnalpha score --date DATE` | Score symbols → `candidate_score` (authoritative) + `daily_watchlist` |
+| `vnalpha watchlist --date DATE` | Display watchlist from persisted `candidate_score` as Rich table |
+| `vnalpha tui [--date DATE]` | Launch Textual TUI (date defaults to today) |
+
+**Date formats accepted:** `today` or ISO `YYYY-MM-DD`. Both `--date today` and `--date 2024-06-28` are valid.
 
 ## Candidate Class Ontology
 
@@ -141,6 +143,35 @@ Research-only classification. **Not trade signals.**
 4. **No persistence across warehouse resets** — re-run full pipeline after `init`.
 5. **TUI requires textual** — `pip install textual` separately if not in venv.
 6. **No real-time quality scoring** — quality flags are set during ingestion only.
+
+## Troubleshooting
+
+### Empty watchlist after `score`
+
+**Symptom:** `vnalpha watchlist --date <date>` shows "No watchlist entries".
+
+**Causes and fixes:**
+
+1. **No feature snapshots for that date** — run `vnalpha build features --date <date>` first.
+2. **All symbols scored as IGNORE** — check that canonical OHLCV has sufficient history (≥ 60 bars).
+3. **All scores below min-score threshold** — try `vnalpha score --min-score 0.0 --date <date>`.
+4. **Wrong date** — verify the date has data: `duckdb ~/.vnalpha/warehouse.duckdb -c "SELECT COUNT(*) FROM feature_snapshot WHERE date = '<date>'"`.
+
+### Missing feature snapshots
+
+**Symptom:** `build features` exits with `built: 0 symbols`.
+
+**Causes and fixes:**
+
+1. **No canonical OHLCV** — run `vnalpha build canonical` after syncing OHLCV.
+2. **Insufficient history for moving averages** — ensure at least 100 days of OHLCV data exists.
+3. **Wrong VNALPHA_WAREHOUSE_PATH** — check your `.env` points to the correct DuckDB file.
+
+### Scoring version mismatch
+
+If `lineage_json.scoring_version` in `candidate_score` does not match the current
+`SCORING_VERSION` constant in `repositories.py`, re-run `vnalpha score` to refresh scores.
+Historical scores are preserved as-is; only new `(symbol, date)` pairs are overwritten.
 
 ## Deferred Work (Phase 5.8 / 5.9)
 

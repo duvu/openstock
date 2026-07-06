@@ -1,4 +1,5 @@
 """Rule-based signal rules for alpha scoring."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -76,7 +77,9 @@ def rule_near_52w_high(features: dict[str, Any], threshold: float = -0.05) -> bo
     return dist is not None and dist > threshold
 
 
-def rule_not_extended_from_ma20(features: dict[str, Any], max_distance: float = 0.15) -> bool:
+def rule_not_extended_from_ma20(
+    features: dict[str, Any], max_distance: float = 0.15
+) -> bool:
     """Not extended > max_distance from MA20."""
     dist = features.get("distance_to_ma20")
     return dist is not None and abs(dist) < max_distance

@@ -1,4 +1,5 @@
 """DuckDB schema DDL for the vnalpha research warehouse."""
+
 from __future__ import annotations
 
 INGESTION_RUN_DDL = """

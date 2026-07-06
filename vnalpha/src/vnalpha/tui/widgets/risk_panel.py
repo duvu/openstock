@@ -1,4 +1,5 @@
 """Risk panel widget — shows risk flags for a symbol."""
+
 from __future__ import annotations
 
 from typing import List

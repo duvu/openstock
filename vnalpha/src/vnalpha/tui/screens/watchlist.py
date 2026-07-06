@@ -1,4 +1,5 @@
 """Daily watchlist screen — ranked research candidates."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -27,7 +28,9 @@ class WatchlistScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Vertical(
-            Label(f"[bold]Research Candidates — {self._target_date}[/bold]", id="wl-title"),
+            Label(
+                f"[bold]Research Candidates — {self._target_date}[/bold]", id="wl-title"
+            ),
             Static("Loading...", id="wl-status"),
             DataTable(id="wl-table"),
             id="wl-container",
@@ -43,6 +46,7 @@ class WatchlistScreen(Screen):
         try:
             from vnalpha.warehouse.connection import get_connection
             from vnalpha.warehouse.repositories import get_watchlist
+
             conn = get_connection()
             rows = get_watchlist(conn, self._target_date)
             table = self.query_one("#wl-table", DataTable)
@@ -55,6 +59,7 @@ class WatchlistScreen(Screen):
                 return
             for row in rows:
                 import json
+
                 risk_flags = json.loads(row.get("risk_flags_json") or "[]")
                 flags_str = ", ".join(risk_flags) if risk_flags else "—"
                 table.add_row(

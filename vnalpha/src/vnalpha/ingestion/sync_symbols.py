@@ -1,4 +1,5 @@
 """Sync symbol master from vnstock-service."""
+
 from __future__ import annotations
 
 from typing import Optional
@@ -55,7 +56,9 @@ def sync_symbols(
                 )
                 synced += 1
             except Exception as e:
-                logger.warning("Failed to upsert symbol %s: %s", record.get("symbol"), e)
+                logger.warning(
+                    "Failed to upsert symbol %s: %s", record.get("symbol"), e
+                )
                 errors += 1
 
         finish_ingestion_run(conn, run_id, "SUCCESS")
