@@ -387,3 +387,85 @@ def cmd_runner(
     # Non-zero exit for non-success
     if result.status != "SUCCESS":
         raise typer.Exit(code=1)
+
+
+@app.command("ask")
+def ask_runner(
+    question: str = typer.Argument(..., help="Natural-language research question."),
+    date: Optional[str] = typer.Option(None, "--date", help="Target date (YYYY-MM-DD or 'today')."),
+    show_plan: bool = typer.Option(False, "--show-plan", help="Print the tool plan before answering."),
+    trace: bool = typer.Option(False, "--trace", help="Print tool trace summary after answering."),
+    no_execute: bool = typer.Option(False, "--no-execute", help="Show plan only; do not execute tools."),
+) -> None:
+    """Ask a natural-language research question. Phase 5.9 research assistant.
+
+    Examples:
+        vnalpha ask "Show strongest VN30 candidates today"
+        vnalpha ask "Why is FPT in the watchlist?"
+        vnalpha ask "Compare FPT, VNM, and MWG"
+        vnalpha ask "Which candidates have weak data quality?"
+    """
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+
+    from vnalpha.assistant.app import AssistantApp
+    from vnalpha.assistant.errors import AssistantError
+    from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
+    from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+
+    console = Console()
+
+    resolved_date = None
+    if date:
+        resolved_date = resolve_date(date)
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+
+    try:
+        llm_config = LLMGatewayConfig.from_env()
+        llm_client = LLMGatewayClient(llm_config)
+        assistant = AssistantApp(conn, surface="cli", llm_client=llm_client)
+        result, plan = assistant.ask(question, date=resolved_date, no_execute=no_execute)
+    except AssistantError as exc:
+        console.print(f"[red]Assistant error: {exc}[/red]", err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        console.print(f"[red]Unexpected error: {exc}[/red]", err=True)
+        raise typer.Exit(code=1) from exc
+
+    # Show plan if requested (or if no_execute)
+    if show_plan or no_execute:
+        from vnalpha.assistant.planner import PlanBuilder
+        pb = PlanBuilder()
+        console.print(Panel(pb.preview(plan), title="Research Plan", border_style="blue"))
+
+    if isinstance(result, RefusalMessage):
+        console.print(Panel(
+            f"[yellow]{result.reason}[/yellow]" +
+            (f"\n\n[dim]Suggestion: {result.suggestion}[/dim]" if result.suggestion else ""),
+            title="[red]Request Refused[/red]",
+            border_style="red",
+        ))
+        raise typer.Exit(code=1)
+
+    # Render answer
+    assert isinstance(result, AssistantAnswer)
+    answer_text = Text()
+    answer_text.append(result.summary + "\n\n", style="bold")
+    answer_text.append("Basis: ", style="dim")
+    answer_text.append(result.basis + "\n")
+    if result.risks_caveats:
+        answer_text.append("Risks/caveats: ", style="dim yellow")
+        answer_text.append(result.risks_caveats + "\n")
+    if result.missing_data:
+        answer_text.append("\nMissing data:\n", style="dim red")
+        for item in result.missing_data:
+            answer_text.append(f"  \u2022 {item}\n", style="red")
+    console.print(Panel(answer_text, title="Research Answer", border_style="green"))
+
+    if trace:
+        console.print(Panel(result.tool_trace_summary or "(no trace)", title="Tool Trace", border_style="dim"))

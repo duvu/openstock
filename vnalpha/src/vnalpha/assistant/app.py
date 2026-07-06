@@ -1,0 +1,173 @@
+"""
+AssistantApp: top-level orchestrator for Phase 5.9.
+
+Flow:
+1. Create assistant_session
+2. check_policy (deterministic pre-rules)
+3. Classify intent (IntentClassifier)
+4. check_intent_policy
+5. Build plan (PlanBuilder)
+6. Execute tools (AssistantExecutor)
+7. Synthesize answer (AnswerSynthesizer)
+8. Persist answer, finish session
+9. Return AssistantAnswer or RefusalMessage
+"""
+from __future__ import annotations
+
+from vnalpha.assistant.errors import (
+    AssistantError,
+    RefusalError,
+)
+from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
+from vnalpha.assistant.intent import IntentClassifier
+from vnalpha.assistant.models import (
+    AssistantAnswer,
+    AssistantPlan,
+    RefusalMessage,
+)
+from vnalpha.assistant.planner import PlanBuilder
+from vnalpha.assistant.policy import check_intent_policy, check_policy
+from vnalpha.assistant.synthesizer import AnswerSynthesizer
+from vnalpha.warehouse.assistant_repo import (
+    create_assistant_session,
+    create_llm_trace,
+    finish_assistant_session,
+    finish_llm_trace,
+)
+
+
+class AssistantApp:
+    """Orchestrates the full Phase 5.9 research assistant flow."""
+
+    def __init__(
+        self,
+        conn,
+        *,
+        surface: str = "cli",
+        llm_client: LLMGatewayClient | None = None,
+    ):
+        self._conn = conn
+        self._surface = surface
+        self._llm = llm_client or LLMGatewayClient(LLMGatewayConfig.from_env())
+        self._classifier = IntentClassifier(self._llm)
+        self._planner = PlanBuilder()
+        self._synthesizer = AnswerSynthesizer(self._llm)
+
+    def ask(
+        self,
+        user_prompt: str,
+        *,
+        date: str | None = None,
+        no_execute: bool = False,
+    ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
+        """
+        Process a natural-language research question.
+        Returns (answer_or_refusal, plan).
+        If no_execute=True, return a plan preview without executing tools.
+        """
+        session_id = create_assistant_session(
+            self._conn,
+            surface=self._surface,
+            user_prompt=user_prompt,
+        )
+
+        try:
+            return self._run(user_prompt, session_id, date=date, no_execute=no_execute)
+        except RefusalError as exc:
+            finish_assistant_session(
+                self._conn, session_id,
+                status="REFUSED",
+                refusal_reason=exc.args[0] if exc.args else str(exc),
+            )
+            return RefusalMessage(
+                reason=exc.args[0] if exc.args else str(exc),
+                policy_category=exc.policy_category if hasattr(exc, "policy_category") else "UNKNOWN",
+                suggestion=exc.suggestion if hasattr(exc, "suggestion") else None,
+            ), AssistantPlan(intent="unsupported_or_unsafe", steps=[], refusal_reason=str(exc))
+        except AssistantError as exc:
+            finish_assistant_session(
+                self._conn, session_id,
+                status="FAILED",
+                error={"error_type": type(exc).__name__, "message": str(exc)},
+            )
+            raise
+        except Exception as exc:
+            finish_assistant_session(
+                self._conn, session_id,
+                status="FAILED",
+                error={"error_type": "RuntimeError", "message": str(exc)},
+            )
+            raise
+
+    def _run(
+        self,
+        user_prompt: str,
+        session_id: str,
+        *,
+        date: str | None = None,
+        no_execute: bool = False,
+    ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
+        # 1. Deterministic safety check
+        check_policy(user_prompt)
+
+        # 2. Classify intent
+        llm_trace_id = create_llm_trace(
+            self._conn, assistant_session_id=session_id, stage="classify"
+        )
+        try:
+            intent_result = self._classifier.classify(user_prompt)
+            finish_llm_trace(self._conn, llm_trace_id, status="SUCCESS",
+                             output_summary={"intent": intent_result.intent})
+        except Exception as exc:
+            finish_llm_trace(self._conn, llm_trace_id, status="FAILED",
+                             error={"message": str(exc)})
+            raise
+
+        # Inject date entity if provided
+        if date and "date" not in intent_result.entities:
+            intent_result.entities["date"] = date
+
+        # 3. Post-classification policy check
+        check_intent_policy(intent_result)
+
+        # 4. Build plan
+        plan = self._planner.build(intent_result)
+
+        if no_execute:
+            finish_assistant_session(self._conn, session_id, status="SUCCESS",
+                                     intent=intent_result.intent, plan=plan.to_dict())
+            # Return plan preview as answer
+            preview_answer = AssistantAnswer(
+                summary=f"[Plan preview — not executed]\n{self._planner.preview(plan)}",
+                basis="Plan preview only.",
+                risks_caveats="",
+                tool_trace_summary="No tools executed (--no-execute mode).",
+            )
+            return preview_answer, plan
+
+        # 5. Execute tools
+        from vnalpha.assistant.executor import AssistantExecutor
+        executor = AssistantExecutor(self._conn, assistant_session_id=session_id)
+        tool_outputs = executor.execute(plan)
+
+        # 6. Synthesize answer
+        llm_trace_id2 = create_llm_trace(
+            self._conn, assistant_session_id=session_id, stage="synthesize"
+        )
+        try:
+            answer = self._synthesizer.synthesize(user_prompt, plan, tool_outputs)
+            finish_llm_trace(self._conn, llm_trace_id2, status="SUCCESS",
+                             output_summary={"summary_length": len(answer.summary)})
+        except Exception as exc:
+            finish_llm_trace(self._conn, llm_trace_id2, status="FAILED",
+                             error={"message": str(exc)})
+            raise
+
+        # 7. Persist and finish
+        finish_assistant_session(
+            self._conn, session_id, status="SUCCESS",
+            intent=intent_result.intent,
+            plan=plan.to_dict(),
+            answer=answer.to_dict(),
+        )
+        return answer, plan

@@ -8,6 +8,7 @@ from textual.app import App
 from textual.binding import Binding
 
 from vnalpha.core.dates import resolve_date
+from vnalpha.tui.screens.assistant import AssistantScreen
 from vnalpha.tui.screens.command import CommandScreen
 from vnalpha.tui.screens.detail import DetailScreen
 from vnalpha.tui.screens.home import HomeScreen
@@ -37,6 +38,7 @@ class VnAlphaApp(App):
         Binding("h", "show_home", "Home"),
         Binding("w", "show_watchlist", "Watchlist"),
         Binding("c", "show_commands", "Commands"),
+        Binding("a", "show_assistant", "Ask"),
         Binding("r", "show_rejected", "Rejected"),
         Binding("p", "show_quality", "Quality"),
         Binding("q", "quit", "Quit"),
@@ -57,6 +59,9 @@ class VnAlphaApp(App):
 
     def action_show_commands(self) -> None:
         self.push_screen(CommandScreen(target_date=self.target_date))
+
+    def action_show_assistant(self) -> None:
+        self.push_screen(AssistantScreen(target_date=self.target_date))
 
     def action_show_rejected(self) -> None:
         self.push_screen(RejectedScreen(target_date=self.target_date))

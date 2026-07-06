@@ -201,3 +201,41 @@ ALL_DDL_PHASE58 = [
 ]
 
 ALL_DDL_COMBINED = ALL_DDL + ALL_DDL_PHASE58
+
+# Phase 5.9 assistant-layer tables
+ASSISTANT_SESSION_DDL = """
+CREATE TABLE IF NOT EXISTS assistant_session (
+    assistant_session_id  VARCHAR PRIMARY KEY,
+    started_at            TIMESTAMPTZ NOT NULL,
+    finished_at           TIMESTAMPTZ,
+    status                VARCHAR NOT NULL,
+    surface               VARCHAR NOT NULL,
+    user_prompt           VARCHAR NOT NULL,
+    intent                VARCHAR,
+    plan_json             VARCHAR,
+    answer_json           VARCHAR,
+    refusal_reason        VARCHAR,
+    error_json            VARCHAR
+)
+"""
+
+LLM_TRACE_DDL = """
+CREATE TABLE IF NOT EXISTS llm_trace (
+    llm_trace_id            VARCHAR PRIMARY KEY,
+    assistant_session_id    VARCHAR NOT NULL,
+    stage                   VARCHAR NOT NULL,
+    model                   VARCHAR,
+    started_at              TIMESTAMPTZ NOT NULL,
+    finished_at             TIMESTAMPTZ,
+    status                  VARCHAR NOT NULL,
+    input_summary_json      VARCHAR,
+    output_summary_json     VARCHAR,
+    usage_json              VARCHAR,
+    error_json              VARCHAR
+)
+"""
+
+ALL_DDL_PHASE59 = [
+    ASSISTANT_SESSION_DDL,
+    LLM_TRACE_DDL,
+]

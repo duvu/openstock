@@ -9,7 +9,7 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
-from vnalpha.warehouse.schema import ALL_DDL, ALL_DDL_PHASE58
+from vnalpha.warehouse.schema import ALL_DDL, ALL_DDL_PHASE58, ALL_DDL_PHASE59
 
 logger = get_logger("warehouse.migrations")
 
@@ -30,5 +30,7 @@ def run_migrations(
     for ddl in ALL_DDL:
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE58:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_PHASE59:
         conn.execute(ddl)
     logger.info("Warehouse migrations complete.")
