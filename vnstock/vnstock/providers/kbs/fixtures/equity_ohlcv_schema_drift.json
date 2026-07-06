@@ -1,0 +1,6 @@
+{
+  "data_day": [
+    {"t": "2026-07-01", "timestamp": 1751337600, "h": 119200000, "l": 117800000, "c": 118000000, "v": 1250000}
+  ],
+  "_note": "Schema drift: 'o' renamed to something else; open column missing"
+}

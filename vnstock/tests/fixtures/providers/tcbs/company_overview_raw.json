@@ -1,0 +1,16 @@
+{
+  "ticker": "FPT",
+  "exchange": "HOSE",
+  "industry": "Technology",
+  "industryId": 8,
+  "industryIdV2": "8500",
+  "companyType": "CORP",
+  "shortName": "FPT Corporation",
+  "website": "https://fpt.com.vn",
+  "foreignPercent": 49.0,
+  "outstandingShare": 1002093060,
+  "issueShare": 1002093060,
+  "establishedYear": "1988",
+  "noEmployees": 38000,
+  "stockRating": 4.5
+}

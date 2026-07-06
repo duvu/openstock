@@ -1,0 +1,57 @@
+# docker-compose.yml — vnstock local data service
+#
+# SINGLE-USER, LOCALHOST-ONLY deployment.
+# Public internet exposure is out of scope for this service.
+#
+# Usage:
+#   docker compose up -d
+#
+# Interactive login (run separately before starting the service):
+#   docker compose run --rm vnstock-login vnstock-auth login tcbs
+#
+# Check status:
+#   curl http://127.0.0.1:6900/healthz
+#   curl http://127.0.0.1:6900/v1/auth/status
+
+version: "3.9"
+
+services:
+  vnstock-service:
+    build: .
+    image: vnstock-service:latest
+    container_name: vnstock-service
+    # IMPORTANT: Bind to 127.0.0.1 only — never 0.0.0.0 on the host
+    ports:
+      - "127.0.0.1:6900:6900"
+    volumes:
+      # Mount credentials directory (read-only for the running service)
+      # Run 'vnstock-auth login' separately with write access to populate
+      - "${HOME}/.config/vnstock:/home/vnstock/.config/vnstock:ro"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6900/healthz')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # One-shot service for interactive login (run separately)
+  # docker compose run --rm vnstock-login vnstock-auth login tcbs
+  vnstock-login:
+    build: .
+    image: vnstock-service:latest
+    profiles:
+      - login
+    volumes:
+      # Write access to store credentials
+      - "${HOME}/.config/vnstock:/home/vnstock/.config/vnstock"
+    entrypoint: ["vnstock-auth"]
+    command: ["status"]

@@ -1,0 +1,4 @@
+[
+  {"year": 2024, "quarter": 2, "shortAssets": 15000000000000, "cash": 8000000000000, "receivables": 4000000000000, "inventories": 1000000000000, "otherShortAssets": 2000000000000, "longAssets": 25000000000000, "fixedAssets": 10000000000000, "totalAssets": 40000000000000, "shortLiabilities": 12000000000000, "longLiabilities": 8000000000000, "equity": 20000000000000},
+  {"year": 2024, "quarter": 1, "shortAssets": 14500000000000, "cash": 7500000000000, "receivables": 3800000000000, "inventories": 950000000000, "otherShortAssets": 2250000000000, "longAssets": 24500000000000, "fixedAssets": 9800000000000, "totalAssets": 39000000000000, "shortLiabilities": 11800000000000, "longLiabilities": 7800000000000, "equity": 19400000000000}
+]

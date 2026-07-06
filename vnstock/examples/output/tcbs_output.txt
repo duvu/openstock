@@ -1,0 +1,63 @@
+============================================================
+  Quote.history() — Daily OHLCV (3-endpoint fallback)
+============================================================[ERROR] Không tìm thấy dữ liệu cho mã FPT từ TCBS. Lỗi cuối: Failed to fetch data: 404 - Not Found
+
+============================================================
+  Quote.intraday() — Intraday trades [EXPERIMENTAL]
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Trading.price_board() — Live quotes for multiple symbols
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Listing.all_symbols() — Full symbol list
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Listing.symbol_industry() — Industry classification
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Company.overview() — Company profile
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Company.shareholders() — Major shareholders
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Company.dividends() — Dividend history
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Finance.balance_sheet() — Quarterly balance sheet
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Finance.income_statement() — Quarterly income statement
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Finance.cash_flow() — Quarterly cash flow
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Finance.ratio() — Key financial ratios
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found
+
+============================================================
+  Screener.scan() — Stock screener [EXPERIMENTAL]
+============================================================
+[ERROR] Failed to fetch data: 404 - Not Found

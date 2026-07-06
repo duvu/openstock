@@ -1,0 +1,1 @@
+"""MSN provider package."""

@@ -1,0 +1,31 @@
+{
+  "pageSize": 3,
+  "pageIndex": 0,
+  "totalCount": 3,
+  "data": [
+    {
+      "navDate": "2026-07-01",
+      "nav": 15234.5,
+      "navChange": 12.3,
+      "navChangePct": 0.081,
+      "fundId": 1,
+      "shortName": "SSICA"
+    },
+    {
+      "navDate": "2026-06-30",
+      "nav": 15222.2,
+      "navChange": -5.1,
+      "navChangePct": -0.033,
+      "fundId": 1,
+      "shortName": "SSICA"
+    },
+    {
+      "navDate": "2026-06-27",
+      "nav": 15227.3,
+      "navChange": 8.7,
+      "navChangePct": 0.057,
+      "fundId": 1,
+      "shortName": "SSICA"
+    }
+  ]
+}

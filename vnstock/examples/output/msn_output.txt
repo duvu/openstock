@@ -1,0 +1,35 @@
+============================================================
+  Listing.search_symbol() — Find symbol_id for a ticker
+============================================================     symbol symbol_id  ...                                         local_name locale
+0       FPT    aqji2w  ...                                Công ty Cổ phần FPT  vi-vn
+1       FPT    anib3m  ...  เฟรเซอร์ส พร็อพเพอร์ตี้ (ประเทศไทย) จำกัด (มหาชน)  th-th
+2       FTS    aqji8m  ...                    Công ty Cổ phần Chứng khoán FPT  vi-vn
+3       FRT    azrju2  ...             CÔNG TY CỔ PHẦN BÁN LẺ KỸ THUẬT SỐ FPT  vi-vn
+4  FUEFCV50    c9t8ur  ...                              FPT Capital VNX50 ETF  vi-vn
+
+[5 rows x 10 columns]
+
+Resolved symbol_id for 'FPT': aqji2w
+
+============================================================
+  Listing.info() — Detailed symbol metadata
+============================================================
+     symbol symbol_id  ...                                         local_name locale
+0       FPT    aqji2w  ...                                Công ty Cổ phần FPT  vi-vn
+1       FPT    anib3m  ...  เฟรเซอร์ส พร็อพเพอร์ตี้ (ประเทศไทย) จำกัด (มหาชน)  th-th
+2       FTS    aqji8m  ...                    Công ty Cổ phần Chứng khoán FPT  vi-vn
+3       FRT    azrju2  ...             CÔNG TY CỔ PHẦN BÁN LẺ KỸ THUẬT SỐ FPT  vi-vn
+4  FUEFCV50    c9t8ur  ...                              FPT Capital VNX50 ETF  vi-vn
+
+[5 rows x 10 columns]
+
+============================================================
+  Quote.history() — Daily OHLCV (using symbol_id)
+============================================================
+        time      open      high       low     close   volume
+0 2024-01-02  70432.85  70432.85  69560.61  69705.99  2358772
+1 2024-01-03  69487.93  70142.10  69342.56  69996.73  1976856
+2 2024-01-04  69996.73  71523.14  69924.05  70650.91  4091427
+3 2024-01-05  70723.59  70868.96  70142.10  70796.28  1566461
+4 2024-01-08  70796.28  71450.45  70578.22  70723.59  1985248
+Rows: 120, Cols: ['time', 'open', 'high', 'low', 'close', 'volume']

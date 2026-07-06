@@ -1,6 +1,0 @@
-[submodule "vnstock"]
-	path = vnstock
-	url = git@github.com:duvu/vnstock.git
-[submodule "vnalpha"]
-	path = vnalpha
-	url = git@github.com:duvu/vnalpha.git

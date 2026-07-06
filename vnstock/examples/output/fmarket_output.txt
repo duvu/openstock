@@ -1,0 +1,60 @@
+2026-07-03 09:39:12 - vnstock.explorer.fmarket.fund - INFO - Total number of funds currently listed on Fmarket: 65
+2026-07-03 09:39:13 - vnstock.explorer.fmarket.fund - INFO - Total number of funds currently listed on Fmarket: 65
+============================================================
+  Fund.listing() — All funds on FMarket
+============================================================
+  short_name  ...   vsd_fee_id
+0       DCDS  ...   VFMVF1N001
+1      MAGEF  ...    MAGEFN001
+2      BVFED  ...    BVFEDN001
+3   VCBF-BCF  ...  VCBFBCFN001
+4     SSISCA  ...   SSISCAN001
+
+[5 rows x 21 columns]
+Total funds: 65
+
+============================================================
+  Fund.filter() — Filter/search for 'SSISCA'
+============================================================
+   id shortName
+0  11    SSISCA
+
+============================================================
+  Fund.nav_report() — NAV history for 'SSISCA'
+============================================================
+         date  nav_per_unit
+0  2014-09-26      10000.00
+1  2014-09-30      10403.38
+2  2014-10-01      10498.19
+3  2014-10-08      10614.92
+4  2014-10-15      10375.90
+NAV records: 2162
+
+============================================================
+  Fund.top_holding() — Top stock holdings of 'SSISCA'
+============================================================
+  stock_code           industry  ...   update_at fundId
+0        VIC       Bất động sản  ...  2026-06-19     11
+1        VHM       Bất động sản  ...  2026-06-19     11
+2        HPG  Vật liệu xây dựng  ...  2026-06-19     11
+3        VCB          Ngân hàng  ...  2026-06-19     11
+4        MWG             Bán lẻ  ...  2026-06-19     11
+
+[5 rows x 6 columns]
+
+============================================================
+  Fund.industry_holding() — Sector allocation of 'SSISCA'
+============================================================
+            industry  net_asset_percent
+0          Ngân hàng              32.95
+1       Bất động sản              24.23
+2             Bán lẻ               6.53
+3  Vật liệu xây dựng               6.47
+4        Chứng khoán               4.71
+
+============================================================
+  Fund.asset_holding() — Asset class allocation of 'SSISCA'
+============================================================
+   asset_percent                asset_type
+0          97.21                  Cổ phiếu
+1           2.79  Tiền và tương đương tiền

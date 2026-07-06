@@ -1,0 +1,49 @@
+[
+  {
+    "listingInfo": {
+      "symbol": "FPT",
+      "exchange": "HOSE",
+      "floorPrice": 109100,
+      "ceilingPrice": 127200,
+      "refPrice": 118100,
+      "listedShares": 1050000000,
+      "tradingUnit": 100
+    },
+    "bidAsk": {
+      "code": "FPT",
+      "symbol": "FPT",
+      "session": "LO",
+      "receivedTime": "09:15:32",
+      "messageType": "UPS",
+      "time": "09:15:32",
+      "openPrice": 118300,
+      "highestPrice": 119200,
+      "lowestPrice": 117800,
+      "bidPrices": [
+        {"price": 117900, "volume": 2100},
+        {"price": 117800, "volume": 3500},
+        {"price": 117700, "volume": 1800}
+      ],
+      "askPrices": [
+        {"price": 118100, "volume": 1200},
+        {"price": 118200, "volume": 2400},
+        {"price": 118300, "volume": 3200}
+      ],
+      "foreignBuy": 320000,
+      "foreignSell": 180000,
+      "foreignRoom": 15000000
+    },
+    "matchPrice": {
+      "code": "FPT",
+      "symbol": "FPT",
+      "matchedPrice": 118000,
+      "matchedVolume": 5200,
+      "priceChange": -100,
+      "priceChangePercent": -0.08,
+      "averagePrice": 118050,
+      "totalVolume": 1250000,
+      "totalValue": 147575000000,
+      "currentRoom": 15000000
+    }
+  }
+]

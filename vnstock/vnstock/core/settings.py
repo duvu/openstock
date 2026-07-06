@@ -1,0 +1,471 @@
+"""
+Configuration management for vnstock library.
+
+This module provides centralized configuration with environment
+variable support using dataclasses.
+"""
+
+import os
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
+
+
+@dataclass
+class APIKeyConfig:
+    """API keys for various providers."""
+
+    fmp: Optional[str] = None
+    binance: Optional[str] = None
+
+    def get(self, provider: str) -> Optional[str]:
+        """
+        Get API key for a specific provider.
+
+        Args:
+            provider: Provider name (lowercase)
+
+        Returns:
+            API key string or None if not set
+        """
+        return getattr(self, provider.lower(), None)
+
+    def set(self, provider: str, api_key: str) -> None:
+        """
+        Set API key for a specific provider.
+
+        Args:
+            provider: Provider name (lowercase)
+            api_key: API key string
+        """
+        setattr(self, provider.lower(), api_key)
+
+
+@dataclass
+class NetworkConfig:
+    """Network and HTTP request configuration."""
+
+    timeout: float = 30.0
+    max_retries: int = 3
+    retry_delay: float = 1.0
+    user_agent: str = "vnstock/3.0"
+
+    def __post_init__(self):
+        """Validate configuration after initialization."""
+        if self.timeout <= 0:
+            raise ValueError("timeout must be positive")
+        if self.timeout > 300:
+            raise ValueError("timeout cannot exceed 300 seconds")
+        if self.max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
+
+
+@dataclass
+class CacheConfig:
+    """Caching configuration.
+
+    Environment variables:
+        VNSTOCK_CACHE_ENABLED  : "true"/"false" — enable/disable cache (default: true)
+        VNSTOCK_CACHE_TTL      : integer seconds — entry lifetime (default: 300)
+        VNSTOCK_CACHE_MAX_SIZE : integer — max entries before eviction (default: 100)
+        VNSTOCK_CACHE_BACKEND  : "memory" | "sqlite" — storage backend (default: memory)
+        VNSTOCK_CACHE_PATH     : file path for sqlite backend (default: ~/.vnstock/cache.db)
+    """
+
+    enabled: bool = True
+    ttl: int = 300  # seconds
+    max_size: int = 100
+    backend: str = "memory"  # "memory" | "sqlite"
+    path: str = ""  # file path for sqlite; "" → ~/.vnstock/cache.db
+
+    def __post_init__(self):
+        """Validate configuration after initialization."""
+        if self.ttl < 0:
+            raise ValueError("ttl must be non-negative")
+        if self.max_size <= 0:
+            raise ValueError("max_size must be positive")
+        if self.backend not in ("memory", "sqlite"):
+            raise ValueError("backend must be 'memory' or 'sqlite'")
+
+
+@dataclass
+class QualityConfig:
+    """Data quality validation configuration.
+
+    Environment variables:
+
+    * ``VNSTOCK_QUALITY_ENABLED`` — ``"true"``/``"false"`` (default: ``false``)
+    * ``VNSTOCK_QUALITY_MODE`` — ``"off"|"warn"|"strict"`` (default: ``"warn"``)
+    * ``VNSTOCK_QUALITY_ATTACH_REPORT`` — ``"true"``/``"false"`` (default: ``true``)
+    * ``VNSTOCK_QUALITY_STALE_PRICE_BOARD_SECONDS`` — integer (default: ``30``)
+    * ``VNSTOCK_QUALITY_STALE_INTRADAY_SECONDS`` — integer (default: ``60``)
+    * ``VNSTOCK_QUALITY_STALE_DAILY_OHLCV_HOURS`` — integer (default: ``36``)
+    * ``VNSTOCK_QUALITY_CHECK_MISSING_SESSIONS`` — ``"true"``/``"false"`` (default: ``true``)
+    * ``VNSTOCK_QUALITY_CHECK_SESSION_TIME`` — ``"true"``/``"false"`` (default: ``false``)
+    """
+
+    enabled: bool = False
+    mode: str = "warn"  # "off" | "warn" | "strict"
+    attach_report: bool = True
+    max_error_examples: int = 20
+
+    stale_price_board_seconds: int = 30
+    stale_intraday_seconds: int = 60
+    stale_daily_ohlcv_hours: int = 36
+
+    check_missing_sessions: bool = True
+    check_ohlc_consistency: bool = True
+    check_price_scale: bool = True
+    check_session_time: bool = False
+
+    def __post_init__(self):
+        """Validate configuration after initialization."""
+        if self.mode not in ("off", "warn", "strict"):
+            raise ValueError("mode must be 'off', 'warn', or 'strict'")
+
+
+@dataclass
+class VnstockConfig:
+    """
+    Main configuration class for vnstock.
+
+    Supports loading from:
+    1. Environment variables (VNSTOCK_* prefix)
+    2. Direct instantiation
+
+    Example:
+        # From environment variables
+        export VNSTOCK_FMP_API_KEY="your_key"
+        export VNSTOCK_TIMEOUT=60
+
+        # Or in code
+        config = VnstockConfig(
+            api_keys=APIKeyConfig(fmp="your_key"),
+            network=NetworkConfig(timeout=60)
+        )
+    """
+
+    api_keys: APIKeyConfig = field(default_factory=APIKeyConfig)
+    network: NetworkConfig = field(default_factory=NetworkConfig)
+    cache: CacheConfig = field(default_factory=CacheConfig)
+    quality: QualityConfig = field(default_factory=QualityConfig)
+    log_level: str = "INFO"
+    debug_mode: bool = False
+    default_source: str = "kbs"
+
+    def __post_init__(self):
+        """Validate and load from environment after initialization."""
+        # Validate log level
+        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if self.log_level.upper() not in valid_levels:
+            raise ValueError(
+                f"Invalid log level: {self.log_level}. "
+                f"Must be one of: {', '.join(valid_levels)}"
+            )
+        self.log_level = self.log_level.upper()
+
+        # Load from environment if not set
+        self._load_from_env()
+
+    def _load_from_env(self):
+        """Load configuration from environment variables."""
+        # API Keys
+        if os.getenv("VNSTOCK_FMP_API_KEY") and not self.api_keys.fmp:
+            self.api_keys.fmp = os.getenv("VNSTOCK_FMP_API_KEY")
+        if os.getenv("VNSTOCK_BINANCE_API_KEY") and not self.api_keys.binance:
+            self.api_keys.binance = os.getenv("VNSTOCK_BINANCE_API_KEY")
+
+        # Network config
+        timeout_env = os.getenv("VNSTOCK_TIMEOUT")
+        if timeout_env:
+            try:
+                self.network.timeout = float(timeout_env)
+            except (ValueError, TypeError):
+                pass
+
+        max_retries_env = os.getenv("VNSTOCK_MAX_RETRIES")
+        if max_retries_env:
+            try:
+                self.network.max_retries = int(max_retries_env)
+            except (ValueError, TypeError):
+                pass
+
+        # Other settings
+        log_level_env = os.getenv("VNSTOCK_LOG_LEVEL")
+        if log_level_env:
+            self.log_level = log_level_env.upper()
+
+        debug_mode_env = os.getenv("VNSTOCK_DEBUG_MODE")
+        if debug_mode_env:
+            debug_value = debug_mode_env.lower()
+            self.debug_mode = debug_value in ("true", "1", "yes")
+
+        default_source_env = os.getenv("VNSTOCK_DEFAULT_SOURCE")
+        if default_source_env:
+            self.default_source = default_source_env
+
+        # Cache config
+        cache_enabled_env = os.getenv("VNSTOCK_CACHE_ENABLED")
+        if cache_enabled_env:
+            self.cache.enabled = cache_enabled_env.lower() in ("true", "1", "yes")
+
+        cache_ttl_env = os.getenv("VNSTOCK_CACHE_TTL")
+        if cache_ttl_env:
+            try:
+                self.cache.ttl = int(cache_ttl_env)
+            except (ValueError, TypeError):
+                pass
+
+        cache_max_size_env = os.getenv("VNSTOCK_CACHE_MAX_SIZE")
+        if cache_max_size_env:
+            try:
+                self.cache.max_size = int(cache_max_size_env)
+            except (ValueError, TypeError):
+                pass
+
+        cache_backend_env = os.getenv("VNSTOCK_CACHE_BACKEND")
+        if cache_backend_env and cache_backend_env.lower() in ("memory", "sqlite"):
+            self.cache.backend = cache_backend_env.lower()
+
+        cache_path_env = os.getenv("VNSTOCK_CACHE_PATH")
+        if cache_path_env:
+            self.cache.path = cache_path_env
+
+        # Quality config
+        quality_enabled_env = os.getenv("VNSTOCK_QUALITY_ENABLED")
+        if quality_enabled_env:
+            self.quality.enabled = quality_enabled_env.lower() in ("true", "1", "yes")
+
+        quality_mode_env = os.getenv("VNSTOCK_QUALITY_MODE")
+        if quality_mode_env and quality_mode_env.lower() in ("off", "warn", "strict"):
+            self.quality.mode = quality_mode_env.lower()
+
+        quality_attach_env = os.getenv("VNSTOCK_QUALITY_ATTACH_REPORT")
+        if quality_attach_env:
+            self.quality.attach_report = quality_attach_env.lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+
+        quality_stale_pb_env = os.getenv("VNSTOCK_QUALITY_STALE_PRICE_BOARD_SECONDS")
+        if quality_stale_pb_env:
+            try:
+                self.quality.stale_price_board_seconds = int(quality_stale_pb_env)
+            except (ValueError, TypeError):
+                pass
+
+        quality_stale_id_env = os.getenv("VNSTOCK_QUALITY_STALE_INTRADAY_SECONDS")
+        if quality_stale_id_env:
+            try:
+                self.quality.stale_intraday_seconds = int(quality_stale_id_env)
+            except (ValueError, TypeError):
+                pass
+
+        quality_stale_daily_env = os.getenv("VNSTOCK_QUALITY_STALE_DAILY_OHLCV_HOURS")
+        if quality_stale_daily_env:
+            try:
+                self.quality.stale_daily_ohlcv_hours = int(quality_stale_daily_env)
+            except (ValueError, TypeError):
+                pass
+
+        quality_missing_sessions_env = os.getenv(
+            "VNSTOCK_QUALITY_CHECK_MISSING_SESSIONS"
+        )
+        if quality_missing_sessions_env:
+            self.quality.check_missing_sessions = (
+                quality_missing_sessions_env.lower()
+                in (
+                    "true",
+                    "1",
+                    "yes",
+                )
+            )
+
+        quality_session_time_env = os.getenv("VNSTOCK_QUALITY_CHECK_SESSION_TIME")
+        if quality_session_time_env:
+            self.quality.check_session_time = quality_session_time_env.lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+
+    def get_api_key(self, provider: str) -> Optional[str]:
+        """
+        Get API key for a provider.
+
+        Args:
+            provider: Provider name
+
+        Returns:
+            API key or None
+        """
+        return self.api_keys.get(provider)
+
+    def set_api_key(self, provider: str, api_key: str) -> None:
+        """
+        Set API key for a provider.
+
+        Args:
+            provider: Provider name
+            api_key: API key string
+        """
+        self.api_keys.set(provider, api_key)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert config to dictionary.
+
+        Returns:
+            Dictionary representation
+        """
+        return {
+            "api_keys": {
+                "fmp": self.api_keys.fmp,
+                "binance": self.api_keys.binance,
+            },
+            "network": {
+                "timeout": self.network.timeout,
+                "max_retries": self.network.max_retries,
+                "retry_delay": self.network.retry_delay,
+                "user_agent": self.network.user_agent,
+            },
+            "cache": {
+                "enabled": self.cache.enabled,
+                "ttl": self.cache.ttl,
+                "max_size": self.cache.max_size,
+                "backend": self.cache.backend,
+                "path": self.cache.path,
+            },
+            "log_level": self.log_level,
+            "debug_mode": self.debug_mode,
+            "default_source": self.default_source,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "VnstockConfig":
+        """
+        Create config from dictionary.
+
+        Args:
+            data: Configuration dictionary
+
+        Returns:
+            VnstockConfig instance
+        """
+        api_keys = APIKeyConfig(**data.get("api_keys", {}))
+        network = NetworkConfig(**data.get("network", {}))
+        cache = CacheConfig(**data.get("cache", {}))
+
+        return cls(
+            api_keys=api_keys,
+            network=network,
+            cache=cache,
+            log_level=data.get("log_level", "INFO"),
+            debug_mode=data.get("debug_mode", False),
+            default_source=data.get("default_source", "kbs"),
+        )
+
+
+# ============================================================================
+# GLOBAL CONFIG INSTANCE
+# ============================================================================
+
+# Global config instance - can be modified by users
+_global_config: Optional[VnstockConfig] = None
+
+
+def get_config() -> VnstockConfig:
+    """
+    Get global config instance.
+
+    Creates default config if not already initialized.
+
+    Returns:
+        VnstockConfig instance
+    """
+    global _global_config
+    if _global_config is None:
+        _global_config = VnstockConfig()
+    return _global_config
+
+
+def set_config(config: VnstockConfig) -> None:
+    """
+    Set global config instance.
+
+    Args:
+        config: VnstockConfig instance
+    """
+    global _global_config
+    _global_config = config
+
+
+def reset_config() -> None:
+    """Reset global config to default values."""
+    global _global_config
+    _global_config = VnstockConfig()
+
+
+# ============================================================================
+# CONVENIENCE FUNCTIONS
+# ============================================================================
+
+
+def get_api_key(provider: str) -> Optional[str]:
+    """
+    Get API key for a provider from global config.
+
+    Args:
+        provider: Provider name
+
+    Returns:
+        API key or None
+    """
+    config = get_config()
+    return config.get_api_key(provider)
+
+
+def set_api_key(provider: str, api_key: str) -> None:
+    """
+    Set API key for a provider in global config.
+
+    Args:
+        provider: Provider name
+        api_key: API key string
+    """
+    config = get_config()
+    config.set_api_key(provider, api_key)
+
+
+def get_timeout() -> float:
+    """Get default timeout from global config."""
+    config = get_config()
+    return config.network.timeout
+
+
+def set_timeout(timeout: float) -> None:
+    """
+    Set default timeout in global config.
+
+    Args:
+        timeout: Timeout in seconds
+    """
+    config = get_config()
+    config.network.timeout = timeout
+
+
+def is_debug_mode() -> bool:
+    """Check if debug mode is enabled."""
+    config = get_config()
+    return config.debug_mode
+
+
+def set_debug_mode(enabled: bool) -> None:
+    """
+    Enable or disable debug mode.
+
+    Args:
+        enabled: True to enable, False to disable
+    """
+    config = get_config()
+    config.debug_mode = enabled

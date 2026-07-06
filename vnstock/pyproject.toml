@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vnstock"
+version = "4.0.4"
+description = "Data-only market data toolkit and local data-service platform for Vietnamese financial data"
+readme = "README.md"
+authors = [
+  { name = "Thinh Vu", email = "support@vnstocks.com" },
+]
+maintainers = [
+  { name = "duvu" },
+]
+license = { text = "Custom: Personal, research, non-commercial; contact support@vnstocks.com for other use" }
+requires-python = ">=3.10"
+keywords = ["vnstock", "market-data", "vietnam", "stock market", "data-platform", "API"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "License :: Other/Proprietary License",
+    "Natural Language :: Vietnamese",
+    "Natural Language :: English",
+]
+dependencies = [
+    "requests",
+    "beautifulsoup4",
+    "pandas",
+    "seaborn",
+    "openpyxl",
+    "pydantic",
+    "psutil",
+    "cryptography",
+    "packaging>=20.0",
+    "importlib-metadata>=1.0",
+    "tenacity",
+    "vnai>=2.4.8",
+    "pytz"
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0", "pytest-cov>=4.0", "pytest-timeout"]
+dev = [
+    "build",
+    "pre-commit",
+    "ruff",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-timeout",
+    "setuptools>=42",
+    "wheel",
+]
+
+[project.scripts]
+vnstock-tcbs-login = "vnstock.cli.tcbs_login:main"
+vnstock-auth = "vnstock.cli.auth:main"
+vnstock-serve = "vnstock.cli.serve:main"
+
+[project.urls]
+Documentation = "https://github.com/duvu/vnstock#readme"
+Source = "https://github.com/duvu/vnstock"
+IssueTracker = "https://github.com/duvu/vnstock/issues"
+
+[tool.setuptools]
+include-package-data = true
+[tool.setuptools.packages.find]
+exclude = ["build*", "dist*", "tests*", "notebooks*", "scripts*"]
+
+[tool.setuptools.package-data]
+vnstock = ["docs/*.txt", "docs/*.csv"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+extend-exclude = ["*.ipynb", "dev-docs", "notebooks", "tests/archived"]
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+]
+ignore = [
+    "E501", # line too long, handled by ruff-format
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+norecursedirs = ["tests/archived"]
+addopts = "--ignore-glob='*tcbs*'"

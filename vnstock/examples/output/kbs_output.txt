@@ -1,0 +1,103 @@
+============================================================
+  Quote.history() — Daily OHLCV
+============================================================                 time   open   high    low  close   volume
+0 2024-01-02 07:00:00  69.96  69.96  69.10  69.24  1714500
+1 2024-01-03 07:00:00  69.02  69.67  68.88  69.53  1436900
+2 2024-01-04 07:00:00  69.53  71.04  69.46  70.18  2973900
+3 2024-01-05 07:00:00  70.25  70.40  69.67  70.32  1138600
+4 2024-01-08 07:00:00  70.32  70.97  70.11  70.25  1443000
+Rows: 120, Cols: ['time', 'open', 'high', 'low', 'close', 'volume']
+
+============================================================
+  Quote.intraday() — Intraday trades
+============================================================
+                 time  price  volume match_type                            id
+0 2026-07-03 09:38:32   72.0     500        buy  2026-07-03_093832_720000_500
+1 2026-07-03 09:38:26   72.0     200        buy  2026-07-03_093826_720000_200
+2 2026-07-03 09:38:21   72.0     100        buy  2026-07-03_093821_720000_100
+3 2026-07-03 09:38:21   71.9     200       sell  2026-07-03_093821_719000_200
+4 2026-07-03 09:38:19   71.9     100       sell  2026-07-03_093819_719000_100
+
+============================================================
+  Trading.price_board() — Live quotes for multiple symbols
+============================================================
+  symbol           time  ... foreign_sell_volume  foreign_room
+0    FPT  1783046322386  ...               42100     363791335
+1    VCB  1783046321146  ...               20100     818309637
+2    TCB  1783046321750  ...              282430      65078495
+
+[3 rows x 30 columns]
+Symbols returned: 3
+
+============================================================
+  Listing.all_symbols() — Full symbol list
+============================================================
+  symbol                              organ_name
+0    SMC              CTCP Đầu tư Thương mại SMC
+1    DPP                      CTCP Dược Đồng Nai
+2    KHX           CTCP Phát hành sách Khánh Hòa
+3    DAH          CTCP Tập đoàn Khách sạn Đông Á
+4    EIB  Ngân hàng TMCP Xuất nhập khẩu Việt Nam
+Total symbols: 1527
+
+============================================================
+  Listing.symbols_by_industries() — Symbols grouped by industry
+============================================================
+  symbol  industry_code industry_name
+0    AGR              5   Chứng khoán
+1    APG              5   Chứng khoán
+2    APS              5   Chứng khoán
+3    BSI              5   Chứng khoán
+4    BVS              5   Chứng khoán
+
+============================================================
+  Company.overview() — Company profile
+============================================================
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 business_model symbol founded_date  charter_capital  number_of_employees listing_date  par_value exchange  listing_price  listed_volume            ceo_name  ceo_position      inspector_name                         inspector_position establishment_license business_code     tax_id  auditor    company_type                                               address             phone              fax      email         website                                                                                                                                                               branches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 history  free_float_percentage  free_float  outstanding_shares          as_of_date
+\n- Công nghệ:+ Nhóm dịch vụ: Tư vấn Chuyển đổi số, Chuyển đổi xanh và Chuyển đổi trí tuệ nhân tạo; Thiết kế, triển khai, tích hợp, vận hành, bảo trì, kiểm thử... các hệ thống CNTT; Dịch vụ an toàn, an ninh mạng; Cung cấp các giải pháp dựa trên các nền tảng công nghệ: NVIDIA, Landing AI, SAP, Oracle, Microsoft, ESRI…+ Nhóm sản phẩm, giải pháp: Cung cấp các nền tảng công nghệ tiên tiến như: nền tảng trí tuệ nhân tạo FPT.AI, nền tảng điện toán đám mây FPT Cloud, nền tảng quản trị doanh nghiệp Base.vn; Phát triển chip nguồn và chip IoT; Sản phẩm, giải pháp chuyển đổi số tích hợp công nghệ AI, AI tạo sinh (Generative AI), tự động hóa (RPA), kết nối vạn vật (IoT)… chuyên sâu cho các lĩnh vực như: Chính phủ, Viễn thông, Ngân hàng \n- Tài chính, Y tế, Giao thông vận tải, Tài chính công, Năng lượng, Doanh nghiệp, Ô tô…; Sản phẩm, giải pháp tiên tiến giải quyết các bài toán nghiệp vụ chuyên sâu của doanh nghiệp như: quản lý chuỗi cung ứng, quản lý tài chính, quản lý nguồn nhân lực, quản lý quan hệ khách hàng & trải nghiệm người dùng, quản lý phát triển bền vững, chuyển đổi quy trình kinh doanh…\n- Viễn thông: Dịch vụ Viễn thông; Dịch vụ truyền hình FPT Play; Dịch vụ họp trực tuyến; Hệ sinh thái truyền thông số; Hệ thống các sản phẩm FPT Smart Home.\n- Giáo dục: Bao gồm các khối đào tạo Giáo dục Phổ thông; Giáo dục Nghề nghiệp và Giáo dục Đại học.    FPT   28/02/2002            17035                54110   13/12/2006      10000     HOSE         400000           1704 Mr. Trương Gia Bình Chủ tịch HĐQT Ms. Mai Thị Lan Anh Phó Giám đốc Marketing và Truyền thông FPT            178/QĐ-TTG    0101248141 0101248141 Deloitte Công ty cổ phần Số 10 - Phố Phạm Văn Bạch - P.  Cầu Giấy - Tp. Hà Nội (84.24) 7300 7300 (84.24) 768 7410 Ir@fpt.com https://fpt.com - VPĐD tại Cần Thơ: 69 Hùng Vương - P.THới Bình - Q.Ninh Kiều - Tp.Cần Thơ\r\n- VPĐD tại Đà Nẵng: Tòa nhà FPT - 01 KCN Đà Nẵng - P.An Hải Bắc - Q.Sơn Trà - Tp.Đà Nẵng \n- Ngày 13/09/1988: Tiền thân là Công ty Công nghệ thực phẩm thành lập.\n- Ngày 27/10/1990: Đổi tên thành Công ty Phát triển đầu tư công nghệ FPT.\n- Năm 1999: Tiến ra thị trường nước ngoài với hướng đi chiến lược là xuất khẩu phần mềm.\n- Năm 2001: Ra mắt báo điện tử VnExpress, tờ báo điện tử đầu tiên của Việt Nam.\n- Tháng 03/2002: Công ty tiến hành cổ phần hóa; Sản xuất sản phẩm công nghệ thương hiệu FPT.\n- Năm 2006: Niêm yết trên thị trường chứng khoán; Thành lập trường ĐH FPT.\n- Ngày 25/09/2008: Đổi tên thành CTCP FPT.\n- Năm 2012: Đầu tư mở rộng chuỗi bán lẻ sản phẩm công nghệ FPT (FPT Shop) và Đầu tư vào thương mại điện tử.\n- Năm 2014: Tiến hành thương vụ M&A đầu tiên trong lĩnh vực CNTT của Việt Nam tại thị trường nước ngoài. Trong nước, công ty bắt đầu cung cấp dịch vụ truyền hình trả tiền.\n- Ngày 14/04/2017: Tăng vốn điều lệ lên 4,617,230,540,000 đồng.\n- Ngày 22/06/2017: Tăng vốn điều lệ lên 5,309,611,050,000 đồng.\n- Ngày 23/04/2018: Tăng vốn điều lệ lên 5,336,156,610,000 đồng.\n- Ngày 19/06/2018: Tăng vốn điều lệ lên 6,136,367,720,000 đồng.\n- Ngày 16/04/2019: Tăng vốn điều lệ lên 6,167,039,720,000 đồng.\n- Ngày 11/06/2019: Tăng vốn điều lệ lên 6,783,586,880,000 đồng.\n- Ngày 13/04/2020: Tăng vốn điều lệ lên 6,817,504,780.000 đồng.\n- Ngày 04/06/2020: Tăng vốn điều lệ lên 7,839,874,860,000 đồng.\n- Ngày 06/05/2021: Tăng vốn điều lệ lên 7,891,972,540,000 đồng.\n- Ngày 06/07/2021: Tăng vốn điều lệ lên 9,075,516,490,000 đồng.\n- Tháng 05/2022: Tăng vốn điều lệ lên 9,141,959,000,000 đồng.\n- Tháng 07/2022: Tăng vốn điều lệ lên 10,970,266,000,000 đồng.\n- Tháng 05/2023: Tăng vốn điều lệ lên 11,043,316,000,000 đồng.\n- Tháng 06/2024: Tăng vốn điều lệ lên 14,604,480,660,000 đồng.\n- Tháng 10/2024: Tăng vốn điều lệ lên 14,710,691,830,000 đồng.\n- Tháng 05/2025: Tăng vốn điều lệ lên 14,813,301,220,000 đồng.\n- Tháng 08/2025: Tăng vốn điều lệ lên 17,035,071,210,000 đồng.         17035071210000       10000          1703507121 2025-12-31T00:00:00
+
+============================================================
+  Company.shareholders() — Major shareholders
+============================================================
+              name          update_date  shares_owned  ownership_percentage
+0  Trương Gia Bình  2025-12-31T00:00:00     117347966                  6.89
+
+============================================================
+  Finance.balance_sheet() — Quarterly balance sheet
+============================================================
+<IPython.core.display.HTML object>
+Empty DataFrame
+Columns: []
+Index: []
+
+============================================================
+  Finance.income_statement() — Quarterly income statement
+============================================================
+<IPython.core.display.HTML object>
+                                                item  ...       2025-Q3
+0         1. Doanh thu bán hàng và cung cấp dịch vụ   ...  1.665834e+13
+1                    2. Các khoản giảm trừ doanh thu  ...  3.362272e+10
+2  3. Doanh thu thuần về bán hàng và cung cấp dịc...  ...  1.662471e+13
+
+[3 rows x 6 columns]
+
+============================================================
+  Finance.cash_flow() — Quarterly cash flow
+============================================================
+<IPython.core.display.HTML object>
+                              item  ...       2025-Q2
+0       Phân bổ lợi thế thương mại  ...           NaN
+1                   Chi phí đi vay  ...  1.794612e+11
+2  Tiền và tương đương tiền đầu kỳ  ...  1.052211e+13
+
+[3 rows x 4 columns]
+
+============================================================
+  Finance.ratio() — Key financial ratios
+============================================================
+                                                item  ...   2025-Q3
+0  Thu nhập trên mỗi cổ phần của 4 quý gần nhất (...  ...   5862.01
+1                Giá trị sổ sách của cổ phiếu (BVPS)  ...  26918.00
+2          Chỉ số giá thị trường trên thu nhập (P/E)  ...     20.16
+
+[3 rows x 6 columns]

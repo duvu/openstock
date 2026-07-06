@@ -1,0 +1,113 @@
+============================================================
+  Quote.history() — Daily OHLCV
+============================================================        time   open   high    low  close   volume
+0 2023-12-14  69.16  69.59  68.72  69.45  1715423
+1 2023-12-15  69.45  69.52  68.58  69.45  1477484
+2 2023-12-18  69.23  69.45  67.64  67.86  2269177
+3 2023-12-19  67.79  68.29  67.57  68.29  1253010
+4 2023-12-20  68.07  68.58  67.93  68.36  1351472
+Rows: 132, Cols: ['time', 'open', 'high', 'low', 'close', 'volume']
+
+============================================================
+  Quote.intraday() — Intraday trades
+============================================================
+                       time  price  volume match_type         id
+0 2026-07-03 09:37:22+07:00   72.0    1900       Sell  491656439
+1 2026-07-03 09:37:22+07:00   72.0   19000        Buy  491656464
+2 2026-07-03 09:37:22+07:00   71.9     700       Sell  491656459
+3 2026-07-03 09:37:22+07:00   71.9     200       Sell  491656458
+4 2026-07-03 09:37:22+07:00   71.9     100       Sell  491656457
+
+============================================================
+  Trading.price_board() — Live quotes for multiple symbols
+============================================================
+  listing                 ...      bid_ask
+   symbol ceiling  floor  ... ask_2_volume ask_3_price ask_3_volume
+0     FPT   77500  67500  ...        33700       72200        58100
+1     VCB   66400  57800  ...        21100       62400        24200
+2     TCB   36200  31500  ...       271300       33800        14800
+
+[3 rows x 82 columns]
+Symbols returned: 3
+
+============================================================
+  Listing.all_symbols() — Full symbol list
+============================================================
+  symbol                                         organ_name
+0    YTC  Công ty Cổ phần Xuất nhập khẩu Y tế Thành phố ...
+1    YEG                     Công ty Cổ phần Tập đoàn Yeah1
+2    YBM     Công ty Cổ phần Khoáng sản Công nghiệp Yên Bái
+3    YBC      Công ty Cổ phần Xi măng và Khoáng sản Yên Bái
+4    XPH                    Công ty Cổ phần Xà phòng Hà Nội
+Total symbols: 1745
+
+============================================================
+  Listing.symbols_by_industries() — Symbols grouped by industry
+============================================================
+  symbol                         organ_name  ... icb_code                 icb_name
+0    A32                 Công ty Cổ phần 32  ...     3000           Hàng Tiêu dùng
+1    A32                 Công ty Cổ phần 32  ...     3700  Hàng cá nhân & Gia dụng
+2    A32                 Công ty Cổ phần 32  ...     3760             Hàng cá nhân
+3    A32                 Công ty Cổ phần 32  ...     3765                 Giầy dép
+4    AAA  Công ty Cổ phần Nhựa An Phát Xanh  ...     1000          Nguyên vật liệu
+
+[5 rows x 6 columns]
+
+============================================================
+  Company.overview() — Company profile
+============================================================
+symbol organ_code  current_price   market_cap  issue_share  tag rating rating_as_of          organ_name organ_short_name com_type_code com_group_code     sector  average_match_value1_month  average_match_volume1_month  highest_price1_year  lowest_price1_year  foreigner_percentage  maximum_foreign_percentage  state_percentage analyst  upside_to_target_percent  dividend_per_share_tsr  projected_tsr_percentage  target_price                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           company_profile  in_cu icb_code_lv2 icb_code_lv4  free_float  free_float_percentage        listing_date                                                                                                       prev_insight fund_info  is_bank  listing  bank
+   FPT        FPT        72500.0 1.242887e+14 1714326422.0 None    BUY    08-Jun-26 Công ty Cổ phần FPT         FPT Corp            CT        VNINDEX Technology                6.380520e+11                    8722360.0             110120.0             69048.0              0.276413                        0.49          0.056698 Ngan Ly                  0.245517                  2300.0                  0.277241       90300.0 Công ty Cổ phần FPT (FPT) có tiền thân là Công ty Công nghệ Thực phẩm được thành lập năm 1988. Công ty hoạt động chính trong lĩnh vực phần mềm, công nghệ thông tin, tích hợp hệ thống, viễn thông, và giáo dục đào tạo. FPT chính thức hoạt động theo mô hình công ty cổ phần từ năm 2002. FPT là tập đoàn công nghệ và dịch vụ CNTT có hiện diện tại hơn 30 quốc gia và vùng lãnh thổ trên 4 châu lục. Doanh nghiệp tập trung vào các mảng công nghệ chiến lược như AI, điện toán đám mây, bán dẫn, an ninh mạng và dữ liệu, đồng thời vận hành trung tâm dữ liệu quy mô 10.000 m² cùng các nhà máy AI tại Việt Nam và Nhật Bản. FPT cũng tham gia nhiều dự án chuyển đổi số quy mô lớn cho khối Chính phủ, bộ ngành, địa phương và khách hàng toàn cầu. FPT được niêm yết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) từ tháng 12/2006.   True         9500         9537  1457177458                   0.85 2006-12-13T00:00:00 {'targetPrice': 116600.0, 'rating': 'BUY', 'ratingAsOf': '22-Oct-25', 'analyst': 'Ngan Ly', 'version': '20260604'}      None    False     True False
+
+============================================================
+  Company.shareholders() — Major shareholders
+============================================================
+  symbol  ...              update_date
+0    FPT  ...  2026-02-03T10:36:48.587
+1    FPT  ...   2026-04-06T16:53:49.03
+2    FPT  ...   2025-10-05T12:54:27.52
+3    FPT  ...      2015-06-15T00:00:00
+4    FPT  ...   2025-10-05T12:54:27.52
+
+[5 rows x 5 columns]
+
+============================================================
+  Finance.balance_sheet() — Quarterly balance sheet
+============================================================
+<IPython.core.display.HTML object>
+period                      item  ...       2025-Q2
+0               TÀI SẢN NGẮN HẠN  ...  5.271118e+13
+1       Tiền và tương đương tiền  ...  1.001963e+13
+2                           Tiền  ...  7.755451e+12
+
+[3 rows x 7 columns]
+
+============================================================
+  Finance.income_statement() — Quarterly income statement
+============================================================
+<IPython.core.display.HTML object>
+period                                    item  ...       2025-Q2
+0       Doanh thu bán hàng và cung cấp dịch vụ  ...  1.665834e+13
+1                 Các khoản giảm trừ doanh thu  ... -3.362272e+10
+2                              Doanh thu thuần  ...  1.662471e+13
+
+[3 rows x 7 columns]
+
+============================================================
+  Finance.cash_flow() — Quarterly cash flow
+============================================================
+<IPython.core.display.HTML object>
+period                       item  ...       2025-Q2
+0       Lợi nhuận/(lỗ) trước thuế  ...  3.141033e+12
+1          Khấu hao TSCĐ và BĐSĐT  ...  7.219656e+11
+2                Chi phí dự phòng  ...  5.793886e+10
+
+[3 rows x 7 columns]
+
+============================================================
+  Finance.ratio() — Key financial ratios
+============================================================
+period    item       item_en     item_id  2018-Q1  2018-Q2  2018-Q3  2018-Q4
+0          Năm             0        year     2018     2018     2018     2018
+1          Quý             0     quarter        1        2        3        4
+2       Mã TTM  Ratio TTM Id  ratioTTMId  2699069  2713910  2716011  2717390

@@ -1,0 +1,20 @@
+
+============================================================
+  Quote.history() — Daily OHLCV
+============================================================
+[ERROR] DNSE trả về dữ liệu rỗng cho mã FPT. API DNSE chỉ hoạt động từ địa chỉ IP tại Việt Nam. Vui lòng sử dụng proxy tại Việt Nam hoặc chuyển sang nhà cung cấp khác (KBS/VCI).
+
+============================================================
+  Quote.intraday() — Intraday trades
+============================================================
+                 time  price  volume
+0 2026-07-03 09:15:00   72.6   27600
+1 2026-07-03 09:16:00   72.7    5700
+2 2026-07-03 09:17:00   72.7    1600
+3 2026-07-03 09:18:00   72.7    6900
+4 2026-07-03 09:19:00   72.7    9800
+
+============================================================
+  Trading.price_board() — Live quotes for multiple symbols
+============================================================
+[ERROR] DNSE price_board không khả dụng: endpoint /chart-api/v2/quotes hiện trả về lỗi 500. Vui lòng sử dụng nhà cung cấp khác (KBS/VCI) để lấy bảng giá realtime.

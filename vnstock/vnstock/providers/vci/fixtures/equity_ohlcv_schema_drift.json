@@ -1,0 +1,11 @@
+[
+  {
+    "_note": "Schema drift: 'o' key renamed to 'open' — normalizer should detect mismatch",
+    "t": [1751337600],
+    "open": [118300],
+    "h": [119200],
+    "l": [117800],
+    "c": [118000],
+    "v": [1250000]
+  }
+]
