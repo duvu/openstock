@@ -1,3 +1,9 @@
 vnalpha/.venv/
+vnalpha/dist/
+vnalpha/build/
+vnalpha/src/*.egg-info/
 *.key
 .omo/
+.env
+.env.*
+!.env.example

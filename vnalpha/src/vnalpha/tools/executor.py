@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any
+import time
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from vnalpha.tools.models import ToolPermission
 from vnalpha.tools.registry import LocalToolRegistry
 from vnalpha.warehouse.session_repo import create_tool_trace, finish_tool_trace
+
+
+@dataclass
+class TraceEvent:
+    """A snapshot of a single tool call's lifecycle stage."""
+
+    tool_name: str
+    status: str  # "RUNNING" | "SUCCESS" | "FAILED"
+    duration_ms: float | None  # None while RUNNING
+    tool_trace_id: str
 
 
 class TracedLocalToolExecutor:
@@ -21,12 +33,14 @@ class TracedLocalToolExecutor:
         session_id: str | None = None,
         assistant_session_id: str | None = None,
         trace_parent_type: str = "command",
+        trace_event_callback: Callable[[TraceEvent], None] | None = None,
     ) -> None:
         self._conn = conn
         self._registry = registry
         self._session_id = session_id
         self._assistant_session_id = assistant_session_id
         self._trace_parent_type = trace_parent_type
+        self._trace_event_callback = trace_event_callback
 
     def call(
         self,
@@ -45,22 +59,57 @@ class TracedLocalToolExecutor:
             tool_name=name,
             input_data=_json_safe(kwargs),
         )
+
+        # Emit RUNNING event
+        if self._trace_event_callback is not None:
+            self._trace_event_callback(
+                TraceEvent(
+                    tool_name=name,
+                    status="RUNNING",
+                    duration_ms=None,
+                    tool_trace_id=trace_id,
+                )
+            )
+
+        start = time.monotonic()
         try:
             output = self._registry.call(name, granted, **kwargs)
+            duration_ms = (time.monotonic() - start) * 1000
             finish_tool_trace(
                 self._conn,
                 trace_id,
                 status="SUCCESS",
                 output_summary=_summarize_output(output),
             )
+            # Emit SUCCESS event
+            if self._trace_event_callback is not None:
+                self._trace_event_callback(
+                    TraceEvent(
+                        tool_name=name,
+                        status="SUCCESS",
+                        duration_ms=duration_ms,
+                        tool_trace_id=trace_id,
+                    )
+                )
             return output
         except Exception as exc:
+            duration_ms = (time.monotonic() - start) * 1000
             finish_tool_trace(
                 self._conn,
                 trace_id,
                 status="FAILED",
                 error={"message": str(exc), "error_type": type(exc).__name__},
             )
+            # Emit FAILED event
+            if self._trace_event_callback is not None:
+                self._trace_event_callback(
+                    TraceEvent(
+                        tool_name=name,
+                        status="FAILED",
+                        duration_ms=duration_ms,
+                        tool_trace_id=trace_id,
+                    )
+                )
             raise
 
 

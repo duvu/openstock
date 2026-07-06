@@ -6,10 +6,14 @@ Rules:
 - Every call is persisted in tool_trace (linked to assistant_session_id).
 - Network, Python exec, MCP, raw SQL, filesystem, broker/order/allocation are forbidden.
 """
+
 from __future__ import annotations
 
 import dataclasses
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from vnalpha.tools.executor import TraceEvent
 
 from vnalpha.assistant.errors import RefusalError, ToolExecutionError
 from vnalpha.assistant.models import AssistantPlan, ToolPlanStep
@@ -43,7 +47,12 @@ def _build_tool_registry(conn):
 class AssistantExecutor:
     """Executes an AssistantPlan against the local tool registry."""
 
-    def __init__(self, conn, assistant_session_id: str) -> None:
+    def __init__(
+        self,
+        conn,
+        assistant_session_id: str,
+        on_trace_event: "Callable[[TraceEvent], None] | None" = None,
+    ) -> None:
         self._conn = conn
         self._assistant_session_id = assistant_session_id
         self._registry = _build_tool_registry(conn)
@@ -53,6 +62,7 @@ class AssistantExecutor:
             session_id=None,  # assistant traces have no command session parent
             assistant_session_id=assistant_session_id,
             trace_parent_type="assistant",
+            trace_event_callback=on_trace_event,
         )
 
     def execute(self, plan: AssistantPlan) -> dict[str, Any]:
@@ -78,7 +88,9 @@ class AssistantExecutor:
     def _execute_step(self, step: ToolPlanStep) -> Any:
         try:
             permission = _TOOL_PERMISSIONS[step.tool_name]
-            output = self._tool_executor.call(step.tool_name, {permission}, **step.arguments)
+            output = self._tool_executor.call(
+                step.tool_name, {permission}, **step.arguments
+            )
             # Return as dict for synthesizer
             if dataclasses.is_dataclass(output):
                 return dataclasses.asdict(output)

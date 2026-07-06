@@ -12,7 +12,13 @@ Flow:
 8. Persist answer, finish session
 9. Return AssistantAnswer or RefusalMessage
 """
+
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from vnalpha.tools.executor import TraceEvent
 
 from vnalpha.assistant.errors import (
     AssistantError,
@@ -59,6 +65,7 @@ class AssistantApp:
         *,
         date: str | None = None,
         no_execute: bool = False,
+        on_trace_event: "Callable[[TraceEvent], None] | None" = None,
     ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
         """
         Process a natural-language research question.
@@ -72,28 +79,41 @@ class AssistantApp:
         )
 
         try:
-            return self._run(user_prompt, session_id, date=date, no_execute=no_execute)
+            return self._run(
+                user_prompt,
+                session_id,
+                date=date,
+                no_execute=no_execute,
+                on_trace_event=on_trace_event,
+            )
         except RefusalError as exc:
             finish_assistant_session(
-                self._conn, session_id,
+                self._conn,
+                session_id,
                 status="REFUSED",
                 refusal_reason=exc.args[0] if exc.args else str(exc),
             )
             return RefusalMessage(
                 reason=exc.args[0] if exc.args else str(exc),
-                policy_category=exc.policy_category if hasattr(exc, "policy_category") else "UNKNOWN",
+                policy_category=exc.policy_category
+                if hasattr(exc, "policy_category")
+                else "UNKNOWN",
                 suggestion=exc.suggestion if hasattr(exc, "suggestion") else None,
-            ), AssistantPlan(intent="unsupported_or_unsafe", steps=[], refusal_reason=str(exc))
+            ), AssistantPlan(
+                intent="unsupported_or_unsafe", steps=[], refusal_reason=str(exc)
+            )
         except AssistantError as exc:
             finish_assistant_session(
-                self._conn, session_id,
+                self._conn,
+                session_id,
                 status="FAILED",
                 error={"error_type": type(exc).__name__, "message": str(exc)},
             )
             raise
         except Exception as exc:
             finish_assistant_session(
-                self._conn, session_id,
+                self._conn,
+                session_id,
                 status="FAILED",
                 error={"error_type": "RuntimeError", "message": str(exc)},
             )
@@ -106,6 +126,7 @@ class AssistantApp:
         *,
         date: str | None = None,
         no_execute: bool = False,
+        on_trace_event: "Callable[[TraceEvent], None] | None" = None,
     ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
         # 1. Deterministic safety check
         check_policy(user_prompt)
@@ -120,12 +141,17 @@ class AssistantApp:
         )
         try:
             intent_result = self._classifier.classify(user_prompt)
-            finish_llm_trace(self._conn, llm_trace_id, status="SUCCESS",
-                             output_summary={"intent": intent_result.intent},
-                             usage=self._classifier.last_usage)
+            finish_llm_trace(
+                self._conn,
+                llm_trace_id,
+                status="SUCCESS",
+                output_summary={"intent": intent_result.intent},
+                usage=self._classifier.last_usage,
+            )
         except Exception as exc:
-            finish_llm_trace(self._conn, llm_trace_id, status="FAILED",
-                             error={"message": str(exc)})
+            finish_llm_trace(
+                self._conn, llm_trace_id, status="FAILED", error={"message": str(exc)}
+            )
             raise
 
         # Inject date entity if provided
@@ -139,8 +165,13 @@ class AssistantApp:
         plan = self._planner.build(intent_result)
 
         if no_execute:
-            finish_assistant_session(self._conn, session_id, status="SUCCESS",
-                                     intent=intent_result.intent, plan=plan.to_dict())
+            finish_assistant_session(
+                self._conn,
+                session_id,
+                status="SUCCESS",
+                intent=intent_result.intent,
+                plan=plan.to_dict(),
+            )
             # Return plan preview as answer
             preview_answer = AssistantAnswer(
                 summary=f"[Plan preview — not executed]\n{self._planner.preview(plan)}",
@@ -152,7 +183,12 @@ class AssistantApp:
 
         # 5. Execute tools
         from vnalpha.assistant.executor import AssistantExecutor
-        executor = AssistantExecutor(self._conn, assistant_session_id=session_id)
+
+        executor = AssistantExecutor(
+            self._conn,
+            assistant_session_id=session_id,
+            on_trace_event=on_trace_event,
+        )
         tool_outputs = executor.execute(plan)
 
         # 6. Synthesize answer
@@ -165,17 +201,24 @@ class AssistantApp:
         )
         try:
             answer = self._synthesizer.synthesize(user_prompt, plan, tool_outputs)
-            finish_llm_trace(self._conn, llm_trace_id2, status="SUCCESS",
-                             output_summary={"summary_length": len(answer.summary)},
-                             usage=self._synthesizer.last_usage)
+            finish_llm_trace(
+                self._conn,
+                llm_trace_id2,
+                status="SUCCESS",
+                output_summary={"summary_length": len(answer.summary)},
+                usage=self._synthesizer.last_usage,
+            )
         except Exception as exc:
-            finish_llm_trace(self._conn, llm_trace_id2, status="FAILED",
-                             error={"message": str(exc)})
+            finish_llm_trace(
+                self._conn, llm_trace_id2, status="FAILED", error={"message": str(exc)}
+            )
             raise
 
         # 7. Persist and finish
         finish_assistant_session(
-            self._conn, session_id, status="SUCCESS",
+            self._conn,
+            session_id,
+            status="SUCCESS",
             intent=intent_result.intent,
             plan=plan.to_dict(),
             answer=answer.to_dict(),
