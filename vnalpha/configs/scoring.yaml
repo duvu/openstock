@@ -1,0 +1,25 @@
+# alpha scoring config
+weights:
+  trend: 25
+  relative_strength: 25
+  volume: 15
+  base_compression: 15
+  breakout_proximity: 10
+  risk_data_quality: 10
+
+thresholds:
+  strong_candidate: 80
+  watch_candidate: 65
+  weak_candidate: 50
+
+filters:
+  min_history_days: 100
+  min_daily_volume: 100000
+  max_atr14_pct: 0.08  # 8% ATR filter
+
+risk_flags:
+  extended_from_ma20_pct: 0.15   # >15% above MA20
+  low_liquidity_threshold: 100000
+  high_volatility_atr_pct: 0.06  # >6% ATR
+  weak_rs_threshold: -0.05       # RS20 < -5%
+  abnormal_volume_ratio: 5.0     # volume > 5x MA20

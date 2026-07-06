@@ -1,0 +1,152 @@
+"""DuckDB schema DDL for the vnalpha research warehouse."""
+from __future__ import annotations
+
+INGESTION_RUN_DDL = """
+CREATE TABLE IF NOT EXISTS ingestion_run (
+    ingestion_run_id  VARCHAR PRIMARY KEY,
+    started_at        TIMESTAMPTZ NOT NULL,
+    finished_at       TIMESTAMPTZ,
+    status            VARCHAR NOT NULL,
+    source_service    VARCHAR,
+    source_endpoint   VARCHAR,
+    universe          VARCHAR,
+    params_json       VARCHAR,
+    error_json        VARCHAR
+)
+"""
+
+SYMBOL_MASTER_DDL = """
+CREATE TABLE IF NOT EXISTS symbol_master (
+    symbol        VARCHAR PRIMARY KEY,
+    exchange      VARCHAR,
+    name          VARCHAR,
+    sector        VARCHAR,
+    industry      VARCHAR,
+    is_active     BOOLEAN DEFAULT TRUE,
+    last_seen_at  TIMESTAMPTZ
+)
+"""
+
+MARKET_OHLCV_RAW_DDL = """
+CREATE TABLE IF NOT EXISTS market_ohlcv_raw (
+    ingestion_run_id   VARCHAR NOT NULL,
+    symbol             VARCHAR NOT NULL,
+    time               TIMESTAMP NOT NULL,
+    interval           VARCHAR NOT NULL DEFAULT '1D',
+    open               DOUBLE,
+    high               DOUBLE,
+    low                DOUBLE,
+    close              DOUBLE,
+    volume             DOUBLE,
+    provider           VARCHAR,
+    quality_status     VARCHAR,
+    quality_report_json VARCHAR,
+    diagnostics_json   VARCHAR,
+    fetched_at         TIMESTAMPTZ,
+    raw_json           VARCHAR,
+    PRIMARY KEY (ingestion_run_id, symbol, time, interval)
+)
+"""
+
+CANONICAL_OHLCV_DDL = """
+CREATE TABLE IF NOT EXISTS canonical_ohlcv (
+    symbol                  VARCHAR NOT NULL,
+    time                    TIMESTAMP NOT NULL,
+    interval                VARCHAR NOT NULL DEFAULT '1D',
+    open                    DOUBLE,
+    high                    DOUBLE,
+    low                     DOUBLE,
+    close                   DOUBLE,
+    volume                  DOUBLE,
+    selected_provider       VARCHAR,
+    quality_status          VARCHAR,
+    ingestion_run_id        VARCHAR,
+    source_service_run_id   VARCHAR,
+    PRIMARY KEY (symbol, time, interval)
+)
+"""
+
+FEATURE_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS feature_snapshot (
+    symbol                VARCHAR NOT NULL,
+    date                  DATE NOT NULL,
+    close                 DOUBLE,
+    ma20                  DOUBLE,
+    ma50                  DOUBLE,
+    ma100                 DOUBLE,
+    ma20_slope            DOUBLE,
+    ma50_slope            DOUBLE,
+    volume_ma20           DOUBLE,
+    volume_ratio          DOUBLE,
+    atr14                 DOUBLE,
+    return_20d            DOUBLE,
+    return_60d            DOUBLE,
+    rs_20d_vs_vnindex     DOUBLE,
+    rs_60d_vs_vnindex     DOUBLE,
+    distance_to_ma20      DOUBLE,
+    distance_to_52w_high  DOUBLE,
+    base_range_30d        DOUBLE,
+    close_strength        DOUBLE,
+    volatility_20d        DOUBLE,
+    PRIMARY KEY (symbol, date)
+)
+"""
+
+CANDIDATE_SCORE_DDL = """
+CREATE TABLE IF NOT EXISTS candidate_score (
+    symbol                    VARCHAR NOT NULL,
+    date                      DATE NOT NULL,
+    score                     DOUBLE NOT NULL,
+    candidate_class           VARCHAR NOT NULL,
+    setup_type                VARCHAR,
+    trend_score               DOUBLE,
+    relative_strength_score   DOUBLE,
+    volume_score              DOUBLE,
+    base_score                DOUBLE,
+    breakout_score            DOUBLE,
+    risk_quality_score        DOUBLE,
+    evidence_json             VARCHAR,
+    risk_flags_json           VARCHAR,
+    lineage_json              VARCHAR,
+    PRIMARY KEY (symbol, date)
+)
+"""
+
+DAILY_WATCHLIST_DDL = """
+CREATE TABLE IF NOT EXISTS daily_watchlist (
+    date             DATE NOT NULL,
+    rank             INTEGER NOT NULL,
+    symbol           VARCHAR NOT NULL,
+    score            DOUBLE,
+    candidate_class  VARCHAR,
+    setup_type       VARCHAR,
+    risk_flags_json  VARCHAR,
+    lineage_json     VARCHAR,
+    created_at       TIMESTAMPTZ DEFAULT current_timestamp,
+    PRIMARY KEY (date, rank)
+)
+"""
+
+REJECTED_SYMBOL_DDL = """
+CREATE TABLE IF NOT EXISTS rejected_symbol (
+    symbol           VARCHAR NOT NULL,
+    date             DATE NOT NULL,
+    stage            VARCHAR NOT NULL,
+    reason           VARCHAR NOT NULL,
+    details_json     VARCHAR,
+    ingestion_run_id VARCHAR,
+    created_at       TIMESTAMPTZ DEFAULT current_timestamp,
+    PRIMARY KEY (symbol, date, stage)
+)
+"""
+
+ALL_DDL = [
+    INGESTION_RUN_DDL,
+    SYMBOL_MASTER_DDL,
+    MARKET_OHLCV_RAW_DDL,
+    CANONICAL_OHLCV_DDL,
+    FEATURE_SNAPSHOT_DDL,
+    CANDIDATE_SCORE_DDL,
+    DAILY_WATCHLIST_DDL,
+    REJECTED_SYMBOL_DDL,
+]

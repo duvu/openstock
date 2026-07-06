@@ -1,0 +1,2 @@
+[console_scripts]
+vnalpha = vnalpha.cli:app

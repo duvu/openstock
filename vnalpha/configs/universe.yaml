@@ -1,0 +1,21 @@
+# universe definitions
+universes:
+  VN30:
+    description: "VN30 index constituents"
+    source: reference.symbols
+    filter:
+      exchange: HOSE
+      vn30: true
+
+  HOSE_LIQUID:
+    description: "HOSE liquid universe (avg daily value >= 5B VND)"
+    source: reference.symbols
+    filter:
+      exchange: HOSE
+      min_avg_daily_value_b: 5.0
+
+benchmarks:
+  default: VNINDEX
+  alternatives:
+    - VN30
+    - HNXINDEX

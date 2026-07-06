@@ -1,0 +1,6 @@
+# vnalpha services config
+vnstock_service:
+  base_url: "http://127.0.0.1:6900"
+  timeout: 30
+  retry_max: 3
+  retry_backoff: 1.0

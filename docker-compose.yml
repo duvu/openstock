@@ -1,0 +1,35 @@
+# openstock docker-compose.yml
+# Orchestrates vnstock-service for local research workflow.
+# Usage:
+#   docker compose up -d           # start
+#   docker compose down            # stop
+#   docker compose logs -f         # follow logs
+
+version: "3.9"
+
+services:
+  vnstock-service:
+    build:
+      context: ./vnstock
+      dockerfile: Dockerfile
+    image: vnstock-service:latest
+    container_name: vnstock-service
+    ports:
+      - "127.0.0.1:6900:6900"
+    volumes:
+      - "${HOME}/.config/vnstock:/home/vnstock/.config/vnstock:ro"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6900/healthz')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
