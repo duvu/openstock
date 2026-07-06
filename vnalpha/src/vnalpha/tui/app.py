@@ -8,6 +8,7 @@ from textual.app import App
 from textual.binding import Binding
 
 from vnalpha.core.dates import resolve_date
+from vnalpha.tui.screens.command import CommandScreen
 from vnalpha.tui.screens.detail import DetailScreen
 from vnalpha.tui.screens.home import HomeScreen
 from vnalpha.tui.screens.quality import QualityScreen
@@ -21,6 +22,7 @@ class VnAlphaApp(App):
     Keyboard navigation:
         h - Home
         w - Watchlist
+        c - Command workspace (Phase 5.8)
         r - Rejected symbols
         p - Data quality
         q - Quit
@@ -34,6 +36,7 @@ class VnAlphaApp(App):
     BINDINGS = [
         Binding("h", "show_home", "Home"),
         Binding("w", "show_watchlist", "Watchlist"),
+        Binding("c", "show_commands", "Commands"),
         Binding("r", "show_rejected", "Rejected"),
         Binding("p", "show_quality", "Quality"),
         Binding("q", "quit", "Quit"),
@@ -51,6 +54,9 @@ class VnAlphaApp(App):
 
     def action_show_watchlist(self) -> None:
         self.push_screen(WatchlistScreen(target_date=self.target_date))
+
+    def action_show_commands(self) -> None:
+        self.push_screen(CommandScreen(target_date=self.target_date))
 
     def action_show_rejected(self) -> None:
         self.push_screen(RejectedScreen(target_date=self.target_date))

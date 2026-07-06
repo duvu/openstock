@@ -274,3 +274,116 @@ def tui(
         raise typer.Exit(code=1) from err
 
     VnAlphaApp(date=date).run()
+
+
+@app.command("cmd")
+def cmd_runner(
+    command: str = typer.Argument(..., help="Slash command to run, e.g. '/scan VN30'"),
+    date: Optional[str] = typer.Option(
+        None, "--date", help="Override date context (YYYY-MM-DD or 'today')."
+    ),
+) -> None:
+    """Run a Phase 5.8 slash command in the research workspace.
+
+    Examples:
+        vnalpha cmd "/help"
+        vnalpha cmd "/scan"
+        vnalpha cmd "/explain FPT"
+        vnalpha cmd "/filter score>=0.70"
+        vnalpha cmd "/history --limit 20"
+    """
+    from vnalpha.commands.errors import (
+        CommandError,
+        CommandParseError,
+        UnknownCommandError,
+    )
+    from vnalpha.commands.parser import parse as parse_command
+    from vnalpha.commands.renderers.rich_renderer import render_result
+    from vnalpha.commands.setup import build_default_registry
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.warehouse.session_repo import (
+        create_research_session,
+        finish_research_session,
+    )
+
+    # Parse command
+    try:
+        parsed = parse_command(command)
+    except CommandParseError as exc:
+        typer.echo(f"Parse error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    # Override date option if --date passed to CLI
+    if date:
+        parsed.options["date"] = date
+
+    # Open warehouse connection
+    conn = get_connection()
+    run_migrations(conn=conn)
+
+    # Create research session
+    session_id = create_research_session(
+        conn,
+        surface="cli",
+        command_text=command,
+        command_name=parsed.command_name,
+        parsed_args={
+            "positional": parsed.positional,
+            "filters": [(f.key, f.op, f.value) for f in parsed.filters],
+            "options": dict(parsed.options),
+        },
+    )
+
+    # Build registry and run
+    registry = build_default_registry()
+    try:
+        result = registry.execute(parsed, conn=conn, registry=registry, session_id=session_id)
+    except UnknownCommandError as exc:
+        finish_research_session(
+            conn, session_id, status="FAILED",
+            error={"error_type": "UnknownCommandError", "message": str(exc)},
+        )
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    except CommandError as exc:
+        finish_research_session(
+            conn, session_id, status="FAILED",
+            error={"error_type": type(exc).__name__, "message": str(exc)},
+        )
+        typer.echo(f"Command error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        finish_research_session(
+            conn, session_id, status="FAILED",
+            error={"error_type": "RuntimeError", "message": str(exc)},
+        )
+        typer.echo(f"Unexpected error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    # Persist session result
+    session_status = result.status if result.status == "SUCCESS" else "FAILED"
+    if result.status == "VALIDATION_ERROR":
+        session_status = "VALIDATION_ERROR"
+    finish_research_session(
+        conn,
+        session_id,
+        status=session_status,
+        result_summary={"title": result.title, "summary": result.summary},
+        error={"error_type": result.error.error_type, "message": result.error.message}
+        if result.error
+        else None,
+    )
+
+    # Render result
+    try:
+        from rich.console import Console
+        render_result(result, console=Console())
+    except ImportError:
+        typer.echo(result.title)
+        if result.summary:
+            typer.echo(result.summary)
+
+    # Non-zero exit for non-success
+    if result.status != "SUCCESS":
+        raise typer.Exit(code=1)

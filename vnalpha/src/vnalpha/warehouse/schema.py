@@ -151,3 +151,53 @@ ALL_DDL = [
     DAILY_WATCHLIST_DDL,
     REJECTED_SYMBOL_DDL,
 ]
+
+# Phase 5.8 command-layer tables
+RESEARCH_SESSION_DDL = """
+CREATE TABLE IF NOT EXISTS research_session (
+    session_id            VARCHAR PRIMARY KEY,
+    started_at            TIMESTAMPTZ NOT NULL,
+    finished_at           TIMESTAMPTZ,
+    status                VARCHAR NOT NULL,
+    surface               VARCHAR NOT NULL,
+    command_text          VARCHAR NOT NULL,
+    command_name          VARCHAR,
+    parsed_args_json      VARCHAR,
+    result_summary_json   VARCHAR,
+    error_json            VARCHAR
+)
+"""
+
+TOOL_TRACE_DDL = """
+CREATE TABLE IF NOT EXISTS tool_trace (
+    tool_trace_id         VARCHAR PRIMARY KEY,
+    session_id            VARCHAR NOT NULL,
+    tool_name             VARCHAR NOT NULL,
+    started_at            TIMESTAMPTZ NOT NULL,
+    finished_at           TIMESTAMPTZ,
+    status                VARCHAR NOT NULL,
+    input_json            VARCHAR,
+    output_summary_json   VARCHAR,
+    error_json            VARCHAR
+)
+"""
+
+RESEARCH_NOTE_DDL = """
+CREATE TABLE IF NOT EXISTS research_note (
+    note_id               VARCHAR PRIMARY KEY,
+    created_at            TIMESTAMPTZ NOT NULL,
+    updated_at            TIMESTAMPTZ,
+    symbol                VARCHAR,
+    session_id            VARCHAR,
+    note_text             VARCHAR NOT NULL,
+    tags_json             VARCHAR
+)
+"""
+
+ALL_DDL_PHASE58 = [
+    RESEARCH_SESSION_DDL,
+    TOOL_TRACE_DDL,
+    RESEARCH_NOTE_DDL,
+]
+
+ALL_DDL_COMBINED = ALL_DDL + ALL_DDL_PHASE58
