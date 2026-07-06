@@ -1,11 +1,14 @@
 """Tests for the vnstock-service client using respx mock."""
-import pytest
 import httpx
+import pytest
 import respx
-from vnalpha.clients.vnstock.client import VnstockClient
-from vnalpha.clients.vnstock.errors import VnstockHTTPError, VnstockConnectionError
-from vnalpha.clients.vnstock.schemas import VnstockResponse, OHLCVResponse, SymbolsResponse
 
+from vnalpha.clients.vnstock.client import VnstockClient
+from vnalpha.clients.vnstock.errors import VnstockHTTPError
+from vnalpha.clients.vnstock.schemas import (
+    OHLCVResponse,
+    SymbolsResponse,
+)
 
 MOCK_BASE = "http://127.0.0.1:6900"
 
@@ -87,8 +90,9 @@ def test_provider_health(respx_mock):
 
 def test_no_provider_specific_logic():
     """vnalpha client MUST NOT import vnstock provider classes."""
-    import vnalpha.clients.vnstock.client as mod
     import inspect
+
+    import vnalpha.clients.vnstock.client as mod
     src = inspect.getsource(mod)
     # Ensure no direct imports of vnstock provider internals
     assert "from vnstock.providers" not in src

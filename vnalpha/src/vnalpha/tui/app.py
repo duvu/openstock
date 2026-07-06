@@ -2,16 +2,15 @@
 from __future__ import annotations
 
 from typing import Optional
-from textual.app import App, ComposeResult
-from textual.binding import Binding
-from textual.widgets import Header, Footer
-from textual.screen import Screen
 
-from vnalpha.tui.screens.watchlist import WatchlistScreen
+from textual.app import App
+from textual.binding import Binding
+
 from vnalpha.tui.screens.detail import DetailScreen
-from vnalpha.tui.screens.rejected import RejectedScreen
-from vnalpha.tui.screens.quality import QualityScreen
 from vnalpha.tui.screens.home import HomeScreen
+from vnalpha.tui.screens.quality import QualityScreen
+from vnalpha.tui.screens.rejected import RejectedScreen
+from vnalpha.tui.screens.watchlist import WatchlistScreen
 
 
 class VnAlphaApp(App):

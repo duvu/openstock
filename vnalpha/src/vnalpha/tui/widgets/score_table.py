@@ -1,9 +1,9 @@
 """Score table widget — renders sorted research candidates."""
 from __future__ import annotations
 
-from typing import List, Any
+from typing import Any, List
+
 from textual.widgets import DataTable
-from textual.app import ComposeResult
 
 
 class ScoreTable(DataTable):

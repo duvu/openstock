@@ -1,7 +1,7 @@
 """Test vnalpha CLI entry point."""
 from typer.testing import CliRunner
-from vnalpha.cli import app
 
+from vnalpha.cli import app
 
 runner = CliRunner()
 

@@ -1,17 +1,21 @@
 """Tests for feature computations using synthetic data."""
-import pytest
-import pandas as pd
 import numpy as np
-from datetime import date, timedelta
+import pandas as pd
 
 from vnalpha.features.price import (
-    compute_ma, compute_ma_slope, compute_distance_to_ma,
-    compute_distance_to_52w_high, compute_return, compute_close_strength,
-    compute_base_range, compute_price_features,
+    compute_close_strength,
+    compute_distance_to_ma,
+    compute_ma,
+    compute_ma_slope,
+    compute_price_features,
+    compute_return,
 )
-from vnalpha.features.volume import compute_volume_ma, compute_volume_ratio, compute_volume_features
-from vnalpha.features.volatility import compute_atr, compute_volatility, compute_volatility_features
-from vnalpha.features.relative_strength import compute_relative_strength, compute_relative_strength_features
+from vnalpha.features.relative_strength import (
+    compute_relative_strength,
+    compute_relative_strength_features,
+)
+from vnalpha.features.volatility import compute_atr, compute_volatility
+from vnalpha.features.volume import compute_volume_ma, compute_volume_ratio
 
 
 def make_ohlcv(n: int = 200, seed: int = 42) -> pd.DataFrame:

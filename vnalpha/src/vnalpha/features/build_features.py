@@ -1,18 +1,16 @@
 """Build feature snapshots for a given date from canonical_ohlcv."""
 from __future__ import annotations
 
-import json
-from datetime import date
 from typing import Optional
+
 import duckdb
 import pandas as pd
 
-from vnalpha.features.price import compute_price_features
-from vnalpha.features.volume import compute_volume_features
-from vnalpha.features.volatility import compute_volatility_features
-from vnalpha.features.relative_strength import compute_relative_strength_features
 from vnalpha.core.logging import get_logger
-from vnalpha.warehouse.repositories import upsert_symbol
+from vnalpha.features.price import compute_price_features
+from vnalpha.features.relative_strength import compute_relative_strength_features
+from vnalpha.features.volatility import compute_volatility_features
+from vnalpha.features.volume import compute_volume_features
 
 logger = get_logger("features.build")
 

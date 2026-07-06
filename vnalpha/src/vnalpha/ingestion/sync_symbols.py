@@ -2,15 +2,16 @@
 from __future__ import annotations
 
 from typing import Optional
+
 import duckdb
 
 from vnalpha.clients.vnstock.client import VnstockClient
+from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.repositories import (
     create_ingestion_run,
     finish_ingestion_run,
     upsert_symbol,
 )
-from vnalpha.core.logging import get_logger
 
 logger = get_logger("ingestion.sync_symbols")
 

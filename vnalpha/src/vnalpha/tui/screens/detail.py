@@ -5,10 +5,10 @@ from datetime import date
 from typing import Optional
 
 from textual.app import ComposeResult
-from textual.screen import Screen
-from textual.widgets import Header, Footer, Static, Label
-from textual.containers import Vertical, ScrollableContainer
 from textual.binding import Binding
+from textual.containers import ScrollableContainer, Vertical
+from textual.screen import Screen
+from textual.widgets import Footer, Header, Label, Static
 
 
 class DetailScreen(Screen):
@@ -64,7 +64,7 @@ class DetailScreen(Screen):
                     "return_20d", "return_60d", "rs_20d_vs_vnindex", "rs_60d_vs_vnindex",
                     "distance_to_ma20", "distance_to_52w_high", "base_range_30d",
                     "close_strength", "volatility_20d"]
-            features = dict(zip(cols, row))
+            features = dict(zip(cols, row, strict=False))
 
             from vnalpha.scoring.score import compute_composite_score
             result = compute_composite_score(features)

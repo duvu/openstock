@@ -1,24 +1,22 @@
 """Core scoring logic: compute composite score for a symbol."""
 from __future__ import annotations
 
-from typing import Any, Optional
 import math
+from typing import Any, Optional
 
+from vnalpha.core.types import CandidateClass, SetupType
+from vnalpha.scoring.risk_flags import compute_risk_flags
 from vnalpha.scoring.rules import (
-    rule_price_above_ma20,
-    rule_price_above_ma50,
+    rule_base_compression,
+    rule_close_near_high,
     rule_ma20_above_ma50,
     rule_ma50_above_ma100,
-    rule_positive_ma20_slope,
-    rule_volume_expansion,
-    rule_close_near_high,
-    rule_rs_positive_20d,
-    rule_base_compression,
     rule_near_52w_high,
-    rule_not_extended_from_ma20,
+    rule_positive_ma20_slope,
+    rule_price_above_ma20,
+    rule_price_above_ma50,
+    rule_volume_expansion,
 )
-from vnalpha.scoring.risk_flags import compute_risk_flags
-from vnalpha.core.types import CandidateClass, SetupType, RiskFlag
 
 
 def _safe(v: Optional[float], default: float = 0.0) -> float:
@@ -136,30 +134,44 @@ def compute_composite_score(features: dict[str, Any]) -> dict[str, Any]:
 
 
 def _classify_candidate(score: float, features: dict[str, Any]) -> str:
-    """Map composite score + features to CandidateClass."""
-    if score >= 0.75:
-        return CandidateClass.STAGE2.value
-    elif score >= 0.55:
-        if rule_base_compression(features) and rule_near_52w_high(features):
-            return CandidateClass.STAGE1.value
-        if rule_volume_expansion(features, threshold=1.5):
-            return CandidateClass.BREAKOUT.value
-        return CandidateClass.MOMENTUM.value
-    elif score >= 0.35:
-        return CandidateClass.MEAN_REVERT.value
+    """Map composite score + features to canonical CandidateClass.
+
+    Canonical ontology:
+        STRONG_CANDIDATE  — score >= 0.70, strong setup or momentum
+        WATCH_CANDIDATE   — score >= 0.50, moderate setup
+        WEAK_CANDIDATE    — score >= 0.30, marginal
+        IGNORE            — score < 0.30, insufficient evidence
+    """
+    if score >= 0.70:
+        return CandidateClass.STRONG_CANDIDATE.value
+    elif score >= 0.50:
+        return CandidateClass.WATCH_CANDIDATE.value
+    elif score >= 0.30:
+        return CandidateClass.WEAK_CANDIDATE.value
     else:
-        return CandidateClass.STAGE1.value
+        return CandidateClass.IGNORE.value
 
 
 def _detect_setup(features: dict[str, Any]) -> str:
-    """Detect primary setup type from features."""
+    """Detect primary setup type from features using canonical SetupType values.
+
+    Canonical ontology:
+        ACCUMULATION_BASE       — tight base near 52w high
+        BREAKOUT_ATTEMPT        — near 52w high + volume expansion
+        MOMENTUM_CONTINUATION   — uptrend + price > MA
+        PULLBACK_TO_TREND       — uptrend + close near MA20
+        MEAN_REVERSION          — price below MA, volume expansion
+        UNCLASSIFIED            — no clear pattern
+    """
     if rule_base_compression(features) and rule_near_52w_high(features):
-        return SetupType.BASE_BREAKOUT.value
+        if rule_volume_expansion(features, threshold=1.5):
+            return SetupType.BREAKOUT_ATTEMPT.value
+        return SetupType.ACCUMULATION_BASE.value
     if rule_positive_ma20_slope(features) and rule_price_above_ma20(features):
         dist = _safe(features.get("distance_to_ma20"))
         if abs(dist) < 0.03:
-            return SetupType.PULLBACK_TO_MA.value
-        return SetupType.TREND_CONTINUATION.value
-    if rule_volume_expansion(features, threshold=2.0):
-        return SetupType.VOLUME_SURGE.value
-    return SetupType.TREND_CONTINUATION.value
+            return SetupType.PULLBACK_TO_TREND.value
+        return SetupType.MOMENTUM_CONTINUATION.value
+    if not rule_price_above_ma20(features) and rule_volume_expansion(features, threshold=1.5):
+        return SetupType.MEAN_REVERSION.value
+    return SetupType.UNCLASSIFIED.value

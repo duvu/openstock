@@ -1,17 +1,18 @@
 """Sync equity OHLCV from vnstock-service."""
 from __future__ import annotations
 
-from typing import Optional, List
+from typing import List, Optional
+
 import duckdb
 
 from vnalpha.clients.vnstock.client import VnstockClient
+from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.repositories import (
     create_ingestion_run,
     finish_ingestion_run,
-    insert_raw_ohlcv,
     get_symbols_active,
+    insert_raw_ohlcv,
 )
-from vnalpha.core.logging import get_logger
 
 logger = get_logger("ingestion.sync_ohlcv")
 

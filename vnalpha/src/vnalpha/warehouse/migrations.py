@@ -1,13 +1,14 @@
 """Warehouse migration runner."""
 from __future__ import annotations
 
-import duckdb
-from typing import Optional
 from pathlib import Path
+from typing import Optional
 
-from vnalpha.warehouse.schema import ALL_DDL
-from vnalpha.warehouse.connection import get_connection, in_memory_connection
+import duckdb
+
 from vnalpha.core.logging import get_logger
+from vnalpha.warehouse.connection import get_connection
+from vnalpha.warehouse.schema import ALL_DDL
 
 logger = get_logger("warehouse.migrations")
 

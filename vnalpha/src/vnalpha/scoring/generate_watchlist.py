@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import json
-from typing import Optional, List
+from typing import List, Optional
+
 import duckdb
 
-from vnalpha.scoring.score import compute_composite_score
 from vnalpha.core.logging import get_logger
+from vnalpha.scoring.score import compute_composite_score
+from vnalpha.warehouse.repositories import save_candidate_score
 
 logger = get_logger("scoring.generate_watchlist")
 
@@ -49,12 +51,14 @@ def score_universe(
 
     results = []
     for row in rows:
-        features = dict(zip(cols, row))
+        features = dict(zip(cols, row, strict=True))
         symbol = features.pop("symbol")
         date_val = features.pop("date")
         scored = compute_composite_score(features)
         scored["symbol"] = symbol
         scored["date"] = str(date_val)
+        # Persist to candidate_score table for full evidence trail
+        save_candidate_score(conn, symbol, str(date_val), scored)
         results.append(scored)
 
     results.sort(key=lambda x: x["score"], reverse=True)

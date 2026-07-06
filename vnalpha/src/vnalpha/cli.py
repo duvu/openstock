@@ -1,6 +1,7 @@
 """vnalpha CLI entry point."""
 from __future__ import annotations
 
+from datetime import date as _date
 from typing import Optional
 
 import typer
@@ -19,9 +20,9 @@ def sync_symbols_cmd(
     source: Optional[str] = typer.Option(None, "--source", help="Preferred provider"),
 ):
     """Sync symbol master from vnstock-service."""
+    from vnalpha.ingestion.sync_symbols import sync_symbols
     from vnalpha.warehouse.connection import get_connection
     from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.ingestion.sync_symbols import sync_symbols
     conn = get_connection()
     run_migrations(conn=conn)
     result = sync_symbols(conn, source=source)
@@ -37,9 +38,9 @@ def sync_ohlcv_cmd(
     source: Optional[str] = typer.Option(None, "--source"),
 ):
     """Sync OHLCV data from vnstock-service."""
+    from vnalpha.ingestion.sync_ohlcv import sync_ohlcv
     from vnalpha.warehouse.connection import get_connection
     from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.ingestion.sync_ohlcv import sync_ohlcv
     conn = get_connection()
     run_migrations(conn=conn)
     universe = symbols.split(",") if symbols else None
@@ -60,19 +61,29 @@ def build_canonical_cmd(
     interval: str = typer.Option("1D", "--interval"),
 ):
     """Build canonical OHLCV from raw data."""
-    from vnalpha.warehouse.connection import get_connection
     from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
+    from vnalpha.warehouse.connection import get_connection
     conn = get_connection()
     result = build_canonical_ohlcv(conn, symbol=symbol, interval=interval)
     typer.echo(f"Canonical build complete: {result['upserted']} rows")
 
 
 @build_app.command("features")
-def build_features(
-    date: str = typer.Option("today", help="Reference date (YYYY-MM-DD or 'today')."),
+def build_features_cmd(
+    date: str = typer.Option("today", "--date", help="Reference date (YYYY-MM-DD or 'today')."),
+    symbols: Optional[str] = typer.Option(None, "--symbols", help="Comma-separated symbols, default: all."),
+    benchmark: str = typer.Option("VNINDEX", "--benchmark", help="Benchmark symbol for relative strength."),
 ) -> None:
-    """Compute technical features for the given date."""
-    typer.echo("build features: not yet implemented")
+    """Compute technical features for all symbols on the given date."""
+    from vnalpha.features.build_features import build_features
+    from vnalpha.warehouse.connection import get_connection
+
+    target_date = str(_date.today()) if date == "today" else date
+    universe = symbols.split(",") if symbols else None
+
+    conn = get_connection()
+    result = build_features(conn, target_date=target_date, universe=universe, benchmark_symbol=benchmark)
+    typer.echo(f"Features built: {result['built']} symbols, skipped: {result['skipped']}")
 
 
 # ---------------------------------------------------------------------------
@@ -87,25 +98,87 @@ def init() -> None:
     from vnalpha.warehouse import migrations
 
     migrations.run_migrations()
+    typer.echo("Warehouse ready.")
 
 
 @app.command("score")
 def score(
-    date: str = typer.Option("today", help="Reference date (YYYY-MM-DD or 'today')."),
+    date: str = typer.Option("today", "--date", help="Reference date (YYYY-MM-DD or 'today')."),
+    symbols: Optional[str] = typer.Option(None, "--symbols", help="Comma-separated symbols to score."),
+    top_n: int = typer.Option(30, "--top-n", help="Maximum candidates in watchlist."),
+    min_score: float = typer.Option(0.40, "--min-score", help="Minimum composite score threshold."),
 ) -> None:
-    """Score candidate setups for the given date."""
-    typer.echo("score: not yet implemented")
+    """Score candidate research setups for the given date and generate the watchlist."""
+    from vnalpha.scoring.generate_watchlist import generate_watchlist
+    from vnalpha.warehouse.connection import get_connection
+
+    target_date = str(_date.today()) if date == "today" else date
+    universe = symbols.split(",") if symbols else None
+
+    conn = get_connection()
+    result = generate_watchlist(conn, date=target_date, universe=universe, top_n=top_n, min_score=min_score)
+    typer.echo(f"Scored {result['scored']} symbols — {result['saved']} candidates in watchlist for {target_date}")
 
 
 @app.command("watchlist")
 def watchlist(
-    date: str = typer.Option("today", help="Reference date (YYYY-MM-DD or 'today')."),
+    date: str = typer.Option("today", "--date", help="Reference date (YYYY-MM-DD or 'today')."),
 ) -> None:
-    """Show the daily watchlist for the given date."""
-    typer.echo("watchlist: not yet implemented")
+    """Show the daily research watchlist for the given date as a Rich table."""
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.repositories import get_watchlist as _get_watchlist
+
+    target_date = str(_date.today()) if date == "today" else date
+    conn = get_connection()
+    rows = _get_watchlist(conn, target_date)
+
+    if not rows:
+        typer.echo(f"No watchlist entries for {target_date}. Run 'vnalpha score --date {target_date}' first.")
+        return
+
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console()
+        table = Table(title=f"Research Candidates — {target_date}", show_lines=False)
+        table.add_column("#", style="dim", width=4)
+        table.add_column("Symbol", style="bold cyan", width=8)
+        table.add_column("Score", justify="right", width=7)
+        table.add_column("Class", width=18)
+        table.add_column("Setup", width=22)
+        table.add_column("Risk Flags", width=30)
+
+        import json as _json
+        for row in rows:
+            flags = _json.loads(row.get("risk_flags_json") or "[]")
+            table.add_row(
+                str(row["rank"]),
+                row["symbol"],
+                f"{row['score']:.3f}",
+                row.get("candidate_class", ""),
+                row.get("setup_type", ""),
+                ", ".join(flags) if flags else "—",
+            )
+        console.print(table)
+    except ImportError:
+        # Fallback if rich not available
+        typer.echo(f"{'#':<4} {'Symbol':<8} {'Score':>7}  {'Class':<18}  {'Setup'}")
+        typer.echo("-" * 65)
+        for row in rows:
+            typer.echo(f"{row['rank']:<4} {row['symbol']:<8} {row['score']:>7.3f}  {row.get('candidate_class',''):<18}  {row.get('setup_type','')}")
 
 
 @app.command("tui")
-def tui() -> None:
-    """Launch the interactive TUI watchlist."""
-    typer.echo("tui: not yet implemented")
+def tui(
+    date: Optional[str] = typer.Option(None, "--date", help="Reference date (YYYY-MM-DD). Default: today."),
+) -> None:
+    """Launch the interactive research TUI."""
+    try:
+        from vnalpha.tui.app import VnAlphaApp
+    except ImportError as err:
+        typer.echo("Error: 'textual' is required for the TUI. Install it with: pip install textual", err=True)
+        raise typer.Exit(code=1) from err
+
+    VnAlphaApp(date=date).run()
+

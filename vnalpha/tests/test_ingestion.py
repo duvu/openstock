@@ -1,16 +1,16 @@
 """Tests for ingestion jobs using mocks."""
-import pytest
-import httpx
-import respx
 from unittest.mock import MagicMock
 
+import httpx
+import pytest
+import respx
+
+from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
+from vnalpha.ingestion.sync_ohlcv import sync_ohlcv
+from vnalpha.ingestion.sync_symbols import sync_symbols
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.repositories import get_symbols_active
-from vnalpha.ingestion.sync_symbols import sync_symbols
-from vnalpha.ingestion.sync_ohlcv import sync_ohlcv
-from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
-
 
 MOCK_BASE = "http://127.0.0.1:6900"
 

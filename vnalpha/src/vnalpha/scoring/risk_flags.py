@@ -1,5 +1,6 @@
 """Risk flag detection for alpha candidates."""
 from __future__ import annotations
+
 from typing import Any, List
 
 from vnalpha.core.types import RiskFlag

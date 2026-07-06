@@ -3,8 +3,7 @@
 Ensures the library uses research-only language throughout.
 """
 import inspect
-import pytest
-
+import os
 
 FORBIDDEN_TERMS = ["buy signal", "sell signal", "buy order", "sell order", "portfolio", "investment advice", "place order", "execute order"]
 SOFT_FORBIDDEN = ["buy", "sell", "order", "recommend", "portfolio"]
@@ -13,9 +12,10 @@ SOFT_FORBIDDEN = ["buy", "sell", "order", "recommend", "portfolio"]
 def get_all_source_modules():
     """Return all importable vnalpha source modules."""
     import pkgutil
+
     import vnalpha
     modules = []
-    for importer, modname, ispkg in pkgutil.walk_packages(
+    for _importer, modname, _ispkg in pkgutil.walk_packages(
         path=vnalpha.__path__,
         prefix="vnalpha.",
         onerror=lambda x: None,
@@ -29,6 +29,18 @@ def get_all_source_modules():
     return modules
 
 
+def _walk_source_files(root_dir: str):
+    """Yield (rel_path, src_text) for all .py files under root_dir."""
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        # Skip __pycache__
+        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+        for fname in filenames:
+            if fname.endswith(".py"):
+                fpath = os.path.join(dirpath, fname)
+                with open(fpath, encoding="utf-8") as f:
+                    yield fpath, f.read()
+
+
 def test_no_hard_forbidden_terms():
     """No module contains hard-forbidden trading terms in string literals."""
     modules = get_all_source_modules()
@@ -39,6 +51,40 @@ def test_no_hard_forbidden_terms():
             continue
         for term in FORBIDDEN_TERMS:
             assert term not in src, f"Forbidden term '{term}' found in {modname}"
+
+
+def test_static_scan_source_files_for_forbidden_terms():
+    """Static file scan: no .py file under src/vnalpha contains hard-forbidden terms.
+
+    This catches files that cannot be inspected via importlib (e.g. tui modules
+    when textual is not installed).
+    """
+    src_root = os.path.join(os.path.dirname(__file__), "..", "src", "vnalpha")
+    violations = []
+    for fpath, src in _walk_source_files(src_root):
+        src_lower = src.lower()
+        for term in FORBIDDEN_TERMS:
+            if term in src_lower:
+                violations.append((fpath, term))
+
+    assert not violations, (
+        "Forbidden terms found in source files:\n"
+        + "\n".join(f"  {fp}: {term!r}" for fp, term in violations)
+    )
+
+
+def test_cli_help_uses_research_language():
+    """CLI help text uses research / watchlist / candidate language, not execution language."""
+    from typer.testing import CliRunner
+
+    from vnalpha.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["--help"])
+    src = result.output.lower()
+    execution_terms = ["place order", "execute order", "buy order", "sell order"]
+    for term in execution_terms:
+        assert term not in src, f"Forbidden execution term {term!r} in CLI help output"
 
 
 def test_candidate_output_includes_evidence():
@@ -62,16 +108,16 @@ def test_candidate_output_includes_evidence():
 
 def test_candidate_output_includes_lineage():
     """Watchlist save includes lineage_json."""
+    from vnalpha.scoring.generate_watchlist import save_watchlist
     from vnalpha.warehouse.connection import in_memory_connection
     from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.scoring.generate_watchlist import save_watchlist
 
     conn = in_memory_connection()
     run_migrations(conn=conn)
 
     candidates = [{
         "symbol": "FPT", "date": "2024-01-02", "score": 0.65,
-        "candidate_class": "STAGE2", "setup_type": "TREND_CONTINUATION",
+        "candidate_class": "WATCH_CANDIDATE", "setup_type": "MOMENTUM_CONTINUATION",
         "trend_score": 0.8, "relative_strength_score": 0.6,
         "volume_score": 0.7, "risk_flags": [],
     }]

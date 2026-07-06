@@ -1,22 +1,17 @@
 """Tests for the alpha scoring engine."""
-import pytest
-import math
 
+from vnalpha.core.types import RiskFlag
+from vnalpha.scoring.risk_flags import compute_risk_flags
 from vnalpha.scoring.rules import (
-    rule_price_above_ma20,
-    rule_ma20_above_ma50,
-    rule_volume_expansion,
     rule_base_compression,
-    rule_near_52w_high,
+    rule_price_above_ma20,
+    rule_volume_expansion,
 )
-from vnalpha.scoring.risk_flags import compute_risk_flags, detect_thin_volume, detect_high_atr
 from vnalpha.scoring.score import (
+    compute_composite_score,
     compute_trend_score,
     compute_volume_score,
-    compute_composite_score,
 )
-from vnalpha.core.types import RiskFlag
-
 
 STRONG_FEATURES = {
     "close": 100.0,
@@ -137,6 +132,30 @@ def test_composite_score_range():
     assert "risk_flags" in result
 
 
+def test_composite_score_uses_canonical_candidate_class():
+    """compute_composite_score returns canonical CandidateClass values."""
+    from vnalpha.core.types import CandidateClass, SetupType
+    canonical_classes = {c.value for c in CandidateClass}
+    canonical_setups = {s.value for s in SetupType}
+
+    for features in [STRONG_FEATURES, WEAK_FEATURES]:
+        result = compute_composite_score(features)
+        assert result["candidate_class"] in canonical_classes, (
+            f"Non-canonical candidate_class: {result['candidate_class']!r}"
+        )
+        assert result["setup_type"] in canonical_setups, (
+            f"Non-canonical setup_type: {result['setup_type']!r}"
+        )
+
+
+def test_strong_features_not_ignore():
+    """Strong features should not classify as IGNORE."""
+    result = compute_composite_score(STRONG_FEATURES)
+    assert result["candidate_class"] != "IGNORE", (
+        f"STRONG_FEATURES incorrectly classified as IGNORE (score={result['score']})"
+    )
+
+
 def test_composite_score_strong_beats_weak():
     strong_result = compute_composite_score(STRONG_FEATURES)
     weak_result = compute_composite_score(WEAK_FEATURES)
@@ -146,7 +165,7 @@ def test_composite_score_strong_beats_weak():
 
 
 def test_composite_score_handles_none_features():
-    empty_features = {k: None for k in STRONG_FEATURES}
+    empty_features = dict.fromkeys(STRONG_FEATURES)
     result = compute_composite_score(empty_features)
     assert 0.0 <= result["score"] <= 1.0
 
@@ -154,9 +173,9 @@ def test_composite_score_handles_none_features():
 # --- Watchlist integration ---
 
 def test_generate_watchlist():
+    from vnalpha.scoring.generate_watchlist import save_watchlist, score_universe
     from vnalpha.warehouse.connection import in_memory_connection
     from vnalpha.warehouse.migrations import run_migrations
-    from vnalpha.scoring.generate_watchlist import score_universe, save_watchlist
 
     conn = in_memory_connection()
     run_migrations(conn=conn)

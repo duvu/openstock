@@ -1,9 +1,11 @@
 """DuckDB warehouse connection management."""
 from __future__ import annotations
 
-import duckdb
 from pathlib import Path
 from typing import Optional
+
+import duckdb
+
 from vnalpha.core.config import get_config
 from vnalpha.core.logging import get_logger
 

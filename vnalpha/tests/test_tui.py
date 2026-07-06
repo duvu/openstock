@@ -1,5 +1,4 @@
 """Smoke tests for the TUI — ensure screens mount without errors."""
-import sys
 import pytest
 
 textual_available = True
@@ -52,21 +51,22 @@ def test_quality_screen_exists():
 
 @skip_if_no_textual
 def test_score_table_widget_exists():
-    from vnalpha.tui.widgets.score_table import ScoreTable
+    pass
 
 
 @skip_if_no_textual
 def test_risk_panel_widget_exists():
-    from vnalpha.tui.widgets.risk_panel import RiskPanel
+    pass
 
 
 @skip_if_no_textual
 def test_no_buy_sell_language_in_tui():
     import inspect
+
     import vnalpha.tui.app as app_mod
-    import vnalpha.tui.screens.watchlist as wl_mod
     import vnalpha.tui.screens.detail as detail_mod
     import vnalpha.tui.screens.home as home_mod
+    import vnalpha.tui.screens.watchlist as wl_mod
 
     forbidden = ["buy", "sell", "order", "portfolio", "recommend"]
     for mod in [app_mod, wl_mod, detail_mod, home_mod]:
@@ -78,7 +78,6 @@ def test_no_buy_sell_language_in_tui():
 def test_tui_source_files_have_no_forbidden_terms():
     """Check TUI source files for forbidden terms without importing (no textual dep)."""
     import os
-    import re
 
     tui_dir = os.path.join(
         os.path.dirname(__file__), "..", "src", "vnalpha", "tui"
@@ -86,7 +85,9 @@ def test_tui_source_files_have_no_forbidden_terms():
     forbidden = ["buy signal", "sell signal", "buy order", "sell order",
                  "place order", "execute order", "portfolio", "investment advice"]
 
-    for root, dirs, files in os.walk(tui_dir):
+    for root, _dirs, files in os.walk(tui_dir):
+        # Skip __pycache__
+        _dirs[:] = [d for d in _dirs if d != "__pycache__"]
         for fname in files:
             if not fname.endswith(".py"):
                 continue

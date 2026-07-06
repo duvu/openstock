@@ -1,16 +1,15 @@
 """Tests for the DuckDB warehouse."""
 import pytest
-import duckdb
-from vnalpha.warehouse.schema import ALL_DDL, SYMBOL_MASTER_DDL
-from vnalpha.warehouse.migrations import run_migrations
+
 from vnalpha.warehouse.connection import in_memory_connection
+from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.repositories import (
     create_ingestion_run,
     finish_ingestion_run,
-    upsert_symbol,
-    insert_raw_ohlcv,
     get_symbols_active,
     get_watchlist,
+    insert_raw_ohlcv,
+    upsert_symbol,
 )
 
 

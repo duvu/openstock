@@ -1,5 +1,6 @@
 """vnalpha shared types and enums."""
 from __future__ import annotations
+
 from enum import Enum
 from typing import TypeAlias
 
@@ -7,27 +8,41 @@ DateStr: TypeAlias = str  # YYYY-MM-DD
 
 
 class CandidateClass(str, Enum):
-    # Scoring engine v1 classes
+    """Canonical candidate classification values.
+
+    Research-only: used for watchlist filtering and display.
+    Do not use as trade signals.
+    """
+    # Canonical values (current)
+    STRONG_CANDIDATE = "STRONG_CANDIDATE"
+    WATCH_CANDIDATE = "WATCH_CANDIDATE"
+    WEAK_CANDIDATE = "WEAK_CANDIDATE"
+    IGNORE = "IGNORE"
+    # Legacy aliases (deprecated — kept for backward compat only, do not use in new code)
     STAGE1 = "STAGE1"
     STAGE2 = "STAGE2"
     BREAKOUT = "BREAKOUT"
     MOMENTUM = "MOMENTUM"
     MEAN_REVERT = "MEAN_REVERT"
-    # Legacy classes (kept for backward compat)
-    STRONG_CANDIDATE = "STRONG_CANDIDATE"
-    WATCH_CANDIDATE = "WATCH_CANDIDATE"
-    WEAK_CANDIDATE = "WEAK_CANDIDATE"
-    IGNORE = "IGNORE"
 
 
 class SetupType(str, Enum):
-    # Scoring engine v1 setup types
+    """Canonical setup-type classification values.
+
+    Describes the observed chart pattern for research purposes.
+    """
+    # Canonical values (current)
+    ACCUMULATION_BASE = "ACCUMULATION_BASE"
+    BREAKOUT_ATTEMPT = "BREAKOUT_ATTEMPT"
+    MOMENTUM_CONTINUATION = "MOMENTUM_CONTINUATION"
+    PULLBACK_TO_TREND = "PULLBACK_TO_TREND"
+    MEAN_REVERSION = "MEAN_REVERSION"
+    UNCLASSIFIED = "UNCLASSIFIED"
+    # Legacy aliases (deprecated — kept for backward compat only, do not use in new code)
     TREND_CONTINUATION = "TREND_CONTINUATION"
     BASE_BREAKOUT = "BASE_BREAKOUT"
     PULLBACK_TO_MA = "PULLBACK_TO_MA"
     VOLUME_SURGE = "VOLUME_SURGE"
-    # Legacy setup types (kept for backward compat)
-    ACCUMULATION_BASE = "ACCUMULATION_BASE"
     BASE_BREAKOUT_ATTEMPT = "BASE_BREAKOUT_ATTEMPT"
     PULLBACK_TO_MA20 = "PULLBACK_TO_MA20"
     RELATIVE_STRENGTH_LEADER = "RELATIVE_STRENGTH_LEADER"
