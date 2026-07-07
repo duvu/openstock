@@ -131,16 +131,27 @@ def append_chat_message(
 def list_chat_messages(
     conn: duckdb.DuckDBPyConnection,
     chat_session_id: str,
+    *,
+    include_hidden: bool = False,
 ) -> list[dict]:
-    """Return all messages for a session ordered by created_at ASC."""
+    """Return messages for a session ordered by created_at ASC.
+
+    By default only visible messages are returned (is_visible IS NULL OR is_visible = true).
+    Pass include_hidden=True to return all messages including soft-deleted ones.
+    """
+    visibility_clause = (
+        "" if include_hidden else "AND (is_visible IS NULL OR is_visible = true)"
+    )
     rows = conn.execute(
-        """
+        f"""
         SELECT
             chat_message_id, chat_session_id, created_at, role, content,
             message_type, assistant_session_id, research_session_id,
             tool_trace_ids_json, plan_json, metadata_json
         FROM chat_message
         WHERE chat_session_id = ?
+          AND role != 'trace'
+        {visibility_clause}
         ORDER BY created_at ASC
         """,
         [chat_session_id],
@@ -167,17 +178,37 @@ def list_chat_messages(
 def clear_visible_messages(
     conn: duckdb.DuckDBPyConnection,
     chat_session_id: str,
+    *,
+    forget: bool = False,
 ) -> int:
-    """Delete all messages for a session. Returns count of deleted rows."""
+    """Hide or delete visible messages for a session.
+
+    When *forget* is False (default), sets ``is_visible=false`` and records
+    ``hidden_at`` on all currently visible rows — audit transcript is preserved.
+    When *forget* is True, permanently deletes all messages for the session.
+
+    Returns the count of affected rows.
+    """
     row = conn.execute(
-        "SELECT COUNT(*) FROM chat_message WHERE chat_session_id = ?",
+        "SELECT COUNT(*) FROM chat_message WHERE chat_session_id = ? AND (is_visible IS NULL OR is_visible = true)",
         [chat_session_id],
     ).fetchone()
     count = row[0] if row else 0
-    conn.execute(
-        "DELETE FROM chat_message WHERE chat_session_id = ?",
-        [chat_session_id],
-    )
+    if forget:
+        conn.execute(
+            "DELETE FROM chat_message WHERE chat_session_id = ?",
+            [chat_session_id],
+        )
+    else:
+        now = _now_utc_iso()
+        conn.execute(
+            """
+            UPDATE chat_message
+            SET is_visible = false, hidden_at = ?
+            WHERE chat_session_id = ? AND (is_visible IS NULL OR is_visible = true)
+            """,
+            [now, chat_session_id],
+        )
     return count
 
 

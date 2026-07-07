@@ -49,6 +49,7 @@ def run_migrations(
     _migrate_candidate_outcome_columns(conn)
     _migrate_aggregate_outcome_columns(conn)
     _migrate_outcome_evaluation_run_columns(conn)
+    _migrate_chat_message_visibility_columns(conn)
     logger.info("Warehouse migrations complete.")
 
 
@@ -132,3 +133,13 @@ def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
 
 def _migrate_outcome_evaluation_run_columns(conn: duckdb.DuckDBPyConnection) -> None:
     """No-op: outcome_evaluation_run was created fresh in Phase 6 DDL."""
+
+
+def _migrate_chat_message_visibility_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add is_visible and hidden_at columns to chat_message for /clear audit-preserve behavior."""
+    conn.execute(
+        "ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS is_visible BOOLEAN DEFAULT TRUE"
+    )
+    conn.execute(
+        "ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ"
+    )
