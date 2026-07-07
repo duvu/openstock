@@ -1,0 +1,28 @@
+# openstock-data-platform.service
+# Manages the long-running Docker data platform (vnstock-service).
+#
+# Install:  sudo cp packaging/systemd/openstock-data-platform.service /etc/systemd/system/
+#           sudo systemctl daemon-reload
+# Enable:   sudo systemctl enable --now openstock-data-platform
+# Start:    sudo systemctl start openstock-data-platform
+# Stop:     sudo systemctl stop openstock-data-platform
+# Status:   sudo systemctl status openstock-data-platform
+
+[Unit]
+Description=OpenStock data platform
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/openstock
+EnvironmentFile=-/etc/openstock/openstock.env
+ExecStartPre=/usr/bin/install -d -m 0755 /var/lib/openstock/warehouse
+ExecStartPre=/usr/bin/install -d -m 0755 /var/lib/openstock/vnstock-config
+ExecStart=/usr/bin/docker compose up -d vnstock-service
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
