@@ -5,8 +5,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # events module — unit tests
 # ---------------------------------------------------------------------------
@@ -44,7 +42,11 @@ def test_stage_to_style_returns_correct_mapping():
 
 def test_format_stage_event_tool_start():
     """TOOL_START events render as '⟳ {tool_name} running...'."""
-    from vnalpha.chat.events import AssistantStage, AssistantStageEvent, format_stage_event
+    from vnalpha.chat.events import (
+        AssistantStage,
+        AssistantStageEvent,
+        format_stage_event,
+    )
 
     event = AssistantStageEvent(
         stage=AssistantStage.TOOL_START,
@@ -56,7 +58,11 @@ def test_format_stage_event_tool_start():
 
 def test_format_stage_event_tool_success():
     """TOOL_SUCCESS events render as '✓ {tool_name} success {elapsed_ms}ms'."""
-    from vnalpha.chat.events import AssistantStage, AssistantStageEvent, format_stage_event
+    from vnalpha.chat.events import (
+        AssistantStage,
+        AssistantStageEvent,
+        format_stage_event,
+    )
 
     event = AssistantStageEvent(
         stage=AssistantStage.TOOL_SUCCESS,
@@ -69,7 +75,11 @@ def test_format_stage_event_tool_success():
 
 def test_format_stage_event_tool_failed():
     """TOOL_FAILED events render as '✗ {tool_name} failed {elapsed_ms}ms'."""
-    from vnalpha.chat.events import AssistantStage, AssistantStageEvent, format_stage_event
+    from vnalpha.chat.events import (
+        AssistantStage,
+        AssistantStageEvent,
+        format_stage_event,
+    )
 
     event = AssistantStageEvent(
         stage=AssistantStage.TOOL_FAILED,
@@ -82,7 +92,11 @@ def test_format_stage_event_tool_failed():
 
 def test_format_stage_event_classifying():
     """CLASSIFYING events render as '⋯ classifying...'."""
-    from vnalpha.chat.events import AssistantStage, AssistantStageEvent, format_stage_event
+    from vnalpha.chat.events import (
+        AssistantStage,
+        AssistantStageEvent,
+        format_stage_event,
+    )
 
     event = AssistantStageEvent(stage=AssistantStage.CLASSIFYING, text="")
     assert format_stage_event(event) == "⋯ classifying..."
@@ -90,7 +104,11 @@ def test_format_stage_event_classifying():
 
 def test_format_stage_event_planning():
     """PLANNING events render as '⋯ planning...'."""
-    from vnalpha.chat.events import AssistantStage, AssistantStageEvent, format_stage_event
+    from vnalpha.chat.events import (
+        AssistantStage,
+        AssistantStageEvent,
+        format_stage_event,
+    )
 
     event = AssistantStageEvent(stage=AssistantStage.PLANNING, text="")
     assert format_stage_event(event) == "⋯ planning..."
@@ -98,7 +116,11 @@ def test_format_stage_event_planning():
 
 def test_format_stage_event_synthesizing():
     """SYNTHESIZING events render as '⋯ synthesizing...'."""
-    from vnalpha.chat.events import AssistantStage, AssistantStageEvent, format_stage_event
+    from vnalpha.chat.events import (
+        AssistantStage,
+        AssistantStageEvent,
+        format_stage_event,
+    )
 
     event = AssistantStageEvent(stage=AssistantStage.SYNTHESIZING, text="")
     assert format_stage_event(event) == "⋯ synthesizing..."
@@ -106,7 +128,11 @@ def test_format_stage_event_synthesizing():
 
 def test_format_stage_event_final_returns_text():
     """FINAL events return event.text directly."""
-    from vnalpha.chat.events import AssistantStage, AssistantStageEvent, format_stage_event
+    from vnalpha.chat.events import (
+        AssistantStage,
+        AssistantStageEvent,
+        format_stage_event,
+    )
 
     answer = "VPB closed at 18,500 VND."
     event = AssistantStageEvent(stage=AssistantStage.FINAL, text=answer)
@@ -173,12 +199,18 @@ def test_handle_natural_language_emits_classifying_and_final():
     assert "dim cyan" in styles, f"Expected 'dim cyan' (CLASSIFYING) in {styles}"
     assert "bold" in styles, f"Expected 'bold' (FINAL) in {styles}"
 
-    classifying_idx = next(i for i, (s, t) in enumerate(messages) if s == "dim cyan" and "classifying" in t)
-    final_idx = next(i for i, (s, t) in enumerate(messages) if s == "bold" and "VPB" in t)
+    classifying_idx = next(
+        i for i, (s, t) in enumerate(messages) if s == "dim cyan" and "classifying" in t
+    )
+    final_idx = next(
+        i for i, (s, t) in enumerate(messages) if s == "bold" and "VPB" in t
+    )
     assert classifying_idx < final_idx, "CLASSIFYING must precede FINAL"
 
     # The final message should contain the answer summary
-    assert any("VPB price is 18,500." in t for t in texts), f"Answer summary not found in {texts}"
+    assert any("VPB price is 18,500." in t for t in texts), (
+        f"Answer summary not found in {texts}"
+    )
 
 
 def test_handle_natural_language_emits_planning_and_synthesizing():

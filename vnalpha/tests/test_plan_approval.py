@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
-
-from vnalpha.assistant.models import AssistantAnswer, AssistantPlan, RefusalMessage, ToolPlanStep
+from vnalpha.assistant.models import (
+    AssistantAnswer,
+    AssistantPlan,
+    ToolPlanStep,
+)
 from vnalpha.chat.modes import (
     SAFE_READ_ONLY_TOOLS,
     ExecutionMode,
     format_plan_preview,
     is_safe_read_only_plan,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

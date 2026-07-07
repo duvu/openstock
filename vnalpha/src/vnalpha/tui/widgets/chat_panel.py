@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 try:
     from textual.app import ComposeResult
     from textual.binding import Binding
-    from textual.widgets import Input, RichLog, Widget
+    from textual.widget import Widget
+    from textual.widgets import Input, RichLog
 
     _TEXTUAL_AVAILABLE = True
 except ImportError:
@@ -288,8 +289,11 @@ if _TEXTUAL_AVAILABLE:
 
         def _set_busy(self, busy: bool) -> None:
             self._busy = busy
-            inp = self.query_one("#chat-input", Input)
-            inp.disabled = busy
+            try:
+                inp = self.query_one("#chat-input", Input)
+                inp.disabled = busy
+            except Exception:
+                pass
 
 else:
 

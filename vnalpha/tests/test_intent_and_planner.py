@@ -1,4 +1,5 @@
 """Tests for Phase 5.9 intent classifier and plan builder."""
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,10 @@ from vnalpha.assistant.planner import TOOL_ALLOWLIST, PlanBuilder, _validate_pla
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _fake_response(intent: str, confidence: float = 0.9, entities: dict | None = None, **kwargs) -> tuple[str, dict]:
+
+def _fake_response(
+    intent: str, confidence: float = 0.9, entities: dict | None = None, **kwargs
+) -> tuple[str, dict]:
     payload = {
         "intent": intent,
         "confidence": confidence,
@@ -30,7 +34,9 @@ def _fake_response(intent: str, confidence: float = 0.9, entities: dict | None =
     return json.dumps(payload), {}
 
 
-def _make_classifier(responses: list[tuple[str, dict]] | None = None) -> IntentClassifier:
+def _make_classifier(
+    responses: list[tuple[str, dict]] | None = None,
+) -> IntentClassifier:
     return IntentClassifier(FakeLLMClient(responses))
 
 
@@ -41,6 +47,7 @@ def _make_intent(intent: str, entities: dict | None = None) -> IntentResult:
 # ===========================================================================
 # Intent classifier tests
 # ===========================================================================
+
 
 class TestDeterministicPrecheck:
     def test_deterministic_precheck_buy_refused(self):
@@ -122,9 +129,11 @@ class TestIntentClassifier:
 
     def test_llm_invalid_json_raises_classification_error(self):
         fake = FakeLLMClient()
+
         # Override chat to return invalid JSON
         def bad_chat(messages, response_schema=None, *, stage="unknown"):
             return "not valid json {{{{", {}
+
         fake.chat = bad_chat  # type: ignore[method-assign]
         classifier = IntentClassifier(fake)
         with pytest.raises(IntentClassificationError, match="Invalid JSON"):
@@ -142,6 +151,7 @@ class TestIntentClassifier:
 # ===========================================================================
 # Plan builder tests
 # ===========================================================================
+
 
 class TestPlanBuilder:
     def setup_method(self):
@@ -174,7 +184,9 @@ class TestPlanBuilder:
         """Multi-symbol compare passes full symbols list to get_many_status."""
         intent = _make_intent("compare_symbols", {"symbols": ["FPT", "VNM", "HPG"]})
         plan = self.builder.build(intent)
-        quality_step = next(s for s in plan.steps if s.tool_name == "quality.get_many_status")
+        quality_step = next(
+            s for s in plan.steps if s.tool_name == "quality.get_many_status"
+        )
         assert quality_step.arguments.get("symbols") == ["FPT", "VNM", "HPG"]
 
     def test_plan_explain_has_three_steps(self):
@@ -203,7 +215,9 @@ class TestPlanBuilder:
         assert plan.steps[0].tool_name == "history.list_sessions"
 
     def test_plan_note_tool_name(self):
-        intent = _make_intent("create_research_note", {"symbol": "FPT", "note_text": "Good setup"})
+        intent = _make_intent(
+            "create_research_note", {"symbol": "FPT", "note_text": "Good setup"}
+        )
         plan = self.builder.build(intent)
         assert len(plan.steps) == 1
         assert plan.steps[0].tool_name == "note.create"
@@ -251,7 +265,9 @@ class TestPlanBuilder:
         assert preview.startswith("[REFUSED]")
 
     def test_plan_filter_candidates(self):
-        intent = _make_intent("filter_candidates", {"filters": {"class": "STRONG_CANDIDATE"}})
+        intent = _make_intent(
+            "filter_candidates", {"filters": {"class": "STRONG_CANDIDATE"}}
+        )
         plan = self.builder.build(intent)
         assert len(plan.steps) == 1
         assert plan.steps[0].tool_name == "watchlist.filter"
@@ -265,9 +281,15 @@ class TestPlanBuilder:
     def test_plan_all_steps_in_allowlist(self):
         """Every non-refusal plan step must use an allowlisted tool."""
         for intent_name in [
-            "scan_candidates", "filter_candidates", "compare_symbols",
-            "explain_symbol", "review_quality", "show_lineage",
-            "summarize_watchlist", "create_research_note", "show_history",
+            "scan_candidates",
+            "filter_candidates",
+            "compare_symbols",
+            "explain_symbol",
+            "review_quality",
+            "show_lineage",
+            "summarize_watchlist",
+            "create_research_note",
+            "show_history",
         ]:
             intent = _make_intent(intent_name)
             plan = self.builder.build(intent)
@@ -290,7 +312,9 @@ class TestPlanBuilder:
         assert len(plan.refusal_reason) > 0
 
     def test_plan_refusal_custom_reason(self):
-        intent = _make_intent("unsupported_or_unsafe", {"reason": "Trading not allowed"})
+        intent = _make_intent(
+            "unsupported_or_unsafe", {"reason": "Trading not allowed"}
+        )
         plan = self.builder.build(intent)
         assert plan.refusal_reason == "Trading not allowed"
 
