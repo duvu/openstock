@@ -53,6 +53,7 @@ class CommandScreen(Screen):
             try:
                 from vnalpha.warehouse.connection import get_connection
                 from vnalpha.warehouse.migrations import run_migrations
+
                 conn = get_connection()
                 run_migrations(conn=conn)
             except Exception:

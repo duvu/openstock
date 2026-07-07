@@ -9,6 +9,7 @@ import pytest
 
 try:
     import textual  # noqa: F401
+
     HAS_TEXTUAL = True
 except ImportError:
     HAS_TEXTUAL = False
@@ -20,10 +21,12 @@ skip_if_no_textual = pytest.mark.skipif(not HAS_TEXTUAL, reason="textual not ins
 class TestCommandScreenSmoke:
     def test_command_screen_imports(self):
         from vnalpha.tui.screens.command import CommandScreen
+
         assert CommandScreen is not None
 
     def test_command_screen_instantiate(self):
         from vnalpha.tui.screens.command import CommandScreen
+
         screen = CommandScreen(target_date="2026-07-06")
         assert screen.target_date == "2026-07-06"
 
@@ -32,20 +35,24 @@ class TestCommandScreenSmoke:
 class TestCommandWidgets:
     def test_command_input_widget_imports(self):
         from vnalpha.tui.widgets.command_input import CommandInput
+
         assert CommandInput is not None
 
     def test_command_result_panel_imports(self):
         from vnalpha.tui.widgets.command_result import CommandResultPanel
+
         assert CommandResultPanel is not None
 
     def test_app_has_command_binding(self):
         """TUI app must expose 'c' binding for command workspace."""
         from vnalpha.tui.app import VnAlphaApp
+
         binding_keys = [b.key for b in VnAlphaApp.BINDINGS]
         assert "c" in binding_keys, "Missing 'c' binding for command workspace"
 
     def test_app_action_show_commands_exists(self):
         from vnalpha.tui.app import VnAlphaApp
+
         assert hasattr(VnAlphaApp, "action_show_commands")
 
 
@@ -54,29 +61,44 @@ class TestCommandWidgetsStatic:
 
     def test_command_screen_in_tui_dir(self):
         from pathlib import Path
-        screens_dir = Path(__file__).parent.parent / "src" / "vnalpha" / "tui" / "screens"
+
+        screens_dir = (
+            Path(__file__).parent.parent / "src" / "vnalpha" / "tui" / "screens"
+        )
         assert (screens_dir / "command.py").exists()
 
     def test_command_input_widget_in_widgets_dir(self):
         from pathlib import Path
-        widgets_dir = Path(__file__).parent.parent / "src" / "vnalpha" / "tui" / "widgets"
+
+        widgets_dir = (
+            Path(__file__).parent.parent / "src" / "vnalpha" / "tui" / "widgets"
+        )
         assert (widgets_dir / "command_input.py").exists()
         assert (widgets_dir / "command_result.py").exists()
 
     def test_command_screen_language_boundary(self):
         """CommandScreen must not contain trading language."""
         from pathlib import Path
+
         source = (
-            Path(__file__).parent.parent / "src" / "vnalpha" / "tui" / "screens" / "command.py"
+            Path(__file__).parent.parent
+            / "src"
+            / "vnalpha"
+            / "tui"
+            / "screens"
+            / "command.py"
         ).read_text()
         forbidden = ["buy", "sell", "order", "portfolio", "broker", "position", "trade"]
         for word in forbidden:
-            assert word not in source.lower(), f"Forbidden word '{word}' found in command.py"
+            assert word not in source.lower(), (
+                f"Forbidden word '{word}' found in command.py"
+            )
 
     def test_textual_renderer_returns_string(self):
         """textual_renderer.result_to_markup must return a string."""
         from vnalpha.commands.models import CommandResult
         from vnalpha.commands.renderers.textual_renderer import result_to_markup
+
         result = CommandResult(status="SUCCESS", title="test", summary="ok")
         markup = result_to_markup(result)
         assert isinstance(markup, str)
@@ -90,6 +112,7 @@ class TestCommandWidgetsStatic:
 
         from vnalpha.commands.models import CommandResult
         from vnalpha.commands.renderers.rich_renderer import render_result
+
         result = CommandResult(status="SUCCESS", title="test", summary="works")
         buf = StringIO()
         console = Console(file=buf, highlight=False)

@@ -9,8 +9,8 @@ from vnalpha.core.dates import resolve_date
 try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
-    from textual.containers import Vertical
     from textual.message import Message
+    from textual.widgets import ContentSwitcher
 
     from vnalpha.tui.screens.assistant import AssistantScreen
     from vnalpha.tui.screens.command import CommandScreen
@@ -38,8 +38,14 @@ if _TEXTUAL_AVAILABLE:
         CSS_PATH = None  # inline styles only for portability
 
         CSS = """
-        VnAlphaApp > Vertical {
-            height: 1fr;
+        Screen {
+            layout: vertical;
+        }
+        #main-workspace {
+            height: 7fr;
+        }
+        #chat-panel {
+            height: 3fr;
         }
         """
 
@@ -57,6 +63,8 @@ if _TEXTUAL_AVAILABLE:
             Binding("q", "quit", "Quit"),
             Binding("ctrl+backslash", "toggle_chat", "Toggle chat"),
             Binding("ctrl+slash", "focus_chat", "Focus chat"),
+            Binding("ctrl+up", "resize_chat_bigger", "Bigger chat", show=False),
+            Binding("ctrl+down", "resize_chat_smaller", "Smaller chat", show=False),
             Binding("escape", "cancel_pending_plan", "Cancel plan", show=False),
         ]
 
@@ -65,35 +73,48 @@ if _TEXTUAL_AVAILABLE:
             self.target_date: str = resolve_date(date)
 
         def compose(self) -> ComposeResult:
-            """Yield screen area (70%) then persistent ChatPanel (30%)."""
-            with Vertical():
-                yield ChatPanel(target_date=self.target_date, id="chat-panel")
+            """Yield ContentSwitcher workspace area then persistent ChatPanel."""
+            with ContentSwitcher(id="main-workspace", initial="home"):
+                yield HomeScreen(id="home")
+                yield WatchlistScreen(target_date=self.target_date, id="watchlist")
+                yield CommandScreen(target_date=self.target_date, id="commands")
+                yield AssistantScreen(target_date=self.target_date, id="assistant")
+                yield RejectedScreen(target_date=self.target_date, id="rejected")
+                yield QualityScreen(id="quality")
+                yield OutcomeScreen(target_date=self.target_date, id="outcomes")
+            yield ChatPanel(target_date=self.target_date, id="chat-panel")
 
-        def on_mount(self) -> None:
-            self.push_screen(WatchlistScreen(target_date=self.target_date))
+        def _switch_to(self, screen_id: str) -> None:
+            """Switch the main-workspace ContentSwitcher to the given screen id."""
+            try:
+                switcher = self.query_one("#main-workspace", ContentSwitcher)
+                switcher.current = screen_id
+            except Exception:
+                pass
 
         def action_show_home(self) -> None:
-            self.push_screen(HomeScreen())
+            self.query_one("#main-workspace", ContentSwitcher).current = "home"
 
         def action_show_watchlist(self) -> None:
-            self.push_screen(WatchlistScreen(target_date=self.target_date))
+            self.query_one("#main-workspace", ContentSwitcher).current = "watchlist"
 
         def action_show_commands(self) -> None:
-            self.push_screen(CommandScreen(target_date=self.target_date))
+            self.query_one("#main-workspace", ContentSwitcher).current = "commands"
 
         def action_show_assistant(self) -> None:
-            self.push_screen(AssistantScreen(target_date=self.target_date))
+            self.query_one("#main-workspace", ContentSwitcher).current = "assistant"
 
         def action_show_rejected(self) -> None:
-            self.push_screen(RejectedScreen(target_date=self.target_date))
+            self.query_one("#main-workspace", ContentSwitcher).current = "rejected"
 
         def action_show_quality(self) -> None:
-            self.push_screen(QualityScreen())
+            self.query_one("#main-workspace", ContentSwitcher).current = "quality"
 
         def action_show_outcomes(self) -> None:
-            self.push_screen(OutcomeScreen(target_date=self.target_date))
+            self.query_one("#main-workspace", ContentSwitcher).current = "outcomes"
 
         def show_detail(self, symbol: str) -> None:
+            """Push a detail screen over the current workspace (overlay)."""
             self.push_screen(DetailScreen(symbol=symbol, target_date=self.target_date))
 
         def action_toggle_chat(self) -> None:
@@ -105,6 +126,14 @@ if _TEXTUAL_AVAILABLE:
             """Focus the chat input widget."""
             panel = self.query_one("#chat-panel", ChatPanel)
             panel.action_focus_input()
+
+        def action_resize_chat_bigger(self) -> None:
+            """Increase ChatPanel relative height."""
+            pass  # CSS height adjustment is cosmetic; no-op for now
+
+        def action_resize_chat_smaller(self) -> None:
+            """Decrease ChatPanel relative height."""
+            pass  # CSS height adjustment is cosmetic; no-op for now
 
         def action_cancel_pending_plan(self) -> None:
             """Post PlanCancelRequested message so subscribers can cancel plans."""
@@ -123,7 +152,7 @@ if _TEXTUAL_AVAILABLE:
 else:
 
     class _FallbackBinding:
-        def __init__(self, key: str, action: str, description: str) -> None:
+        def __init__(self, key: str, action: str, description: str, **kwargs) -> None:
             self.key = key
             self.action = action
             self.description = description
@@ -144,6 +173,9 @@ else:
             _FallbackBinding("q", "quit", "Quit"),
             _FallbackBinding("ctrl+backslash", "toggle_chat", "Toggle chat"),
             _FallbackBinding("ctrl+slash", "focus_chat", "Focus chat"),
+            _FallbackBinding("ctrl+up", "resize_chat_bigger", "Bigger chat"),
+            _FallbackBinding("ctrl+down", "resize_chat_smaller", "Smaller chat"),
+            _FallbackBinding("escape", "cancel_pending_plan", "Cancel plan"),
         ]
 
         def __init__(self, date: Optional[str] = None, **kwargs):
