@@ -11,6 +11,7 @@ from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.schema import (
     ALL_DDL,
+    ALL_DDL_PHASE510,
     ALL_DDL_PHASE6,
     ALL_DDL_PHASE58,
     ALL_DDL_PHASE59,
@@ -40,6 +41,8 @@ def run_migrations(
     for ddl in ALL_DDL_PHASE59:
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE6:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_PHASE510:
         conn.execute(ddl)
     _migrate_feature_snapshot_columns(conn)
     _migrate_rejected_symbol_columns(conn)

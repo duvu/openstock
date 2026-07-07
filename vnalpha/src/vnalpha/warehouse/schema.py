@@ -398,4 +398,35 @@ ALL_DDL_PHASE6 = [
     RISK_FLAG_PERFORMANCE_DDL,
 ]
 
-ALL_DDL_COMBINED = ALL_DDL + ALL_DDL_PHASE58 + ALL_DDL_PHASE59 + ALL_DDL_PHASE6
+CHAT_SESSION_DDL = """
+CREATE TABLE IF NOT EXISTS chat_session (
+    chat_session_id  VARCHAR PRIMARY KEY,
+    started_at       TIMESTAMPTZ NOT NULL,
+    updated_at       TIMESTAMPTZ,
+    status           VARCHAR NOT NULL DEFAULT 'active',
+    surface          VARCHAR NOT NULL DEFAULT 'tui-chat',
+    target_date      VARCHAR,
+    title            VARCHAR,
+    context_json     VARCHAR
+)
+"""
+
+CHAT_MESSAGE_DDL = """
+CREATE TABLE IF NOT EXISTS chat_message (
+    chat_message_id       VARCHAR PRIMARY KEY,
+    chat_session_id       VARCHAR NOT NULL,
+    created_at            TIMESTAMPTZ NOT NULL,
+    role                  VARCHAR NOT NULL,
+    content               VARCHAR NOT NULL,
+    message_type          VARCHAR NOT NULL DEFAULT 'plain_text',
+    assistant_session_id  VARCHAR,
+    research_session_id   VARCHAR,
+    tool_trace_ids_json   VARCHAR,
+    plan_json             VARCHAR,
+    metadata_json         VARCHAR
+)
+"""
+
+ALL_DDL_PHASE510 = [CHAT_SESSION_DDL, CHAT_MESSAGE_DDL]
+
+ALL_DDL_COMBINED = ALL_DDL + ALL_DDL_PHASE58 + ALL_DDL_PHASE59 + ALL_DDL_PHASE6 + ALL_DDL_PHASE510
