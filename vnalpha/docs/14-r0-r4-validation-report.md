@@ -15,6 +15,10 @@
 | R2 CI checks | ✅ PASS | 16 OK, 1 WARN, 0 FAIL | WARN = systemd-analyze on timer (informational) |
 | R4 chat tests | ✅ PASS | 80 passed | session bootstrap, persistence, permissions, trace, clear |
 | Lint | ✅ PASS | 0 errors | ruff check + ruff format |
+| `make install-vnalpha` | ✅ PASS | — | uv pip install -e vnalpha/ exits 0 |
+| `docker compose config` | ✅ PASS | — | Parses cleanly, exit 0 |
+| Package build (`make build-vnalpha-deb`) | ⏸ DEFERRED | — | SSL error on nexus.x51.vn; requires deployment host access |
+| Manual deployed-host smoke | ⏸ DEFERRED | — | Documented in operator runbook §Fresh-host checklist |
 
 ---
 
@@ -113,6 +117,32 @@ $ ruff format --check .
 174 files already formatted
 ```
 
+### make install-vnalpha
+
+```
+$ make install-vnalpha
+uv pip install -e vnalpha/ --python vnalpha/.venv/bin/python || pip install -e vnalpha/
+Resolved 30 packages in 1.57s
+Built vnalpha @ file:///home/beou/IdeaProjects/openstock/vnalpha
+Prepared 1 package in 2.84s
+Installed 1 package in 0.90ms
+~ vnalpha==0.1.0 (from file:///home/beou/IdeaProjects/openstock/vnalpha)
+```
+
+### docker compose config
+
+```
+$ docker compose config
+name: openstock
+services:
+  vnstock-service:
+    build:
+      context: /home/beou/IdeaProjects/openstock/vnstock
+      dockerfile: Dockerfile
+    ...
+(exit 0)
+```
+
 ---
 
 ## Deferred Items (R5+)
@@ -124,6 +154,17 @@ The following items are scoped to R5+ and are **not** part of this validation:
 - Pattern engine backtesting (R5)
 - AI explanation generation with real LLM responses (R5)
 - Production deployment to worker-z440 (separate deploy runbook)
+
+### Explicitly deferred validation gates
+
+| Gate | Reason | Evidence |
+|------|--------|----------|
+| 6.9 Package build/install | Fails due to SSL error on `nexus.x51.vn` in this environment; requires internal Nexus access on deployment host | `make build-vnalpha-deb` fails with `SSLError` on setuptools fetch |
+| 6.10 Manual deployed-host `openstock-verify` | Requires running deployment on worker-z440 | See `12-operator-runbook.md` fresh-host checklist |
+| 6.11 Manual backup validation | Requires running deployment on worker-z440 | See `12-operator-runbook.md` |
+| 6.12 TUI manual smoke | Requires physical terminal with display | See `12-operator-runbook.md` |
+| 6.13 ChatPanel manual smoke | Requires running TUI with display | See `12-operator-runbook.md` |
+| 3.5.x Fresh-host steps | Steps documented in runbook; not executable in CI | See `12-operator-runbook.md` §Fresh-host setup checklist |
 
 ---
 

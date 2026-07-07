@@ -121,6 +121,62 @@ systemctl status openstock-daily-pipeline.service
 journalctl -u openstock-daily-pipeline --since today
 ```
 
+## Fresh-host setup checklist
+
+Use this checklist when deploying to a new machine or after a clean OS reinstall.
+
+### Prerequisites
+
+- Docker Engine installed and running
+- `uv` installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- Repository cloned: `git clone <repo> ~/IdeaProjects/openstock && cd ~/IdeaProjects/openstock`
+
+### Step-by-step
+
+```bash
+# 1. Verify Docker Compose config parses cleanly
+docker compose config
+
+# 2. Start vnstock-service
+docker compose up -d vnstock-service
+
+# 3. Create the vnalpha virtualenv and install
+cd vnalpha && uv venv .venv && cd ..
+make install-vnalpha
+
+# 4. Install packaging scripts
+sudo cp packaging/scripts/openstock-* /usr/local/bin/
+sudo chmod +x /usr/local/bin/openstock-*
+
+# 5. Run static CI checks (does not require network or running services)
+openstock-verify --ci
+
+# 6. Run the pipeline for the first time (requires vnstock-service running)
+openstock-run-pipeline
+
+# 7. Verify workspace integrity after first run
+openstock-verify
+
+# 8. Take an initial backup
+openstock-backup-warehouse
+```
+
+### Expected results
+
+| Step | Expected output |
+|------|----------------|
+| `docker compose config` | Prints service config, exit 0 |
+| `docker compose up -d vnstock-service` | Container starts, `docker ps` shows healthy |
+| Worker `init` (first pipeline run) | DB created at `~/.vnalpha/warehouse.duckdb` |
+| Pipeline wrapper | 7-step run completes, exit 0 |
+| `openstock-verify` | `[OK]` for all checks |
+| `openstock-backup-warehouse` | `.duckdb.gz` written to `~/.vnalpha/backups/` |
+
+### Notes
+
+- All `openstock-*` scripts are in `packaging/scripts/` — install to `/usr/local/bin/` for system-wide access.
+- Package build (`make build-vnalpha-deb`) requires access to the internal Nexus repository (`nexus.x51.vn`); deferred on machines without network access to that host.
+
 ## Safety notes
 
 - The system does **not** connect to any broker API.
