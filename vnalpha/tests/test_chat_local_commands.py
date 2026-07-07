@@ -118,12 +118,13 @@ def test_cmd_clear_calls_clear_visible_messages(in_memory_conn):
     ctrl, _ = _make_ctrl(in_memory_conn, session_id=session_id)
     result = ctrl.handle_chat_local_command("clear", [])
 
-    # Verify the row was deleted
+    # Soft-hide: row still exists but is_visible=false
     row = in_memory_conn.execute(
-        "SELECT COUNT(*) FROM chat_message WHERE chat_session_id = ?",
+        "SELECT is_visible FROM chat_message WHERE chat_session_id = ?",
         [session_id],
     ).fetchone()
-    assert row[0] == 0
+    assert row is not None
+    assert row[0] is False
 
     assert "cleared" in result.lower()
 

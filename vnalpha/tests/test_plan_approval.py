@@ -394,8 +394,8 @@ class TestAutoExecuteSafeReadOnly:
         assert "Price fetched" in all_text
 
     def test_unsafe_plan_stored_as_pending(self):
-        ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY)
-        unsafe_plan = _make_plan(["broker.place_order"])
+        ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
+        unsafe_plan = _make_plan(["write_file"])
         preview_answer = AssistantAnswer(
             summary="[Plan preview]",
             basis="preview",
@@ -404,15 +404,33 @@ class TestAutoExecuteSafeReadOnly:
         )
 
         def fake_run_ask(question, *, no_execute=False):
-            # In AUTO mode, unsafe plan should only call with no_execute=True
-            assert no_execute is True, "Unsafe plan should not be auto-executed"
+            assert no_execute is True, "Should preview plan before execution"
             return preview_answer, unsafe_plan
+
+        ctrl._run_ask = fake_run_ask
+        ctrl.handle_natural_language("write a file")
+
+        assert ctrl._pending_plan is unsafe_plan
+
+    def test_hard_deny_tool_is_refused_not_pending(self):
+        ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY)
+        denied_plan = _make_plan(["broker.place_order"])
+        preview_answer = AssistantAnswer(
+            summary="[Plan preview]",
+            basis="preview",
+            risks_caveats="",
+            tool_trace_summary="no exec",
+        )
+
+        def fake_run_ask(question, *, no_execute=False):
+            return preview_answer, denied_plan
 
         ctrl._run_ask = fake_run_ask
         ctrl.handle_natural_language("place order VNM")
 
-        # Should be stored as pending
-        assert ctrl._pending_plan is unsafe_plan
+        assert ctrl._pending_plan is None
+        all_text = " ".join(t for _, t in messages)
+        assert "Refused" in all_text or "refused" in all_text or "forbidden" in all_text
 
 
 # ---------------------------------------------------------------------------

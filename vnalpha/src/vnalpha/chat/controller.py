@@ -60,11 +60,39 @@ class ChatController:
         self._target_date = target_date
         self._surface = surface
         self._on_message = on_message
-        self._on_trace = on_trace
+        self._on_trace = self._wrap_trace_with_persistence(on_trace)
         self._chat_session_id = chat_session_id
         self.execution_mode: ExecutionMode = execution_mode
         self._pending_plan: "AssistantPlan | None" = None
         self._pending_plan_turn_context: dict | None = None
+
+    def _wrap_trace_with_persistence(
+        self, original: Callable[["TraceEvent"], None] | None
+    ) -> Callable[["TraceEvent"], None] | None:
+        def _persisting_trace(event: "TraceEvent") -> None:
+            if original:
+                original(event)
+            if self._chat_session_id:
+                try:
+                    from vnalpha.warehouse.chat_repo import append_trace_event
+
+                    conn = self._connection_factory()
+                    try:
+                        run_migrations(conn=conn)
+                        append_trace_event(
+                            conn,
+                            chat_session_id=self._chat_session_id,
+                            tool_name=event.tool_name,
+                            status=event.status,
+                            elapsed_ms=event.duration_ms,
+                            tool_trace_id=getattr(event, "tool_trace_id", None),
+                        )
+                    finally:
+                        conn.close()
+                except Exception:
+                    pass
+
+        return _persisting_trace
 
     def classify_input(
         self, raw: str
@@ -191,6 +219,15 @@ class ChatController:
                         self._on_message("yellow", f"Refused: {answer.reason}")
                     return None
 
+            if plan is not None and hasattr(plan, "steps"):
+                refusal = self._evaluate_plan_permissions(plan)
+                if refusal is not None:
+                    self._on_message("yellow", refusal)
+                    self._persist_error_message(
+                        refusal, ChatErrorKind.REFUSAL, role="assistant"
+                    )
+                    return refusal
+
             self._pending_plan = plan
             self._pending_plan_turn_context = {"question": question}
             self._on_message("dim", format_plan_preview(plan))
@@ -201,6 +238,28 @@ class ChatController:
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             return error_text
+
+    def _evaluate_plan_permissions(self, plan: "AssistantPlan") -> str | None:
+        from vnalpha.chat.safety import PermissionState, get_permission_state
+
+        for step in plan.steps:
+            tool_name = (
+                getattr(step, "tool_name", None)
+                or getattr(step, "tool", None)
+                or str(step)
+            )
+            state = get_permission_state(tool_name, self.execution_mode)
+            if state == PermissionState.HARD_DENY:
+                return (
+                    f"Refused: tool '{tool_name}' is permanently forbidden. "
+                    "This request cannot be approved."
+                )
+            if state == PermissionState.DENY:
+                return (
+                    f"Refused: tool '{tool_name}' is not permitted in current mode ({self.execution_mode.value}). "
+                    "Use /plan on to enable plan-then-approve mode."
+                )
+        return None
 
     def approve_pending_plan(self) -> None:
         if self._pending_plan is None:
@@ -304,7 +363,7 @@ class ChatController:
         conn = self._connection_factory()
         try:
             run_migrations(conn=conn)
-            count = clear_visible_messages(conn, self._chat_session_id)
+            count = clear_visible_messages(conn, self._chat_session_id, forget=forget)
             if forget:
                 return (
                     f"Chat log cleared and {count} message(s) deleted from transcript."
