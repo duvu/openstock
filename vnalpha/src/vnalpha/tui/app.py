@@ -10,6 +10,7 @@ try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
     from textual.containers import Vertical
+    from textual.message import Message
 
     from vnalpha.tui.screens.assistant import AssistantScreen
     from vnalpha.tui.screens.command import CommandScreen
@@ -27,6 +28,9 @@ except ImportError:
 
 
 if _TEXTUAL_AVAILABLE:
+
+    class PlanCancelRequested(Message):
+        """Posted when the user requests a pending plan to be cancelled."""
 
     class VnAlphaApp(App):
         """vnalpha research discovery TUI — split-pane with persistent chat panel."""
@@ -53,6 +57,7 @@ if _TEXTUAL_AVAILABLE:
             Binding("q", "quit", "Quit"),
             Binding("ctrl+backslash", "toggle_chat", "Toggle chat"),
             Binding("ctrl+slash", "focus_chat", "Focus chat"),
+            Binding("escape", "cancel_pending_plan", "Cancel plan", show=False),
         ]
 
         def __init__(self, date: Optional[str] = None, **kwargs):
@@ -100,6 +105,20 @@ if _TEXTUAL_AVAILABLE:
             """Focus the chat input widget."""
             panel = self.query_one("#chat-panel", ChatPanel)
             panel.action_focus_input()
+
+        def action_cancel_pending_plan(self) -> None:
+            """Post PlanCancelRequested message so subscribers can cancel plans."""
+            self.post_message(PlanCancelRequested())
+
+        def action_approve_plan(self) -> None:
+            """Approve the pending plan in the ChatPanel's controller (if any)."""
+            try:
+                panel = self.query_one("#chat-panel", ChatPanel)
+                controller = getattr(panel, "_chat_controller", None)
+                if controller is not None and controller._pending_plan is not None:
+                    controller.approve_pending_plan()
+            except Exception:
+                pass
 
 else:
 
