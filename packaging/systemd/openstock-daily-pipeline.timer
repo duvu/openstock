@@ -1,0 +1,20 @@
+# openstock-daily-pipeline.timer
+# Triggers openstock-daily-pipeline.service Monday-Friday at 17:30.
+#
+# Enable:   sudo systemctl enable --now openstock-daily-pipeline.timer
+# Disable:  sudo systemctl disable --now openstock-daily-pipeline.timer
+# Status:   systemctl list-timers openstock-daily-pipeline.timer
+# Override: sudo systemctl edit openstock-daily-pipeline.timer
+
+[Unit]
+Description=OpenStock daily data pipeline timer
+Requires=openstock-daily-pipeline.service
+
+[Timer]
+# Run Monday-Friday at 17:30 (after VN market close 15:00 + data availability buffer)
+OnCalendar=Mon-Fri 17:30:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
