@@ -32,7 +32,9 @@ def conn():
     c.close()
 
 
-def _make_bars(start_close: float, n: int, start_date: str = "2026-07-06") -> list[dict]:
+def _make_bars(
+    start_close: float, n: int, start_date: str = "2026-07-06"
+) -> list[dict]:
     d = date.fromisoformat(start_date)
     return [
         {"time": (d + timedelta(days=i)).isoformat(), "close": start_close + i * 0.5}
@@ -48,11 +50,21 @@ def _insert_ohlcv(conn, symbol: str, bars: list[dict]) -> None:
                 (symbol, time, interval, open, high, low, close, volume)
             VALUES (?, ?, '1D', ?, ?, ?, ?, ?)
             """,
-            [symbol, bar["time"], bar["close"], bar["close"], bar["close"], bar["close"], 1000.0],
+            [
+                symbol,
+                bar["time"],
+                bar["close"],
+                bar["close"],
+                bar["close"],
+                bar["close"],
+                1000.0,
+            ],
         )
 
 
-def _insert_watchlist(conn, symbol: str, rank: int, score: float, flags: list[str]) -> None:
+def _insert_watchlist(
+    conn, symbol: str, rank: int, score: float, flags: list[str]
+) -> None:
     conn.execute(
         """
         INSERT INTO daily_watchlist
@@ -109,7 +121,9 @@ def test_outcome_report_cli_does_not_launch_tui(monkeypatch, tmp_path):
     def fail_if_tui_imported(*args, **kwargs):
         raise AssertionError("outcome report must not launch the TUI")
 
-    monkeypatch.setattr("vnalpha.tui.app.VnAlphaApp", fail_if_tui_imported, raising=False)
+    monkeypatch.setattr(
+        "vnalpha.tui.app.VnAlphaApp", fail_if_tui_imported, raising=False
+    )
     result = runner.invoke(app, ["outcome", "report", "--horizon", "20"])
 
     assert result.exit_code == 0

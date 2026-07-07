@@ -63,13 +63,23 @@ def aggregate_watchlist_outcome(
 
     complete = [r for r in rows if r["outcome_status"] == OutcomeStatus.COMPLETE.value]
     pending = [r for r in rows if r["outcome_status"] == OutcomeStatus.PENDING.value]
-    missing = [r for r in rows if r["outcome_status"] in (
-        OutcomeStatus.MISSING_DATA.value, OutcomeStatus.PARTIAL.value, OutcomeStatus.ERROR.value
-    )]
+    missing = [
+        r
+        for r in rows
+        if r["outcome_status"]
+        in (
+            OutcomeStatus.MISSING_DATA.value,
+            OutcomeStatus.PARTIAL.value,
+            OutcomeStatus.ERROR.value,
+        )
+    ]
 
-    fwd_returns = [r["forward_return"] for r in complete if r["forward_return"] is not None]
+    fwd_returns = [
+        r["forward_return"] for r in complete if r["forward_return"] is not None
+    ]
     excess_returns = [
-        r["excess_return_vs_vnindex"] for r in complete
+        r["excess_return_vs_vnindex"]
+        for r in complete
         if r["excess_return_vs_vnindex"] is not None
     ]
     max_gains = [r["max_gain"] for r in complete if r["max_gain"] is not None]
@@ -283,25 +293,33 @@ def aggregate_all(
     metric_policy_version: Optional[str] = None,
 ) -> Dict[str, Any]:
     wl_rec = aggregate_watchlist_outcome(
-        conn, watchlist_date, horizon,
+        conn,
+        watchlist_date,
+        horizon,
         evaluation_run_id=evaluation_run_id,
         evaluator_version=evaluator_version,
         metric_policy_version=metric_policy_version,
     )
     bucket_recs = aggregate_score_bucket_performance(
-        conn, watchlist_date, horizon,
+        conn,
+        watchlist_date,
+        horizon,
         evaluation_run_id=evaluation_run_id,
         evaluator_version=evaluator_version,
         metric_policy_version=metric_policy_version,
     )
     setup_recs = aggregate_setup_type_performance(
-        conn, watchlist_date, horizon,
+        conn,
+        watchlist_date,
+        horizon,
         evaluation_run_id=evaluation_run_id,
         evaluator_version=evaluator_version,
         metric_policy_version=metric_policy_version,
     )
     flag_recs = aggregate_risk_flag_performance(
-        conn, watchlist_date, horizon,
+        conn,
+        watchlist_date,
+        horizon,
         evaluation_run_id=evaluation_run_id,
         evaluator_version=evaluator_version,
         metric_policy_version=metric_policy_version,
