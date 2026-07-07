@@ -1,0 +1,356 @@
+#!/usr/bin/env bash
+# openstock-verify — post-deploy verification script
+# Usage: openstock-verify [--ci] [--init] [--help]
+#   --ci     CI mode: skip live network/service checks
+#   --init   Initialize warehouse if not found (runs vnalpha init via docker compose)
+set -uo pipefail
+
+# --- config ---
+VNSTOCK_SERVICE_BASE="${VNSTOCK_SERVICE_URL:-http://127.0.0.1:6900}"
+VNSTOCK_HEALTHZ_URL="${VNSTOCK_SERVICE_BASE}/healthz"
+WAREHOUSE_PATH="${OPENSTOCK_WAREHOUSE_PATH:-/var/lib/openstock/warehouse/warehouse.duckdb}"
+WAREHOUSE_DIR="${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}"
+
+CI_MODE=false
+INIT_MODE=false
+PASS=0
+WARN=0
+FAIL=0
+
+# --- parse args ---
+for arg in "$@"; do
+  case "$arg" in
+    --ci)   CI_MODE=true ;;
+    --init) INIT_MODE=true ;;
+    --help)
+      echo "Usage: openstock-verify [--ci] [--init] [--help]"
+      echo ""
+      echo "Options:"
+      echo "  --ci     CI mode: skip live Docker/network checks"
+      echo "  --init   Initialize warehouse if not found"
+      echo "  --help   Show this help message"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg" >&2
+      echo "Run openstock-verify --help for usage." >&2
+      exit 1
+      ;;
+  esac
+done
+
+# --- helper functions ---
+ok()   { echo "[OK]   $*"; PASS=$(( PASS + 1 )); }
+warn() { echo "[WARN] $*"; WARN=$(( WARN + 1 )); }
+fail() { echo "[FAIL] $*"; FAIL=$(( FAIL + 1 )); }
+skip() { echo "[SKIP] $*"; }
+
+# --- check 6.2: docker binary + docker compose ---
+check_docker() {
+  if ! command -v docker > /dev/null 2>&1; then
+    fail "docker binary not found in PATH"
+    return
+  fi
+  ok "docker binary found: $(docker --version 2>/dev/null | head -1)"
+
+  if docker compose version > /dev/null 2>&1; then
+    ok "docker compose (plugin V2) found: $(docker compose version 2>/dev/null | head -1)"
+  elif command -v docker-compose > /dev/null 2>&1; then
+    ok "docker-compose (standalone legacy) found: $(docker-compose --version 2>/dev/null | head -1)"
+  else
+    fail "neither 'docker compose' plugin nor 'docker-compose' standalone found"
+  fi
+}
+
+# --- check 6.3: systemd openstock-data-platform service ---
+check_systemd() {
+  if "$CI_MODE"; then
+    skip "systemd check (--ci mode)"
+    return
+  fi
+
+  if ! command -v systemctl > /dev/null 2>&1; then
+    skip "systemd check (systemctl not available on this host)"
+    return
+  fi
+
+  local status
+  status="$(systemctl is-active openstock-data-platform 2>/dev/null || true)"
+  if [ "$status" = "active" ]; then
+    ok "openstock-data-platform systemd service is active"
+  else
+    warn "openstock-data-platform systemd service status: ${status:-unknown} (may not be installed yet)"
+  fi
+}
+
+# --- check 6.4: vnstock-service container running ---
+check_container() {
+  if "$CI_MODE"; then
+    skip "container status check (--ci mode)"
+    return
+  fi
+
+  local compose_cmd
+  if docker compose version > /dev/null 2>&1; then
+    compose_cmd="docker compose"
+  elif command -v docker-compose > /dev/null 2>&1; then
+    compose_cmd="docker-compose"
+  else
+    warn "container status check skipped: no docker compose available"
+    return
+  fi
+
+  local ps_output
+  if ps_output="$($compose_cmd ps vnstock-service 2>/dev/null)"; then
+    if echo "$ps_output" | grep -q "running\|Up"; then
+      ok "vnstock-service container is running"
+    else
+      warn "vnstock-service container does not appear to be running"
+    fi
+  else
+    warn "could not query vnstock-service container status (compose may not be configured here)"
+  fi
+}
+
+# --- check 6.5: healthz endpoint ---
+check_healthz() {
+  if "$CI_MODE"; then
+    skip "healthz check (--ci mode): ${VNSTOCK_HEALTHZ_URL}"
+    return
+  fi
+
+  if ! command -v curl > /dev/null 2>&1; then
+    fail "curl not found — cannot check healthz endpoint"
+    return
+  fi
+
+  local http_code
+  http_code="$(curl --max-time 10 --silent --output /dev/null --write-out '%{http_code}' "${VNSTOCK_HEALTHZ_URL}" 2>/dev/null || true)"
+
+  if [ "$http_code" = "200" ]; then
+    ok "vnstock-service healthz returned HTTP 200 (${VNSTOCK_HEALTHZ_URL})"
+  else
+    fail "vnstock-service healthz returned HTTP ${http_code:-000} (expected 200) at ${VNSTOCK_HEALTHZ_URL}"
+  fi
+}
+
+# --- check 6.6: forbidden endpoints return 404 ---
+check_forbidden() {
+  if "$CI_MODE"; then
+    skip "forbidden endpoint checks (--ci mode)"
+    return
+  fi
+
+  if ! command -v curl > /dev/null 2>&1; then
+    fail "curl not found — cannot check forbidden endpoints"
+    return
+  fi
+
+  local base_url
+  base_url="${VNSTOCK_SERVICE_BASE}"
+
+  local endpoint http_code
+
+  for endpoint in /v1/order /v1/account /v1/portfolio /v1/trading; do
+    http_code="$(curl --max-time 5 --silent --output /dev/null --write-out '%{http_code}' "${base_url}${endpoint}" 2>/dev/null || true)"
+    if [ "$http_code" = "404" ]; then
+      ok "forbidden endpoint ${endpoint} returns 404 (safety boundary OK)"
+    else
+      fail "forbidden endpoint ${endpoint} returned HTTP ${http_code:-000} (expected 404 — safety boundary BREACH)"
+    fi
+  done
+}
+
+# --- check 6.7: warehouse directory exists ---
+check_warehouse_dir() {
+  if [ -d "$WAREHOUSE_DIR" ]; then
+    ok "warehouse directory exists: ${WAREHOUSE_DIR}"
+  else
+    warn "warehouse directory not found: ${WAREHOUSE_DIR} (required for full deployment)"
+  fi
+}
+
+# --- check 6.8: warehouse file exists or init ---
+check_warehouse_init() {
+  if [ -f "$WAREHOUSE_PATH" ]; then
+    ok "warehouse file exists: ${WAREHOUSE_PATH}"
+    return
+  fi
+
+  if ! "$INIT_MODE"; then
+    warn "warehouse file not found: ${WAREHOUSE_PATH} (run with --init to initialize)"
+    return
+  fi
+
+  if "$CI_MODE"; then
+    skip "warehouse init skipped (--ci mode)"
+    return
+  fi
+
+  echo "[INFO] warehouse not found — attempting initialization..."
+
+  # Try docker compose run --rm vnalpha-worker init first
+  local compose_cmd
+  if docker compose version > /dev/null 2>&1; then
+    compose_cmd="docker compose"
+  elif command -v docker-compose > /dev/null 2>&1; then
+    compose_cmd="docker-compose"
+  else
+    compose_cmd=""
+  fi
+
+  local init_ok=false
+
+  if [ -n "$compose_cmd" ]; then
+    if $compose_cmd run --rm vnalpha-worker init 2>/dev/null; then
+      init_ok=true
+    fi
+  fi
+
+  # Fallback: host vnalpha init
+  if ! "$init_ok" && command -v vnalpha > /dev/null 2>&1; then
+    if vnalpha init 2>/dev/null; then
+      init_ok=true
+    fi
+  fi
+
+  if "$init_ok"; then
+    if [ -f "$WAREHOUSE_PATH" ]; then
+      ok "warehouse initialized: ${WAREHOUSE_PATH}"
+    else
+      warn "init command ran but warehouse file still not found at: ${WAREHOUSE_PATH}"
+    fi
+  else
+    warn "warehouse init failed — check vnalpha-worker container or host vnalpha install"
+  fi
+}
+
+# --- check 6.9: pipeline smoke test ---
+check_pipeline_smoke() {
+  if [[ "$CI_MODE" == "true" ]]; then
+    skip "6.9 Pipeline smoke test (--ci mode)"
+    return
+  fi
+  local demo_date="${OPENSTOCK_DEMO_DATE:-2026-07-06}"
+  local cmd=""
+  if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; then
+    cmd="docker compose run --rm vnalpha-worker"
+  elif command -v vnalpha &>/dev/null; then
+    cmd="vnalpha"
+  else
+    warn "6.9 Pipeline smoke test: neither docker compose nor host vnalpha available"
+    return
+  fi
+  if $cmd watchlist --date "$demo_date" &>/dev/null 2>&1; then
+    ok "6.9 Pipeline smoke test: watchlist for $demo_date succeeded"
+  else
+    warn "6.9 Pipeline smoke test: watchlist returned non-zero (data may not be synced)"
+  fi
+}
+
+# --- check 6.10: vnalpha --help ---
+check_vnalpha_help() {
+  if command -v vnalpha &>/dev/null; then
+    if vnalpha --help &>/dev/null 2>&1; then
+      ok "6.10 vnalpha --help: OK"
+    else
+      warn "6.10 vnalpha --help: failed (package may need reinstall)"
+    fi
+  else
+    warn "6.10 vnalpha not found on PATH (Debian package not installed)"
+  fi
+}
+
+# --- check 6.11: vnalpha watchlist ---
+check_vnalpha_watchlist() {
+  if [[ "$CI_MODE" == "true" ]]; then
+    skip "6.11 vnalpha watchlist (--ci mode)"
+    return
+  fi
+  local demo_date="${OPENSTOCK_DEMO_DATE:-2026-07-06}"
+  if ! command -v vnalpha &>/dev/null; then
+    warn "6.11 vnalpha watchlist: vnalpha not installed"
+    return
+  fi
+  if vnalpha watchlist --date "$demo_date" &>/dev/null 2>&1; then
+    ok "6.11 vnalpha watchlist --date $demo_date: OK"
+  else
+    warn "6.11 vnalpha watchlist: non-zero exit (warehouse may not be synced)"
+  fi
+}
+
+# --- check 6.12: TUI import check ---
+check_tui_import() {
+  if command -v vnalpha &>/dev/null; then
+    if vnalpha tui --help &>/dev/null 2>&1; then
+      ok "6.12 TUI entrypoint: vnalpha tui --help OK"
+      return
+    fi
+  fi
+  local python_bin=""
+  if python_bin="$(command -v python3 2>/dev/null)" || python_bin="$(command -v python 2>/dev/null)"; then
+    if "$python_bin" -c "from vnalpha.tui.app import VnAlphaApp" &>/dev/null 2>&1; then
+      ok "6.12 TUI import check: VnAlphaApp importable"
+    else
+      warn "6.12 TUI import check: VnAlphaApp not importable (package or deps issue)"
+    fi
+  else
+    warn "6.12 TUI check: vnalpha and python3 not found"
+  fi
+}
+
+# --- check 6.13: optional assistant check ---
+check_assistant() {
+  if [[ "$CI_MODE" == "true" ]]; then
+    skip "6.13 Assistant check (--ci mode)"
+    return
+  fi
+  if [[ -z "${VNALPHA_LLM_API_KEY:-}" ]]; then
+    skip "6.13 Assistant check: VNALPHA_LLM_API_KEY not configured"
+    return
+  fi
+  if command -v vnalpha &>/dev/null && vnalpha ask --no-execute "test" &>/dev/null 2>&1; then
+    ok "6.13 Assistant check: plan-preview OK"
+  else
+    warn "6.13 Assistant check: failed (LLM endpoint may be unavailable)"
+  fi
+}
+
+# --- source env if available ---
+if [ -f /etc/openstock/openstock.env ]; then
+  # shellcheck source=/dev/null
+  set -a
+  . /etc/openstock/openstock.env
+  set +a
+fi
+
+# --- header ---
+echo "openstock-verify — post-deploy verification"
+echo "CI mode: ${CI_MODE}  |  Init mode: ${INIT_MODE}"
+echo ""
+
+# --- run checks ---
+check_docker
+check_systemd
+check_container
+check_healthz
+check_forbidden
+check_warehouse_dir
+check_warehouse_init
+check_vnalpha_help
+check_tui_import
+check_pipeline_smoke
+check_vnalpha_watchlist
+check_assistant
+
+# --- summary ---
+echo ""
+echo "Results: ${PASS} OK  ${WARN} WARN  ${FAIL} FAIL"
+
+if [ "$FAIL" -eq 0 ]; then
+  echo "Status: PASS"
+  exit 0
+else
+  echo "Status: FAIL (${FAIL} required check(s) failed)"
+  exit 1
+fi
