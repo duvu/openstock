@@ -1,11 +1,23 @@
 # openstock docker-compose.yml
-# Orchestrates vnstock-service for local research workflow.
+# Orchestrates vnstock-service for local research workflow,
+# and vnalpha-worker for on-demand data pipeline jobs.
+#
 # Usage:
-#   docker compose up -d           # start
-#   docker compose down            # stop
-#   docker compose logs -f         # follow logs
-
-version: "3.9"
+#   docker compose up -d                   # start data platform
+#   docker compose down                    # stop
+#   docker compose logs -f                 # follow logs
+#
+# Run a pipeline job (profile-gated, does not start automatically):
+#   docker compose run --rm vnalpha-worker init
+#   docker compose run --rm vnalpha-worker sync symbols
+#   docker compose run --rm vnalpha-worker sync ohlcv --universe VN30
+#   docker compose run --rm vnalpha-worker build canonical
+#   docker compose run --rm vnalpha-worker build features
+#   docker compose run --rm vnalpha-worker score
+#   docker compose run --rm vnalpha-worker watchlist
+#
+# Warehouse volume (created by Docker if absent):
+#   /var/lib/openstock/warehouse  →  /warehouse  inside the worker
 
 services:
   vnstock-service:
@@ -33,3 +45,29 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  vnalpha-worker:
+    build:
+      context: ./vnalpha
+      dockerfile: Dockerfile
+    image: vnalpha-worker:latest
+    container_name: vnalpha-worker
+    profiles:
+      - job
+    volumes:
+      - warehouse:/warehouse
+    environment:
+      - PYTHONUNBUFFERED=1
+      - VNSTOCK_SERVICE_URL=http://vnstock-service:6900
+      - VNALPHA_WAREHOUSE_PATH=/warehouse/warehouse.duckdb
+    depends_on:
+      vnstock-service:
+        condition: service_healthy
+
+volumes:
+  warehouse:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/openstock/warehouse
