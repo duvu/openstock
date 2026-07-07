@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -19,43 +18,6 @@ except ImportError:
     _TEXTUAL_AVAILABLE = False
 
 
-# ---------------------------------------------------------------------------
-# Command dispatcher (Section 4)
-# ---------------------------------------------------------------------------
-
-# Maps slash command name → (handler_function_name, handler_module)
-_VALID_COMMANDS = {
-    "scan",
-    "filter",
-    "quality",
-    "score",
-    "explain",
-    "compare",
-    "lineage",
-    "note",
-    "history",
-    "help",
-}
-
-
-def _get_command_registry():
-    """Return the default CommandRegistry (lazy import)."""
-    from vnalpha.commands.setup import build_default_registry
-
-    return build_default_registry()
-
-
-def _parse_command(raw_input: str):
-    """Parse a slash command string via the existing parser. Returns ParsedCommand or raises."""
-    from vnalpha.commands.parser import parse
-
-    return parse(raw_input)
-
-
-# ---------------------------------------------------------------------------
-# ChatPanel
-# ---------------------------------------------------------------------------
-
 if _TEXTUAL_AVAILABLE:
 
     class ChatPanel(Widget):
@@ -67,6 +29,9 @@ if _TEXTUAL_AVAILABLE:
             Input    – always-visible input bar                 (fixed)
 
         Height: 30% of terminal, with a round $accent border.
+
+        All orchestration is delegated to ChatController. ChatPanel is a
+        view/controller adapter only.
         """
 
         DEFAULT_CSS = """
@@ -90,19 +55,34 @@ if _TEXTUAL_AVAILABLE:
 
         def __init__(self, conn=None, target_date: str | None = None, **kwargs) -> None:
             super().__init__(**kwargs)
-            # conn + date are optional; if absent the panel is read-only / cosmetic
             self._conn = conn
             self._target_date = target_date
-            self._registry = _get_command_registry()
             self._busy = False
+            self._chat_controller = None
+            self._setup_controller()
+
+        def _setup_controller(self) -> None:
+            """Construct ChatController with a message callback bound to post_message_text."""
+            try:
+                from vnalpha.chat.controller import ChatController
+
+                def _on_message(style: str, text: str) -> None:
+                    self.post_message_text(text, style=style)
+
+                def _on_trace(event: "TraceEvent") -> None:
+                    self.post_trace_event(event)
+
+                self._chat_controller = ChatController(
+                    target_date=self._target_date,
+                    on_message=_on_message,
+                    on_trace=_on_trace,
+                )
+            except Exception:
+                self._chat_controller = None
 
         def compose(self) -> ComposeResult:
             yield RichLog(id="chat-log", markup=True, wrap=True)
             yield Input(placeholder="Ask or /command ...", id="chat-input")
-
-        # ------------------------------------------------------------------
-        # Public helpers
-        # ------------------------------------------------------------------
 
         def post_message_text(self, text: str, style: str = "") -> None:
             """Append styled text to the chat log."""
@@ -132,10 +112,6 @@ if _TEXTUAL_AVAILABLE:
                 )
                 log.write(f"[red]✗ {event.tool_name} FAILED {ms}[/red]")
 
-        # ------------------------------------------------------------------
-        # Input handling
-        # ------------------------------------------------------------------
-
         def on_input_submitted(self, event: Input.Submitted) -> None:
             raw = event.value.strip()
             if not raw:
@@ -146,134 +122,38 @@ if _TEXTUAL_AVAILABLE:
                     "[yellow]⚠ Still processing, please wait…[/yellow]"
                 )
                 return
-            if raw.startswith("/"):
-                self._dispatch_command_sync(raw)
+            if self._chat_controller is not None:
+                self.run_worker(self._dispatch_via_controller(raw), exclusive=True)
             else:
-                self.run_worker(self._dispatch_assistant(raw), exclusive=True)
+                self.post_message_text("[red]Chat controller unavailable.[/red]")
 
-        # ------------------------------------------------------------------
-        # Assistant dispatch (async, runs in worker)
-        # ------------------------------------------------------------------
+        async def _dispatch_via_controller(self, raw: str) -> None:
+            """Delegate input handling to ChatController asynchronously."""
+            import asyncio
 
-        async def _dispatch_assistant(self, question: str) -> None:
-            """Run AssistantApp.ask() in a thread and post the result."""
             self._set_busy(True)
-            self.post_message_text(f"[bold cyan]You:[/bold cyan] {question}")
-
-            def _on_trace(evt: "TraceEvent") -> None:
-                # Called from worker thread — use call_from_thread to update UI
-                self.app.call_from_thread(self.post_trace_event, evt)
-
             try:
-                answer, _plan = await asyncio.to_thread(
-                    self._run_ask, question, _on_trace
-                )
-                from vnalpha.assistant.models import AssistantAnswer
-
-                if isinstance(answer, AssistantAnswer):
-                    self.post_message_text(
-                        f"[bold green]Assistant:[/bold green] {answer.summary}"
-                    )
-                else:
-                    self.post_message_text(f"[yellow]Refused:[/yellow] {answer.reason}")
+                await asyncio.to_thread(self._chat_controller.handle_turn, raw)
             except Exception as exc:
                 self.post_message_text(f"[red]Error:[/red] {exc}")
             finally:
                 self._set_busy(False)
 
-        def _run_ask(self, question: str, on_trace_event):
-            """Synchronous helper for AssistantApp.ask(), called inside to_thread."""
-            from vnalpha.assistant.app import AssistantApp
-            from vnalpha.warehouse.connection import get_connection
-            from vnalpha.warehouse.migrations import run_migrations
+        def action_approve_plan(self) -> None:
+            """Approve the pending plan via ChatController."""
+            if self._chat_controller is not None:
+                try:
+                    self._chat_controller.approve_pending_plan()
+                except Exception as exc:
+                    self.post_message_text(f"[red]Approve error:[/red] {exc}")
 
-            # Each chat call opens its own connection (DuckDB multi-reader safe)
-            conn = get_connection()
-            run_migrations(conn=conn)
-            app = AssistantApp(conn, surface="tui")
-            return app.ask(
-                question,
-                date=self._target_date,
-                on_trace_event=on_trace_event,
-            )
-
-        # ------------------------------------------------------------------
-        # Command dispatch (sync)
-        # ------------------------------------------------------------------
-
-        def _dispatch_command_sync(self, raw_input: str) -> None:
-            """Parse and dispatch a slash command; post result to log."""
-            from vnalpha.commands.errors import CommandParseError, UnknownCommandError
-
-            self.post_message_text(f"[bold cyan]>[/bold cyan] {raw_input}")
-
-            try:
-                parsed = _parse_command(raw_input)
-            except CommandParseError as exc:
-                self.post_message_text(f"[red]Parse error:[/red] {exc}")
-                return
-
-            cmd_name = parsed.command_name
-            if cmd_name not in _VALID_COMMANDS:
-                valid = ", ".join(sorted(_VALID_COMMANDS))
-                self.post_message_text(
-                    f"[red]Unknown command '/{cmd_name}'.[/red] Valid commands: {valid}"
-                )
-                return
-
-            try:
-                from vnalpha.tools.executor import TracedLocalToolExecutor
-                from vnalpha.tools.setup import build_local_tool_registry
-
-                tool_executor = None
-                if self._conn is not None:
-                    registry = build_local_tool_registry(self._conn)
-                    tool_executor = TracedLocalToolExecutor(
-                        self._conn,
-                        registry,
-                        session_id=None,
-                        trace_parent_type="command",
-                        trace_event_callback=self.post_trace_event,
-                    )
-
-                result = self._registry.execute(
-                    parsed,
-                    conn=self._conn,
-                    tool_executor=tool_executor,
-                )
-                self._render_command_result(result)
-            except UnknownCommandError:
-                valid = ", ".join(sorted(_VALID_COMMANDS))
-                self.post_message_text(
-                    f"[red]Unknown command '/{cmd_name}'.[/red] Valid commands: {valid}"
-                )
-            except Exception as exc:
-                self.post_message_text(f"[red]Command error:[/red] {exc}")
-
-        def _render_command_result(self, result) -> None:
-            """Format CommandResult for the chat log."""
-            if result.status == "FAILED":
-                summary = result.summary or "Command failed."
-                self.post_message_text(f"[red]{summary}[/red]")
-            elif result.status == "VALIDATION_ERROR":
-                summary = result.summary or "Validation error."
-                self.post_message_text(f"[yellow]{summary}[/yellow]")
-            else:
-                summary = result.summary or ""
-                if summary:
-                    self.post_message_text(f"[green]{result.title}:[/green] {summary}")
-                else:
-                    self.post_message_text(f"[green]{result.title}[/green]")
-                # Show table row counts if present
-                for table in result.tables:
-                    n = len(table.rows)
-                    self.post_message_text(
-                        f"[dim]  {table.title}: {n} row{'s' if n != 1 else ''}[/dim]"
-                    )
-
-        # ------------------------------------------------------------------
-        # Actions / bindings
-        # ------------------------------------------------------------------
+        def action_cancel_plan(self) -> None:
+            """Cancel the pending plan via ChatController."""
+            if self._chat_controller is not None:
+                try:
+                    self._chat_controller.cancel_pending_plan()
+                except Exception as exc:
+                    self.post_message_text(f"[red]Cancel error:[/red] {exc}")
 
         def action_toggle_panel(self) -> None:
             """Toggle the chat panel visibility."""
@@ -282,10 +162,6 @@ if _TEXTUAL_AVAILABLE:
         def action_focus_input(self) -> None:
             """Focus the chat input widget."""
             self.query_one("#chat-input", Input).focus()
-
-        # ------------------------------------------------------------------
-        # Internal helpers
-        # ------------------------------------------------------------------
 
         def _set_busy(self, busy: bool) -> None:
             self._busy = busy
@@ -306,3 +182,4 @@ else:
         def __init__(self, conn=None, target_date: str | None = None, **kwargs) -> None:
             self._conn = conn
             self._target_date = target_date
+            self._chat_controller = None
