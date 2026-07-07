@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-
 # ---------------------------------------------------------------------------
 # Metric policy constants
 # ---------------------------------------------------------------------------
@@ -28,6 +27,7 @@ This better captures intrabar risk for drawdown and opportunity for gain.
 # ---------------------------------------------------------------------------
 # Core metrics (policy-agnostic)
 # ---------------------------------------------------------------------------
+
 
 def forward_return(
     entry_close: Optional[float],
@@ -62,6 +62,7 @@ def excess_return_vs_vnindex(
 # ---------------------------------------------------------------------------
 # Policy-aware gain/drawdown metrics
 # ---------------------------------------------------------------------------
+
 
 def max_gain(
     window_closes: List[float],

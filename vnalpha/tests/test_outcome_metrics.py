@@ -25,6 +25,7 @@ from vnalpha.outcomes.metrics import (
 
 # ---- horizons tests ----
 
+
 class TestDefaultHorizons:
     def test_default_horizons(self):
         assert DEFAULT_HORIZONS == [5, 10, 20, 60]
@@ -96,6 +97,7 @@ class TestSplitBars:
 
 
 # ---- metrics tests ----
+
 
 class TestForwardReturn:
     def test_calculation(self):
