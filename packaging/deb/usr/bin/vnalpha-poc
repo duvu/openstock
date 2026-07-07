@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# /usr/bin/vnalpha-poc — convenience launcher for the vnalpha POC demo TUI
+#
+# Opens the interactive research TUI for the configured demo date so an
+# operator can demonstrate or verify the full POC end-to-end from a
+# terminal/SSH/tmux session without typing the full command.
+#
+# Demo date resolution order (first wins):
+#   1. $VNALPHA_DEMO_DATE from /etc/vnalpha/vnalpha.env
+#   2. The --date argument if passed explicitly
+#   3. Literal "today" (vnalpha resolves to the latest trading session)
+#
+# Usage:
+#   vnalpha-poc                     # uses VNALPHA_DEMO_DATE from env
+#   vnalpha-poc --date 2026-07-01   # override date for this invocation
+#
+# Under the hood this simply calls:
+#   vnalpha tui --date <DEMO_DATE>
+#
+# Requirements:
+#   - An interactive terminal (TTY). The Textual TUI library requires one.
+#     Run in a terminal emulator, SSH session, or tmux/screen pane.
+#     Do NOT run in a non-interactive cron/systemd context.
+#   - vnalpha package installed (provides /opt/vnalpha/venv/bin/vnalpha)
+#   - vnstock-service running at the configured URL
+#
+# Research-only: this launcher does not expose brokerage or trading functions.
+
+set -euo pipefail
+
+VNALPHA_BIN=/opt/vnalpha/venv/bin/vnalpha
+ENV_FILE=/etc/vnalpha/vnalpha.env
+
+# Source environment config if present
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck source=/etc/vnalpha/vnalpha.env
+  . "${ENV_FILE}"
+  set +a
+fi
+
+# Resolve demo date: env var takes precedence, default to "today"
+DEMO_DATE="${VNALPHA_DEMO_DATE:-today}"
+
+# Allow explicit --date override from CLI args
+# If the user passes --date XXXX, forward it; otherwise use DEMO_DATE
+# We forward all args to `vnalpha tui` so flags like --help still work.
+if [ "$#" -gt 0 ]; then
+  exec "${VNALPHA_BIN}" tui "$@"
+else
+  exec "${VNALPHA_BIN}" tui --date "${DEMO_DATE}"
+fi

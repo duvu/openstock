@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# /usr/bin/vnalpha — host launcher for the vnalpha research CLI/TUI
+#
+# This script:
+#   1. Sources /etc/vnalpha/vnalpha.env if present, exporting all variables
+#      so child processes (the TUI, Python runtime) inherit them.
+#   2. Exec-replaces itself with the vnalpha binary from the vendored venv.
+#      Using exec means the venv process becomes this process (same PID,
+#      correct signal handling, no wrapper overhead).
+#
+# Environment variables set in /etc/vnalpha/vnalpha.env:
+#   VNSTOCK_SERVICE_URL       — URL of the local vnstock-service
+#   VNALPHA_WAREHOUSE_PATH    — path to the DuckDB warehouse file
+#   VNALPHA_LOG_LEVEL         — log level (default: INFO)
+#   VNALPHA_DEMO_DATE         — default demo date for poc launcher
+#   VNALPHA_LLM_*             — optional LLM gateway configuration
+#
+# Usage:
+#   vnalpha --help
+#   vnalpha tui --date 2026-07-01
+#   vnalpha watchlist --date 2026-07-01
+#   vnalpha sync symbols
+#
+# Research-only: this binary does NOT expose brokerage, order, account,
+# portfolio, or trading functionality.
+
+set -euo pipefail
+
+VNALPHA_BIN=/opt/vnalpha/venv/bin/vnalpha
+ENV_FILE=/etc/vnalpha/vnalpha.env
+
+# Source environment config if present (set -a exports all vars automatically)
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck source=/etc/vnalpha/vnalpha.env
+  . "${ENV_FILE}"
+  set +a
+fi
+
+# Verify the venv binary exists before exec-ing into it
+if [ ! -x "${VNALPHA_BIN}" ]; then
+  echo "vnalpha: ERROR — venv binary not found at ${VNALPHA_BIN}" >&2
+  echo "vnalpha: Run 'apt install --reinstall vnalpha' to rebuild the venv." >&2
+  exit 1
+fi
+
+exec "${VNALPHA_BIN}" "$@"
