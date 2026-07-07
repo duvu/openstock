@@ -44,8 +44,8 @@ tui: ## Launch the vnalpha TUI
 
 # ── vnalpha dev ───────────────────────────────
 
-install-vnalpha: ## Install vnalpha in editable mode
-	pip install -e vnalpha/
+install-vnalpha: ## Install vnalpha in editable mode (uses uv if available)
+	uv pip install -e vnalpha/ --python vnalpha/.venv/bin/python || pip install -e vnalpha/
 
 lint-vnalpha: ## Run ruff linter and format-check on vnalpha
 	cd vnalpha && ruff check . && ruff format --check .
