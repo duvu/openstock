@@ -61,10 +61,32 @@ if _TEXTUAL_AVAILABLE:
             self._chat_controller = None
             self._setup_controller()
 
+        def _bootstrap_session(self) -> str | None:
+            try:
+                from vnalpha.warehouse.chat_repo import (
+                    get_or_create_active_chat_session,
+                )
+                from vnalpha.warehouse.connection import get_connection
+                from vnalpha.warehouse.migrations import run_migrations
+
+                conn = get_connection()
+                try:
+                    run_migrations(conn=conn)
+                    return get_or_create_active_chat_session(
+                        conn,
+                        surface="tui-chat",
+                        target_date=self._target_date,
+                    )
+                finally:
+                    conn.close()
+            except Exception:
+                return None
+
         def _setup_controller(self) -> None:
-            """Construct ChatController with a message callback bound to post_message_text."""
             try:
                 from vnalpha.chat.controller import ChatController
+
+                session_id = self._bootstrap_session()
 
                 def _on_message(style: str, text: str) -> None:
                     self.post_message_text(text, style=style)
@@ -76,7 +98,12 @@ if _TEXTUAL_AVAILABLE:
                     target_date=self._target_date,
                     on_message=_on_message,
                     on_trace=_on_trace,
+                    chat_session_id=session_id,
                 )
+                if session_id is None:
+                    self.post_message_text(
+                        "[yellow]⚠ Chat session bootstrap failed — history will not persist.[/yellow]"
+                    )
             except Exception:
                 self._chat_controller = None
 
@@ -174,8 +201,6 @@ if _TEXTUAL_AVAILABLE:
 else:
 
     class ChatPanel:  # type: ignore[no-redef]
-        """Importable fallback when textual is unavailable."""
-
         DEFAULT_CSS = ""
         BINDINGS = []
 
@@ -183,3 +208,42 @@ else:
             self._conn = conn
             self._target_date = target_date
             self._chat_controller = None
+            self._setup_controller()
+
+        def _bootstrap_session(self) -> str | None:
+            try:
+                from vnalpha.warehouse.chat_repo import (
+                    get_or_create_active_chat_session,
+                )
+                from vnalpha.warehouse.connection import get_connection
+                from vnalpha.warehouse.migrations import run_migrations
+
+                conn = get_connection()
+                try:
+                    run_migrations(conn=conn)
+                    return get_or_create_active_chat_session(
+                        conn,
+                        surface="tui-chat",
+                        target_date=self._target_date,
+                    )
+                finally:
+                    conn.close()
+            except Exception:
+                return None
+
+        def _setup_controller(self) -> None:
+            try:
+                from vnalpha.chat.controller import ChatController
+
+                session_id = self._bootstrap_session()
+
+                def _on_message(style: str, text: str) -> None:
+                    pass
+
+                self._chat_controller = ChatController(
+                    target_date=self._target_date,
+                    on_message=_on_message,
+                    chat_session_id=session_id,
+                )
+            except Exception:
+                self._chat_controller = None

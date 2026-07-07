@@ -123,6 +123,7 @@ class ChatController:
 
     def handle_slash_command(self, raw: str) -> str | None:
         self._on_message("bold cyan", f"> {raw}")
+        self._persist_message("user", raw, "slash_command")
         conn = self._connection_factory()
         try:
             run_migrations(conn=conn)
@@ -135,6 +136,26 @@ class ChatController:
             )
             result = executor.execute(raw)
             self._render_command_result(result)
+            research_session_id = None
+            if result.metadata and isinstance(result.metadata, dict):
+                research_session_id = result.metadata.get("research_session_id")
+            if result.status == "FAILED":
+                self._persist_message(
+                    "system", result.summary or "Command failed.", "runtime_error"
+                )
+            elif result.status == "VALIDATION_ERROR":
+                self._persist_message(
+                    "system",
+                    result.summary or "Validation error.",
+                    "validation_error",
+                )
+            else:
+                self._persist_message(
+                    "assistant",
+                    result.summary or result.title,
+                    "slash_command_result",
+                    research_session_id=research_session_id,
+                )
             return None
         except Exception as exc:
             error_text = format_runtime_error(str(exc))
@@ -146,13 +167,33 @@ class ChatController:
 
     def handle_natural_language(self, question: str) -> str | None:
         self._on_message("bold cyan", f"You: {question}")
+        self._persist_message("user", question, "prompt")
         try:
             self._emit_stage(AssistantStage.CLASSIFYING)
             self._emit_stage(AssistantStage.PLANNING)
             answer, plan = self._run_ask(question, no_execute=True)
 
             if self.execution_mode == ExecutionMode.PLAN_ONLY:
+                import json as _json
+
+                plan_json_str: str | None = None
+                if plan is not None:
+                    try:
+                        plan_json_str = _json.dumps(
+                            [
+                                getattr(s, "tool_name", None) or str(s)
+                                for s in getattr(plan, "steps", [])
+                            ]
+                        )
+                    except Exception:
+                        pass
                 self._on_message("dim", format_plan_preview(plan))
+                self._persist_message(
+                    "assistant",
+                    format_plan_preview(plan),
+                    "plan_preview",
+                    plan_json=plan_json_str,
+                )
                 return None
 
             if self.execution_mode == ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY:
@@ -206,6 +247,7 @@ class ChatController:
                     if isinstance(answer, AssistantAnswer):
                         self._emit_stage(AssistantStage.FINAL, text=answer.summary)
                         self._on_message("bold green", f"Assistant: {answer.summary}")
+                        self._persist_message("assistant", answer.summary, "answer")
                     elif isinstance(answer, RefusalMessage):
                         refusal_text = format_refusal(answer.reason)
                         self._on_message("yellow", refusal_text)
@@ -216,7 +258,11 @@ class ChatController:
                         )
                         return refusal_text
                     else:
-                        self._on_message("yellow", f"Refused: {answer.reason}")
+                        refusal_text = f"Refused: {answer.reason}"
+                        self._on_message("yellow", refusal_text)
+                        self._persist_error_message(
+                            refusal_text, ChatErrorKind.REFUSAL, role="assistant"
+                        )
                     return None
 
             if plan is not None and hasattr(plan, "steps"):
@@ -228,9 +274,27 @@ class ChatController:
                     )
                     return refusal
 
+            import json as _json
+
+            plan_json_str = None
+            if plan is not None:
+                try:
+                    plan_json_str = _json.dumps(
+                        [
+                            getattr(s, "tool_name", None) or str(s)
+                            for s in getattr(plan, "steps", [])
+                        ]
+                    )
+                except Exception:
+                    pass
+
             self._pending_plan = plan
             self._pending_plan_turn_context = {"question": question}
-            self._on_message("dim", format_plan_preview(plan))
+            preview_text = format_plan_preview(plan)
+            self._on_message("dim", preview_text)
+            self._persist_message(
+                "assistant", preview_text, "plan_preview", plan_json=plan_json_str
+            )
             return None
 
         except Exception as exc:
@@ -264,8 +328,18 @@ class ChatController:
     def approve_pending_plan(self) -> None:
         if self._pending_plan is None:
             return
+        refusal = self._evaluate_plan_permissions(self._pending_plan)
+        if refusal is not None:
+            self._on_message("yellow", refusal)
+            self._persist_error_message(
+                refusal, ChatErrorKind.REFUSAL, role="assistant"
+            )
+            self._pending_plan = None
+            self._pending_plan_turn_context = None
+            return
         ctx = self._pending_plan_turn_context or {}
         question = ctx.get("question", "")
+        self._persist_message("user", "Approved.", "plan_approval")
         self._pending_plan = None
         self._pending_plan_turn_context = None
         try:
@@ -274,6 +348,7 @@ class ChatController:
 
             if isinstance(answer, AssistantAnswer):
                 self._on_message("bold green", f"Assistant: {answer.summary}")
+                self._persist_message("assistant", answer.summary, "answer")
             elif isinstance(answer, RefusalMessage):
                 refusal_text = format_refusal(answer.reason)
                 self._on_message("yellow", refusal_text)
@@ -283,13 +358,19 @@ class ChatController:
                     role="assistant",
                 )
             else:
-                self._on_message("yellow", f"Refused: {answer.reason}")
+                refusal_text = f"Refused: {answer.reason}"
+                self._on_message("yellow", refusal_text)
+                self._persist_error_message(
+                    refusal_text, ChatErrorKind.REFUSAL, role="assistant"
+                )
         except Exception as exc:
             error_text = format_runtime_error(str(exc))
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
 
     def cancel_pending_plan(self) -> None:
+        if self._pending_plan is not None:
+            self._persist_message("user", "Cancelled.", "plan_cancel")
         self._pending_plan = None
         self._pending_plan_turn_context = None
         self._on_message("", "Plan canceled.")
@@ -299,8 +380,10 @@ class ChatController:
         parts = stripped[1:].split() if stripped[1:].split() else []
         cmd = parts[0] if parts else ""
         args = parts[1:]
+        self._persist_message("user", raw, "chat_local_command")
         result = self.handle_chat_local_command(cmd, args)
         self._on_message("bold", result)
+        self._persist_message("system", result, "chat_local_command_result")
 
     # ------------------------------------------------------------------
     # Public entry point for chat-local command dispatch
@@ -329,9 +412,7 @@ class ChatController:
     # ------------------------------------------------------------------
 
     def _cmd_new(self) -> str:
-        """Create a new chat session, reset session context, return confirmation."""
         from vnalpha.warehouse.chat_repo import create_chat_session
-        from vnalpha.warehouse.migrations import run_migrations
 
         conn = self._connection_factory()
         try:
@@ -444,13 +525,15 @@ class ChatController:
             lines.append(f"  {ts}  {content}")
         return "\n".join(lines)
 
-    def _persist_error_message(
+    def _persist_message(
         self,
+        role: str,
         content: str,
-        kind: "ChatErrorKind",
-        role: str = "system",
+        message_type: str = "plain_text",
+        *,
+        plan_json: str | None = None,
+        research_session_id: str | None = None,
     ) -> None:
-        """Persist an error/refusal/tool-failure message to chat_message if session exists."""
         if self._chat_session_id is None:
             return
         try:
@@ -464,13 +547,22 @@ class ChatController:
                     chat_session_id=self._chat_session_id,
                     role=role,
                     content=content,
-                    message_type=error_to_message_type(kind),
+                    message_type=message_type,
+                    plan_json=plan_json,
+                    research_session_id=research_session_id,
                 )
             finally:
                 conn.close()
         except Exception:
-            # Never let persistence failure crash the UI
             pass
+
+    def _persist_error_message(
+        self,
+        content: str,
+        kind: "ChatErrorKind",
+        role: str = "system",
+    ) -> None:
+        self._persist_message(role, content, error_to_message_type(kind))
 
     def _cmd_help(self) -> str:
         """Return formatted help text for all chat-local commands."""

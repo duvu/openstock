@@ -67,12 +67,32 @@ def finish_chat_session(
     )
 
 
+def get_or_create_active_chat_session(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    surface: str = "tui-chat",
+    target_date: Optional[str] = None,
+) -> str:
+    row = conn.execute(
+        """
+        SELECT chat_session_id FROM chat_session
+        WHERE surface = ? AND status = 'active'
+          AND (target_date = ? OR (target_date IS NULL AND ? IS NULL))
+        ORDER BY started_at DESC
+        LIMIT 1
+        """,
+        [surface, target_date, target_date],
+    ).fetchone()
+    if row:
+        return str(row[0])
+    return create_chat_session(conn, surface=surface, target_date=target_date)
+
+
 def update_chat_session_context(
     conn: duckdb.DuckDBPyConnection,
     chat_session_id: str,
     context_json: str,
 ) -> None:
-    """Store serialised context JSON on a chat_session and refresh updated_at."""
     conn.execute(
         """
         UPDATE chat_session
