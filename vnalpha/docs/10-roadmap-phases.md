@@ -1,731 +1,637 @@
-# 10. vnalpha Roadmap — OpenBB-style Research Workspace Service
+# 10. OpenStock Roadmap — Terminal-first Research Workspace & Data Platform
 
 ## Strategic direction
 
-`vnalpha` is an independent research workspace service for Vietnamese equities.
+OpenStock is a local-first research system for Vietnamese equities.
+
+It is split into two product layers:
 
 ```text
-vnstock-service  = data platform service
-vnalpha-service  = research workspace service
+vnstock-service  = Docker-managed data platform service
+vnalpha          = terminal-first research workspace
 ```
 
-`vnalpha` should not be just a scanner. It should become a workspace where a user can monitor the market, inspect watchlists, open symbol workspaces, review pattern evidence, track outcomes, run backtests, generate AI explanations, and keep a research journal.
+The roadmap now prioritizes a deployable POC before adding more analytical complexity.
 
-Hard boundary:
+The selected deployment model is:
+
+```text
+Data Platform:
+  Docker Compose
+  - vnstock-service
+  - vnalpha-worker
+  - shared DuckDB bind mount
+  - optional scheduler
+
+Terminal Workspace:
+  Debian package
+  - vnalpha CLI/TUI
+  - direct terminal usage similar to OpenCode
+  - reads DuckDB warehouse
+
+Storage:
+  DuckDB file
+  /var/lib/openstock/warehouse/warehouse.duckdb
+```
+
+The OpenCode-inspired long-term direction is:
+
+```text
+vnalpha tui
+  -> vnalpha local runtime/server
+      -> session/message/command/tool/event APIs
+      -> permission engine
+      -> DuckDB warehouse
+      -> vnstock-service
+      -> vnalpha-worker jobs
+```
+
+The TUI remains terminal-native. The runtime/server becomes the orchestration layer behind the TUI, CLI, and future clients.
+
+## Non-negotiable boundaries
 
 ```text
 No broker login
 No account APIs
 No order placement
 No portfolio execution
+No transfer/margin/trading endpoints
 No auto-trading
 No LLM-only prediction engine
 No investment-advice workflow
+No arbitrary shell execution from the research chat
 ```
+
+AI is allowed only for explanation, critique, summarization, planning, and research assistance over deterministic artifacts.
 
 ---
 
-## Phase 0 — Workspace Service Foundation
+## Roadmap tracks
+
+The system should evolve across five tracks:
+
+```text
+Track A — Data Platform
+  vnstock-service, data contracts, worker jobs, DuckDB warehouse, scheduler
+
+Track B — Terminal Workspace
+  vnalpha CLI/TUI, Debian package, chat/workspace UX, command palette
+
+Track C — Runtime/Server
+  local server, session/message APIs, event stream, command/tool execution
+
+Track D — Governance & Safety
+  permission policy, agent modes, research-only hard-deny rules, audit traces
+
+Track E — Research Capability
+  features, scoring, outcomes, calibration, pattern engine, reports, ML ranking
+```
+
+The roadmap below orders these tracks into implementable phases.
+
+---
+
+## Phase R0 — POC Baseline Stabilization
 
 ### Goal
 
-Create the executable foundation for `vnalpha-service`.
+Freeze the current end-to-end alpha discovery baseline before packaging and deployment.
 
 ### Core question
 
-Can the service start, load config, expose health API, and connect to future workspace modules?
+Can the current local pipeline reliably produce a daily watchlist from `vnstock-service` data?
+
+### Scope
+
+```text
+vnstock-service -> vnalpha sync -> DuckDB -> canonical_ohlcv -> feature_snapshot -> candidate_score -> daily_watchlist -> CLI/TUI
+```
 
 ### Deliverables
 
 ```text
-pyproject.toml
-src/vnalpha/
-src/vnalpha/api/
-src/vnalpha/common/
-configs/
-tests/
-Dockerfile
-docker-compose.yml
-Makefile
-.env.example
-```
-
-### Minimum modules
-
-```text
-vnalpha.api.app
-vnalpha.api.routes_health
-vnalpha.common.config
-vnalpha.common.logging
-vnalpha.common.types
-```
-
-### API
-
-```text
-GET /healthz
-GET /version
+- fix remaining data drift and accuracy issues
+- finish migration safety for existing DuckDB files
+- stabilize feature status taxonomy
+- verify lineage propagation into candidate_score and daily_watchlist
+- stabilize quality-as-of lookup
+- stabilize filter fail-closed behavior
+- stabilize outcome metric policy handling
+- keep current CLI/TUI usable for demo
 ```
 
 ### Definition of Done
 
 ```text
-- project imports successfully
-- FastAPI app starts
-- /healthz works
-- config loads from YAML/env
-- test command works
-- Docker image builds
-- docker compose can start vnalpha-service
+- `vnalpha init` succeeds on a fresh warehouse
+- sync symbols/ohlcv/index succeeds for a demo universe
+- build canonical/features succeeds for a fixed demo date
+- score/watchlist succeeds for a fixed demo date
+- known drift/lineage/quality findings are closed or explicitly deferred
+- no broker/order/account capability exists
 ```
 
 ---
 
-## Phase 1 — vnstock-service Client & Data Contract Integration
+## Phase R1 — POC Deployment Architecture
 
 ### Goal
 
-Allow `vnalpha-service` to consume validated market data from `vnstock-service`.
+Document and implement the selected POC deployment architecture.
 
 ### Core question
 
-Can `vnalpha` fetch OHLCV, symbols, index data, and provider diagnostics without knowing provider internals?
+Can OpenStock be installed and operated on a single host without ad-hoc manual steps?
+
+### Deployment decision
+
+```text
+Docker manages the data platform and batch jobs.
+Debian package manages the terminal user experience.
+DuckDB is the persisted analytical warehouse file shared by both sides.
+```
 
 ### Deliverables
 
 ```text
-src/vnalpha/clients/vnstock/client.py
-src/vnalpha/clients/vnstock/schemas.py
-src/vnalpha/clients/vnstock/errors.py
-configs/services.yaml
-integration tests with mocked vnstock-service
-```
-
-### Required client operations
-
-```text
-GET /v1/equity/ohlcv
-GET /v1/equity/quote
-GET /v1/index/ohlcv
-GET /v1/reference/symbols
-GET /v1/company/info
-GET /v1/providers/health
-GET /v1/providers/capabilities
-```
-
-### Must preserve
-
-```text
-provider
-quality_status
-quality_report
-diagnostics
-fetched_at
-ingestion_run_id
+vnalpha/docs/11-deployment-architecture.md
+Docker Compose data platform design
+vnalpha-worker job model
+DuckDB warehouse bind mount model
+vnalpha Debian terminal app model
+systemd data-platform wrapper design
 ```
 
 ### Definition of Done
 
 ```text
-- vnalpha can call vnstock-service base URL from config
-- client handles timeout/retry/basic errors
-- client maps service response into typed objects
-- no direct provider-specific endpoint exists in vnalpha
-- tests mock vnstock-service responses
+- deployment architecture is documented
+- roles of vnstock-service, vnalpha-worker, DuckDB, and vnalpha.deb are clear
+- TUI is explicitly host-native, not a background Docker daemon
+- DuckDB concurrency rules are documented
+- data platform remains localhost-only by default
 ```
 
 ---
 
-## Phase 2 — Research Warehouse & Canonical OHLCV
+## Phase R2 — Deploy & Verify POC
 
 ### Goal
 
-Persist raw service responses and build canonical OHLCV for research.
+Make deployment repeatable and verifiable.
 
 ### Core question
 
-Can `vnalpha` create a reliable research dataset from `vnstock-service` output?
+Can a fresh host deploy the POC, run a smoke pipeline, and prove the system is ready for demo?
 
 ### Deliverables
 
 ```text
-DuckDB schema
-Parquet export
-ingestion_run table
-market_ohlcv table
-canonical_ohlcv table
-ticker_master table
-provider_quality_report table
+openstock-data-platform Docker Compose
+vnalpha-worker Dockerfile
+vnalpha.deb packaging scripts
+/usr/bin/vnalpha launcher
+/usr/bin/vnalpha-poc launcher
+/etc/vnalpha/vnalpha.env
+/etc/openstock/openstock.env
+openstock-data-platform.service
+openstock-verify
+openstock-backup-warehouse
+rollback documentation
+fresh-host smoke-test checklist
 ```
 
-### Minimum tables
+### Required verification checks
 
 ```text
-ingestion_run
-market_ohlcv
-canonical_ohlcv
-ticker_master
-provider_quality_report
+- docker and docker compose availability
+- openstock-data-platform systemd status
+- vnstock-service container status
+- GET /healthz returns ok
+- forbidden endpoints return 404: /v1/order, /v1/account, /v1/portfolio, /v1/trading
+- warehouse path exists
+- warehouse schema initializes
+- small demo pipeline can sync/build/score
+- vnalpha --help works
+- vnalpha watchlist --date <demo-date> works
+- TUI entrypoint import/help check works without launching interactive UI in CI mode
+- optional assistant check warns, not fails, if LLM env is absent
 ```
 
-### Canonical OHLCV minimum fields
+### Definition of Done
 
 ```text
-symbol
-time
-interval
-open
-high
-low
-close
-volume
-selected_provider
-quality_status
-ingestion_run_id
-source_service_run_id
+- fresh host can start data platform
+- fresh host can install vnalpha.deb
+- `openstock-verify` passes required checks
+- warehouse backup is created before risky migrations/upgrades
+- rollback package/container/warehouse procedures are documented
+- user can run `vnalpha tui` directly from terminal/SSH/tmux
 ```
 
-### Commands
+---
+
+## Phase R3 — Terminal Workspace POC
+
+### Goal
+
+Make `vnalpha tui` the primary analyst entrypoint, similar to OpenCode's terminal-first UX.
+
+### Core question
+
+Can an analyst open one terminal app and perform the daily research workflow without switching between many commands?
+
+### Deliverables
+
+```text
+persistent split-pane TUI shell
+watchlist workspace panel
+symbol detail panel
+quality/rejected data panel
+outcome/calibration panel
+persistent chat panel
+command palette/slash command help
+trace/status panel
+keyboard shortcuts
+read-only demo mode
+```
+
+### Required commands
+
+```text
+/watchlist today
+/watchlist <date>
+/scan VN30
+/explain <symbol>
+/compare <symbol1> <symbol2>
+/quality <symbol>
+/lineage <symbol>
+/outcomes <date>
+/help
+```
+
+### Definition of Done
+
+```text
+- `vnalpha tui --date <demo-date>` starts reliably
+- user can inspect watchlist and symbol detail from TUI
+- slash commands use the same command execution path as CLI
+- TUI does not require Docker interactive execution
+- no command exposes trading or broker execution
+```
+
+---
+
+## Phase R4 — OpenCode-style Chat Workspace Completion
+
+### Goal
+
+Turn the current chat prototype into a stateful research chat workspace.
+
+### Core question
+
+Can the chat behave like a research control panel instead of a one-shot input box?
+
+### Deliverables
+
+```text
+chat_session table usage
+chat_message persistence
+multi-turn deterministic context
+plan preview / approve / cancel
+trace timeline rendering
+chat-local commands
+command routing through unified CommandExecutor
+assistant/tool trace linkage
+staged output or streaming fallback
+```
+
+### Chat-local commands
+
+```text
+/new
+/clear
+/context
+/plan
+/trace
+/help
+```
+
+### Definition of Done
+
+```text
+- every user/assistant turn is persisted
+- chat can recover recent context from transcript and deterministic state
+- slash commands and assistant tool calls create traceable records
+- plan approval is explicit before pipeline/admin actions
+- tool traces are visible in the chat timeline
+- research-only hard-deny rules are enforced
+```
+
+---
+
+## Phase R5 — Local Runtime/Server Layer
+
+### Goal
+
+Introduce a local runtime/server behind TUI and CLI, following the OpenCode architectural pattern.
+
+### Core question
+
+Can the TUI become a client of a local research runtime instead of directly owning orchestration logic?
+
+### Proposed command
 
 ```bash
-python -m vnalpha.ingestion.sync_universe
-python -m vnalpha.ingestion.sync_ohlcv --start 2023-01-01 --end today
-python -m vnalpha.ingestion.build_canonical --date today
+vnalpha serve --host 127.0.0.1 --port 6901
 ```
 
-### Definition of Done
+### Minimum APIs
 
 ```text
-- can sync a small symbol universe
-- can store raw market OHLCV
-- can build canonical OHLCV
-- rejected rows/symbols have reasons
-- canonical data is reproducible by date
-```
-
----
-
-## Phase 3 — Feature Store v1
-
-### Goal
-
-Compute deterministic features from canonical OHLCV.
-
-### Core question
-
-Can `vnalpha` transform clean OHLCV into reusable feature snapshots?
-
-### Deliverables
-
-```text
-feature_snapshot table
-price_features
-volume_features
-volatility_features
-relative_strength
-market_regime basic
-```
-
-### Minimum features
-
-```text
-ma20
-ma50
-ma100
-volume_ma20
-volume_ratio
-atr14
-base_range_30d
-close_strength
-rs_20d
-rs_60d
-rs_line
-rs_line_slope
-distance_to_ma20
-```
-
-### Definition of Done
-
-```text
-- features are computed only from canonical OHLCV
-- feature values are reproducible by date
-- missing windows are handled explicitly
-- benchmark index comparison works
-- synthetic dataset tests pass
-```
-
----
-
-## Phase 4 — Pivot Engine & Market Regime
-
-### Goal
-
-Detect swing structure and classify basic market environment.
-
-### Core question
-
-Can the system understand structure before detecting patterns?
-
-### Deliverables
-
-```text
-pivot_points table
-market_regime table
-zigzag pivot detector
-ATR-based pivot detector
-trend/regime classifier
-market breadth indicators
-```
-
-### Minimum regime labels
-
-```text
-UPTREND
-DOWNTREND
-SIDEWAY
-RECOVERY
-DISTRIBUTION
-UNKNOWN
-```
-
-### Definition of Done
-
-```text
-- pivots are detected deterministically
-- regime is computed per date
-- detector output is explainable
-- pattern engine can consume pivots and regime
-```
-
----
-
-## Phase 5 — Pattern Engine v1
-
-### Goal
-
-Detect first high-value setup families.
-
-### Core question
-
-Can `vnalpha` produce a daily watchlist with evidence, not just tickers?
-
-### Patterns
-
-```text
-ACCUMULATION_BASE
-ACCUMULATION_BREAKOUT
-FAILED_BREAKOUT
+GET  /health
+GET  /config
+GET  /warehouse/status
+GET  /data/health
+GET  /sessions
+POST /sessions
+GET  /sessions/{session_id}
+GET  /sessions/{session_id}/messages
+POST /sessions/{session_id}/messages
+POST /sessions/{session_id}/commands
+GET  /events
+POST /pipeline/run
+GET  /pipeline/status
+POST /verify
+POST /backup
 ```
 
 ### Deliverables
 
 ```text
-PatternDetector interface
-AccumulationBaseDetector
-AccumulationBreakoutDetector
-FailedBreakoutDetector
-pattern_instance table
-risk flag model
-scoring engine
-```
-
-### Pattern instance fields
-
-```text
-pattern_id
-symbol
-pattern_type
-start_date
-end_date
-trigger_date
-status
-score
-invalidation_price
-feature_json
-risk_json
-data_quality_status
-ingestion_run_id
-created_at
+local runtime process
+runtime client used by TUI
+session API
+message API
+command API
+event stream
+pipeline job adapter
+verify/backup adapters
+OpenAPI documentation
 ```
 
 ### Definition of Done
 
 ```text
-- system scans universe end-of-day
-- each pattern has evidence features
-- each pattern has score
-- each pattern has status
-- each pattern has invalidation logic
-- watchlist can be generated from pattern_instance
+- TUI can connect to local runtime
+- runtime can also run headless for automation
+- session/message state is first-class
+- command execution is centralized
+- event stream supports realtime TUI progress updates
+- runtime binds to 127.0.0.1 by default
 ```
 
 ---
 
-## Phase 6 — Watchlist Workspace API
+## Phase R6 — Event Stream & Tool Trace Runtime
 
 ### Goal
 
-Expose the first useful OpenBB-style workspace surface.
+Make all long-running operations observable from TUI and CLI.
 
 ### Core question
 
-Can a user open `vnalpha` daily and inspect actionable research artifacts?
+Can the user see what the system is doing while it syncs, scores, verifies, or calls tools?
 
-### Deliverables
-
-```text
-workspace watchlist service
-market overview service
-symbol workspace service
-pattern detail service
-workspace API routes
-```
-
-### API
+### Event types
 
 ```text
-GET /v1/workspace/market/overview
-GET /v1/workspace/watchlists/daily
-GET /v1/workspace/patterns
-GET /v1/workspace/patterns/{pattern_id}
-GET /v1/workspace/symbols/{symbol}
-```
-
-### Definition of Done
-
-```text
-- daily watchlist API works
-- pattern detail includes evidence and risk flags
-- symbol workspace shows features and pattern history
-- response contains data lineage
-- no AI required yet
-```
-
----
-
-## Phase 7 — Outcome Tracking
-
-### Goal
-
-Evaluate every detected pattern after fixed forward horizons.
-
-### Core question
-
-Do detected setups actually work historically?
-
-### Horizons
-
-```text
-5 sessions
-10 sessions
-20 sessions
-60 sessions
+pipeline.started
+pipeline.step.running
+pipeline.step.completed
+pipeline.step.failed
+tool.running
+tool.completed
+tool.failed
+assistant.plan.created
+assistant.answer.created
+verify.check.ok
+verify.check.warn
+verify.check.fail
+warehouse.backup.created
+permission.requested
+permission.approved
+permission.denied
 ```
 
 ### Deliverables
 
 ```text
-pattern_outcome table
-forward return calculator
-excess return calculator
-max gain/drawdown calculator
-outcome labeler
-outcome summary API
-```
-
-### Outcome labels
-
-```text
-SUCCESS
-FAIL
-NEUTRAL
-PENDING
-```
-
-### API
-
-```text
-GET /v1/workspace/outcomes/summary
-GET /v1/workspace/patterns/{pattern_id}/outcomes
+event schema
+event persistence or replay buffer
+server-sent event stream
+TUI event timeline
+CLI event follow mode
+trace correlation IDs
 ```
 
 ### Definition of Done
 
 ```text
-- every mature pattern can be evaluated
-- outcome label is assigned
-- outcome summary by pattern type works
-- outcome summary by score bucket works
-- failed breakout rate is visible
+- long-running operations stream status
+- TUI can render progress without blocking
+- every tool/pipeline run has trace correlation
+- failed steps show actionable error messages
 ```
 
 ---
 
-## Phase 8 — Streamlit Workspace Dashboard MVP
+## Phase R7 — Permission Policy & Agent Modes
 
 ### Goal
 
-Make the workspace usable without notebooks.
+Add a domain-specific permission model inspired by OpenCode's ask/allow/deny model.
 
 ### Core question
 
-Can the user research market setups visually every day?
+Can the system safely separate read-only research from pipeline/admin operations?
 
-### Screens
+### Agent modes
 
 ```text
-Market Overview
-Daily Watchlist
-Symbol Workspace
-Pattern Detail
-Failed Breakout Review
-Outcome Summary
-Research Journal
+Explore
+  read-only market/watchlist/features/outcomes
+
+Research
+  explain/compare/scan/review research artifacts
+
+Pipeline
+  sync/build/score/evaluate with explicit approval
+
+Admin
+  verify/backup/deploy diagnostics with strict approval
+```
+
+### Permission states
+
+```text
+allow
+ask
+deny
+hard_deny
+```
+
+### Hard-deny operations
+
+```text
+broker_order
+account_access
+portfolio_mutation
+margin
+transfer
+trading
+automated_execution
+arbitrary_shell
 ```
 
 ### Deliverables
 
 ```text
-src/vnalpha/dashboard/streamlit_app.py
-dashboard API client
-charts
-filters
-watchlist export
+/etc/vnalpha/policy.yaml
+policy loader
+permission evaluator
+approval prompts in TUI
+permission audit records
+agent mode switcher
+hard-deny tests
 ```
 
 ### Definition of Done
 
 ```text
-- dashboard starts locally
-- can filter by date, pattern type, score, sector, status
-- can inspect pattern evidence
-- can view chart context
-- can see risk flags and invalidation level
-- can export watchlist
+- read-only commands run without approval in Explore mode
+- pipeline writes require approval
+- backup requires approval
+- restore is denied by default
+- hard-deny operations cannot be bypassed by prompt text
+- permission decisions are traceable
 ```
 
 ---
 
-## Phase 9 — AI Explanation & Risk Critique
+## Phase R8 — Research Context & Project Memory
 
 ### Goal
 
-Add AI as workspace assistant, not signal generator.
+Give the assistant deterministic context without relying on hidden memory or vague prompts.
 
 ### Core question
 
-Can AI explain and critique deterministic research artifacts without inventing data?
+Can `vnalpha` maintain explicit project/research context similar to a project instruction file?
 
 ### Deliverables
 
 ```text
-AI client
-prompt templates
-explain_pattern
-risk_critic
-daily_report
-AI output cache
-AI generation metadata
-```
-
-### AI input must be grounded in
-
-```text
-pattern_instance
-feature_snapshot
-market_regime
-quality_report
-outcome_history
-```
-
-### API
-
-```text
-POST /v1/workspace/ai/explain-pattern
-POST /v1/workspace/ai/risk-critic
-POST /v1/workspace/ai/daily-report
-```
-
-### Must store
-
-```text
-model_name
-prompt_version
-input_hash
-generated_at
-source_artifact_ids
-output_text
+VNALPHA.md or research_context.yaml
+/vnalpha init-context command
+universe defaults
+scoring policy version
+risk policy version
+demo date
+feature availability
+forbidden actions
+explanation style
+watchlist thresholds
 ```
 
 ### Definition of Done
 
 ```text
-- AI explanation uses pattern JSON only
-- AI critique separates setup/data/market/execution risks
-- AI does not override score
-- AI does not create buy/sell instruction
-- prompts are versioned
-- outputs are cached and traceable
+- context file is generated and editable
+- assistant reads context explicitly
+- context changes are visible and auditable
+- no hidden assumptions are required for core workflows
 ```
 
 ---
 
-## Phase 10 — Research Journal & Report Workspace
+## Phase R9 — Team Deployment Hardening
 
 ### Goal
 
-Turn `vnalpha` from scanner into research workflow system.
+Move from single-user POC to controlled internal team usage.
 
 ### Core question
 
-Can the user record reasoning, compare later outcomes, and generate reports?
+Can multiple users operate the system safely on an internal host without corrupting the warehouse or exposing data service publicly?
 
 ### Deliverables
 
 ```text
-journal_entry table
-report table
-journal API
-daily report generator
-weekly review report
-pattern review notes
-```
-
-### API
-
-```text
-POST /v1/workspace/journal
-GET  /v1/workspace/journal
-GET  /v1/workspace/journal/{entry_id}
-POST /v1/workspace/reports/daily
-POST /v1/workspace/reports/weekly
+internal host install guide
+user/group permissions for /var/lib/openstock
+read-only TUI mode while writer job runs
+pipeline writer lock
+warehouse backup schedule
+log rotation
+package versioning
+signed packages or checksum validation
+operator runbook
 ```
 
 ### Definition of Done
 
 ```text
-- notes can attach to date/symbol/pattern/watchlist
-- reports cite source pattern/data IDs
-- later outcome can be compared with original reasoning
-- AI can draft reports but not invent missing data
+- multiple users can run TUI read workflows
+- only one writer pipeline can run at a time
+- backup/restore is operator-controlled
+- data service remains internal/local by default
+- deployment has a documented support/runbook path
 ```
 
 ---
 
-## Phase 11 — Backtest Lab
+## Phase R10 — Research Capability Hardening
 
 ### Goal
 
-Validate strategy rules beyond simple outcome tracking.
+Improve the quality of research outputs after the platform is deployable.
 
 ### Core question
 
-Can the user test entry/exit assumptions and compare performance by regime?
+Are watchlist candidates stable, explainable, and useful across different market regimes?
 
 ### Deliverables
 
 ```text
-backtest_run table
-backtest_result table
-VectorBT integration
-entry/exit simulation
-fee/slippage assumptions
-parameter testing
-regime-level performance report
-```
-
-### API
-
-```text
-POST /v1/workspace/backtests
-GET  /v1/workspace/backtests/{backtest_id}
-GET  /v1/workspace/backtests/{backtest_id}/results
+outcome calibration reports
+score bucket analysis
+setup-type performance analysis
+risk-flag performance analysis
+feature drift monitoring
+quality status dashboard
+regime-aware scoring review
 ```
 
 ### Definition of Done
 
 ```text
-- next-session entry assumption supported
-- stop-loss and invalidation exits supported
-- fees/slippage configurable
-- results split by year, sector, regime
-- compared with VN-Index/VN30 benchmark
+- every candidate has lineage and feature evidence
+- score buckets can be evaluated historically
+- risk flags have outcome impact analysis
+- poor-performing setup types are visible
+- feature/data drift is detectable
 ```
 
 ---
 
-## Phase 12 — Workspace API, CLI/TUI & Agent-safe Tools
+## Phase R11 — Advanced Pattern Engine
 
 ### Goal
 
-Expose workspace state safely to notebooks, CLI/TUI, and future AI agents.
+Add more setup families after v1 is validated.
 
-### Core question
-
-Can users and agents query research artifacts without bypassing governance?
-
-### Deliverables
-
-```text
-workspace query API
-CLI commands
-optional TUI
-agent-safe tool contracts
-workspace search
-watchlist export
-pattern explain tool
-```
-
-### Example commands
-
-```bash
-vnalpha market overview
-vnalpha watchlist daily
-vnalpha symbol FPT
-vnalpha pattern PATTERN_ID
-vnalpha report daily
-```
-
-### Agent-safe tools
-
-```text
-get_market_overview
-get_daily_watchlist
-get_symbol_workspace
-get_pattern_detail
-get_pattern_outcome
-explain_pattern
-risk_critic
-```
-
-### Forbidden tools
-
-```text
-place_order
-connect_broker
-get_account_balance
-execute_portfolio
-auto_trade
-```
-
-### Definition of Done
-
-```text
-- CLI can query core workspace artifacts
-- TUI can browse watchlist and pattern detail
-- agent tools return grounded evidence only
-- no tool accesses broker/order/account capability
-```
-
----
-
-## Phase 13 — Pattern Engine v2
-
-### Goal
-
-Add more sophisticated pattern families after v1 is validated.
-
-### Patterns
+### Candidate patterns
 
 ```text
 VCP
@@ -739,19 +645,87 @@ SHAKEOUT_RECOVERY
 ### Definition of Done
 
 ```text
-- new detectors are rule-based and auditable
+- each detector is deterministic and auditable
 - each detector has synthetic tests
-- each detector has backtest/outcome summary
+- each detector has outcome summary
 - detector config is versioned
+- added patterns improve research triage, not investment advice
 ```
 
 ---
 
-## Phase 14 — ML Ranking
+## Phase R12 — Reports, Journal & Review Workflow
 
 ### Goal
 
-Rank setups using historical outcomes, not replace deterministic logic.
+Turn daily scanning into a repeatable research process.
+
+### Core question
+
+Can users record reasoning, compare later outcomes, and generate grounded reports?
+
+### Deliverables
+
+```text
+research_note and journal workflow
+daily report generator
+weekly review report
+watchlist review notes
+outcome comparison against original reasoning
+export to markdown
+```
+
+### Definition of Done
+
+```text
+- notes attach to date/symbol/watchlist/session
+- reports cite source data IDs
+- AI drafts reports only from grounded artifacts
+- later outcomes can be compared with original thesis
+```
+
+---
+
+## Phase R13 — Backtest Lab
+
+### Goal
+
+Validate strategy rules beyond simple forward outcome tracking.
+
+### Core question
+
+Can users test entry/exit assumptions and compare performance by market regime?
+
+### Deliverables
+
+```text
+backtest_run table
+backtest_result table
+entry/exit simulation
+fee/slippage assumptions
+parameter testing
+regime-level performance report
+benchmark comparison
+```
+
+### Definition of Done
+
+```text
+- next-session entry assumption supported
+- invalidation/stop exits supported
+- fees/slippage configurable
+- results split by year, sector, regime
+- benchmark comparison available
+- outputs remain research-only
+```
+
+---
+
+## Phase R14 — ML Ranking
+
+### Goal
+
+Rank setups using historical outcomes without replacing deterministic logic.
 
 ### Core question
 
@@ -762,7 +736,7 @@ Can ML improve triage after enough labeled pattern outcomes exist?
 ```text
 training dataset builder
 feature leakage checks
-LightGBM or similar ranker
+ranker model
 model registry metadata
 ranking explanation
 performance by regime
@@ -774,48 +748,96 @@ performance by regime
 - ML trains only on historical outcome labels
 - no future leakage
 - model output is ranking/triage only
-- deterministic pattern evidence remains visible
-- AI/ML cannot become investment-advice engine
+- deterministic evidence remains visible
+- AI/ML cannot become an investment-advice engine
 ```
 
 ---
 
-## Recommended MVP cut
+## Recommended MVP cuts
 
-The first meaningful MVP should stop at Phase 8:
+### MVP Cut 1 — Deployable POC
+
+Stop here first:
 
 ```text
-Phase 0: Service foundation
-Phase 1: vnstock-service client
-Phase 2: Canonical OHLCV
-Phase 3: Feature store
-Phase 4: Pivot/regime
-Phase 5: Pattern Engine v1
-Phase 6: Watchlist API
-Phase 7: Outcome tracking
-Phase 8: Streamlit dashboard
+R0 POC baseline stabilization
+R1 POC deployment architecture
+R2 deploy & verify POC
+R3 terminal workspace POC
 ```
 
-AI should start only after the deterministic research artifacts are stable.
+Outcome:
+
+```text
+A user can install the system, verify it, run the data pipeline, and open `vnalpha tui` directly from terminal.
+```
+
+### MVP Cut 2 — OpenCode-style Research Workspace
+
+Stop here second:
+
+```text
+R4 chat workspace completion
+R5 local runtime/server
+R6 event stream and tool trace runtime
+R7 permission policy and agent modes
+R8 research context and project memory
+```
+
+Outcome:
+
+```text
+The TUI becomes a client of a local research runtime with sessions, messages, events, commands, permission modes, and explicit context.
+```
+
+### MVP Cut 3 — Team Internal Deployment
+
+Stop here third:
+
+```text
+R9 team deployment hardening
+R10 research capability hardening
+```
+
+Outcome:
+
+```text
+A small internal team can use the system safely with operator controls, backup, verification, writer locks, and useful calibration outputs.
+```
 
 ---
 
-## Phase dependency summary
+## Dependency summary
 
 ```text
-0 service foundation
-→ 1 data-service client
-→ 2 warehouse/canonical data
-→ 3 features
-→ 4 pivots/regime
-→ 5 pattern engine
-→ 6 workspace API
-→ 7 outcomes
-→ 8 dashboard
-→ 9 AI explanation
-→ 10 journal/report
-→ 11 backtest lab
-→ 12 CLI/TUI/agent tools
-→ 13 pattern v2
-→ 14 ML ranking
+R0 baseline stabilization
+→ R1 deployment architecture
+→ R2 deploy & verify POC
+→ R3 terminal workspace POC
+→ R4 chat workspace completion
+→ R5 local runtime/server
+→ R6 event stream and trace runtime
+→ R7 permission policy and agent modes
+→ R8 research context
+→ R9 team hardening
+→ R10 research capability hardening
+→ R11 advanced patterns
+→ R12 reports/journal
+→ R13 backtest lab
+→ R14 ML ranking
 ```
+
+## Current priority
+
+The next implementation priority is:
+
+```text
+1. Merge deployment architecture documentation.
+2. Merge deploy-and-verify OpenSpec.
+3. Implement R2 deploy & verify POC.
+4. Finish R3/R4 terminal chat workspace gaps.
+5. Start R5 runtime/server only after POC deployment is repeatable.
+```
+
+This keeps the project disciplined: deployability first, OpenCode-style architecture second, advanced research capability third.
