@@ -35,17 +35,20 @@ class TestOutcomeLanguageBoundary:
 
     def test_calibration_report_uses_research_language(self):
         import vnalpha.outcomes.calibration as cal_mod
+
         src = inspect.getsource(cal_mod)
         assert "forward return" in src.lower() or "forward_return" in src.lower()
         assert "buy signal" not in src.lower()
 
     def test_calibration_interpretation_note_present(self):
         import vnalpha.outcomes.calibration as cal_mod
+
         src = inspect.getsource(cal_mod)
         assert "research" in src.lower() or "evaluation" in src.lower()
 
     def test_outcome_status_has_no_action_values(self):
         from vnalpha.outcomes.models import OutcomeStatus
+
         for status in OutcomeStatus:
             assert "buy" not in status.value.lower()
             assert "sell" not in status.value.lower()
@@ -57,6 +60,7 @@ class TestOutcomeScoringIsolation:
 
     def test_evaluator_does_not_import_scoring(self):
         import vnalpha.outcomes.evaluator as ev_mod
+
         src = inspect.getsource(ev_mod)
         # Must not import from scoring module directly
         assert "from vnalpha.scoring" not in src
@@ -64,12 +68,14 @@ class TestOutcomeScoringIsolation:
 
     def test_evaluator_does_not_import_features(self):
         import vnalpha.outcomes.evaluator as ev_mod
+
         src = inspect.getsource(ev_mod)
         assert "from vnalpha.features" not in src
         assert "import features" not in src
 
     def test_aggregations_does_not_import_scoring(self):
         import vnalpha.outcomes.aggregations as agg_mod
+
         src = inspect.getsource(agg_mod)
         assert "from vnalpha.scoring" not in src
 
@@ -90,18 +96,22 @@ class TestOutcomeForwardReturnNonFabricated:
 
     def test_forward_return_none_when_missing_entry(self):
         from vnalpha.outcomes.metrics import forward_return
+
         assert forward_return(None, 110.0) is None
 
     def test_forward_return_none_when_missing_exit(self):
         from vnalpha.outcomes.metrics import forward_return
+
         assert forward_return(100.0, None) is None
 
     def test_excess_return_none_when_missing_benchmark(self):
         from vnalpha.outcomes.metrics import excess_return_vs_vnindex
+
         assert excess_return_vs_vnindex(0.10, None) is None
 
     def test_max_gain_none_when_empty_window(self):
         from vnalpha.outcomes.metrics import max_gain
+
         assert max_gain([], 100.0) is None
 
 
@@ -114,4 +124,7 @@ class TestOutcomeDoesNotMutateScoring:
             src += path.read_text()
         assert "scoring.yaml" not in src or "write" not in src.lower()
         # Must not directly modify CANONICAL_CANDIDATE_CLASSES or similar
-        assert "CANONICAL_CANDIDATE_CLASSES" not in src or "=" not in src.split("CANONICAL_CANDIDATE_CLASSES")[1][:10]
+        assert (
+            "CANONICAL_CANDIDATE_CLASSES" not in src
+            or "=" not in src.split("CANONICAL_CANDIDATE_CLASSES")[1][:10]
+        )

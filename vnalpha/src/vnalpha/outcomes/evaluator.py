@@ -22,26 +22,28 @@ from vnalpha.outcomes.horizons import (
     split_bars,
 )
 from vnalpha.outcomes.metrics import (
-    benchmark_return as calc_benchmark_return,
-)
-from vnalpha.outcomes.metrics import (
+    CLOSE_ONLY_V1,
+    OHLC_HIGH_LOW_V1,
     classify_hit_failure,
     excess_return_vs_vnindex,
+)
+from vnalpha.outcomes.metrics import (
+    benchmark_return as calc_benchmark_return,
 )
 from vnalpha.outcomes.metrics import (
     forward_return as calc_forward_return,
 )
 from vnalpha.outcomes.metrics import (
     max_drawdown as calc_max_drawdown,
+)
+from vnalpha.outcomes.metrics import (
     max_drawdown_from_lows as calc_max_drawdown_from_lows,
 )
 from vnalpha.outcomes.metrics import (
     max_gain as calc_max_gain,
-    max_gain_from_highs as calc_max_gain_from_highs,
 )
 from vnalpha.outcomes.metrics import (
-    CLOSE_ONLY_V1,
-    OHLC_HIGH_LOW_V1,
+    max_gain_from_highs as calc_max_gain_from_highs,
 )
 from vnalpha.outcomes.models import (
     CandidateOutcomeRecord,
@@ -65,7 +67,9 @@ def _now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _get_watchlist_rows(conn: duckdb.DuckDBPyConnection, watchlist_date: str) -> List[Dict]:
+def _get_watchlist_rows(
+    conn: duckdb.DuckDBPyConnection, watchlist_date: str
+) -> List[Dict]:
     """Load daily_watchlist rows for a date.
 
     daily_watchlist already contains score, candidate_class, setup_type,
@@ -90,8 +94,14 @@ def _get_watchlist_rows(conn: duckdb.DuckDBPyConnection, watchlist_date: str) ->
         [watchlist_date],
     ).fetchall()
     cols = [
-        "symbol", "watchlist_date", "rank", "score", "candidate_class",
-        "setup_type", "risk_flags_json", "lineage_json",
+        "symbol",
+        "watchlist_date",
+        "rank",
+        "score",
+        "candidate_class",
+        "setup_type",
+        "risk_flags_json",
+        "lineage_json",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 
@@ -256,7 +266,11 @@ def evaluate_watchlist_date(
             evaluated += 1
             try:
                 rec = _evaluate_single_candidate(
-                    conn, candidate, horizon, symbol_bars, benchmark_bars,
+                    conn,
+                    candidate,
+                    horizon,
+                    symbol_bars,
+                    benchmark_bars,
                     evaluation_run_id=run_id,
                     metric_policy=metric_policy,
                 )
@@ -264,7 +278,9 @@ def evaluate_watchlist_date(
                 persisted += 1
             except Exception as exc:
                 errors += 1
-                logger.warning(f"Error evaluating {symbol}/{watchlist_date}/h{horizon}: {exc}")
+                logger.warning(
+                    f"Error evaluating {symbol}/{watchlist_date}/h{horizon}: {exc}"
+                )
                 try:
                     err_rec = CandidateOutcomeRecord(
                         symbol=symbol,
@@ -285,7 +301,9 @@ def evaluate_watchlist_date(
     for horizon in horizons:
         try:
             aggregates[horizon] = aggregate_all(
-                conn, watchlist_date, horizon,
+                conn,
+                watchlist_date,
+                horizon,
                 evaluation_run_id=run_id,
                 evaluator_version=_EVALUATOR_VERSION,
                 metric_policy_version=metric_policy,
@@ -338,6 +356,8 @@ def evaluate_date_range(
     dates = [r[0] for r in rows]
     results = []
     for d in dates:
-        result = evaluate_watchlist_date(conn, d, horizons=horizons, metric_policy=metric_policy)
+        result = evaluate_watchlist_date(
+            conn, d, horizons=horizons, metric_policy=metric_policy
+        )
         results.append(result)
     return results

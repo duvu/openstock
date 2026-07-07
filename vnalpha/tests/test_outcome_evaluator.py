@@ -17,7 +17,11 @@ from vnalpha.outcomes.aggregations import (
 from vnalpha.outcomes.evaluator import evaluate_date_range, evaluate_watchlist_date
 from vnalpha.outcomes.metrics import CLOSE_ONLY_V1 as METRIC_POLICY_VERSION
 from vnalpha.outcomes.models import OutcomeStatus
-from vnalpha.outcomes.repositories import get_candidate_outcomes, get_evaluation_run, get_watchlist_outcome
+from vnalpha.outcomes.repositories import (
+    get_candidate_outcomes,
+    get_evaluation_run,
+    get_watchlist_outcome,
+)
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -50,7 +54,15 @@ def _insert_ohlcv(conn, symbol: str, bars: list) -> None:
             VALUES (?, ?, '1D', ?, ?, ?, ?, ?)
             ON CONFLICT (symbol, time, interval) DO NOTHING
             """,
-            [symbol, bar["time"], bar["close"], bar["close"], bar["close"], bar["close"], 1000.0],
+            [
+                symbol,
+                bar["time"],
+                bar["close"],
+                bar["close"],
+                bar["close"],
+                bar["close"],
+                1000.0,
+            ],
         )
 
 
@@ -83,7 +95,12 @@ def _insert_watchlist(
                lineage_json=excluded.lineage_json
         """,
         [
-            watchlist_date, rank, symbol, score, candidate_class, setup_type,
+            watchlist_date,
+            rank,
+            symbol,
+            score,
+            candidate_class,
+            setup_type,
             json.dumps(risk_flags or []),
         ],
     )
@@ -190,7 +207,9 @@ class TestAggregations:
             bars = _make_bars(100.0 + i * 10, bars_per_sym, "2026-01-01")
             _insert_ohlcv(conn, sym, bars)
             _insert_watchlist(
-                conn, sym, "2026-01-01",
+                conn,
+                sym,
+                "2026-01-01",
                 score=0.70 + i * 0.05,
                 setup_type="ACCUMULATION_BASE",
                 risk_flags=["THIN_VOLUME"] if i == 0 else [],

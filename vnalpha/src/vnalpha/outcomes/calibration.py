@@ -130,7 +130,11 @@ def _check_bucket_monotonicity(bucket_rows: List[Dict]) -> Optional[bool]:
     """Return True if higher score buckets have higher avg_forward_return."""
     if len(bucket_rows) < 2:
         return None
-    returns = [r["avg_forward_return"] for r in bucket_rows if r["avg_forward_return"] is not None]
+    returns = [
+        r["avg_forward_return"]
+        for r in bucket_rows
+        if r["avg_forward_return"] is not None
+    ]
     if len(returns) < 2:
         return None
     return all(returns[i] <= returns[i + 1] for i in range(len(returns) - 1))
@@ -138,17 +142,33 @@ def _check_bucket_monotonicity(bucket_rows: List[Dict]) -> Optional[bool]:
 
 def _best_by_return(rows: List[Dict]) -> Optional[str]:
     """Return the name/key of the row with highest avg_forward_return."""
-    valid = [(r, r["avg_forward_return"]) for r in rows if r["avg_forward_return"] is not None]
+    valid = [
+        (r, r["avg_forward_return"])
+        for r in rows
+        if r["avg_forward_return"] is not None
+    ]
     if not valid:
         return None
     best = max(valid, key=lambda x: x[1])
-    return best[0].get("setup_type") or best[0].get("risk_flag") or best[0].get("score_bucket")
+    return (
+        best[0].get("setup_type")
+        or best[0].get("risk_flag")
+        or best[0].get("score_bucket")
+    )
 
 
 def _worst_by_return(rows: List[Dict]) -> Optional[str]:
     """Return the name/key of the row with lowest avg_forward_return."""
-    valid = [(r, r["avg_forward_return"]) for r in rows if r["avg_forward_return"] is not None]
+    valid = [
+        (r, r["avg_forward_return"])
+        for r in rows
+        if r["avg_forward_return"] is not None
+    ]
     if not valid:
         return None
     worst = min(valid, key=lambda x: x[1])
-    return worst[0].get("setup_type") or worst[0].get("risk_flag") or worst[0].get("score_bucket")
+    return (
+        worst[0].get("setup_type")
+        or worst[0].get("risk_flag")
+        or worst[0].get("score_bucket")
+    )
