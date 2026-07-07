@@ -52,7 +52,15 @@ class TestOutcomeCommandHelp:
 
 class TestOutcomeLanguageBoundary:
     def test_no_buy_sell_in_help(self):
-        for cmd in ["evaluate", "candidates", "watchlist", "buckets", "setups", "risks", "report"]:
+        for cmd in [
+            "evaluate",
+            "candidates",
+            "watchlist",
+            "buckets",
+            "setups",
+            "risks",
+            "report",
+        ]:
             result = runner.invoke(app, ["outcome", cmd, "--help"])
             assert "buy signal" not in result.output.lower()
             assert "sell signal" not in result.output.lower()

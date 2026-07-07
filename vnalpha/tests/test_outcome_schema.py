@@ -36,8 +36,14 @@ OUTCOME_TABLES = {
     "risk_flag_performance",
 }
 PHASE5_TABLES = {
-    "ingestion_run", "symbol_master", "market_ohlcv_raw", "canonical_ohlcv",
-    "feature_snapshot", "candidate_score", "daily_watchlist", "rejected_symbol",
+    "ingestion_run",
+    "symbol_master",
+    "market_ohlcv_raw",
+    "canonical_ohlcv",
+    "feature_snapshot",
+    "candidate_score",
+    "daily_watchlist",
+    "rejected_symbol",
 }
 
 
@@ -108,7 +114,9 @@ class TestCandidateOutcomeRepo:
 
     def test_upsert_updates_existing(self, conn):
         rec = CandidateOutcomeRecord(
-            symbol="FPT", watchlist_date="2026-07-01", horizon_sessions=20,
+            symbol="FPT",
+            watchlist_date="2026-07-01",
+            horizon_sessions=20,
             outcome_status=OutcomeStatus.PENDING.value,
         )
         upsert_candidate_outcome(conn, rec)
@@ -127,9 +135,13 @@ class TestCandidateOutcomeRepo:
 class TestWatchlistOutcomeRepo:
     def test_upsert_and_get(self, conn):
         rec = WatchlistOutcomeRecord(
-            watchlist_date="2026-07-01", horizon_sessions=20,
-            candidate_count=5, complete_count=4, pending_count=1,
-            hit_rate=0.6, failure_rate=0.2,
+            watchlist_date="2026-07-01",
+            horizon_sessions=20,
+            candidate_count=5,
+            complete_count=4,
+            pending_count=1,
+            hit_rate=0.6,
+            failure_rate=0.2,
         )
         upsert_watchlist_outcome(conn, rec)
         result = get_watchlist_outcome(conn, "2026-07-01", 20)
@@ -144,9 +156,12 @@ class TestWatchlistOutcomeRepo:
 class TestScoreBucketRepo:
     def test_upsert_and_list(self, conn):
         rec = ScoreBucketPerformanceRecord(
-            as_of_date="2026-07-01", horizon_sessions=20,
-            score_bucket="0.70-0.80", candidate_count=3,
-            avg_forward_return=0.08, hit_rate=0.67,
+            as_of_date="2026-07-01",
+            horizon_sessions=20,
+            score_bucket="0.70-0.80",
+            candidate_count=3,
+            avg_forward_return=0.08,
+            hit_rate=0.67,
         )
         upsert_score_bucket_performance(conn, rec)
         rows = list_score_bucket_performance(conn, 20)
@@ -157,8 +172,10 @@ class TestScoreBucketRepo:
 class TestSetupTypeRepo:
     def test_upsert_and_list(self, conn):
         rec = SetupTypePerformanceRecord(
-            as_of_date="2026-07-01", horizon_sessions=20,
-            setup_type="ACCUMULATION_BASE", candidate_count=2,
+            as_of_date="2026-07-01",
+            horizon_sessions=20,
+            setup_type="ACCUMULATION_BASE",
+            candidate_count=2,
             avg_forward_return=0.06,
         )
         upsert_setup_type_performance(conn, rec)
@@ -170,8 +187,10 @@ class TestSetupTypeRepo:
 class TestRiskFlagRepo:
     def test_upsert_and_list(self, conn):
         rec = RiskFlagPerformanceRecord(
-            as_of_date="2026-07-01", horizon_sessions=20,
-            risk_flag="THIN_VOLUME", candidate_count=1,
+            as_of_date="2026-07-01",
+            horizon_sessions=20,
+            risk_flag="THIN_VOLUME",
+            candidate_count=1,
             avg_forward_return=-0.02,
         )
         upsert_risk_flag_performance(conn, rec)

@@ -23,6 +23,7 @@ def _now_utc() -> str:
 
 # ---- outcome_evaluation_run ----
 
+
 def create_evaluation_run(
     conn: duckdb.DuckDBPyConnection,
     watchlist_date: str,
@@ -40,8 +41,11 @@ def create_evaluation_run(
         VALUES (?, ?, ?, 'RUNNING', ?, ?, ?)
         """,
         [
-            run_id, watchlist_date, _now_utc(),
-            evaluator_version, metric_policy_version,
+            run_id,
+            watchlist_date,
+            _now_utc(),
+            evaluator_version,
+            metric_policy_version,
             str(horizons),
         ],
     )
@@ -74,9 +78,15 @@ def finish_evaluation_run(
         WHERE evaluation_run_id=?
         """,
         [
-            _now_utc(), status, evaluated, persisted, errors,
-            symbol_bar_count_json, benchmark_bar_count,
-            error_json, run_id,
+            _now_utc(),
+            status,
+            evaluated,
+            persisted,
+            errors,
+            symbol_bar_count_json,
+            benchmark_bar_count,
+            error_json,
+            run_id,
         ],
     )
 
@@ -100,17 +110,30 @@ def get_evaluation_run(
     if row is None:
         return None
     cols = [
-        "evaluation_run_id", "watchlist_date", "started_at", "finished_at",
-        "status", "evaluator_version", "metric_policy_version",
-        "horizons_json", "symbol_bar_count_json", "benchmark_bar_count",
-        "evaluated", "persisted", "errors", "error_json",
+        "evaluation_run_id",
+        "watchlist_date",
+        "started_at",
+        "finished_at",
+        "status",
+        "evaluator_version",
+        "metric_policy_version",
+        "horizons_json",
+        "symbol_bar_count_json",
+        "benchmark_bar_count",
+        "evaluated",
+        "persisted",
+        "errors",
+        "error_json",
     ]
     return dict(zip(cols, row, strict=True))
 
 
 # ---- candidate_outcome ----
 
-def upsert_candidate_outcome(conn: duckdb.DuckDBPyConnection, rec: CandidateOutcomeRecord) -> None:
+
+def upsert_candidate_outcome(
+    conn: duckdb.DuckDBPyConnection, rec: CandidateOutcomeRecord
+) -> None:
     """Upsert one candidate outcome row."""
     if rec.computed_at is None:
         rec.computed_at = _now_utc()
@@ -155,18 +178,35 @@ def upsert_candidate_outcome(conn: duckdb.DuckDBPyConnection, rec: CandidateOutc
             benchmark_bar_count=excluded.benchmark_bar_count
         """,
         [
-            rec.symbol, rec.watchlist_date, rec.horizon_sessions,
-            rec.rank, rec.score, rec.candidate_class, rec.setup_type,
-            rec.risk_flags_json, rec.entry_close, rec.exit_close,
-            rec.benchmark_entry_close, rec.benchmark_exit_close,
-            rec.forward_return, rec.benchmark_return,
-            rec.excess_return_vs_vnindex, rec.max_gain, rec.max_drawdown,
-            rec.hit, rec.failure, rec.outcome_status,
-            rec.bars_available, rec.required_bars,
-            rec.computed_at, rec.error_json,
-            rec.evaluation_run_id, rec.evaluator_version,
+            rec.symbol,
+            rec.watchlist_date,
+            rec.horizon_sessions,
+            rec.rank,
+            rec.score,
+            rec.candidate_class,
+            rec.setup_type,
+            rec.risk_flags_json,
+            rec.entry_close,
+            rec.exit_close,
+            rec.benchmark_entry_close,
+            rec.benchmark_exit_close,
+            rec.forward_return,
+            rec.benchmark_return,
+            rec.excess_return_vs_vnindex,
+            rec.max_gain,
+            rec.max_drawdown,
+            rec.hit,
+            rec.failure,
+            rec.outcome_status,
+            rec.bars_available,
+            rec.required_bars,
+            rec.computed_at,
+            rec.error_json,
+            rec.evaluation_run_id,
+            rec.evaluator_version,
             rec.metric_policy_version,
-            rec.symbol_bar_count, rec.benchmark_bar_count,
+            rec.symbol_bar_count,
+            rec.benchmark_bar_count,
         ],
     )
 
@@ -192,19 +232,40 @@ def get_candidate_outcomes(
         [watchlist_date, horizon_sessions],
     ).fetchall()
     cols = [
-        "symbol", "watchlist_date", "horizon_sessions", "rank", "score",
-        "candidate_class", "setup_type", "risk_flags_json",
-        "entry_close", "exit_close", "benchmark_entry_close", "benchmark_exit_close",
-        "forward_return", "benchmark_return", "excess_return_vs_vnindex",
-        "max_gain", "max_drawdown", "hit", "failure", "outcome_status",
-        "bars_available", "required_bars", "computed_at", "error_json",
+        "symbol",
+        "watchlist_date",
+        "horizon_sessions",
+        "rank",
+        "score",
+        "candidate_class",
+        "setup_type",
+        "risk_flags_json",
+        "entry_close",
+        "exit_close",
+        "benchmark_entry_close",
+        "benchmark_exit_close",
+        "forward_return",
+        "benchmark_return",
+        "excess_return_vs_vnindex",
+        "max_gain",
+        "max_drawdown",
+        "hit",
+        "failure",
+        "outcome_status",
+        "bars_available",
+        "required_bars",
+        "computed_at",
+        "error_json",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 
 
 # ---- watchlist_outcome ----
 
-def upsert_watchlist_outcome(conn: duckdb.DuckDBPyConnection, rec: WatchlistOutcomeRecord) -> None:
+
+def upsert_watchlist_outcome(
+    conn: duckdb.DuckDBPyConnection, rec: WatchlistOutcomeRecord
+) -> None:
     if rec.computed_at is None:
         rec.computed_at = _now_utc()
     conn.execute(
@@ -237,14 +298,24 @@ def upsert_watchlist_outcome(conn: duckdb.DuckDBPyConnection, rec: WatchlistOutc
             metric_policy_version=excluded.metric_policy_version
         """,
         [
-            rec.watchlist_date, rec.horizon_sessions,
-            rec.candidate_count, rec.complete_count,
-            rec.pending_count, rec.missing_data_count,
-            rec.avg_forward_return, rec.median_forward_return,
-            rec.avg_excess_return, rec.median_excess_return,
-            rec.avg_max_gain, rec.avg_max_drawdown,
-            rec.hit_rate, rec.failure_rate, rec.computed_at,
-            rec.evaluation_run_id, rec.evaluator_version, rec.metric_policy_version,
+            rec.watchlist_date,
+            rec.horizon_sessions,
+            rec.candidate_count,
+            rec.complete_count,
+            rec.pending_count,
+            rec.missing_data_count,
+            rec.avg_forward_return,
+            rec.median_forward_return,
+            rec.avg_excess_return,
+            rec.median_excess_return,
+            rec.avg_max_gain,
+            rec.avg_max_drawdown,
+            rec.hit_rate,
+            rec.failure_rate,
+            rec.computed_at,
+            rec.evaluation_run_id,
+            rec.evaluator_version,
+            rec.metric_policy_version,
         ],
     )
 
@@ -270,18 +341,31 @@ def get_watchlist_outcome(
     if row is None:
         return None
     cols = [
-        "watchlist_date", "horizon_sessions", "candidate_count",
-        "complete_count", "pending_count", "missing_data_count",
-        "avg_forward_return", "median_forward_return",
-        "avg_excess_return", "median_excess_return",
-        "avg_max_gain", "avg_max_drawdown", "hit_rate", "failure_rate", "computed_at",
+        "watchlist_date",
+        "horizon_sessions",
+        "candidate_count",
+        "complete_count",
+        "pending_count",
+        "missing_data_count",
+        "avg_forward_return",
+        "median_forward_return",
+        "avg_excess_return",
+        "median_excess_return",
+        "avg_max_gain",
+        "avg_max_drawdown",
+        "hit_rate",
+        "failure_rate",
+        "computed_at",
     ]
     return dict(zip(cols, row, strict=True))
 
 
 # ---- score_bucket_performance ----
 
-def upsert_score_bucket_performance(conn: duckdb.DuckDBPyConnection, rec: ScoreBucketPerformanceRecord) -> None:
+
+def upsert_score_bucket_performance(
+    conn: duckdb.DuckDBPyConnection, rec: ScoreBucketPerformanceRecord
+) -> None:
     if rec.computed_at is None:
         rec.computed_at = _now_utc()
     conn.execute(
@@ -307,11 +391,20 @@ def upsert_score_bucket_performance(conn: duckdb.DuckDBPyConnection, rec: ScoreB
             metric_policy_version=excluded.metric_policy_version
         """,
         [
-            rec.as_of_date, rec.horizon_sessions, rec.score_bucket,
-            rec.candidate_count, rec.avg_forward_return, rec.median_forward_return,
-            rec.avg_excess_return, rec.hit_rate, rec.failure_rate,
-            rec.avg_max_drawdown, rec.computed_at,
-            rec.evaluation_run_id, rec.evaluator_version, rec.metric_policy_version,
+            rec.as_of_date,
+            rec.horizon_sessions,
+            rec.score_bucket,
+            rec.candidate_count,
+            rec.avg_forward_return,
+            rec.median_forward_return,
+            rec.avg_excess_return,
+            rec.hit_rate,
+            rec.failure_rate,
+            rec.avg_max_drawdown,
+            rec.computed_at,
+            rec.evaluation_run_id,
+            rec.evaluator_version,
+            rec.metric_policy_version,
         ],
     )
 
@@ -335,16 +428,27 @@ def list_score_bucket_performance(
     sql += " ORDER BY score_bucket"
     rows = conn.execute(sql, params).fetchall()
     cols = [
-        "as_of_date", "horizon_sessions", "score_bucket", "candidate_count",
-        "avg_forward_return", "median_forward_return", "avg_excess_return",
-        "hit_rate", "failure_rate", "avg_max_drawdown", "computed_at",
+        "as_of_date",
+        "horizon_sessions",
+        "score_bucket",
+        "candidate_count",
+        "avg_forward_return",
+        "median_forward_return",
+        "avg_excess_return",
+        "hit_rate",
+        "failure_rate",
+        "avg_max_drawdown",
+        "computed_at",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 
 
 # ---- setup_type_performance ----
 
-def upsert_setup_type_performance(conn: duckdb.DuckDBPyConnection, rec: SetupTypePerformanceRecord) -> None:
+
+def upsert_setup_type_performance(
+    conn: duckdb.DuckDBPyConnection, rec: SetupTypePerformanceRecord
+) -> None:
     if rec.computed_at is None:
         rec.computed_at = _now_utc()
     conn.execute(
@@ -370,11 +474,20 @@ def upsert_setup_type_performance(conn: duckdb.DuckDBPyConnection, rec: SetupTyp
             metric_policy_version=excluded.metric_policy_version
         """,
         [
-            rec.as_of_date, rec.horizon_sessions, rec.setup_type,
-            rec.candidate_count, rec.avg_forward_return, rec.median_forward_return,
-            rec.avg_excess_return, rec.hit_rate, rec.failure_rate,
-            rec.avg_max_drawdown, rec.computed_at,
-            rec.evaluation_run_id, rec.evaluator_version, rec.metric_policy_version,
+            rec.as_of_date,
+            rec.horizon_sessions,
+            rec.setup_type,
+            rec.candidate_count,
+            rec.avg_forward_return,
+            rec.median_forward_return,
+            rec.avg_excess_return,
+            rec.hit_rate,
+            rec.failure_rate,
+            rec.avg_max_drawdown,
+            rec.computed_at,
+            rec.evaluation_run_id,
+            rec.evaluator_version,
+            rec.metric_policy_version,
         ],
     )
 
@@ -398,16 +511,27 @@ def list_setup_type_performance(
     sql += " ORDER BY setup_type"
     rows = conn.execute(sql, params).fetchall()
     cols = [
-        "as_of_date", "horizon_sessions", "setup_type", "candidate_count",
-        "avg_forward_return", "median_forward_return", "avg_excess_return",
-        "hit_rate", "failure_rate", "avg_max_drawdown", "computed_at",
+        "as_of_date",
+        "horizon_sessions",
+        "setup_type",
+        "candidate_count",
+        "avg_forward_return",
+        "median_forward_return",
+        "avg_excess_return",
+        "hit_rate",
+        "failure_rate",
+        "avg_max_drawdown",
+        "computed_at",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 
 
 # ---- risk_flag_performance ----
 
-def upsert_risk_flag_performance(conn: duckdb.DuckDBPyConnection, rec: RiskFlagPerformanceRecord) -> None:
+
+def upsert_risk_flag_performance(
+    conn: duckdb.DuckDBPyConnection, rec: RiskFlagPerformanceRecord
+) -> None:
     if rec.computed_at is None:
         rec.computed_at = _now_utc()
     conn.execute(
@@ -433,11 +557,20 @@ def upsert_risk_flag_performance(conn: duckdb.DuckDBPyConnection, rec: RiskFlagP
             metric_policy_version=excluded.metric_policy_version
         """,
         [
-            rec.as_of_date, rec.horizon_sessions, rec.risk_flag,
-            rec.candidate_count, rec.avg_forward_return, rec.median_forward_return,
-            rec.avg_excess_return, rec.hit_rate, rec.failure_rate,
-            rec.avg_max_drawdown, rec.computed_at,
-            rec.evaluation_run_id, rec.evaluator_version, rec.metric_policy_version,
+            rec.as_of_date,
+            rec.horizon_sessions,
+            rec.risk_flag,
+            rec.candidate_count,
+            rec.avg_forward_return,
+            rec.median_forward_return,
+            rec.avg_excess_return,
+            rec.hit_rate,
+            rec.failure_rate,
+            rec.avg_max_drawdown,
+            rec.computed_at,
+            rec.evaluation_run_id,
+            rec.evaluator_version,
+            rec.metric_policy_version,
         ],
     )
 
@@ -461,8 +594,16 @@ def list_risk_flag_performance(
     sql += " ORDER BY risk_flag"
     rows = conn.execute(sql, params).fetchall()
     cols = [
-        "as_of_date", "horizon_sessions", "risk_flag", "candidate_count",
-        "avg_forward_return", "median_forward_return", "avg_excess_return",
-        "hit_rate", "failure_rate", "avg_max_drawdown", "computed_at",
+        "as_of_date",
+        "horizon_sessions",
+        "risk_flag",
+        "candidate_count",
+        "avg_forward_return",
+        "median_forward_return",
+        "avg_excess_return",
+        "hit_rate",
+        "failure_rate",
+        "avg_max_drawdown",
+        "computed_at",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
