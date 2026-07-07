@@ -3,7 +3,6 @@
 import duckdb
 import numpy as np
 import pandas as pd
-import pytest
 
 from vnalpha.features.price import (
     compute_close_strength,
@@ -227,7 +226,20 @@ def _insert_ohlcv(conn, symbol, n=200, end_date="2024-06-28", seed=42):
     idx = pd.date_range(end=end_date, periods=n, freq="B")
     df.index = idx
     rows = [
-        (symbol, "1D", str(d.date()), row["open"], row["high"], row["low"], row["close"], row["volume"], None, None, None, None)
+        (
+            symbol,
+            "1D",
+            str(d.date()),
+            row["open"],
+            row["high"],
+            row["low"],
+            row["close"],
+            row["volume"],
+            None,
+            None,
+            None,
+            None,
+        )
         for d, row in df.iterrows()
     ]
     conn.executemany(
@@ -250,7 +262,8 @@ def test_build_features_exact_date_metadata():
 
     row = conn.execute(
         "SELECT as_of_bar_date, feature_data_status, source_row_count, feature_build_version, feature_generated_at "
-        "FROM feature_snapshot WHERE symbol = 'FPT' AND date = ?", [target]
+        "FROM feature_snapshot WHERE symbol = 'FPT' AND date = ?",
+        [target],
     ).fetchone()
     assert row is not None
     as_of_bar_date, status, src_count, build_ver, gen_at = row
@@ -277,7 +290,8 @@ def test_build_features_stale_date_metadata():
 
     row = conn.execute(
         "SELECT as_of_bar_date, feature_data_status FROM feature_snapshot "
-        "WHERE symbol = 'ACB' AND date = ?", [target]
+        "WHERE symbol = 'ACB' AND date = ?",
+        [target],
     ).fetchone()
     assert row is not None
     as_of_bar_date, status = row
@@ -299,7 +313,8 @@ def test_build_features_missing_benchmark():
 
     row = conn.execute(
         "SELECT benchmark_as_of_bar_date, benchmark_row_count, rs_20d_vs_vnindex "
-        "FROM feature_snapshot WHERE symbol = 'VNM' AND date = ?", [target]
+        "FROM feature_snapshot WHERE symbol = 'VNM' AND date = ?",
+        [target],
     ).fetchone()
     assert row is not None
     bench_as_of, bench_count, rs = row

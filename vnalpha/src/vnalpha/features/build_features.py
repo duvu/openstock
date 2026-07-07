@@ -134,9 +134,11 @@ def save_feature_snapshot(
     all_data_columns = FEATURE_COLUMNS + METADATA_COLUMNS
     cols = ["symbol", "date"] + all_data_columns
     row_meta = metadata or {}
-    values = [symbol, date_str] + [features.get(c) for c in FEATURE_COLUMNS] + [
-        row_meta.get(c) for c in METADATA_COLUMNS
-    ]
+    values = (
+        [symbol, date_str]
+        + [features.get(c) for c in FEATURE_COLUMNS]
+        + [row_meta.get(c) for c in METADATA_COLUMNS]
+    )
     placeholders = ", ".join(["?"] * len(cols))
     col_names = ", ".join(cols)
     update_set = ", ".join(f"{c} = excluded.{c}" for c in all_data_columns)
@@ -196,7 +198,9 @@ def build_features(
             skipped += 1
             skipped_reasons.append({"symbol": symbol, "reason": "NO_CANONICAL_DATA"})
             continue
-        features_df = build_features_for_symbol(df, benchmark_df if not benchmark_df.empty else None)
+        features_df = build_features_for_symbol(
+            df, benchmark_df if not benchmark_df.empty else None
+        )
         if features_df.empty:
             skipped += 1
             skipped_reasons.append(
@@ -211,7 +215,11 @@ def build_features(
             continue
         last_row = row.iloc[-1]
         # Record the actual bar date (index) of the last row used
-        as_of_bar_date = str(last_row.name.date()) if hasattr(last_row.name, "date") else str(last_row.name)
+        as_of_bar_date = (
+            str(last_row.name.date())
+            if hasattr(last_row.name, "date")
+            else str(last_row.name)
+        )
         source_row_count = len(df)
 
         if benchmark_df.empty:
