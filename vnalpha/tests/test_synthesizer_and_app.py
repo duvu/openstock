@@ -1,4 +1,5 @@
 """Tests for Phase 5.9 AnswerSynthesizer and AssistantApp orchestrator."""
+
 from __future__ import annotations
 
 import json
@@ -29,13 +30,15 @@ from vnalpha.warehouse.migrations import run_migrations
 # ---------------------------------------------------------------------------
 
 VALID_INTENT_JSON = '{"intent": "scan_candidates", "confidence": 0.9, "entities": {}}'
-VALID_SYNTHESIS_JSON = json.dumps({
-    "summary": "3 strong candidates found.",
-    "basis": "Based on persisted score.",
-    "risks_caveats": "See risk flags.",
-    "tool_trace_summary": "Ran watchlist.scan.",
-    "missing_data": [],
-})
+VALID_SYNTHESIS_JSON = json.dumps(
+    {
+        "summary": "3 strong candidates found.",
+        "basis": "Based on persisted score.",
+        "risks_caveats": "See risk flags.",
+        "tool_trace_summary": "Ran watchlist.scan.",
+        "missing_data": [],
+    }
+)
 
 
 def _make_fake_llm() -> FakeLLMClient:
@@ -120,13 +123,15 @@ class TestAnswerSynthesizer:
 
     def test_synthesizer_missing_data_populated(self):
         """missing_data list is correctly parsed from LLM response."""
-        response = json.dumps({
-            "summary": "FPT score missing.",
-            "basis": "No score found.",
-            "risks_caveats": "N/A",
-            "tool_trace_summary": "Ran watchlist.scan.",
-            "missing_data": ["no_candidate_score for FPT on 2026-07-01"],
-        })
+        response = json.dumps(
+            {
+                "summary": "FPT score missing.",
+                "basis": "No score found.",
+                "risks_caveats": "N/A",
+                "tool_trace_summary": "Ran watchlist.scan.",
+                "missing_data": ["no_candidate_score for FPT on 2026-07-01"],
+            }
+        )
         client = FakeLLMClient(responses=[(response, {})])
         synth = AnswerSynthesizer(client)
         plan = _make_scan_plan()
@@ -151,6 +156,7 @@ class TestAnswerSynthesizer:
 
     def test_synthesizer_llm_failure_raises_synthesis_error(self):
         """If LLM chat raises, SynthesisError is raised."""
+
         class BrokenLLM:
             def chat(self, messages, response_schema=None, *, stage="unknown"):
                 raise RuntimeError("network down")
