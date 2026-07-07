@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import inspect
 
-import pytest
-
 from vnalpha.chat.context import (
     ChatContext,
     build_context_prompt_prefix,
     resolve_entity_reference,
     update_context_from_command,
 )
-
 
 # ---------------------------------------------------------------------------
 # ChatContext — default field values

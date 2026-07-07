@@ -2,18 +2,26 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING, Callable, Literal
 
 from vnalpha.chat.errors import (
     ChatErrorKind,
+    error_to_message_type,
     format_refusal,
     format_runtime_error,
     format_tool_failure,
-    error_to_message_type,
 )
-from vnalpha.chat.events import AssistantStage, AssistantStageEvent, format_stage_event, stage_to_style
-from vnalpha.chat.modes import ExecutionMode, format_plan_preview, is_safe_read_only_plan
+from vnalpha.chat.events import (
+    AssistantStage,
+    AssistantStageEvent,
+    format_stage_event,
+    stage_to_style,
+)
+from vnalpha.chat.modes import (
+    ExecutionMode,
+    format_plan_preview,
+    is_safe_read_only_plan,
+)
 from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
 from vnalpha.warehouse.migrations import run_migrations
@@ -126,16 +134,32 @@ class ChatController:
                     def _staged_on_trace(event: "TraceEvent") -> None:
                         if _original_on_trace:
                             _original_on_trace(event)
-                        elapsed = int(event.duration_ms) if event.duration_ms is not None else None
+                        elapsed = (
+                            int(event.duration_ms)
+                            if event.duration_ms is not None
+                            else None
+                        )
                         if event.status == "RUNNING":
-                            self._emit_stage(AssistantStage.TOOL_START, tool_name=event.tool_name)
+                            self._emit_stage(
+                                AssistantStage.TOOL_START, tool_name=event.tool_name
+                            )
                         elif event.status == "SUCCESS":
-                            self._emit_stage(AssistantStage.TOOL_SUCCESS, tool_name=event.tool_name, elapsed_ms=elapsed)
+                            self._emit_stage(
+                                AssistantStage.TOOL_SUCCESS,
+                                tool_name=event.tool_name,
+                                elapsed_ms=elapsed,
+                            )
                         elif event.status == "FAILED":
-                            self._emit_stage(AssistantStage.TOOL_FAILED, tool_name=event.tool_name, elapsed_ms=elapsed)
+                            self._emit_stage(
+                                AssistantStage.TOOL_FAILED,
+                                tool_name=event.tool_name,
+                                elapsed_ms=elapsed,
+                            )
                             failure_text = format_tool_failure(
                                 event.tool_name,
-                                f"failed after {elapsed}ms" if elapsed is not None else "failed",
+                                f"failed after {elapsed}ms"
+                                if elapsed is not None
+                                else "failed",
                             )
                             self._persist_error_message(
                                 failure_text,
@@ -149,6 +173,7 @@ class ChatController:
                     finally:
                         self._on_trace = _original_on_trace
                     from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
+
                     self._emit_stage(AssistantStage.SYNTHESIZING)
                     if isinstance(answer, AssistantAnswer):
                         self._emit_stage(AssistantStage.FINAL, text=answer.summary)
@@ -187,6 +212,7 @@ class ChatController:
         try:
             answer, _plan = self._run_ask(question, no_execute=False)
             from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
+
             if isinstance(answer, AssistantAnswer):
                 self._on_message("bold green", f"Assistant: {answer.summary}")
             elif isinstance(answer, RefusalMessage):
@@ -280,7 +306,9 @@ class ChatController:
             run_migrations(conn=conn)
             count = clear_visible_messages(conn, self._chat_session_id)
             if forget:
-                return f"Chat log cleared and {count} message(s) deleted from transcript."
+                return (
+                    f"Chat log cleared and {count} message(s) deleted from transcript."
+                )
             else:
                 return f"Chat log cleared ({count} message(s) removed from view)."
         finally:
@@ -288,7 +316,6 @@ class ChatController:
 
     def _cmd_context(self) -> str:
         """Return a formatted string showing the current ChatContext state."""
-        from vnalpha.chat.context import ChatContext
 
         ctx_fields: list[str] = []
         if self._chat_session_id:
@@ -436,7 +463,9 @@ class ChatController:
         tool_name: str | None = None,
         elapsed_ms: int | None = None,
     ) -> None:
-        event = AssistantStageEvent(stage=stage, text=text, tool_name=tool_name, elapsed_ms=elapsed_ms)
+        event = AssistantStageEvent(
+            stage=stage, text=text, tool_name=tool_name, elapsed_ms=elapsed_ms
+        )
         self._on_message(stage_to_style(stage), format_stage_event(event))
 
     def _render_command_result(self, result) -> None:
@@ -454,4 +483,6 @@ class ChatController:
                 self._on_message("green", result.title)
             for table in result.tables:
                 n = len(table.rows)
-                self._on_message("dim", f"  {table.title}: {n} row{{'s' if n != 1 else ''}}")
+                self._on_message(
+                    "dim", f"  {table.title}: {n} row{{'s' if n != 1 else ''}}"
+                )

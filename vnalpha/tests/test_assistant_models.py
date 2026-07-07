@@ -1,4 +1,5 @@
 """Tests for Phase 5.9 assistant core models, errors, and LLM gateway."""
+
 from __future__ import annotations
 
 from vnalpha.assistant.errors import (
@@ -249,7 +250,9 @@ def test_llm_gateway_config_defaults(monkeypatch):
 
 def test_llm_gateway_config_from_env(monkeypatch):
     monkeypatch.setenv("VNALPHA_LLM_MODEL", "gpt-4o")
-    monkeypatch.setenv("VNALPHA_LLM_ENDPOINT", "https://custom.endpoint/v1/chat/completions")
+    monkeypatch.setenv(
+        "VNALPHA_LLM_ENDPOINT", "https://custom.endpoint/v1/chat/completions"
+    )
     monkeypatch.setenv("VNALPHA_LLM_TIMEOUT", "60")
     monkeypatch.setenv("VNALPHA_LLM_MAX_OUTPUT_TOKENS", "2048")
     monkeypatch.setenv("VNALPHA_LLM_MAX_RETRIES", "5")

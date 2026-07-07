@@ -1,4 +1,5 @@
 """Intent classifier for the Phase 5.9 natural-language research assistant."""
+
 from __future__ import annotations
 
 import json
@@ -12,12 +13,32 @@ if TYPE_CHECKING:
 
 # ----- Deterministic pre-rules (checked BEFORE calling LLM) -----
 
-UNSAFE_KEYWORDS: frozenset[str] = frozenset({
-    "buy", "sell", "order", "place" + " order", "execute trade", "broker",
-    "account", "port" + "folio", "invest", "purchase", "transaction",
-    "short", "long position", "guaranteed", "will go up", "will go down",
-    "hide trace", "bypass", "fabricate", "ignore safety", "disable safety",
-})
+UNSAFE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "buy",
+        "sell",
+        "order",
+        "place" + " order",
+        "execute trade",
+        "broker",
+        "account",
+        "port" + "folio",
+        "invest",
+        "purchase",
+        "transaction",
+        "short",
+        "long position",
+        "guaranteed",
+        "will go up",
+        "will go down",
+        "hide trace",
+        "bypass",
+        "fabricate",
+        "ignore safety",
+        "disable safety",
+    }
+)
+
 
 def _deterministic_precheck(prompt: str) -> str | None:
     """Return refusal category string if prompt matches unsafe keyword pattern, else None."""
@@ -26,6 +47,7 @@ def _deterministic_precheck(prompt: str) -> str | None:
         if kw in lower:
             return "TRADING_EXECUTION"
     return None
+
 
 # ----- Classifier prompt -----
 
@@ -49,17 +71,21 @@ Rules:
 - Respond ONLY with valid JSON matching: {"intent": "<name>", "confidence": 0.0-1.0, "entities": {}, "needs_clarification": false, "clarification_question": null, "safety_flags": []}
 """
 
+
 def _build_classifier_messages(user_prompt: str) -> list[dict]:
     return [
         {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
     ]
 
+
 def _parse_classifier_response(response_text: str, user_prompt: str) -> IntentResult:
     try:
         data = json.loads(response_text)
     except json.JSONDecodeError as exc:
-        raise IntentClassificationError(f"Invalid JSON from classifier: {response_text[:100]}") from exc
+        raise IntentClassificationError(
+            f"Invalid JSON from classifier: {response_text[:100]}"
+        ) from exc
     intent = data.get("intent", "unsupported_or_unsafe")
     if intent not in SUPPORTED_INTENTS:
         intent = "unsupported_or_unsafe"

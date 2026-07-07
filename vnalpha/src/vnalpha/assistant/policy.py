@@ -1,4 +1,5 @@
 """Refusal policy for Phase 5.9 assistant — deterministic safety enforcement."""
+
 from __future__ import annotations
 
 from vnalpha.assistant.errors import RefusalError

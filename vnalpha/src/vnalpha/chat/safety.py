@@ -1,6 +1,24 @@
 from __future__ import annotations
 
+from enum import Enum
+
 from vnalpha.chat.modes import ExecutionMode
+
+
+class PermissionState(str, Enum):
+    """Canonical permission states for tool/action evaluation.
+
+    - ALLOW:      Safe read-only research tool; execute immediately.
+    - ASK:        Potentially side-effecting tool; require explicit approval.
+    - DENY:       Not permitted in current execution mode.
+    - HARD_DENY:  Permanently forbidden; reject regardless of mode or prompt text.
+    """
+
+    ALLOW = "allow"
+    ASK = "ask"
+    DENY = "deny"
+    HARD_DENY = "hard_deny"
+
 
 DISALLOWED_TOOL_PREFIXES: frozenset[str] = frozenset(
     {
@@ -8,6 +26,9 @@ DISALLOWED_TOOL_PREFIXES: frozenset[str] = frozenset(
         "order",
         "allocation",
         "account",
+        "trading",
+        "margin",
+        "transfer",
     }
 )
 
@@ -31,6 +52,23 @@ DISALLOWED_TOOL_NAMES: frozenset[str] = frozenset(
         "connect_broker",
         "disconnect_broker",
         "authenticate_broker",
+        "auto_execute",
+        "schedule_trade",
+        "automated_execution",
+        "run_shell",
+        "execute_shell",
+        "shell_command",
+        "shell_exec",
+        "subprocess_run",
+        "run_sql",
+        "execute_sql",
+        "raw_sql",
+        "arbitrary_sql",
+        "disable_safety",
+        "bypass_safety",
+        "hide_trace",
+        "suppress_trace",
+        "ignore_safety_rules",
     }
 )
 
@@ -93,3 +131,15 @@ def validate_tool_call(
 
 def filter_safe_tools(tool_names: list[str]) -> list[str]:
     return [name for name in tool_names if is_tool_allowed_in_chat(name)]
+
+
+def get_permission_state(
+    tool_name: str, execution_mode: ExecutionMode
+) -> PermissionState:
+    if not is_tool_allowed_in_chat(tool_name):
+        return PermissionState.HARD_DENY
+    if requires_plan_approval(tool_name):
+        if execution_mode == ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY:
+            return PermissionState.DENY
+        return PermissionState.ASK
+    return PermissionState.ALLOW

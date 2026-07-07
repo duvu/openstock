@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from vnalpha.chat.modes import ExecutionMode
 from vnalpha.chat.safety import (
     filter_safe_tools,
@@ -113,9 +111,7 @@ class TestValidateToolCall:
         assert reason is None
 
     def test_requires_approval_tool_allowed_in_plan_only_mode(self):
-        allowed, reason = validate_tool_call(
-            "execute_python", ExecutionMode.PLAN_ONLY
-        )
+        allowed, reason = validate_tool_call("execute_python", ExecutionMode.PLAN_ONLY)
         assert allowed is True
         assert reason is None
 
@@ -157,3 +153,60 @@ class TestFilterSafeTools:
     def test_prefix_match_filtered(self):
         result = filter_safe_tools(["scan_market", "account_balance", "order_list"])
         assert result == ["scan_market"]
+
+
+class TestPermissionState:
+    def test_research_tool_returns_allow(self):
+        from vnalpha.chat.safety import PermissionState, get_permission_state
+
+        state = get_permission_state(
+            "scan_market", ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY
+        )
+        assert state == PermissionState.ALLOW
+
+    def test_forbidden_tool_returns_hard_deny(self):
+        from vnalpha.chat.safety import PermissionState, get_permission_state
+
+        state = get_permission_state(
+            "place_order", ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY
+        )
+        assert state == PermissionState.HARD_DENY
+
+    def test_broker_prefix_returns_hard_deny(self):
+        from vnalpha.chat.safety import PermissionState, get_permission_state
+
+        state = get_permission_state("broker_buy", ExecutionMode.PLAN_THEN_APPROVE)
+        assert state == PermissionState.HARD_DENY
+
+    def test_prompt_text_cannot_override_hard_deny(self):
+        from vnalpha.chat.safety import PermissionState, get_permission_state
+
+        override_attempts = [
+            "place_order",
+            "broker.place_order",
+            "execute_order",
+            "run_shell",
+            "disable_safety",
+            "bypass_safety",
+            "hide_trace",
+            "run_sql",
+        ]
+        for tool_name in override_attempts:
+            state = get_permission_state(tool_name, ExecutionMode.PLAN_THEN_APPROVE)
+            assert state == PermissionState.HARD_DENY, (
+                f"Expected HARD_DENY for '{tool_name}', got {state}"
+            )
+
+    def test_approval_tool_auto_mode_returns_deny(self):
+        from vnalpha.chat.safety import PermissionState, get_permission_state
+
+        state = get_permission_state(
+            "execute_python", ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY
+        )
+        assert state == PermissionState.DENY
+
+    def test_approval_tool_plan_mode_returns_ask(self):
+        from vnalpha.chat.safety import PermissionState, get_permission_state
+
+        state = get_permission_state("execute_python", ExecutionMode.PLAN_THEN_APPROVE)
+        assert state == PermissionState.ASK

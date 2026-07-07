@@ -7,6 +7,7 @@ Rules:
 - If a required artifact is missing from tool outputs, state it explicitly; do not fabricate.
 - Every answer must include basis/evidence and risks/caveats.
 """
+
 from __future__ import annotations
 
 import json
@@ -55,7 +56,10 @@ Respond in JSON:
 }
 """
 
-def _build_synthesis_messages(user_prompt: str, plan: AssistantPlan, tool_outputs: dict[str, Any]) -> list[dict]:
+
+def _build_synthesis_messages(
+    user_prompt: str, plan: AssistantPlan, tool_outputs: dict[str, Any]
+) -> list[dict]:
     context = {
         "user_question": user_prompt,
         "intent": plan.intent,
@@ -63,8 +67,12 @@ def _build_synthesis_messages(user_prompt: str, plan: AssistantPlan, tool_output
     }
     return [
         {"role": "system", "content": SYNTHESIZER_SYSTEM_PROMPT},
-        {"role": "user", "content": json.dumps(context, default=str, ensure_ascii=False)},
+        {
+            "role": "user",
+            "content": json.dumps(context, default=str, ensure_ascii=False),
+        },
     ]
+
 
 def _strip_markdown_fence(text: str) -> str:
     text = text.strip()
@@ -82,7 +90,9 @@ def _parse_synthesis_response(response_text: str) -> AssistantAnswer:
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        raise SynthesisError(f"Invalid JSON from synthesizer: {response_text[:100]}") from exc
+        raise SynthesisError(
+            f"Invalid JSON from synthesizer: {response_text[:100]}"
+        ) from exc
     return AssistantAnswer(
         summary=data.get("summary", ""),
         basis=data.get("basis", ""),

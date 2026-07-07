@@ -1,4 +1,5 @@
 """Plan builder: maps IntentResult to AssistantPlan using Phase 5.8 tool allowlist."""
+
 from __future__ import annotations
 
 import uuid
@@ -11,17 +12,20 @@ if TYPE_CHECKING:
     pass
 
 # Phase 5.8 allowlisted tools for Phase 5.9
-TOOL_ALLOWLIST: frozenset[str] = frozenset({
-    "watchlist.scan",
-    "watchlist.filter",
-    "candidate.compare",
-    "candidate.explain",
-    "quality.get_status",
-    "quality.get_many_status",
-    "lineage.get_symbol_lineage",
-    "note.create",
-    "history.list_sessions",
-})
+TOOL_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "watchlist.scan",
+        "watchlist.filter",
+        "candidate.compare",
+        "candidate.explain",
+        "quality.get_status",
+        "quality.get_many_status",
+        "lineage.get_symbol_lineage",
+        "note.create",
+        "history.list_sessions",
+    }
+)
+
 
 def _step(tool: str, args: dict, purpose: str, permission: str) -> ToolPlanStep:
     return ToolPlanStep(
@@ -31,6 +35,7 @@ def _step(tool: str, args: dict, purpose: str, permission: str) -> ToolPlanStep:
         purpose=purpose,
         required_permission=permission,
     )
+
 
 # Deterministic plan builders by intent (no LLM needed for most)
 def _build_scan_plan(entities: dict) -> AssistantPlan:
@@ -43,9 +48,17 @@ def _build_scan_plan(entities: dict) -> AssistantPlan:
         args["universe"] = universe
     return AssistantPlan(
         intent="scan_candidates",
-        steps=[_step("watchlist.scan", args, "Retrieve ranked research candidates", "READ_WATCHLIST")],
+        steps=[
+            _step(
+                "watchlist.scan",
+                args,
+                "Retrieve ranked research candidates",
+                "READ_WATCHLIST",
+            )
+        ],
         required_artifacts=["daily_watchlist", "candidate_score"],
     )
+
 
 def _build_filter_plan(entities: dict) -> AssistantPlan:
     filters = entities.get("filters", {})
@@ -55,9 +68,17 @@ def _build_filter_plan(entities: dict) -> AssistantPlan:
         args["date"] = date
     return AssistantPlan(
         intent="filter_candidates",
-        steps=[_step("watchlist.filter", args, "Filter candidates by criteria", "READ_WATCHLIST")],
+        steps=[
+            _step(
+                "watchlist.filter",
+                args,
+                "Filter candidates by criteria",
+                "READ_WATCHLIST",
+            )
+        ],
         required_artifacts=["candidate_score"],
     )
+
 
 def _build_compare_plan(entities: dict) -> AssistantPlan:
     symbols = entities.get("symbols", [])
@@ -66,20 +87,35 @@ def _build_compare_plan(entities: dict) -> AssistantPlan:
     if date:
         args["date"] = date
     # Use multi-symbol quality tool when comparing 2+ symbols
-    quality_tool = "quality.get_many_status" if len(symbols) > 1 else "quality.get_status"
-    quality_args: dict[str, Any] = {"symbols": symbols, **({"date": date} if date else {})}
+    quality_tool = (
+        "quality.get_many_status" if len(symbols) > 1 else "quality.get_status"
+    )
+    quality_args: dict[str, Any] = {
+        "symbols": symbols,
+        **({"date": date} if date else {}),
+    }
     if quality_tool == "quality.get_status" and symbols:
         quality_args = {"symbol": symbols[0], **({"date": date} if date else {})}
     steps = [
-        _step("candidate.compare", args, "Compare candidate scores and evidence", "READ_SCORE"),
-        _step(quality_tool, quality_args,
-              "Check data quality for each symbol", "READ_QUALITY"),
+        _step(
+            "candidate.compare",
+            args,
+            "Compare candidate scores and evidence",
+            "READ_SCORE",
+        ),
+        _step(
+            quality_tool,
+            quality_args,
+            "Check data quality for each symbol",
+            "READ_QUALITY",
+        ),
     ]
     return AssistantPlan(
         intent="compare_symbols",
         steps=steps,
         required_artifacts=["candidate_score", "canonical_ohlcv"],
     )
+
 
 def _build_explain_plan(entities: dict) -> AssistantPlan:
     symbol = entities.get("symbol", "")
@@ -88,15 +124,28 @@ def _build_explain_plan(entities: dict) -> AssistantPlan:
     if date:
         args["date"] = date
     steps = [
-        _step("candidate.explain", args, "Explain candidate score and evidence", "READ_SCORE"),
-        _step("lineage.get_symbol_lineage", args, "Retrieve data lineage", "READ_LINEAGE"),
-        _step("quality.get_status", {"symbol": symbol, **({"date": date} if date else {})}, "Check data quality status", "READ_QUALITY"),
+        _step(
+            "candidate.explain",
+            args,
+            "Explain candidate score and evidence",
+            "READ_SCORE",
+        ),
+        _step(
+            "lineage.get_symbol_lineage", args, "Retrieve data lineage", "READ_LINEAGE"
+        ),
+        _step(
+            "quality.get_status",
+            {"symbol": symbol, **({"date": date} if date else {})},
+            "Check data quality status",
+            "READ_QUALITY",
+        ),
     ]
     return AssistantPlan(
         intent="explain_symbol",
         steps=steps,
         required_artifacts=["candidate_score", "ingestion_run"],
     )
+
 
 def _build_quality_plan(entities: dict) -> AssistantPlan:
     symbol = entities.get("symbol")
@@ -107,9 +156,14 @@ def _build_quality_plan(entities: dict) -> AssistantPlan:
         args["date"] = entities["date"]
     return AssistantPlan(
         intent="review_quality",
-        steps=[_step("quality.get_status", args, "Review data quality status", "READ_QUALITY")],
+        steps=[
+            _step(
+                "quality.get_status", args, "Review data quality status", "READ_QUALITY"
+            )
+        ],
         required_artifacts=["canonical_ohlcv"],
     )
+
 
 def _build_lineage_plan(entities: dict) -> AssistantPlan:
     symbol = entities.get("symbol", "")
@@ -118,9 +172,14 @@ def _build_lineage_plan(entities: dict) -> AssistantPlan:
         args["date"] = entities["date"]
     return AssistantPlan(
         intent="show_lineage",
-        steps=[_step("lineage.get_symbol_lineage", args, "Show data lineage", "READ_LINEAGE")],
+        steps=[
+            _step(
+                "lineage.get_symbol_lineage", args, "Show data lineage", "READ_LINEAGE"
+            )
+        ],
         required_artifacts=["candidate_score", "ingestion_run"],
     )
+
 
 def _build_summarize_plan(entities: dict) -> AssistantPlan:
     args: dict[str, Any] = {}
@@ -128,9 +187,17 @@ def _build_summarize_plan(entities: dict) -> AssistantPlan:
         args["date"] = entities["date"]
     return AssistantPlan(
         intent="summarize_watchlist",
-        steps=[_step("watchlist.scan", args, "Retrieve all candidates for summary", "READ_WATCHLIST")],
+        steps=[
+            _step(
+                "watchlist.scan",
+                args,
+                "Retrieve all candidates for summary",
+                "READ_WATCHLIST",
+            )
+        ],
         required_artifacts=["daily_watchlist"],
     )
+
 
 def _build_note_plan(entities: dict) -> AssistantPlan:
     symbol = entities.get("symbol", "")
@@ -145,21 +212,33 @@ def _build_note_plan(entities: dict) -> AssistantPlan:
         required_artifacts=[],
     )
 
+
 def _build_history_plan(entities: dict) -> AssistantPlan:
     limit = entities.get("limit", 20)
     return AssistantPlan(
         intent="show_history",
-        steps=[_step("history.list_sessions", {"limit": limit}, "List recent research sessions", "READ_HISTORY")],
+        steps=[
+            _step(
+                "history.list_sessions",
+                {"limit": limit},
+                "List recent research sessions",
+                "READ_HISTORY",
+            )
+        ],
         required_artifacts=[],
     )
 
+
 def _build_refusal_plan(entities: dict) -> AssistantPlan:
-    reason = entities.get("reason", "This request is not supported in the research assistant.")
+    reason = entities.get(
+        "reason", "This request is not supported in the research assistant."
+    )
     return AssistantPlan(
         intent="unsupported_or_unsafe",
         steps=[],
         refusal_reason=reason,
     )
+
 
 _PLAN_BUILDERS = {
     "scan_candidates": _build_scan_plan,
@@ -196,7 +275,9 @@ class PlanBuilder:
         try:
             plan = builder(intent_result.entities)
         except Exception as exc:
-            raise PlanBuildError(f"Failed to build plan for intent '{intent}': {exc}") from exc
+            raise PlanBuildError(
+                f"Failed to build plan for intent '{intent}': {exc}"
+            ) from exc
         _validate_plan(plan)
         return plan
 

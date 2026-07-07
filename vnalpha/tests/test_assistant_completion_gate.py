@@ -54,7 +54,9 @@ def test_assistant_tool_trace_has_explicit_assistant_parent(conn):
 
     app.ask("Show strongest candidates", date="2026-07-06")
 
-    session_id = conn.execute("SELECT assistant_session_id FROM assistant_session").fetchone()[0]
+    session_id = conn.execute(
+        "SELECT assistant_session_id FROM assistant_session"
+    ).fetchone()[0]
     row = conn.execute(
         """
         SELECT assistant_session_id, trace_parent_type, tool_name, status
@@ -92,6 +94,8 @@ def test_unsafe_prompt_refused_before_tool_execution(conn):
 
     app.ask("Buy FPT now", date="2026-07-06")
 
-    assert conn.execute("SELECT status FROM assistant_session").fetchone()[0] == "REFUSED"
+    assert (
+        conn.execute("SELECT status FROM assistant_session").fetchone()[0] == "REFUSED"
+    )
     assert conn.execute("SELECT COUNT(*) FROM tool_trace").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM llm_trace").fetchone()[0] == 0

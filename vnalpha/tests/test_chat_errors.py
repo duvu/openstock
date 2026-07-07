@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import duckdb
 import pytest
 
 from vnalpha.warehouse.migrations import run_migrations
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -130,9 +129,7 @@ class TestHandleTurnErrorHandling:
             target_date="2026-07-07",
         )
 
-        with patch.object(
-            ctrl, "_run_ask", side_effect=RuntimeError("exploded")
-        ):
+        with patch.object(ctrl, "_run_ask", side_effect=RuntimeError("exploded")):
             result = ctrl.handle_turn("show me VN30 stocks")
 
         assert result is not None
@@ -234,7 +231,9 @@ class TestSlashCommandErrorHandling:
         )
 
         with patch("vnalpha.chat.controller.CommandExecutor") as MockExec:
-            MockExec.return_value.execute.side_effect = RuntimeError("db connection failed")
+            MockExec.return_value.execute.side_effect = RuntimeError(
+                "db connection failed"
+            )
             result = ctrl.handle_slash_command("/scan --date 2026-07-07")
 
         assert result is not None
@@ -321,7 +320,10 @@ class TestErrorPersistence:
         msgs = list_chat_messages(in_memory_conn, session_id)
         error_msgs = [m for m in msgs if m["message_type"] == "error"]
         assert len(error_msgs) >= 1
-        assert "llm timeout" in error_msgs[0]["content"] or "ERROR" in error_msgs[0]["content"]
+        assert (
+            "llm timeout" in error_msgs[0]["content"]
+            or "ERROR" in error_msgs[0]["content"]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +343,9 @@ class TestChatErrorDataclass:
     def test_chat_error_with_detail(self):
         from vnalpha.chat.errors import ChatError, ChatErrorKind
 
-        err = ChatError(kind=ChatErrorKind.RUNTIME, message="db error", detail="timeout")
+        err = ChatError(
+            kind=ChatErrorKind.RUNTIME, message="db error", detail="timeout"
+        )
         assert err.detail == "timeout"
 
     def test_chat_package_exports_error_symbols(self):

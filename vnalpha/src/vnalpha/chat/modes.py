@@ -96,9 +96,7 @@ def format_plan_preview(plan: "AssistantPlan") -> str:
     else:
         lines = ["Plan:"]
         for i, step in enumerate(plan.steps, start=1):
-            args_repr = ", ".join(
-                f"{k}={v!r}" for k, v in step.arguments.items()
-            )
+            args_repr = ", ".join(f"{k}={v!r}" for k, v in step.arguments.items())
             lines.append(f"  {i}. {step.tool_name}({args_repr})")
     lines.append("")
     lines.append("Approve? Press 'a' to approve, Esc to cancel.")

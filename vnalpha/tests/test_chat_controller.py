@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import duckdb
 import pytest
@@ -24,6 +24,7 @@ def in_memory_conn():
 
 def _make_conn_factory(conn):
     """Return a factory that always returns the same in-memory connection."""
+
     # We need to NOT close the shared fixture connection, so wrap with a no-op close.
     class _NonClosingConn:
         def __init__(self, inner):
@@ -77,7 +78,9 @@ class TestClassifyInput:
 
     def test_natural_language(self):
         ctrl = self._make_controller()
-        assert ctrl.classify_input("Show me strongest VN30 stocks") == "natural_language"
+        assert (
+            ctrl.classify_input("Show me strongest VN30 stocks") == "natural_language"
+        )
 
     def test_natural_language_empty_prefix(self):
         ctrl = self._make_controller()
@@ -154,9 +157,7 @@ def test_handle_slash_command_calls_executor(in_memory_conn):
         status="SUCCESS", title="/scan", summary="3 candidates."
     )
 
-    with patch(
-        "vnalpha.chat.controller.CommandExecutor"
-    ) as MockExecutor:
+    with patch("vnalpha.chat.controller.CommandExecutor") as MockExecutor:
         instance = MockExecutor.return_value
         instance.execute.return_value = mock_result
 
@@ -256,7 +257,7 @@ def test_chat_controller_no_textual_needed():
     """ChatController and classify_input work without textual installed."""
     # This test itself demonstrates that — it imports only vnalpha.chat.controller
     # which has no textual import anywhere.
-    from vnalpha.chat.controller import CHAT_LOCAL_COMMANDS, ChatController
+    from vnalpha.chat.controller import ChatController
 
     ctrl = ChatController(on_message=lambda s, t: None)
     assert ctrl.classify_input("/scan") == "slash_command"
@@ -341,9 +342,7 @@ def test_command_result_failed_rendered(in_memory_conn):
         on_message=lambda s, t: messages.append((s, t)),
     )
 
-    mock_result = CommandResult(
-        status="FAILED", title="/scan", summary="No database."
-    )
+    mock_result = CommandResult(status="FAILED", title="/scan", summary="No database.")
 
     with patch("vnalpha.chat.controller.CommandExecutor") as MockExecutor:
         instance = MockExecutor.return_value

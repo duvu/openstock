@@ -8,7 +8,6 @@ import pytest
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -174,7 +173,11 @@ def test_cmd_context_returns_context_string(in_memory_conn):
 
     assert isinstance(result, str)
     assert len(result) > 0
-    assert "context" in result.lower() or "session" in result.lower() or "mode" in result.lower()
+    assert (
+        "context" in result.lower()
+        or "session" in result.lower()
+        or "mode" in result.lower()
+    )
 
 
 def test_cmd_context_includes_execution_mode(in_memory_conn):
@@ -269,7 +272,11 @@ def test_cmd_trace_no_session_returns_message(in_memory_conn):
     ctrl, _ = _make_ctrl(in_memory_conn, session_id=None)
     result = ctrl.handle_chat_local_command("trace", [])
     assert isinstance(result, str)
-    assert "no active" in result.lower() or "no trace" in result.lower() or "no session" in result.lower()
+    assert (
+        "no active" in result.lower()
+        or "no trace" in result.lower()
+        or "no session" in result.lower()
+    )
 
 
 def test_cmd_trace_empty_session_returns_no_events(in_memory_conn):

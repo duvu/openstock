@@ -1,4 +1,5 @@
 """Tests for Phase 5.10 chat persistence (chat_session + chat_message)."""
+
 from __future__ import annotations
 
 import json
@@ -184,7 +185,7 @@ def test_list_chat_messages_ordered_asc(conn):
     sid = create_chat_session(conn)
     roles = ["user", "assistant", "user", "assistant"]
     contents = ["Q1", "A1", "Q2", "A2"]
-    for role, content in zip(roles, contents):
+    for role, content in zip(roles, contents, strict=True):
         append_chat_message(conn, chat_session_id=sid, role=role, content=content)
         # tiny sleep to ensure distinct timestamps
         time.sleep(0.01)
@@ -198,8 +199,12 @@ def test_list_chat_messages_isolated_by_session(conn):
     """Messages from different sessions must not bleed into each other."""
     sid_a = create_chat_session(conn)
     sid_b = create_chat_session(conn)
-    append_chat_message(conn, chat_session_id=sid_a, role="user", content="Session A msg")
-    append_chat_message(conn, chat_session_id=sid_b, role="user", content="Session B msg")
+    append_chat_message(
+        conn, chat_session_id=sid_a, role="user", content="Session A msg"
+    )
+    append_chat_message(
+        conn, chat_session_id=sid_b, role="user", content="Session B msg"
+    )
 
     msgs_a = list_chat_messages(conn, sid_a)
     msgs_b = list_chat_messages(conn, sid_b)
@@ -257,7 +262,9 @@ def test_full_chat_transcript_workflow(conn):
     """End-to-end: create session, append multi-role messages, list, finish."""
     sid = create_chat_session(conn, title="E2E test session")
 
-    append_chat_message(conn, chat_session_id=sid, role="system", content="You are helpful.")
+    append_chat_message(
+        conn, chat_session_id=sid, role="system", content="You are helpful."
+    )
     time.sleep(0.01)
     append_chat_message(conn, chat_session_id=sid, role="user", content="Analyse VNM")
     time.sleep(0.01)

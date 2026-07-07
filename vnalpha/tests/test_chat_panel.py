@@ -135,10 +135,12 @@ async def test_chat_panel_dispatch_assistant_posts_answer():
 
     with patch.object(panel, "_run_ask", return_value=(mock_answer, mock_plan)):
         # Provide a fake app.call_from_thread so the callback doesn't crash
-        panel.app = MagicMock()
-        panel.app.call_from_thread = lambda fn, *args: None
-
-        await panel._dispatch_assistant("Show strongest VN30 today")
+        mock_app = MagicMock()
+        mock_app.call_from_thread = lambda fn, *args: None
+        with patch.object(
+            type(panel), "app", new_callable=lambda: property(lambda self: mock_app)
+        ):
+            await panel._dispatch_assistant("Show strongest VN30 today")
 
     all_messages = " ".join(str(c) for c in panel.post_message_text.call_args_list)
     assert "FPT looks strong" in all_messages
@@ -154,10 +156,12 @@ async def test_chat_panel_dispatch_assistant_posts_error_on_exception():
     panel.post_message_text = MagicMock()
 
     with patch.object(panel, "_run_ask", side_effect=RuntimeError("LLM unreachable")):
-        panel.app = MagicMock()
-        panel.app.call_from_thread = lambda fn, *args: None
-
-        await panel._dispatch_assistant("Show strongest VN30 today")
+        mock_app = MagicMock()
+        mock_app.call_from_thread = lambda fn, *args: None
+        with patch.object(
+            type(panel), "app", new_callable=lambda: property(lambda self: mock_app)
+        ):
+            await panel._dispatch_assistant("Show strongest VN30 today")
 
     all_messages = " ".join(str(c) for c in panel.post_message_text.call_args_list)
     assert "LLM unreachable" in all_messages or "Error" in all_messages

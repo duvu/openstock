@@ -33,9 +33,7 @@ class LLMGatewayConfig:
     def from_env(cls) -> LLMGatewayConfig:
         return cls(
             model=os.environ.get("VNALPHA_LLM_MODEL", ASSISTANT_MODEL_DEFAULT),
-            endpoint=os.environ.get(
-                "VNALPHA_LLM_ENDPOINT", ASSISTANT_ENDPOINT_DEFAULT
-            ),
+            endpoint=os.environ.get("VNALPHA_LLM_ENDPOINT", ASSISTANT_ENDPOINT_DEFAULT),
             timeout=int(
                 os.environ.get("VNALPHA_LLM_TIMEOUT", ASSISTANT_TIMEOUT_DEFAULT)
             ),
@@ -151,9 +149,7 @@ class LLMGatewayClient:
 class FakeLLMClient:
     """Deterministic stub for tests. Returns pre-configured responses."""
 
-    def __init__(
-        self, responses: list[tuple[str, dict]] | None = None
-    ) -> None:
+    def __init__(self, responses: list[tuple[str, dict]] | None = None) -> None:
         self._responses = list(responses or [])
         self._call_count = 0
         self.calls: list[list[dict]] = []

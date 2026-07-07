@@ -61,7 +61,11 @@ def update_context_from_command(
 
     # For /scan commands: try to pull out a date and ticker symbols
     stripped = command_text.strip()
-    first_word = stripped[1:].split()[0].lower() if stripped.startswith("/") and stripped[1:].split() else ""
+    first_word = (
+        stripped[1:].split()[0].lower()
+        if stripped.startswith("/") and stripped[1:].split()
+        else ""
+    )
     if first_word == "scan":
         # Extract ISO date from the command arguments
         date_match = re.search(r"\d{4}-\d{2}-\d{2}", command_text)
