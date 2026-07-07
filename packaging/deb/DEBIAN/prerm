@@ -1,0 +1,35 @@
+#!/bin/sh
+# prerm — vnalpha Debian package pre-removal script
+#
+# Called before the package is removed or upgraded.
+#
+# SAFETY CONTRACT:
+#   This script MUST NOT touch /var/lib/openstock/warehouse or any user
+#   research data. The warehouse is the user's irreplaceable research
+#   database and persists across all install/upgrade/remove operations.
+#
+# On removal: we do nothing — the venv and launchers are managed by dpkg.
+# On upgrade: dpkg calls postinst which rebuilds the venv cleanly.
+
+set -e
+
+case "$1" in
+  remove|upgrade|deconfigure)
+    # Nothing to do.
+    # /opt/vnalpha/venv will be removed by dpkg as part of the payload.
+    # /var/lib/openstock/warehouse is NOT part of the package payload and
+    # will NOT be touched.
+    :
+    ;;
+
+  failed-upgrade)
+    :
+    ;;
+
+  *)
+    echo "prerm called with unknown argument: $1" >&2
+    exit 1
+    ;;
+esac
+
+exit 0

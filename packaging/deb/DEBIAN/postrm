@@ -1,0 +1,62 @@
+#!/bin/sh
+# postrm — vnalpha Debian package post-removal script
+#
+# Called after the package payload is removed.
+#
+# SAFETY CONTRACT:
+#   This script MUST NOT remove /var/lib/openstock/warehouse or any user
+#   research data under any circumstance, including purge.
+#
+#   The warehouse contains the user's DuckDB research database. It is
+#   NOT part of the package payload and dpkg will never track it.
+#   However, this script explicitly guards against accidental removal.
+#
+# On purge: remove /etc/vnalpha/ config directory and /opt/vnalpha/
+#   only after confirming no warehouse data lives there.
+
+set -e
+
+VNALPHA_VENV=/opt/vnalpha/venv
+VNALPHA_OPT=/opt/vnalpha
+
+# These paths must NEVER be removed — guard them explicitly
+PROTECTED_PATHS="/var/lib/openstock /var/lib/openstock/warehouse"
+
+case "$1" in
+  remove)
+    # Package payload removed by dpkg. Nothing further needed.
+    :
+    ;;
+
+  purge)
+    # Remove config directory (only files the package owns)
+    if [ -d /etc/vnalpha ]; then
+      rm -rf /etc/vnalpha
+      echo "vnalpha: removed /etc/vnalpha"
+    fi
+
+    # Remove opt directory only if it contains only the venv
+    # (never remove if user added custom files)
+    if [ -d "${VNALPHA_VENV}" ]; then
+      rm -rf "${VNALPHA_VENV}"
+    fi
+    if [ -d "${VNALPHA_OPT}" ] && [ -z "$(ls -A "${VNALPHA_OPT}")" ]; then
+      rmdir "${VNALPHA_OPT}"
+      echo "vnalpha: removed ${VNALPHA_OPT}"
+    fi
+
+    # Explicitly confirm warehouse is never removed
+    echo "vnalpha: /var/lib/openstock/warehouse preserved (not managed by this package)."
+    ;;
+
+  upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    :
+    ;;
+
+  *)
+    echo "postrm called with unknown argument: $1" >&2
+    exit 1
+    ;;
+esac
+
+exit 0

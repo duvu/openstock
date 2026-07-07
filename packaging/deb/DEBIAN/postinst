@@ -1,0 +1,92 @@
+#!/bin/sh
+# postinst — vnalpha Debian package post-installation script
+#
+# Responsibilities:
+#   1. Create /opt/vnalpha/venv Python virtual environment.
+#   2. Install vnalpha and its runtime dependencies into the venv.
+#   3. Create /var/lib/openstock/warehouse directory with safe permissions
+#      if it does not already exist (NEVER removes it if it exists).
+#   4. Apply correct permissions to launchers and config.
+#
+# The venv is rebuilt on every install/upgrade so the package is always
+# self-consistent without requiring network access at runtime. The build
+# script (build-deb.sh) bundles the wheels into /opt/vnalpha/wheels/ so
+# this script can install offline using --find-links.
+
+set -e
+
+VNALPHA_VENV=/opt/vnalpha/venv
+VNALPHA_WHEELS=/opt/vnalpha/wheels
+WAREHOUSE_DIR=/var/lib/openstock/warehouse
+
+case "$1" in
+  configure)
+    # ------------------------------------------------------------------
+    # 1. Create venv
+    # ------------------------------------------------------------------
+    echo "vnalpha: creating virtual environment at ${VNALPHA_VENV} ..."
+
+    # Remove stale venv on upgrade so we start clean, but keep the
+    # wheels directory which was placed there by the .deb payload.
+    if [ -d "${VNALPHA_VENV}" ]; then
+      rm -rf "${VNALPHA_VENV}"
+    fi
+
+    python3 -m venv "${VNALPHA_VENV}"
+
+    # ------------------------------------------------------------------
+    # 2. Install vnalpha into the venv
+    # ------------------------------------------------------------------
+    echo "vnalpha: installing packages ..."
+
+    # Prefer pre-downloaded wheels (offline install). Fall back to PyPI
+    # only if the wheels directory is absent (development or CI scenario).
+    if [ -d "${VNALPHA_WHEELS}" ]; then
+      "${VNALPHA_VENV}/bin/pip" install \
+        --quiet \
+        --no-index \
+        --find-links "${VNALPHA_WHEELS}" \
+        vnalpha
+    else
+      echo "vnalpha: WARNING — wheels directory not found, falling back to PyPI."
+      "${VNALPHA_VENV}/bin/pip" install \
+        --quiet \
+        vnalpha
+    fi
+
+    echo "vnalpha: venv ready."
+
+    # ------------------------------------------------------------------
+    # 3. Ensure warehouse directory exists (NEVER delete if already there)
+    # ------------------------------------------------------------------
+    if [ ! -d "${WAREHOUSE_DIR}" ]; then
+      echo "vnalpha: creating warehouse directory at ${WAREHOUSE_DIR} ..."
+      install -d -m 0755 "${WAREHOUSE_DIR}"
+    else
+      echo "vnalpha: warehouse directory already exists — preserving data."
+    fi
+
+    # ------------------------------------------------------------------
+    # 4. Permissions
+    # ------------------------------------------------------------------
+    # Launchers must be executable (also set in build-deb.sh, belt-and-suspenders)
+    chmod 0755 /usr/bin/vnalpha || true
+    chmod 0755 /usr/bin/vnalpha-poc || true
+
+    # Config file must be readable by all users who will run the TUI
+    chmod 0644 /etc/vnalpha/vnalpha.env || true
+
+    echo "vnalpha: installation complete."
+    ;;
+
+  abort-upgrade|abort-remove|abort-deconfigure)
+    # Nothing to do on rollback
+    ;;
+
+  *)
+    echo "postinst called with unknown argument: $1" >&2
+    exit 1
+    ;;
+esac
+
+exit 0
