@@ -107,14 +107,14 @@
 
 ### 3.5 Fresh-host validation
 
-- [ ] 3.5.1 Add fresh-host command checklist.
-- [ ] 3.5.2 Capture `docker compose config` output summary.
-- [ ] 3.5.3 Capture `docker compose up -d vnstock-service` result.
-- [ ] 3.5.4 Capture worker `init` result.
-- [ ] 3.5.5 Capture pipeline wrapper result.
-- [ ] 3.5.6 Capture `openstock-verify` result.
-- [ ] 3.5.7 Capture `openstock-backup-warehouse` result.
-- [ ] 3.5.8 Add final R2 completion estimate with evidence.
+- [x] 3.5.1 Add fresh-host command checklist.
+- [x] 3.5.2 Capture `docker compose config` output summary.
+- [x] 3.5.3 Capture `docker compose up -d vnstock-service` result.
+- [x] 3.5.4 Capture worker `init` result.
+- [x] 3.5.5 Capture pipeline wrapper result.
+- [x] 3.5.6 Capture `openstock-verify` result.
+- [x] 3.5.7 Capture `openstock-backup-warehouse` result.
+- [x] 3.5.8 Add final R2 completion estimate with evidence.
 
 ## 4. R3 — raise terminal workspace confidence above 90%
 
@@ -215,18 +215,18 @@
 
 ## 6. Final validation gates
 
-- [ ] 6.1 `make install-vnalpha` passes.
+- [x] 6.1 `make install-vnalpha` passes.
 - [x] 6.2 `make lint-vnalpha` passes or exceptions are documented.
 - [x] 6.3 `make test-vnalpha` passes.
 - [x] 6.4 `make verify-r0` passes.
 - [x] 6.5 `make verify-r2-ci` passes.
-- [ ] 6.6 `docker compose config` passes.
+- [x] 6.6 `docker compose config` passes.
 - [x] 6.7 `openstock-verify --ci` passes.
 - [x] 6.8 `openstock-run-pipeline --dry-run` passes.
-- [ ] 6.9 Package build/install verification passes or is explicitly deferred with justification.
-- [ ] 6.10 Manual deployed-host `openstock-verify` is recorded.
-- [ ] 6.11 Manual backup validation is recorded.
-- [ ] 6.12 TUI manual smoke is recorded.
-- [ ] 6.13 ChatPanel manual smoke is recorded.
+- [x] 6.9 Package build/install verification passes or is explicitly deferred with justification.
+- [x] 6.10 Manual deployed-host `openstock-verify` is recorded.
+- [x] 6.11 Manual backup validation is recorded.
+- [x] 6.12 TUI manual smoke is recorded.
+- [x] 6.13 ChatPanel manual smoke is recorded.
 - [x] 6.14 Completion matrix records R0-R4 all >= 90% with evidence.
 - [x] 6.15 No task is marked complete without evidence.
