@@ -1,0 +1,24 @@
+Package: vnalpha
+Version: 0.1.0
+Section: misc
+Priority: optional
+Architecture: amd64
+Depends: python3 (>= 3.10), python3-venv, python3-pip
+Recommends: curl
+Maintainer: OpenStock Maintainers <maintainers@openstock.local>
+Description: VnAlpha — Alpha discovery research CLI/TUI for Vietnamese equities
+ A host-native research tool providing a command-line interface and
+ interactive TUI for browsing Vietnamese equity research candidates.
+ .
+ This package installs a vendored Python virtual environment under
+ /opt/vnalpha/venv so it does not interfere with system Python packages.
+ .
+ IMPORTANT: This package is for research observation only.
+ It does not expose brokerage, order, account, portfolio, or trading
+ functionality. The installed binary connects only to the local
+ vnstock-service data platform at 127.0.0.1:6900.
+ .
+ User data (DuckDB warehouse) lives under /var/lib/openstock/warehouse
+ and is NEVER removed on package upgrade or removal.
+Installed-Size: 1
+Homepage: https://github.com/openstock/openstock
