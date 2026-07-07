@@ -16,10 +16,11 @@ if _TEXTUAL_AVAILABLE:
     class AssistantScreen(Screen):
         """Natural-language research assistant screen."""
 
+        TITLE = "Research Assistant"
         BINDINGS = [("escape", "app.pop_screen", "Back")]
 
-        def __init__(self, target_date: str | None = None):
-            super().__init__()
+        def __init__(self, target_date: str | None = None, **kwargs):
+            super().__init__(**kwargs)
             self.target_date = target_date
 
         def compose(self) -> ComposeResult:

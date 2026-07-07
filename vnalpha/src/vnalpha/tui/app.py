@@ -136,8 +136,16 @@ if _TEXTUAL_AVAILABLE:
             pass  # CSS height adjustment is cosmetic; no-op for now
 
         def action_cancel_pending_plan(self) -> None:
-            """Post PlanCancelRequested message so subscribers can cancel plans."""
-            self.post_message(PlanCancelRequested())
+            """Cancel the pending plan in ChatPanel's controller (if any)."""
+            try:
+                panel = self.query_one("#chat-panel", ChatPanel)
+                controller = getattr(panel, "_chat_controller", None)
+                if controller is not None:
+                    controller.cancel_pending_plan()
+                else:
+                    self.post_message(PlanCancelRequested())
+            except Exception:
+                self.post_message(PlanCancelRequested())
 
         def action_approve_plan(self) -> None:
             """Approve the pending plan in the ChatPanel's controller (if any)."""

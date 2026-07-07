@@ -24,8 +24,10 @@ if _TEXTUAL_AVAILABLE:
 
         BINDINGS = [Binding("escape", "app.pop_screen", "Back")]
 
-        def __init__(self, target_date: str = "today", horizon: int = 20) -> None:
-            super().__init__()
+        def __init__(
+            self, target_date: str = "today", horizon: int = 20, **kwargs
+        ) -> None:
+            super().__init__(**kwargs)
             self.target_date = target_date
             self.horizon = horizon
 

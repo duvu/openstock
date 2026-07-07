@@ -14,7 +14,7 @@ class CommandResultPanel(Static):
 
     DEFAULT_CSS = """
     CommandResultPanel {
-        border: round dim;
+        border: round $panel;
         padding: 1;
         height: auto;
         min-height: 3;
