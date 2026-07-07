@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# openstock-backup-warehouse — create a timestamped backup of the DuckDB warehouse
+# Usage: openstock-backup-warehouse [--force]
+#   --force  Bypass the pipeline lock check
+#
+# Install: sudo install -m 0755 packaging/scripts/openstock-backup-warehouse /usr/bin/
+
+set -euo pipefail
+
+LOCK_FILE="/run/openstock-pipeline.lock"
+FORCE=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --force) FORCE=true ;;
+    --help)
+      echo "Usage: openstock-backup-warehouse [--force]"
+      echo "  --force  Bypass the pipeline lock check"
+      exit 0
+      ;;
+    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+  esac
+done
+
+# Source platform env if available
+if [ -f /etc/openstock/openstock.env ]; then
+  set -a
+  # shellcheck source=/dev/null
+  . /etc/openstock/openstock.env
+  set +a
+fi
+
+WAREHOUSE_PATH="${OPENSTOCK_WAREHOUSE_PATH:-/var/lib/openstock/warehouse/warehouse.duckdb}"
+WAREHOUSE_DIR="${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}"
+BACKUP_DIR="${WAREHOUSE_DIR}/backups"
+
+# Writer-job guard (task 7.4)
+if [ -f "$LOCK_FILE" ] && [ "$FORCE" = "false" ]; then
+  echo "[FAIL] Pipeline lock file $LOCK_FILE exists. A writer job may be running." >&2
+  echo "       Use --force to override." >&2
+  exit 1
+fi
+
+if [ ! -f "$WAREHOUSE_PATH" ]; then
+  echo "[FAIL] Warehouse not found at: $WAREHOUSE_PATH" >&2
+  exit 1
+fi
+
+mkdir -p "$BACKUP_DIR"
+
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+BACKUP_PATH="${BACKUP_DIR}/warehouse-${TIMESTAMP}.duckdb"
+
+echo "[INFO] Backing up $WAREHOUSE_PATH -> $BACKUP_PATH"
+cp "$WAREHOUSE_PATH" "$BACKUP_PATH"
+
+if [ -f "$BACKUP_PATH" ]; then
+  echo "[OK] Backup created: $BACKUP_PATH"
+else
+  echo "[FAIL] Backup failed" >&2
+  exit 1
+fi
