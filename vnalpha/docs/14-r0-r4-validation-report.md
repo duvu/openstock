@@ -10,10 +10,10 @@
 
 | Phase | Status | Tests | Notes |
 |---|---|---|---|
-| Full suite | ✅ PASS | 860 passed, 62 skipped | 0 failures |
+| Full suite | ✅ PASS | 871 passed, 62 skipped | 0 failures |
 | R0 acceptance | ✅ PASS | 67 passed | feature metadata, migration, CLI |
 | R2 CI checks | ✅ PASS | 16 OK, 1 WARN, 0 FAIL | WARN = systemd-analyze on timer (informational) |
-| R4 chat tests | ✅ PASS | 69 passed, 9 skipped | panel, clear, permissions, persistence, session, trace |
+| R4 chat tests | ✅ PASS | 80 passed | session bootstrap, persistence, permissions, trace, clear |
 | Lint | ✅ PASS | 0 errors | ruff check + ruff format |
 
 ---
@@ -81,19 +81,27 @@ openstock-run-pipeline
 ### R4 chat workspace tests
 
 ```
-$ python -m pytest tests/test_r4_chat_panel.py tests/test_r4_clear.py \
-    tests/test_r4_permissions.py tests/test_r4_persistence.py \
-    tests/test_r4_session.py tests/test_r4_trace.py
-69 passed, 9 skipped in 2.96s
+$ make verify-r4
+
+cd vnalpha && pytest -q \
+    tests/test_r4_permissions.py \
+    tests/test_r4_session.py \
+    tests/test_r4_trace.py \
+    tests/test_r4_clear.py \
+    tests/test_r4_persistence.py \
+    tests/test_r4_controller_persistence.py
+80 passed in 4.10s
 ```
 
 Covers:
+- 1.x Chat session bootstrap (ChatPanel → `get_or_create_active_chat_session`)
 - 5.1 ChatPanel widget wiring → ChatController
 - 5.2 `/clear` command clears message history
 - 5.3 Permission evaluation (ALLOW, ASK, DENY, HARD_DENY)
-- 5.4 Message persistence (chat_message table, session history)
+- 5.4 Message persistence at controller boundary (natural-language, slash-cmd, chat-local, plan approval)
 - 5.6 Session management (`/new`, session context)
 - 5.7 Tool trace events (TraceEvent, AssistantStage)
+- 11.x Controller-level persistence suite (`test_r4_controller_persistence.py`, 11 tests)
 
 ### Lint
 
@@ -101,8 +109,8 @@ Covers:
 $ ruff check .
 All checks passed!
 
-$ ruff format .
-10 files reformatted, 163 files left unchanged
+$ ruff format --check .
+174 files already formatted
 ```
 
 ---
@@ -125,7 +133,7 @@ The following items are scoped to R5+ and are **not** part of this validation:
 |---|---|
 | Test suite | `vnalpha/tests/` |
 | R0 gap tests | `vnalpha/tests/test_r0_gaps.py` |
-| R4 chat tests | `vnalpha/tests/test_r4_*.py` |
+| R4 chat tests | `vnalpha/tests/test_r4_*.py` + `test_r4_controller_persistence.py` |
 | CI verify script | `packaging/scripts/openstock-verify` |
 | Pipeline script | `packaging/scripts/openstock-run-pipeline` |
 | Completion matrix | `vnalpha/docs/13-r0-r4-completion-matrix.md` |
