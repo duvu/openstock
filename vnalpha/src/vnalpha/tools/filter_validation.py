@@ -49,7 +49,7 @@ def validate_filters(filters: list[dict]) -> None:
         if key in NUMERIC_FIELDS and op in NUMERIC_OPS:
             try:
                 float(value)
-            except ValueError:
+            except ValueError as err:
                 raise FilterValidationError(
                     f"Filter '{key}{op}{value}' requires a numeric value, got '{value}'."
-                )
+                ) from err

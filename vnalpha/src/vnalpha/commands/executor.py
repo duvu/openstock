@@ -39,7 +39,9 @@ class CommandExecutor:
         self._registry = registry or build_default_registry()
         self._default_date = default_date
 
-    def execute(self, command_text: str, *, date_override: str | None = None) -> CommandResult:
+    def execute(
+        self, command_text: str, *, date_override: str | None = None
+    ) -> CommandResult:
         """Run a command and persist a research_session regardless of parse outcome."""
         session_id = create_research_session(
             self._conn,
@@ -111,7 +113,10 @@ class CommandExecutor:
             session_id,
             status=session_status,
             result_summary={"title": result.title, "summary": result.summary},
-            error={"error_type": result.error.error_type, "message": result.error.message}
+            error={
+                "error_type": result.error.error_type,
+                "message": result.error.message,
+            }
             if result.error
             else None,
         )
@@ -138,7 +143,9 @@ class CommandExecutor:
             error=CommandError(error_type=error_type, message=message),
         )
 
-    def _finish_failed(self, session_id: str, error_type: str, message: str) -> CommandResult:
+    def _finish_failed(
+        self, session_id: str, error_type: str, message: str
+    ) -> CommandResult:
         finish_research_session(
             self._conn,
             session_id,

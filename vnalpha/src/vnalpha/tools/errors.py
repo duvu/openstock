@@ -13,9 +13,7 @@ class ToolPermissionError(ToolError):
     def __init__(self, tool_name: str, required: str) -> None:
         self.tool_name = tool_name
         self.required = required
-        super().__init__(
-            f"Tool '{tool_name}' requires permission '{required}'."
-        )
+        super().__init__(f"Tool '{tool_name}' requires permission '{required}'.")
 
 
 class ToolNotFoundError(ToolError):

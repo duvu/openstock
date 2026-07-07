@@ -18,7 +18,9 @@ def handle_compare(
 ) -> CommandResult:
     """Compare a list of symbols using their persisted candidate scores."""
     if conn is None:
-        return CommandResult(status="FAILED", title="/compare", summary="No database connection.")
+        return CommandResult(
+            status="FAILED", title="/compare", summary="No database connection."
+        )
 
     if not parsed.positional:
         return CommandResult(
@@ -32,7 +34,9 @@ def handle_compare(
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
-        return CommandResult(status="FAILED", title="/compare", summary="No tool executor available.")
+        return CommandResult(
+            status="FAILED", title="/compare", summary="No tool executor available."
+        )
     output = tool_executor.call("candidate.compare", symbols=symbols, date=date)
     records = output.data or []
 
@@ -50,9 +54,15 @@ def handle_compare(
             f"{r.get('score', 0):.3f}" if r.get("score") is not None else "—",
             r.get("candidate_class", ""),
             r.get("setup_type", ""),
-            f"{r.get('trend_score', 0):.2f}" if r.get("trend_score") is not None else "—",
-            f"{r.get('relative_strength_score', 0):.2f}" if r.get("relative_strength_score") is not None else "—",
-            f"{r.get('volume_score', 0):.2f}" if r.get("volume_score") is not None else "—",
+            f"{r.get('trend_score', 0):.2f}"
+            if r.get("trend_score") is not None
+            else "—",
+            f"{r.get('relative_strength_score', 0):.2f}"
+            if r.get("relative_strength_score") is not None
+            else "—",
+            f"{r.get('volume_score', 0):.2f}"
+            if r.get("volume_score") is not None
+            else "—",
             _format_risk_flags(r.get("risk_flags_json")),
             r.get("data_quality_status", "unknown"),
         ]

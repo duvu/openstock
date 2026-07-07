@@ -14,7 +14,9 @@ def handle_note(
 ) -> CommandResult:
     """Create a research note linked to a symbol."""
     if conn is None:
-        return CommandResult(status="FAILED", title="/note", summary="No database connection.")
+        return CommandResult(
+            status="FAILED", title="/note", summary="No database connection."
+        )
 
     if len(parsed.positional) < 2:
         return CommandResult(
@@ -30,7 +32,11 @@ def handle_note(
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
-        return CommandResult(status="FAILED", title=f"/note {symbol}", summary="No tool executor available.")
+        return CommandResult(
+            status="FAILED",
+            title=f"/note {symbol}",
+            summary="No tool executor available.",
+        )
     output = tool_executor.call(
         "note.create",
         symbol=symbol,

@@ -18,7 +18,7 @@ Usage::
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
 
@@ -36,9 +36,7 @@ def _today_vn() -> str:
 
 def _latest_research_date(conn: "duckdb.DuckDBPyConnection") -> Optional[str]:
     """Return the latest date present in daily_watchlist, or None if empty."""
-    row = conn.execute(
-        "SELECT MAX(date)::VARCHAR FROM daily_watchlist"
-    ).fetchone()
+    row = conn.execute("SELECT MAX(date)::VARCHAR FROM daily_watchlist").fetchone()
     if row and row[0]:
         return row[0]
     return None
@@ -74,6 +72,7 @@ def resolve_date(
     value = value.strip()
     try:
         from datetime import date
+
         parsed = date.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(

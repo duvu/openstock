@@ -1,4 +1,5 @@
 """CLI and TUI contract tests for Phase 5.9 'vnalpha ask' command."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -105,7 +106,9 @@ class TestAskHelp:
 class TestAskFunctional:
     def test_ask_output_is_research_language(self):
         """Answer output must not contain buy/sell/order language."""
-        with patch("vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success):
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success
+        ):
             result = runner.invoke(app, ["ask", "Show strongest VN30 candidates today"])
         assert result.exit_code == 0
         output_lower = result.output.lower()
@@ -115,47 +118,61 @@ class TestAskFunctional:
 
     def test_ask_output_contains_summary(self):
         """Answer panel must contain the summary text from the mocked answer."""
-        with patch("vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success):
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success
+        ):
             result = runner.invoke(app, ["ask", "Show strongest VN30 candidates today"])
         assert result.exit_code == 0
         assert "3 strong candidates identified" in result.output
 
     def test_ask_refusal_exits_nonzero(self):
         """A RefusalMessage result must produce exit code 1."""
-        with patch("vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_refusal):
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_refusal
+        ):
             result = runner.invoke(app, ["ask", "Buy FPT for me"])
         assert result.exit_code == 1
 
     def test_ask_refusal_shows_refused_panel(self):
         """A RefusalMessage result must render the refusal reason in output."""
-        with patch("vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_refusal):
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_refusal
+        ):
             result = runner.invoke(app, ["ask", "Buy FPT for me"])
         assert "Trading execution" in result.output or "Refused" in result.output
 
     def test_ask_show_plan_flag_renders_plan(self):
         """--show-plan must add 'Research Plan' panel to output."""
-        with patch("vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success):
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success
+        ):
             result = runner.invoke(app, ["ask", "Show watchlist", "--show-plan"])
         assert result.exit_code == 0
         assert "Research Plan" in result.output or "Plan for intent" in result.output
 
     def test_ask_trace_flag_renders_trace(self):
         """--trace must add trace summary to output."""
-        with patch("vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success):
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success
+        ):
             result = runner.invoke(app, ["ask", "Show watchlist", "--trace"])
         assert result.exit_code == 0
         assert "Tool Trace" in result.output or "watchlist.scan" in result.output
 
     def test_ask_no_execute_flag_renders_plan(self):
         """--no-execute must show the plan panel."""
-        with patch("vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success):
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success
+        ):
             result = runner.invoke(app, ["ask", "Show watchlist", "--no-execute"])
         assert result.exit_code == 0
         assert "Research Plan" in result.output or "Plan for intent" in result.output
 
     def test_ask_basis_shown_in_answer(self):
         """Answer panel must include basis field content."""
-        with patch("vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success):
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask", side_effect=mock_ask_success
+        ):
             result = runner.invoke(app, ["ask", "Why is FPT in the watchlist?"])
         assert result.exit_code == 0
         assert "persisted candidate_score" in result.output
@@ -206,6 +223,7 @@ class TestTuiAskBinding:
         except ImportError:
             pytest.skip("textual not installed")
         from vnalpha.tui.screens.assistant import AssistantScreen
+
         assert AssistantScreen is not None
 
     def test_assistant_screen_has_escape_binding(self):

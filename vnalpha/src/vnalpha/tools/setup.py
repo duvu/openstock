@@ -146,7 +146,9 @@ def _lineage(impl, conn, **kwargs):
     symbol = kwargs.get("symbol")
     date = kwargs.get("date")
     if symbol is None or date is None:
-        raise ToolExecutionError("lineage.get_symbol_lineage requires 'symbol' and 'date'.")
+        raise ToolExecutionError(
+            "lineage.get_symbol_lineage requires 'symbol' and 'date'."
+        )
     return impl(conn, symbol=symbol, date=date)
 
 

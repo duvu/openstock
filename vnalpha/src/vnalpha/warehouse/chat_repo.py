@@ -5,6 +5,7 @@ Tables: chat_session, chat_message
 
 from __future__ import annotations
 
+import json as _json
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -184,8 +185,6 @@ def clear_visible_messages(
 # Trace timeline helpers (Section 8 — Phase 5.10)
 # ---------------------------------------------------------------------------
 
-import json as _json
-
 
 def append_trace_event(
     conn: duckdb.DuckDBPyConnection,
@@ -269,4 +268,4 @@ def list_trace_events_for_session(
         "plan_json",
         "metadata_json",
     ]
-    return [dict(zip(columns, row)) for row in rows]
+    return [dict(zip(columns, row, strict=False)) for row in rows]

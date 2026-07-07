@@ -166,9 +166,7 @@ class TestSafetyBoundary:
                 continue
             source = py_file.read_text()
             for forbidden in {"subprocess", "os.system"}:
-                assert forbidden not in source, (
-                    f"{py_file.name} contains '{forbidden}'"
-                )
+                assert forbidden not in source, f"{py_file.name} contains '{forbidden}'"
 
 
 # ── Quality tool: historical (as-of-date) lookup tests ──────────────────────
@@ -204,8 +202,26 @@ def _make_quality_conn() -> duckdb.DuckDBPyConnection:
 
 
 def _insert_ohlcv_rows(conn, symbol, dates, provider="KBS", quality="PASS"):
-    rows = [(symbol, d, "1D", 100.0, 102.0, 99.0, 101.0, 1000.0, provider, quality, None, None) for d in dates]
-    conn.executemany("INSERT INTO canonical_ohlcv VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    rows = [
+        (
+            symbol,
+            d,
+            "1D",
+            100.0,
+            102.0,
+            99.0,
+            101.0,
+            1000.0,
+            provider,
+            quality,
+            None,
+            None,
+        )
+        for d in dates
+    ]
+    conn.executemany(
+        "INSERT INTO canonical_ohlcv VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
+    )
 
 
 class TestQualityHistoricalLookup:
@@ -259,7 +275,9 @@ class TestQualityHistoricalLookup:
         _insert_ohlcv_rows(conn, "FPT", ["2024-06-20", "2024-06-28"])
         _insert_ohlcv_rows(conn, "VNM", ["2024-06-18", "2024-06-28"])
 
-        result = get_many_quality_status(conn, symbols=["FPT", "VNM"], date="2024-06-21")
+        result = get_many_quality_status(
+            conn, symbols=["FPT", "VNM"], date="2024-06-21"
+        )
         assert result.data is not None
         for row in result.data:
             assert row["as_of_date"] <= "2024-06-21", (
@@ -306,21 +324,30 @@ class TestFilterValidation:
 
     def test_unsupported_field_raises(self):
         """Unknown field names are rejected."""
-        from vnalpha.tools.filter_validation import FilterValidationError, validate_filters
+        from vnalpha.tools.filter_validation import (
+            FilterValidationError,
+            validate_filters,
+        )
 
         with pytest.raises(FilterValidationError, match="not_a_field"):
             validate_filters([{"key": "not_a_field", "op": ">=", "value": 1}])
 
     def test_malformed_numeric_op_raises(self):
         """Non-numeric value with inequality op on numeric field is rejected."""
-        from vnalpha.tools.filter_validation import FilterValidationError, validate_filters
+        from vnalpha.tools.filter_validation import (
+            FilterValidationError,
+            validate_filters,
+        )
 
         with pytest.raises(FilterValidationError):
             validate_filters([{"key": "score", "op": ">=", "value": "not_a_number"}])
 
     def test_missing_key_raises(self):
         """Filters missing the 'key' key are rejected (empty string not in supported set)."""
-        from vnalpha.tools.filter_validation import FilterValidationError, validate_filters
+        from vnalpha.tools.filter_validation import (
+            FilterValidationError,
+            validate_filters,
+        )
 
         with pytest.raises(FilterValidationError):
             validate_filters([{"op": ">=", "value": 1}])
@@ -349,7 +376,11 @@ class TestFilterValidation:
             "CREATE TABLE daily_watchlist (date VARCHAR, rank INTEGER, symbol VARCHAR, "
             "score FLOAT, candidate_class VARCHAR, setup_type VARCHAR, risk_label VARCHAR)"
         )
-        conn.execute("INSERT INTO daily_watchlist VALUES ('2024-06-20', 1, 'FPT', 0.8, 'A', 'B', 'low')")
+        conn.execute(
+            "INSERT INTO daily_watchlist VALUES ('2024-06-20', 1, 'FPT', 0.8, 'A', 'B', 'low')"
+        )
 
         with pytest.raises(FilterValidationError, match="BAD_FIELD"):
-            filter_watchlist(conn, "2024-06-20", [{"key": "BAD_FIELD", "op": ">=", "value": 1}])
+            filter_watchlist(
+                conn, "2024-06-20", [{"key": "BAD_FIELD", "op": ">=", "value": 1}]
+            )

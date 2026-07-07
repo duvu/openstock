@@ -5,6 +5,7 @@ Covers:
 - list_trace_events_for_session ordering and session isolation
 - tool_trace_id stored as JSON array in tool_trace_ids_json
 """
+
 from __future__ import annotations
 
 import json
@@ -19,7 +20,6 @@ from vnalpha.warehouse.chat_repo import (
 )
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -154,7 +154,9 @@ def test_list_trace_events_isolated_by_session(conn):
     sid_a = _make_session(conn)
     sid_b = _make_session(conn)
 
-    append_trace_event(conn, chat_session_id=sid_a, tool_name="tool_a", status="RUNNING")
+    append_trace_event(
+        conn, chat_session_id=sid_a, tool_name="tool_a", status="RUNNING"
+    )
     append_trace_event(
         conn, chat_session_id=sid_b, tool_name="tool_b", status="SUCCESS", elapsed_ms=9
     )

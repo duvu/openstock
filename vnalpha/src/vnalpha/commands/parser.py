@@ -33,9 +33,7 @@ def parse(text: str) -> ParsedCommand:
     """
     raw = text.strip()
     if not raw.startswith("/"):
-        raise CommandParseError(
-            f"Commands must start with '/'. Got: {raw!r}"
-        )
+        raise CommandParseError(f"Commands must start with '/'. Got: {raw!r}")
 
     # Split off leading "/" and tokenize respecting quotes
     try:
@@ -63,7 +61,7 @@ def parse(text: str) -> ParsedCommand:
 
         # Option: --key [value]
         if tok.startswith(OPTION_PREFIX):
-            key = tok[len(OPTION_PREFIX):]
+            key = tok[len(OPTION_PREFIX) :]
             if not key:
                 raise CommandParseError("Bare '--' is not a valid option.")
             # Peek at next token; if it doesn't look like a flag or filter, treat as value
@@ -85,9 +83,7 @@ def parse(text: str) -> ParsedCommand:
             fval = fval.strip()
             if fval.startswith((">", "<", "=", "!")):
                 raise CommandParseError(f"Malformed filter expression: {tok!r}")
-            filters.append(
-                CommandFilter(key=fkey, op=_validate_op(fop), value=fval)
-            )
+            filters.append(CommandFilter(key=fkey, op=_validate_op(fop), value=fval))
             i += 1
             continue
 
@@ -104,7 +100,9 @@ def parse(text: str) -> ParsedCommand:
     )
 
 
-def _validate_op(op: str) -> Literal["=", "!=", ">", ">=", "<", "<=", "contains", "not_contains"]:
+def _validate_op(
+    op: str,
+) -> Literal["=", "!=", ">", ">=", "<", "<=", "contains", "not_contains"]:
     valid = {"=", "!=", ">", ">=", "<", "<=", "contains", "not_contains"}
     if op not in valid:
         raise CommandParseError(f"Invalid filter operator: {op!r}")

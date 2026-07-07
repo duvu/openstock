@@ -201,6 +201,7 @@ class TestNormalizers:
 
     def test_normalize_date_today(self):
         from datetime import date
+
         result = normalize_date(None)
         assert result == date.today().isoformat()
 

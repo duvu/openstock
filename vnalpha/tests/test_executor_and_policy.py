@@ -1,4 +1,5 @@
 """Tests for Phase 5.9 AssistantExecutor and safety/refusal policy."""
+
 from __future__ import annotations
 
 import duckdb
@@ -43,7 +44,9 @@ def _make_plan(*steps: ToolPlanStep, refusal_reason=None) -> AssistantPlan:
     )
 
 
-def _make_step(tool_name: str, arguments: dict, step_id: str = "step_1") -> ToolPlanStep:
+def _make_step(
+    tool_name: str, arguments: dict, step_id: str = "step_1"
+) -> ToolPlanStep:
     return ToolPlanStep(
         step_id=step_id,
         tool_name=tool_name,
@@ -162,7 +165,9 @@ class TestExecutorAllowlist:
         """Tool not in allowlist must raise ToolExecutionError."""
         step = _make_step("network.fetch", {"url": "http://example.com"})
         plan = _make_plan(step)
-        with pytest.raises(ToolExecutionError, match="not in the assistant tool allowlist"):
+        with pytest.raises(
+            ToolExecutionError, match="not in the assistant tool allowlist"
+        ):
             executor.execute(plan)
 
     def test_executor_allowlist_blocks_sql_tool(self, executor):
@@ -179,7 +184,10 @@ class TestExecutorRefusal:
         plan = _make_plan(refusal_reason="This is a trading request.")
         with pytest.raises(RefusalError) as exc_info:
             executor.execute(plan)
-        assert "Unsupported" in exc_info.value.reason or "trading" in exc_info.value.reason.lower()
+        assert (
+            "Unsupported" in exc_info.value.reason
+            or "trading" in exc_info.value.reason.lower()
+        )
 
     def test_executor_refusal_plan_category_is_unsupported(self, executor):
         """Refusal plan should use UNSUPPORTED policy category."""

@@ -121,4 +121,3 @@ class TestResolveDateWithConn:
         """Without conn, returns Asia/Ho_Chi_Minh today."""
         result = resolve_date("today")
         assert result == _today_vn()
-

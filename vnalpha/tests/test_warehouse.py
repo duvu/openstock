@@ -129,11 +129,14 @@ def test_build_canonical_rejected_uses_bar_date(conn):
 
     run_id = create_ingestion_run(conn, "test-service", "/test")
     # Insert a raw row with invalid close (close <= 0 triggers rejection)
-    conn.execute("""
+    conn.execute(
+        """
         INSERT INTO market_ohlcv_raw
         (ingestion_run_id, symbol, time, interval, open, high, low, close, volume, provider, fetched_at)
         VALUES (?, 'BADFPT', '2024-03-15', '1D', 10.0, 11.0, 9.0, -1.0, 1000.0, 'KBS', current_timestamp)
-    """, [run_id])
+    """,
+        [run_id],
+    )
     build_canonical_ohlcv(conn, interval="1D", symbol="BADFPT")
 
     rows = conn.execute(
@@ -153,11 +156,14 @@ def test_build_canonical_rejected_carries_provider(conn):
     from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
 
     run_id = create_ingestion_run(conn, "test-service", "/test")
-    conn.execute("""
+    conn.execute(
+        """
         INSERT INTO market_ohlcv_raw
         (ingestion_run_id, symbol, time, interval, open, high, low, close, volume, provider, fetched_at)
         VALUES (?, 'PROVTEST', '2024-04-01', '1D', 10.0, 5.0, 11.0, 10.0, 1000.0, 'VCI', current_timestamp)
-    """, [run_id])
+    """,
+        [run_id],
+    )
     # high < low → invalid
     build_canonical_ohlcv(conn, interval="1D", symbol="PROVTEST")
 

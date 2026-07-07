@@ -11,10 +11,10 @@ from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.schema import (
     ALL_DDL,
-    ALL_DDL_PHASE510,
     ALL_DDL_PHASE6,
     ALL_DDL_PHASE58,
     ALL_DDL_PHASE59,
+    ALL_DDL_PHASE510,
 )
 
 logger = get_logger("warehouse.migrations")
@@ -53,8 +53,12 @@ def run_migrations(
 
 
 def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:
-    conn.execute("ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS assistant_session_id VARCHAR")
-    conn.execute("ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS trace_parent_type VARCHAR")
+    conn.execute(
+        "ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS assistant_session_id VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE tool_trace ADD COLUMN IF NOT EXISTS trace_parent_type VARCHAR"
+    )
     try:
         conn.execute("ALTER TABLE tool_trace ALTER COLUMN session_id DROP NOT NULL")
     except Exception:
@@ -74,7 +78,9 @@ def _migrate_feature_snapshot_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("lineage_json", "VARCHAR"),
     ]
     for col, col_type in cols:
-        conn.execute(f"ALTER TABLE feature_snapshot ADD COLUMN IF NOT EXISTS {col} {col_type}")
+        conn.execute(
+            f"ALTER TABLE feature_snapshot ADD COLUMN IF NOT EXISTS {col} {col_type}"
+        )
 
 
 def _migrate_rejected_symbol_columns(conn: duckdb.DuckDBPyConnection) -> None:
@@ -84,7 +90,9 @@ def _migrate_rejected_symbol_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("provider", "VARCHAR"),
     ]
     for col, col_type in cols:
-        conn.execute(f"ALTER TABLE rejected_symbol ADD COLUMN IF NOT EXISTS {col} {col_type}")
+        conn.execute(
+            f"ALTER TABLE rejected_symbol ADD COLUMN IF NOT EXISTS {col} {col_type}"
+        )
 
 
 def _migrate_candidate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
@@ -97,7 +105,9 @@ def _migrate_candidate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("benchmark_bar_count", "INTEGER"),
     ]
     for col, col_type in cols:
-        conn.execute(f"ALTER TABLE candidate_outcome ADD COLUMN IF NOT EXISTS {col} {col_type}")
+        conn.execute(
+            f"ALTER TABLE candidate_outcome ADD COLUMN IF NOT EXISTS {col} {col_type}"
+        )
 
 
 def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
@@ -115,7 +125,9 @@ def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
     ]
     for table in aggregate_tables:
         for col, col_type in cols:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}")
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}"
+            )
 
 
 def _migrate_outcome_evaluation_run_columns(conn: duckdb.DuckDBPyConnection) -> None:

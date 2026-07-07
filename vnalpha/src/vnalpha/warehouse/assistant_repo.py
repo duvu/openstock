@@ -1,4 +1,5 @@
 """Repository helpers for Phase 5.9 assistant session and LLM trace persistence."""
+
 from __future__ import annotations
 
 import json
@@ -54,7 +55,9 @@ def finish_assistant_session(
         WHERE assistant_session_id = ?
         """,
         [
-            _now(), status, intent,
+            _now(),
+            status,
+            intent,
             json.dumps(plan) if plan else None,
             json.dumps(answer) if answer else None,
             refusal_reason,
@@ -75,8 +78,16 @@ def list_assistant_sessions(conn, limit: int = 20) -> list[dict]:
         """,
         [limit],
     ).fetchall()
-    keys = ["assistant_session_id", "started_at", "finished_at", "status",
-            "surface", "user_prompt", "intent", "refusal_reason"]
+    keys = [
+        "assistant_session_id",
+        "started_at",
+        "finished_at",
+        "status",
+        "surface",
+        "user_prompt",
+        "intent",
+        "refusal_reason",
+    ]
     return [dict(zip(keys, row, strict=False)) for row in rows]
 
 
@@ -97,7 +108,11 @@ def create_llm_trace(
         VALUES (?, ?, ?, ?, ?, 'RUNNING', ?)
         """,
         [
-            trace_id, assistant_session_id, stage, model, _now(),
+            trace_id,
+            assistant_session_id,
+            stage,
+            model,
+            _now(),
             json.dumps(input_summary) if input_summary else None,
         ],
     )
@@ -124,7 +139,8 @@ def finish_llm_trace(
         WHERE llm_trace_id = ?
         """,
         [
-            _now(), status,
+            _now(),
+            status,
             json.dumps(output_summary) if output_summary else None,
             json.dumps(usage) if usage else None,
             json.dumps(error) if error else None,

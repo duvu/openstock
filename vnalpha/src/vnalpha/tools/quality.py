@@ -100,8 +100,8 @@ def get_quality_status(
         return ToolOutput(
             data=result,
             summary=f"Quality status for {symbol} (last {len(data)} bars"
-                    + (f" up to {date}" if date else "")
-                    + f", {len(rejected)} rejected records).",
+            + (f" up to {date}" if date else "")
+            + f", {len(rejected)} rejected records).",
         )
     else:
         # Watchlist-level: join OHLCV bars on or before the watchlist date
@@ -134,7 +134,9 @@ def get_quality_status(
             {"symbol": r[0], "quality_status": r[1] or "unknown", "provider": r[2]}
             for r in rows
         ]
-        return ToolOutput(data=data, summary=f"{len(data)} watchlist symbols quality check.")
+        return ToolOutput(
+            data=data, summary=f"{len(data)} watchlist symbols quality check."
+        )
 
 
 def get_many_quality_status(

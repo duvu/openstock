@@ -20,6 +20,7 @@ from vnalpha.warehouse.session_repo import (
 def conn():
     """In-memory DuckDB connection with all migrations applied."""
     import duckdb
+
     c = duckdb.connect(":memory:")
     run_migrations(conn=c)
     yield c
@@ -30,12 +31,18 @@ class TestSchemaAdditive:
     def test_phase5_tables_still_exist(self, conn):
         """Phase 5 tables must still be present after Phase 5.8 migration."""
         phase5_tables = [
-            "ingestion_run", "symbol_master", "market_ohlcv_raw",
-            "canonical_ohlcv", "feature_snapshot", "candidate_score",
-            "daily_watchlist", "rejected_symbol",
+            "ingestion_run",
+            "symbol_master",
+            "market_ohlcv_raw",
+            "canonical_ohlcv",
+            "feature_snapshot",
+            "candidate_score",
+            "daily_watchlist",
+            "rejected_symbol",
         ]
         existing = {
-            r[0] for r in conn.execute(
+            r[0]
+            for r in conn.execute(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
             ).fetchall()
         }
@@ -46,7 +53,8 @@ class TestSchemaAdditive:
         """Phase 5.8 tables must be present after migration."""
         phase58_tables = ["research_session", "tool_trace", "research_note"]
         existing = {
-            r[0] for r in conn.execute(
+            r[0]
+            for r in conn.execute(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
             ).fetchall()
         }
@@ -67,7 +75,9 @@ class TestResearchSession:
 
     def test_finish_session_success(self, conn):
         sid = create_research_session(conn, surface="cli", command_text="/scan")
-        finish_research_session(conn, sid, status="SUCCESS", result_summary={"count": 5})
+        finish_research_session(
+            conn, sid, status="SUCCESS", result_summary={"count": 5}
+        )
         row = conn.execute(
             "SELECT status, result_summary_json FROM research_session WHERE session_id=?",
             [sid],
@@ -100,7 +110,10 @@ class TestToolTrace:
     def test_create_and_finish_trace(self, conn):
         sid = create_research_session(conn, surface="cli", command_text="/scan")
         trace_id = create_tool_trace(
-            conn, session_id=sid, tool_name="watchlist.scan", input_data={"date": "2026-07-06"}
+            conn,
+            session_id=sid,
+            tool_name="watchlist.scan",
+            input_data={"date": "2026-07-06"},
         )
         finish_tool_trace(conn, trace_id, status="SUCCESS", output_summary={"rows": 3})
         row = conn.execute(
@@ -122,7 +135,10 @@ class TestToolTrace:
 class TestResearchNote:
     def test_create_note(self, conn):
         note_id = create_research_note(
-            conn, symbol="FPT", note_text="Watch RS vs VNINDEX", tags=["rs", "watchlist"]
+            conn,
+            symbol="FPT",
+            note_text="Watch RS vs VNINDEX",
+            tags=["rs", "watchlist"],
         )
         assert len(note_id) == 36
 

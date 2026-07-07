@@ -285,9 +285,15 @@ app.add_typer(outcome_app, name="outcome")
 
 @outcome_app.command("evaluate")
 def outcome_evaluate(
-    date: Optional[str] = typer.Option(None, "--date", help="Evaluate a single watchlist date"),
-    from_date: Optional[str] = typer.Option(None, "--from", help="Start date for range evaluation"),
-    to_date: Optional[str] = typer.Option(None, "--to", help="End date for range evaluation"),
+    date: Optional[str] = typer.Option(
+        None, "--date", help="Evaluate a single watchlist date"
+    ),
+    from_date: Optional[str] = typer.Option(
+        None, "--from", help="Start date for range evaluation"
+    ),
+    to_date: Optional[str] = typer.Option(
+        None, "--to", help="End date for range evaluation"
+    ),
 ):
     """Evaluate candidate outcomes for a date or date range."""
     from vnalpha.core.dates import resolve_date
@@ -301,7 +307,9 @@ def outcome_evaluate(
     if date:
         target = resolve_date(date)
         result = evaluate_watchlist_date(conn, target)
-        typer.echo(f"Evaluated {result['evaluated']} candidate-horizon pairs for {target}.")
+        typer.echo(
+            f"Evaluated {result['evaluated']} candidate-horizon pairs for {target}."
+        )
         typer.echo(f"Persisted: {result['persisted']}, Errors: {result['errors']}")
         if result.get("evaluation_run_id"):
             typer.echo(f"Evaluation run: {result['evaluation_run_id']}")
@@ -318,7 +326,9 @@ def outcome_evaluate(
         )
         for r in results:
             run_id = r.get("evaluation_run_id") or "none"
-            typer.echo(f"  {r['watchlist_date']}: run_id={run_id}, evaluated={r['evaluated']}, errors={r['errors']}")
+            typer.echo(
+                f"  {r['watchlist_date']}: run_id={run_id}, evaluated={r['evaluated']}, errors={r['errors']}"
+            )
     else:
         typer.echo("Provide --date or --from/--to.", err=True)
         raise typer.Exit(code=1)
@@ -359,8 +369,14 @@ def outcome_candidates(
     table.add_column("Failure")
 
     for row in rows:
-        fwd = f"{row['forward_return']:.2%}" if row["forward_return"] is not None else "—"
-        exc = f"{row['excess_return_vs_vnindex']:.2%}" if row["excess_return_vs_vnindex"] is not None else "—"
+        fwd = (
+            f"{row['forward_return']:.2%}" if row["forward_return"] is not None else "—"
+        )
+        exc = (
+            f"{row['excess_return_vs_vnindex']:.2%}"
+            if row["excess_return_vs_vnindex"] is not None
+            else "—"
+        )
         score = f"{row['score']:.2f}" if row["score"] is not None else "—"
         table.add_row(
             row["symbol"],
@@ -398,10 +414,20 @@ def outcome_watchlist(
         console.print(f"[dim]No watchlist outcome for {date} horizon={horizon}[/dim]")
         return
 
-    avg_fwd = f"{result['avg_forward_return']:.2%}" if result["avg_forward_return"] is not None else "—"
-    avg_exc = f"{result['avg_excess_return']:.2%}" if result["avg_excess_return"] is not None else "—"
+    avg_fwd = (
+        f"{result['avg_forward_return']:.2%}"
+        if result["avg_forward_return"] is not None
+        else "—"
+    )
+    avg_exc = (
+        f"{result['avg_excess_return']:.2%}"
+        if result["avg_excess_return"] is not None
+        else "—"
+    )
     hit_rate = f"{result['hit_rate']:.1%}" if result["hit_rate"] is not None else "—"
-    fail_rate = f"{result['failure_rate']:.1%}" if result["failure_rate"] is not None else "—"
+    fail_rate = (
+        f"{result['failure_rate']:.1%}" if result["failure_rate"] is not None else "—"
+    )
     lines = [
         f"Candidates: {result.get('candidate_count')}",
         f"Complete: {result.get('complete_count')} | Pending: {result.get('pending_count')} | Missing: {result.get('missing_data_count')}",
@@ -410,7 +436,12 @@ def outcome_watchlist(
         f"Hit Rate: {hit_rate}",
         f"Failure Rate: {fail_rate}",
     ]
-    console.print(Panel("\n".join(lines), title=f"Watchlist Outcome — {date} | Horizon {horizon} sessions"))
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title=f"Watchlist Outcome — {date} | Horizon {horizon} sessions",
+        )
+    )
 
 
 @outcome_app.command("buckets")
@@ -442,10 +473,16 @@ def outcome_buckets(
     table.add_column("Hit Rate")
     table.add_column("Failure Rate")
     for row in rows:
-        fwd = f"{row['avg_forward_return']:.2%}" if row["avg_forward_return"] is not None else "—"
+        fwd = (
+            f"{row['avg_forward_return']:.2%}"
+            if row["avg_forward_return"] is not None
+            else "—"
+        )
         hit = f"{row['hit_rate']:.1%}" if row["hit_rate"] is not None else "—"
         fail = f"{row['failure_rate']:.1%}" if row["failure_rate"] is not None else "—"
-        table.add_row(row["score_bucket"], str(row["candidate_count"] or 0), fwd, hit, fail)
+        table.add_row(
+            row["score_bucket"], str(row["candidate_count"] or 0), fwd, hit, fail
+        )
     console.print(table)
 
 
@@ -478,10 +515,16 @@ def outcome_setups(
     table.add_column("Hit Rate")
     table.add_column("Failure Rate")
     for row in rows:
-        fwd = f"{row['avg_forward_return']:.2%}" if row["avg_forward_return"] is not None else "—"
+        fwd = (
+            f"{row['avg_forward_return']:.2%}"
+            if row["avg_forward_return"] is not None
+            else "—"
+        )
         hit = f"{row['hit_rate']:.1%}" if row["hit_rate"] is not None else "—"
         fail = f"{row['failure_rate']:.1%}" if row["failure_rate"] is not None else "—"
-        table.add_row(row["setup_type"], str(row["candidate_count"] or 0), fwd, hit, fail)
+        table.add_row(
+            row["setup_type"], str(row["candidate_count"] or 0), fwd, hit, fail
+        )
     console.print(table)
 
 
@@ -514,17 +557,25 @@ def outcome_risks(
     table.add_column("Hit Rate")
     table.add_column("Failure Rate")
     for row in rows:
-        fwd = f"{row['avg_forward_return']:.2%}" if row["avg_forward_return"] is not None else "—"
+        fwd = (
+            f"{row['avg_forward_return']:.2%}"
+            if row["avg_forward_return"] is not None
+            else "—"
+        )
         hit = f"{row['hit_rate']:.1%}" if row["hit_rate"] is not None else "—"
         fail = f"{row['failure_rate']:.1%}" if row["failure_rate"] is not None else "—"
-        table.add_row(row["risk_flag"], str(row["candidate_count"] or 0), fwd, hit, fail)
+        table.add_row(
+            row["risk_flag"], str(row["candidate_count"] or 0), fwd, hit, fail
+        )
     console.print(table)
 
 
 @outcome_app.command("report")
 def outcome_report(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
-    date: Optional[str] = typer.Option(None, "--date", help="As-of date (default: latest)"),
+    date: Optional[str] = typer.Option(
+        None, "--date", help="As-of date (default: latest)"
+    ),
 ):
     """Generate calibration report."""
     from rich.console import Console
@@ -542,18 +593,20 @@ def outcome_report(
     conn.close()
 
     console = Console()
-    console.print(Panel(
-        f"As-of date: {report['as_of_date']} | Horizon: {horizon} sessions\n"
-        f"Pending: {report['pending_count']} | Missing: {report['missing_count']}\n"
-        f"Score buckets: {len(report.get('score_buckets', []))} | "
-        f"Setups: {len(report.get('setup_types', []))} | "
-        f"Risk flags: {len(report.get('risk_flags', []))}\n"
-        f"Score bucket monotone: {report['score_bucket_monotone']}\n"
-        f"Best setup: {report.get('best_setup') or '—'} | Worst setup: {report.get('worst_setup') or '—'}\n"
-        f"Worst risk flag: {report.get('worst_risk_flag') or '—'}\n\n"
-        f"[dim]{report['interpretation_note']}[/dim]",
-        title="Calibration Report",
-    ))
+    console.print(
+        Panel(
+            f"As-of date: {report['as_of_date']} | Horizon: {horizon} sessions\n"
+            f"Pending: {report['pending_count']} | Missing: {report['missing_count']}\n"
+            f"Score buckets: {len(report.get('score_buckets', []))} | "
+            f"Setups: {len(report.get('setup_types', []))} | "
+            f"Risk flags: {len(report.get('risk_flags', []))}\n"
+            f"Score bucket monotone: {report['score_bucket_monotone']}\n"
+            f"Best setup: {report.get('best_setup') or '—'} | Worst setup: {report.get('worst_setup') or '—'}\n"
+            f"Worst risk flag: {report.get('worst_risk_flag') or '—'}\n\n"
+            f"[dim]{report['interpretation_note']}[/dim]",
+            title="Calibration Report",
+        )
+    )
 
 
 @app.command("cmd")
@@ -585,6 +638,7 @@ def cmd_runner(
     # Render result
     try:
         from rich.console import Console
+
         render_result(result, console=Console())
     except ImportError:
         typer.echo(result.title)
@@ -599,10 +653,18 @@ def cmd_runner(
 @app.command("ask")
 def ask_runner(
     question: str = typer.Argument(..., help="Natural-language research question."),
-    date: Optional[str] = typer.Option(None, "--date", help="Target date (YYYY-MM-DD or 'today')."),
-    show_plan: bool = typer.Option(False, "--show-plan", help="Print the tool plan before answering."),
-    trace: bool = typer.Option(False, "--trace", help="Print tool trace summary after answering."),
-    no_execute: bool = typer.Option(False, "--no-execute", help="Show plan only; do not execute tools."),
+    date: Optional[str] = typer.Option(
+        None, "--date", help="Target date (YYYY-MM-DD or 'today')."
+    ),
+    show_plan: bool = typer.Option(
+        False, "--show-plan", help="Print the tool plan before answering."
+    ),
+    trace: bool = typer.Option(
+        False, "--trace", help="Print tool trace summary after answering."
+    ),
+    no_execute: bool = typer.Option(
+        False, "--no-execute", help="Show plan only; do not execute tools."
+    ),
 ) -> None:
     """Ask a natural-language research question. Phase 5.9 research assistant.
 
@@ -635,7 +697,9 @@ def ask_runner(
         llm_config = LLMGatewayConfig.from_env()
         llm_client = LLMGatewayClient(llm_config)
         assistant = AssistantApp(conn, surface="cli", llm_client=llm_client)
-        result, plan = assistant.ask(question, date=resolved_date, no_execute=no_execute)
+        result, plan = assistant.ask(
+            question, date=resolved_date, no_execute=no_execute
+        )
     except AssistantError as exc:
         error_console.print(f"[red]Assistant error: {exc}[/red]")
         raise typer.Exit(code=1) from exc
@@ -646,16 +710,25 @@ def ask_runner(
     # Show plan if requested (or if no_execute)
     if show_plan or no_execute:
         from vnalpha.assistant.planner import PlanBuilder
+
         pb = PlanBuilder()
-        console.print(Panel(pb.preview(plan), title="Research Plan", border_style="blue"))
+        console.print(
+            Panel(pb.preview(plan), title="Research Plan", border_style="blue")
+        )
 
     if isinstance(result, RefusalMessage):
-        console.print(Panel(
-            f"[yellow]{result.reason}[/yellow]" +
-            (f"\n\n[dim]Suggestion: {result.suggestion}[/dim]" if result.suggestion else ""),
-            title="[red]Request Refused[/red]",
-            border_style="red",
-        ))
+        console.print(
+            Panel(
+                f"[yellow]{result.reason}[/yellow]"
+                + (
+                    f"\n\n[dim]Suggestion: {result.suggestion}[/dim]"
+                    if result.suggestion
+                    else ""
+                ),
+                title="[red]Request Refused[/red]",
+                border_style="red",
+            )
+        )
         raise typer.Exit(code=1)
 
     # Render answer
@@ -674,4 +747,10 @@ def ask_runner(
     console.print(Panel(answer_text, title="Research Answer", border_style="green"))
 
     if trace:
-        console.print(Panel(result.tool_trace_summary or "(no trace)", title="Tool Trace", border_style="dim"))
+        console.print(
+            Panel(
+                result.tool_trace_summary or "(no trace)",
+                title="Tool Trace",
+                border_style="dim",
+            )
+        )

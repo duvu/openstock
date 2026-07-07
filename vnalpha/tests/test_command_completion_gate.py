@@ -31,7 +31,9 @@ def _seed_watchlist(conn, target_date: str) -> None:
             target_date,
             {
                 "score": score,
-                "candidate_class": "STRONG_CANDIDATE" if rank == 1 else "WATCH_CANDIDATE",
+                "candidate_class": "STRONG_CANDIDATE"
+                if rank == 1
+                else "WATCH_CANDIDATE",
                 "setup_type": "ACCUMULATION_BASE",
                 "trend_score": 0.8,
                 "relative_strength_score": 0.7,
@@ -87,7 +89,9 @@ class TestCommandExecutorCompletion:
         target_date = date.today().isoformat()
         _seed_watchlist(conn, target_date)
 
-        result = CommandExecutor(conn, surface="cli").execute(f"/scan --date {target_date}")
+        result = CommandExecutor(conn, surface="cli").execute(
+            f"/scan --date {target_date}"
+        )
 
         assert result.status == "SUCCESS"
         session = _latest_research_session(conn)
@@ -130,10 +134,14 @@ class TestCommandExecutorCompletion:
         assert result.status == "VALIDATION_ERROR"
         assert conn.execute("SELECT COUNT(*) FROM tool_trace").fetchone()[0] == 0
 
-    def test_unsupported_filter_field_is_validation_error_without_tool_trace(self, conn):
+    def test_unsupported_filter_field_is_validation_error_without_tool_trace(
+        self, conn
+    ):
         from vnalpha.commands.executor import CommandExecutor
 
-        result = CommandExecutor(conn, surface="cli").execute('/filter raw_sql="drop table candidate_score"')
+        result = CommandExecutor(conn, surface="cli").execute(
+            '/filter raw_sql="drop table candidate_score"'
+        )
 
         assert result.status == "VALIDATION_ERROR"
         assert conn.execute("SELECT COUNT(*) FROM tool_trace").fetchone()[0] == 0
@@ -144,7 +152,9 @@ class TestCommandExecutorCompletion:
         target_date = date.today().isoformat()
         _seed_watchlist(conn, target_date)
 
-        result = CommandExecutor(conn, surface="cli").execute(f"/scan VN30 --date {target_date}")
+        result = CommandExecutor(conn, surface="cli").execute(
+            f"/scan VN30 --date {target_date}"
+        )
 
         table = result.tables[0]
         assert any(c.name == "risk_flags" for c in table.columns)

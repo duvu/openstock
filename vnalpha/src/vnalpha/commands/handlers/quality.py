@@ -18,14 +18,22 @@ def handle_quality(
 ) -> CommandResult:
     """Show data quality for a symbol or the latest watchlist."""
     if conn is None:
-        return CommandResult(status="FAILED", title="/quality", summary="No database connection.")
+        return CommandResult(
+            status="FAILED", title="/quality", summary="No database connection."
+        )
 
     symbol = normalize_symbol(parsed.positional[0]) if parsed.positional else None
-    date = normalize_date(parsed.options.get("date")) if parsed.options.get("date") else None
+    date = (
+        normalize_date(parsed.options.get("date"))
+        if parsed.options.get("date")
+        else None
+    )
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
-        return CommandResult(status="FAILED", title="/quality", summary="No tool executor available.")
+        return CommandResult(
+            status="FAILED", title="/quality", summary="No tool executor available."
+        )
     output = tool_executor.call("quality.get_status", symbol=symbol, date=date)
 
     if output.data is None:

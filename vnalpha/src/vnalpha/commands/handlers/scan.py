@@ -19,7 +19,9 @@ def handle_scan(
 ) -> CommandResult:
     """Scan the daily watchlist for a date."""
     if conn is None:
-        return CommandResult(status="FAILED", title="/scan", summary="No database connection.")
+        return CommandResult(
+            status="FAILED", title="/scan", summary="No database connection."
+        )
 
     date = normalize_date(parsed.options.get("date"))
     universe_hint = parsed.positional[0].upper() if parsed.positional else None
@@ -27,18 +29,23 @@ def handle_scan(
     if universe_hint:
         try:
             from vnalpha.core.universe import resolve_universe
+
             universe_symbols = set(resolve_universe(universe_hint))
         except ValueError as exc:
             return CommandResult(
                 status="VALIDATION_ERROR",
                 title="/scan",
                 summary=str(exc),
-                error=CommandError(error_type="CommandValidationError", message=str(exc)),
+                error=CommandError(
+                    error_type="CommandValidationError", message=str(exc)
+                ),
             )
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
-        return CommandResult(status="FAILED", title="/scan", summary="No tool executor available.")
+        return CommandResult(
+            status="FAILED", title="/scan", summary="No tool executor available."
+        )
     output = tool_executor.call("watchlist.scan", date=date)
     rows_data = output.data or []
     if universe_symbols is not None:

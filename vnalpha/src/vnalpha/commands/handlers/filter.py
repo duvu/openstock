@@ -20,14 +20,15 @@ def handle_filter(
 ) -> CommandResult:
     """Filter candidate scores by deterministic conditions."""
     if conn is None:
-        return CommandResult(status="FAILED", title="/filter", summary="No database connection.")
+        return CommandResult(
+            status="FAILED", title="/filter", summary="No database connection."
+        )
 
     date = normalize_date(parsed.options.get("date"))
 
     # Build filter dicts from ParsedCommand.filters
     filter_dicts = [
-        {"key": f.key, "op": f.op, "value": f.value}
-        for f in parsed.filters
+        {"key": f.key, "op": f.op, "value": f.value} for f in parsed.filters
     ]
     try:
         validate_filters(filter_dicts)
@@ -42,7 +43,9 @@ def handle_filter(
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
-        return CommandResult(status="FAILED", title="/filter", summary="No tool executor available.")
+        return CommandResult(
+            status="FAILED", title="/filter", summary="No tool executor available."
+        )
     output = tool_executor.call("watchlist.filter", date=date, filters=filter_dicts)
     rows_data = output.data or []
 

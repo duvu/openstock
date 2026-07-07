@@ -13,7 +13,9 @@ class TestCmdHelp:
     def test_cmd_help_option(self):
         result = runner.invoke(app, ["cmd", "--help"])
         assert result.exit_code == 0
-        assert "slash command" in result.output.lower() or "cmd" in result.output.lower()
+        assert (
+            "slash command" in result.output.lower() or "cmd" in result.output.lower()
+        )
 
     def test_cmd_help_command(self):
         result = runner.invoke(app, ["cmd", "/help"])
@@ -67,7 +69,10 @@ class TestCmdHelp:
             create_research_session,
             finish_research_session,
         )
-        sid = create_research_session(conn, surface="cli", command_text="/help", command_name="help")
+
+        sid = create_research_session(
+            conn, surface="cli", command_text="/help", command_name="help"
+        )
         finish_research_session(conn, sid, status="SUCCESS")
         sessions = list_research_sessions(conn, limit=5)
         assert len(sessions) == 1

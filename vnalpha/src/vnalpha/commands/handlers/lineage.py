@@ -17,7 +17,9 @@ def handle_lineage(
 ) -> CommandResult:
     """Show provider, ingestion run, feature date, and scoring version for a symbol."""
     if conn is None:
-        return CommandResult(status="FAILED", title="/lineage", summary="No database connection.")
+        return CommandResult(
+            status="FAILED", title="/lineage", summary="No database connection."
+        )
 
     if not parsed.positional:
         return CommandResult(
@@ -31,7 +33,11 @@ def handle_lineage(
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
-        return CommandResult(status="FAILED", title=f"/lineage {symbol}", summary="No tool executor available.")
+        return CommandResult(
+            status="FAILED",
+            title=f"/lineage {symbol}",
+            summary="No tool executor available.",
+        )
     output = tool_executor.call("lineage.get_symbol_lineage", symbol=symbol, date=date)
 
     if output.data is None:

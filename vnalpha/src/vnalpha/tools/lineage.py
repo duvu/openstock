@@ -31,7 +31,9 @@ def get_symbol_lineage(
             warnings=["Run 'vnalpha score' to generate candidate scores."],
         )
     lineage_raw, score, candidate_class = row
-    lineage = json.loads(lineage_raw) if isinstance(lineage_raw, str) else lineage_raw or {}
+    lineage = (
+        json.loads(lineage_raw) if isinstance(lineage_raw, str) else lineage_raw or {}
+    )
 
     # Get latest ingestion run info
     ing_row = conn.execute(

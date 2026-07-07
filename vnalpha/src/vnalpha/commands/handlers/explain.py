@@ -17,7 +17,9 @@ def handle_explain(
 ) -> CommandResult:
     """Explain a symbol from persisted candidate score artifacts."""
     if conn is None:
-        return CommandResult(status="FAILED", title="/explain", summary="No database connection.")
+        return CommandResult(
+            status="FAILED", title="/explain", summary="No database connection."
+        )
 
     if not parsed.positional:
         return CommandResult(
@@ -31,7 +33,11 @@ def handle_explain(
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
-        return CommandResult(status="FAILED", title=f"/explain {symbol}", summary="No tool executor available.")
+        return CommandResult(
+            status="FAILED",
+            title=f"/explain {symbol}",
+            summary="No tool executor available.",
+        )
     output = tool_executor.call("candidate.explain", symbol=symbol, date=date)
     quality_output = tool_executor.call("quality.get_status", symbol=symbol, date=date)
 

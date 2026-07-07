@@ -28,10 +28,7 @@ def handle_help(parsed: ParsedCommand, registry=None, **kwargs) -> CommandResult
             summary="No commands registered.",
         )
 
-    rows = [
-        [f"/{meta.name}", meta.description, meta.usage]
-        for meta in commands
-    ]
+    rows = [[f"/{meta.name}", meta.description, meta.usage] for meta in commands]
     table = ResultTable(
         title="Available Commands",
         columns=[

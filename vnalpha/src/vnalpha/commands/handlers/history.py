@@ -17,7 +17,9 @@ def handle_history(
 ) -> CommandResult:
     """Show recent research sessions."""
     if conn is None:
-        return CommandResult(status="FAILED", title="/history", summary="No database connection.")
+        return CommandResult(
+            status="FAILED", title="/history", summary="No database connection."
+        )
 
     limit_raw = parsed.options.get("limit", 20)
     try:
@@ -27,7 +29,9 @@ def handle_history(
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
-        return CommandResult(status="FAILED", title="/history", summary="No tool executor available.")
+        return CommandResult(
+            status="FAILED", title="/history", summary="No tool executor available."
+        )
     output = tool_executor.call("history.list_sessions", limit=limit)
     sessions = output.data or []
 
