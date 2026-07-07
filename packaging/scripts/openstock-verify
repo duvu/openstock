@@ -316,6 +316,155 @@ check_assistant() {
   fi
 }
 
+# --- check ci.1: docker compose config ---
+check_ci_compose_config() {
+  if ! "$CI_MODE"; then return; fi
+  if ! command -v docker >/dev/null 2>&1; then
+    skip "CI: docker compose config (docker not available)"
+    return
+  fi
+  if docker compose config >/dev/null 2>&1; then
+    ok "CI: docker compose config is valid"
+  else
+    fail "CI: docker compose config failed"
+  fi
+}
+
+# --- check ci.2: localhost-only binding ---
+check_ci_localhost_binding() {
+  if ! "$CI_MODE"; then return; fi
+  local compose_file="docker-compose.yml"
+  if [ ! -f "$compose_file" ]; then
+    skip "CI: localhost binding check (docker-compose.yml not found)"
+    return
+  fi
+  if grep -q "127.0.0.1:6900" "$compose_file"; then
+    ok "CI: vnstock-service binds to localhost (127.0.0.1:6900)"
+  else
+    fail "CI: vnstock-service does not bind to 127.0.0.1:6900 — potential safety boundary issue"
+  fi
+}
+
+# --- check ci.3: vnalpha-worker is profile-gated ---
+check_ci_worker_profile() {
+  if ! "$CI_MODE"; then return; fi
+  local compose_file="docker-compose.yml"
+  if [ ! -f "$compose_file" ]; then
+    skip "CI: worker profile check (docker-compose.yml not found)"
+    return
+  fi
+  if grep -A 5 "vnalpha-worker" "$compose_file" | grep -q "profiles:"; then
+    ok "CI: vnalpha-worker is profile-gated in docker-compose.yml"
+  else
+    fail "CI: vnalpha-worker is NOT profile-gated — it should require explicit --profile to start"
+  fi
+}
+
+# --- check ci.4: worker warehouse env/mount ---
+check_ci_worker_warehouse_env() {
+  if ! "$CI_MODE"; then return; fi
+  local compose_file="docker-compose.yml"
+  if [ ! -f "$compose_file" ]; then
+    skip "CI: worker env check (docker-compose.yml not found)"
+    return
+  fi
+  if grep -q "VNSTOCK_SERVICE_URL" "$compose_file" && grep -q "VNALPHA_WAREHOUSE_PATH" "$compose_file"; then
+    ok "CI: worker env contains VNSTOCK_SERVICE_URL and VNALPHA_WAREHOUSE_PATH"
+  else
+    fail "CI: docker-compose.yml missing required worker env vars (VNSTOCK_SERVICE_URL or VNALPHA_WAREHOUSE_PATH)"
+  fi
+}
+
+# --- check ci.5: bash -n on deploy scripts ---
+check_ci_script_syntax() {
+  if ! "$CI_MODE"; then return; fi
+  local script_dir
+  script_dir="$(dirname "$0")"
+  local failed=0
+
+  for script in \
+    "${script_dir}/openstock-verify" \
+    "${script_dir}/openstock-backup-warehouse" \
+    "${script_dir}/openstock-run-pipeline"
+  do
+    if [ -f "$script" ]; then
+      if bash -n "$script" 2>/dev/null; then
+        ok "CI: bash -n $script OK"
+      else
+        fail "CI: bash -n $script FAILED (syntax error)"
+        failed=1
+      fi
+    else
+      warn "CI: script not found: $script"
+    fi
+  done
+}
+
+# --- check ci.6: systemd-analyze verify ---
+check_ci_systemd_analyze() {
+  if ! "$CI_MODE"; then return; fi
+  if ! command -v systemd-analyze >/dev/null 2>&1; then
+    skip "CI: systemd-analyze not available"
+    return
+  fi
+  local script_dir
+  script_dir="$(dirname "$0")"
+  local systemd_dir="${script_dir}/../systemd"
+  if [ ! -d "$systemd_dir" ]; then
+    skip "CI: systemd dir not found"
+    return
+  fi
+  local failed=0
+  for unit in "$systemd_dir"/*.service "$systemd_dir"/*.timer; do
+    [ -f "$unit" ] || continue
+    if systemd-analyze verify "$unit" 2>/dev/null; then
+      ok "CI: systemd-analyze verify $(basename "$unit") OK"
+    else
+      warn "CI: systemd-analyze verify $(basename "$unit") reported issues"
+    fi
+  done
+}
+
+# --- check ci.7: package metadata/launcher files ---
+check_ci_package_files() {
+  if ! "$CI_MODE"; then return; fi
+  local script_dir
+  script_dir="$(dirname "$0")"
+  local pkg_dir="${script_dir}/../deb"
+  local failed=0
+
+  for f in \
+    "${pkg_dir}/DEBIAN/control" \
+    "${pkg_dir}/usr/bin/vnalpha" \
+    "${pkg_dir}/usr/bin/vnalpha-poc" \
+    "${pkg_dir}/etc/vnalpha/vnalpha.env"
+  do
+    if [ -f "$f" ]; then
+      ok "CI: package file exists: $(basename "$f")"
+    else
+      fail "CI: package file missing: $f"
+      failed=1
+    fi
+  done
+}
+
+# --- check ci.8: no TUI daemon configured ---
+check_ci_no_tui_daemon() {
+  if ! "$CI_MODE"; then return; fi
+  local script_dir
+  script_dir="$(dirname "$0")"
+  local systemd_dir="${script_dir}/../systemd"
+  if [ -d "$systemd_dir" ]; then
+    if grep -r "vnalpha tui\|vnalpha-tui\|tui --daemon\|tui --headless" "$systemd_dir" 2>/dev/null; then
+      fail "CI: TUI daemon found in systemd units — TUI should not run as a daemon"
+    else
+      ok "CI: no TUI daemon configured in systemd units"
+    fi
+  else
+    skip "CI: systemd dir not found for TUI daemon check"
+  fi
+}
+
 # --- source env if available ---
 if [ -f /etc/openstock/openstock.env ]; then
   # shellcheck source=/dev/null
@@ -330,18 +479,31 @@ echo "CI mode: ${CI_MODE}  |  Init mode: ${INIT_MODE}"
 echo ""
 
 # --- run checks ---
-check_docker
-check_systemd
-check_container
-check_healthz
-check_forbidden
-check_warehouse_dir
-check_warehouse_init
-check_vnalpha_help
-check_tui_import
-check_pipeline_smoke
-check_vnalpha_watchlist
-check_assistant
+if "$CI_MODE"; then
+  check_ci_compose_config
+  check_ci_localhost_binding
+  check_ci_worker_profile
+  check_ci_worker_warehouse_env
+  check_ci_script_syntax
+  check_ci_systemd_analyze
+  check_ci_package_files
+  check_ci_no_tui_daemon
+  check_vnalpha_help
+  check_tui_import
+else
+  check_docker
+  check_systemd
+  check_container
+  check_healthz
+  check_forbidden
+  check_warehouse_dir
+  check_warehouse_init
+  check_vnalpha_help
+  check_tui_import
+  check_pipeline_smoke
+  check_vnalpha_watchlist
+  check_assistant
+fi
 
 # --- summary ---
 echo ""

@@ -1,5 +1,5 @@
 # openstock-daily-pipeline.service
-# Runs the daily data pipeline worker jobs via Docker.
+# Runs the daily data pipeline via openstock-run-pipeline wrapper.
 # Controlled by openstock-daily-pipeline.timer.
 #
 # Manual run:  sudo systemctl start openstock-daily-pipeline
@@ -14,15 +14,7 @@ After=openstock-data-platform.service
 Type=oneshot
 WorkingDirectory=/opt/openstock
 EnvironmentFile=-/etc/openstock/openstock.env
-# Lock guard: prevent concurrent pipeline runs (task 5.4)
-ExecStartPre=/bin/bash -c 'exec 200>/run/openstock-pipeline.lock; flock -n 200 || { echo "Pipeline already running (lock held)"; exit 1; }'
-ExecStart=/usr/bin/docker compose run --rm vnalpha-worker sync symbols
-ExecStart=/usr/bin/docker compose run --rm vnalpha-worker sync ohlcv --universe VN30
-ExecStart=/usr/bin/docker compose run --rm vnalpha-worker sync ohlcv --universe VNINDEX
-ExecStart=/usr/bin/docker compose run --rm vnalpha-worker build canonical
-ExecStart=/usr/bin/docker compose run --rm vnalpha-worker build features
-ExecStart=/usr/bin/docker compose run --rm vnalpha-worker score
-ExecStartPost=/bin/rm -f /run/openstock-pipeline.lock
+ExecStart=/usr/local/bin/openstock-run-pipeline
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=openstock-pipeline

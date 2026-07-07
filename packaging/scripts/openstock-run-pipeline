@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# openstock-run-pipeline — daily data pipeline wrapper
+#
+# Acquires a writer lock for the full pipeline run, executes commands in the
+# correct order, and releases the lock on success or failure.
+#
+# Usage:
+#   openstock-run-pipeline [--date YYYY-MM-DD] [--start YYYY-MM-DD]
+#                          [--ci-fixture] [--dry-run] [--help]
+#
+# Options:
+#   --date YYYY-MM-DD    Target date for features/score/watchlist (default: today)
+#   --start YYYY-MM-DD   Start date for sync commands (default: 2024-01-01)
+#   --ci-fixture         Skip provider-backed sync; run only offline build steps
+#   --dry-run            Print commands but do not execute them
+#   --help               Show this message
+
+set -uo pipefail
+
+LOCK_FILE="${OPENSTOCK_LOCK_FILE:-/run/openstock-pipeline.lock}"
+LOCK_FD=200
+DATE_ARG=""
+START_ARG="2024-01-01"
+CI_FIXTURE=false
+DRY_RUN=false
+
+ok()   { echo "[OK]   $*"; }
+warn() { echo "[WARN] $*"; }
+fail() { echo "[FAIL] $*"; }
+info() { echo "[INFO] $*"; }
+
+for arg in "$@"; do
+  case "$arg" in
+    --help)
+      sed -n '2,14p' "$0" | sed 's/^# \?//'
+      exit 0
+      ;;
+    --ci-fixture) CI_FIXTURE=true ;;
+    --dry-run)    DRY_RUN=true ;;
+    --date=*)     DATE_ARG="${arg#--date=}" ;;
+    --start=*)    START_ARG="${arg#--start=}" ;;
+    *)
+      if [[ -n "${PREV_ARG:-}" ]]; then
+        case "$PREV_ARG" in
+          --date)  DATE_ARG="$arg" ;;
+          --start) START_ARG="$arg" ;;
+        esac
+        unset PREV_ARG
+      else
+        case "$arg" in
+          --date|--start) PREV_ARG="$arg" ;;
+          *) echo "[FAIL] Unknown option: $arg" >&2; exit 1 ;;
+        esac
+      fi
+      ;;
+  esac
+done
+
+if [ -z "$DATE_ARG" ]; then
+  DATE_ARG="$(date +%Y-%m-%d)"
+fi
+
+if [ -f /etc/openstock/openstock.env ]; then
+  set -a
+  # shellcheck source=/dev/null
+  . /etc/openstock/openstock.env
+  set +a
+fi
+
+_COMPOSE_CMD=""
+if docker compose version >/dev/null 2>&1; then
+  _COMPOSE_CMD="docker compose run --rm vnalpha-worker"
+elif docker-compose --version >/dev/null 2>&1; then
+  _COMPOSE_CMD="docker-compose run --rm vnalpha-worker"
+fi
+
+_run() {
+  local full_cmd="$*"
+  if "$DRY_RUN"; then
+    echo "[DRY-RUN] $full_cmd"
+    return 0
+  fi
+  info "Running: $full_cmd"
+  if ! eval "$full_cmd"; then
+    fail "Command failed: $full_cmd"
+    return 1
+  fi
+  ok "Done: $full_cmd"
+  return 0
+}
+
+_vnalpha() {
+  if [ -n "$_COMPOSE_CMD" ]; then
+    _run "$_COMPOSE_CMD $*"
+  else
+    _run "vnalpha $*"
+  fi
+}
+
+_acquire_lock() {
+  if "$DRY_RUN"; then
+    info "[DRY-RUN] Would acquire lock: $LOCK_FILE"
+    return 0
+  fi
+  eval "exec ${LOCK_FD}>\"${LOCK_FILE}\""
+  if ! flock -n "$LOCK_FD"; then
+    fail "Pipeline already running (lock held at $LOCK_FILE)"
+    exit 1
+  fi
+  ok "Acquired pipeline lock: $LOCK_FILE"
+}
+
+_release_lock() {
+  if "$DRY_RUN"; then
+    return 0
+  fi
+  flock -u "$LOCK_FD" 2>/dev/null || true
+  rm -f "$LOCK_FILE" 2>/dev/null || true
+}
+
+trap '_release_lock' EXIT
+
+echo "openstock-run-pipeline"
+echo "  date=${DATE_ARG}  start=${START_ARG}  ci-fixture=${CI_FIXTURE}  dry-run=${DRY_RUN}"
+echo ""
+
+_acquire_lock
+
+if ! "$CI_FIXTURE"; then
+  _vnalpha sync symbols || exit 1
+  _vnalpha sync ohlcv --universe VN30 --start "$START_ARG" || exit 1
+  _vnalpha sync index --symbol VNINDEX --start "$START_ARG" || exit 1
+else
+  info "CI-fixture mode: skipping provider-backed sync steps"
+fi
+
+_vnalpha build canonical || exit 1
+_vnalpha build features --date "$DATE_ARG" || exit 1
+_vnalpha score --date "$DATE_ARG" || exit 1
+_vnalpha watchlist --date "$DATE_ARG" || exit 1
+
+ok "Pipeline complete for date=${DATE_ARG}"

@@ -5,7 +5,8 @@
 # ──────────────────────────────────────────────
 
 .PHONY: help up-vnstock down-vnstock sync features score tui \
-        install-vnalpha lint-vnalpha test-vnalpha
+        install-vnalpha lint-vnalpha test-vnalpha \
+        verify-r0 verify-r2-ci build-vnalpha-deb verify-vnalpha-deb
 
 help: ## Show this help message
 	@printf "\nopenstock — local research workflow\n\n"
@@ -51,3 +52,21 @@ lint-vnalpha: ## Run ruff linter and format-check on vnalpha
 
 test-vnalpha: ## Run vnalpha test suite
 	cd vnalpha && pytest -q
+
+verify-r0: ## Run offline R0 pipeline confidence tests (no network required)
+	cd vnalpha && pytest -q \
+		tests/test_phase5_e2e.py \
+		tests/test_features.py \
+		tests/test_warehouse.py \
+		tests/test_command_warehouse.py \
+		tests/test_r0_gaps.py
+
+verify-r2-ci: ## Run static CI verification for R2 deploy correctness
+	packaging/scripts/openstock-verify --ci
+
+build-vnalpha-deb: ## Build the vnalpha Debian package
+	./packaging/build-deb.sh
+
+verify-vnalpha-deb: ## Verify the vnalpha Debian package structure
+	./packaging/test/test_packaging.sh packaging/dist/vnalpha_*.deb 2>/dev/null || \
+		./packaging/test/test_packaging.sh
