@@ -321,6 +321,14 @@ def evaluate_watchlist_date(
         symbol_bar_count_json=json.dumps(symbol_bar_counts),
         benchmark_bar_count=len(benchmark_bars),
     )
+    try:
+        from vnalpha.observability.domain import log_outcome_eval_success
+
+        log_outcome_eval_success(
+            watchlist_date, evaluated=evaluated, persisted=persisted
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
     logger.info(
         f"Outcome evaluation {watchlist_date}: "

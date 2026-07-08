@@ -33,6 +33,12 @@ def run_migrations(
     if conn is None:
         conn = get_connection(path=path)
     logger.info("Running warehouse migrations...")
+    try:
+        from vnalpha.observability.domain import log_migration_start
+
+        log_migration_start("warehouse")
+    except Exception:  # noqa: BLE001
+        pass
     for ddl in ALL_DDL:
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE58:
@@ -51,6 +57,12 @@ def run_migrations(
     _migrate_outcome_evaluation_run_columns(conn)
     _migrate_chat_message_visibility_columns(conn)
     logger.info("Warehouse migrations complete.")
+    try:
+        from vnalpha.observability.domain import log_migration_success
+
+        log_migration_success("warehouse")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:

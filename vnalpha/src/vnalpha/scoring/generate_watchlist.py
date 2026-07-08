@@ -178,7 +178,29 @@ def generate_watchlist(
     Returns:
         dict with "scored" count (all symbols scored) and "saved" count (watchlist entries).
     """
-    scored = score_universe(conn, date, universe=universe)
-    saved = save_watchlist(conn, date, top_n=top_n, min_score=min_score)
+    try:
+        from vnalpha.observability.domain import log_watchlist_start
+
+        log_watchlist_start(date)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        scored = score_universe(conn, date, universe=universe)
+        saved = save_watchlist(conn, date, top_n=top_n, min_score=min_score)
+    except Exception as exc:
+        logger.error("Watchlist generation failed for %s: %s", date, exc)
+        try:
+            from vnalpha.observability.domain import log_watchlist_failure
+
+            log_watchlist_failure(date, exc=exc)
+        except Exception:  # noqa: BLE001
+            pass
+        raise
     logger.info("Watchlist for %s: scored=%d saved=%d", date, scored, saved)
+    try:
+        from vnalpha.observability.domain import log_watchlist_success
+
+        log_watchlist_success(date, scored=scored, saved=saved)
+    except Exception:  # noqa: BLE001
+        pass
     return {"scored": scored, "saved": saved}

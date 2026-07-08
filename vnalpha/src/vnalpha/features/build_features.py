@@ -164,6 +164,12 @@ def build_features(
         dict with "built" and "skipped" counts.
     """
     generated_at = datetime.now(timezone.utc).isoformat()
+    try:
+        from vnalpha.observability.domain import log_feature_build_start
+
+        log_feature_build_start(target_date)
+    except Exception:  # noqa: BLE001
+        pass
 
     # Load benchmark
     benchmark_df = load_canonical_ohlcv(conn, benchmark_symbol, target_date)
@@ -278,4 +284,10 @@ def build_features(
     logger.info("Features built=%d skipped=%d for date=%s", built, skipped, target_date)
     if skipped_reasons:
         logger.debug("Skipped reasons: %s", skipped_reasons)
+    try:
+        from vnalpha.observability.domain import log_feature_build_success
+
+        log_feature_build_success(target_date, built=built, skipped=skipped)
+    except Exception:  # noqa: BLE001
+        pass
     return {"built": built, "skipped": skipped}
