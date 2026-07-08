@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from vnalpha.tools.errors import ToolPermissionError
 from vnalpha.tools.models import ToolPermission
 from vnalpha.tools.registry import LocalToolRegistry
 from vnalpha.warehouse.session_repo import create_tool_trace, finish_tool_trace
@@ -70,6 +71,14 @@ class TracedLocalToolExecutor:
                     tool_trace_id=trace_id,
                 )
             )
+        try:
+            from vnalpha.observability.trace import log_trace
+
+            log_trace(
+                "TOOL_CALL_STARTED", name, status="RUNNING", module="vnalpha.tools"
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
         start = time.monotonic()
         try:
@@ -91,7 +100,38 @@ class TracedLocalToolExecutor:
                         tool_trace_id=trace_id,
                     )
                 )
+            try:
+                from vnalpha.observability.trace import log_trace
+
+                log_trace(
+                    "TOOL_CALL_SUCCEEDED",
+                    name,
+                    status="SUCCESS",
+                    duration_ms=duration_ms,
+                    module="vnalpha.tools",
+                )
+            except Exception:  # noqa: BLE001
+                pass
             return output
+        except ToolPermissionError as exc:
+            duration_ms = (time.monotonic() - start) * 1000
+            finish_tool_trace(
+                self._conn,
+                trace_id,
+                status="FAILED",
+                error={"message": str(exc), "error_type": type(exc).__name__},
+            )
+            try:
+                from vnalpha.observability.audit import log_audit
+
+                log_audit(
+                    "TOOL_REFUSED",
+                    f"Tool '{name}' refused: {exc}",
+                    module="vnalpha.tools",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            raise
         except Exception as exc:
             duration_ms = (time.monotonic() - start) * 1000
             finish_tool_trace(
@@ -110,6 +150,18 @@ class TracedLocalToolExecutor:
                         tool_trace_id=trace_id,
                     )
                 )
+            try:
+                from vnalpha.observability.trace import log_trace
+
+                log_trace(
+                    "TOOL_CALL_FAILED",
+                    name,
+                    status="FAILED",
+                    duration_ms=duration_ms,
+                    module="vnalpha.tools",
+                )
+            except Exception:  # noqa: BLE001
+                pass
             raise
 
 

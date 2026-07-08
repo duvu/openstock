@@ -119,6 +119,12 @@ class ChatController:
             error_text = format_runtime_error(str(exc))
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+            try:
+                from vnalpha.observability.errors import capture_exception
+
+                capture_exception(exc)
+            except Exception:  # noqa: BLE001
+                pass
             return error_text
 
     def handle_slash_command(self, raw: str) -> str | None:
@@ -168,6 +174,12 @@ class ChatController:
     def handle_natural_language(self, question: str) -> str | None:
         self._on_message("bold cyan", f"You: {question}")
         self._persist_message("user", question, "prompt")
+        try:
+            from vnalpha.observability.audit import log_audit
+
+            log_audit("CHAT_TURN_STARTED", f"Chat turn: {question[:80]}")
+        except Exception:  # noqa: BLE001
+            pass
         try:
             self._emit_stage(AssistantStage.CLASSIFYING)
             self._emit_stage(AssistantStage.PLANNING)
@@ -256,6 +268,12 @@ class ChatController:
                             ChatErrorKind.REFUSAL,
                             role="assistant",
                         )
+                        try:
+                            from vnalpha.observability.audit import log_audit
+
+                            log_audit("CHAT_REFUSAL", f"Refusal: {answer.reason[:120]}")
+                        except Exception:  # noqa: BLE001
+                            pass
                         return refusal_text
                     else:
                         refusal_text = f"Refused: {answer.reason}"
@@ -263,6 +281,12 @@ class ChatController:
                         self._persist_error_message(
                             refusal_text, ChatErrorKind.REFUSAL, role="assistant"
                         )
+                        try:
+                            from vnalpha.observability.audit import log_audit
+
+                            log_audit("CHAT_REFUSAL", refusal_text[:120])
+                        except Exception:  # noqa: BLE001
+                            pass
                     return None
 
             if plan is not None and hasattr(plan, "steps"):
@@ -272,6 +296,12 @@ class ChatController:
                     self._persist_error_message(
                         refusal, ChatErrorKind.REFUSAL, role="assistant"
                     )
+                    try:
+                        from vnalpha.observability.audit import log_audit
+
+                        log_audit("CHAT_REFUSAL", refusal[:120])
+                    except Exception:  # noqa: BLE001
+                        pass
                     return refusal
 
             import json as _json
@@ -295,6 +325,13 @@ class ChatController:
             self._persist_message(
                 "assistant", preview_text, "plan_preview", plan_json=plan_json_str
             )
+            try:
+                from vnalpha.observability.audit import log_audit
+
+                step_count = len(getattr(plan, "steps", [])) if plan is not None else 0
+                log_audit("PLAN_PREVIEWED", f"Plan previewed with {step_count} step(s)")
+            except Exception:  # noqa: BLE001
+                pass
             return None
 
         except Exception as exc:
@@ -340,6 +377,12 @@ class ChatController:
         ctx = self._pending_plan_turn_context or {}
         question = ctx.get("question", "")
         self._persist_message("user", "Approved.", "plan_approval")
+        try:
+            from vnalpha.observability.audit import log_audit
+
+            log_audit("PLAN_APPROVED", "User approved plan")
+        except Exception:  # noqa: BLE001
+            pass
         self._pending_plan = None
         self._pending_plan_turn_context = None
         try:
@@ -371,6 +414,12 @@ class ChatController:
     def cancel_pending_plan(self) -> None:
         if self._pending_plan is not None:
             self._persist_message("user", "Cancelled.", "plan_cancel")
+            try:
+                from vnalpha.observability.audit import log_audit
+
+                log_audit("PLAN_CANCELLED", "User cancelled plan")
+            except Exception:  # noqa: BLE001
+                pass
         self._pending_plan = None
         self._pending_plan_turn_context = None
         self._on_message("", "Plan canceled.")

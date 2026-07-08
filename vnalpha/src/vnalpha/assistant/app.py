@@ -89,13 +89,47 @@ class AssistantApp:
         )
 
         try:
-            return self._run(
+            from vnalpha.observability.trace import log_trace
+
+            log_trace(
+                "ASSISTANT_ASK_STARTED",
+                "ask",
+                status="RUNNING",
+                module="vnalpha.assistant",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        try:
+            result = self._run(
                 user_prompt,
                 session_id,
                 date=date,
                 no_execute=no_execute,
                 on_trace_event=on_trace_event,
             )
+            answer, plan = result
+            try:
+                from vnalpha.observability.audit import log_audit
+                from vnalpha.observability.trace import log_trace
+
+                answer_type = type(answer).__name__
+                summary_chars = len(getattr(answer, "summary", "") or "")
+                log_trace(
+                    "ASSISTANT_ASK_COMPLETED",
+                    "ask",
+                    status="SUCCESS",
+                    module="vnalpha.assistant",
+                    extra={"answer_type": answer_type, "summary_chars": summary_chars},
+                )
+                log_audit(
+                    "ASSISTANT_ANSWER_LOGGED",
+                    f"Answer type={answer_type} summary_chars={summary_chars}",
+                    module="vnalpha.assistant",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            return result
         except RefusalError as exc:
             finish_assistant_session(
                 self._conn,
@@ -103,6 +137,16 @@ class AssistantApp:
                 status="REFUSED",
                 refusal_reason=exc.args[0] if exc.args else str(exc),
             )
+            try:
+                from vnalpha.observability.audit import log_audit
+
+                log_audit(
+                    "CHAT_REFUSAL",
+                    f"AssistantApp refusal: {str(exc)[:120]}",
+                    module="vnalpha.assistant",
+                )
+            except Exception:  # noqa: BLE001
+                pass
             return RefusalMessage(
                 reason=exc.args[0] if exc.args else str(exc),
                 policy_category=exc.policy_category
