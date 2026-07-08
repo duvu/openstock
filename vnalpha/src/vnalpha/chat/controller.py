@@ -191,6 +191,23 @@ class ChatController:
             self._emit_stage(AssistantStage.PLANNING)
             answer, plan = self._run_ask(question, no_execute=True)
 
+            from vnalpha.assistant.models import RefusalMessage as _RefusalMessage
+
+            if isinstance(answer, _RefusalMessage):
+                self._emit_stage(AssistantStage.FINAL, text=answer.reason)
+                refusal_text = format_refusal(answer.reason)
+                self._on_message("yellow", refusal_text)
+                self._persist_error_message(
+                    refusal_text, ChatErrorKind.REFUSAL, role="assistant"
+                )
+                try:
+                    from vnalpha.observability.audit import log_audit
+
+                    log_audit("CHAT_REFUSAL", f"Refusal: {answer.reason[:120]}")
+                except Exception:  # noqa: BLE001
+                    pass
+                return refusal_text
+
             if self.execution_mode == ExecutionMode.PLAN_ONLY:
                 import json as _json
 

@@ -53,20 +53,8 @@ class ExecutionMode(str, Enum):
 
 
 def is_safe_read_only_plan(plan: "AssistantPlan") -> bool:
-    """Return True if *every* tool call in *plan* is in the safe allowlist.
-
-    An empty plan (no steps) is considered safe.
-
-    Parameters
-    ----------
-    plan:
-        An :class:`~vnalpha.assistant.models.AssistantPlan` instance.
-
-    Returns
-    -------
-    bool
-        ``True`` when all step tool names are in :data:`SAFE_READ_ONLY_TOOLS`.
-    """
+    if not plan.steps:
+        return False
     return all(step.tool_name in SAFE_READ_ONLY_TOOLS for step in plan.steps)
 
 

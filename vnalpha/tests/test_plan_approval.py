@@ -82,9 +82,9 @@ class TestExecutionMode:
 
 
 class TestIsSafeReadOnlyPlan:
-    def test_empty_plan_is_safe(self):
+    def test_empty_plan_is_not_safe(self):
         plan = _make_plan([])
-        assert is_safe_read_only_plan(plan) is True
+        assert is_safe_read_only_plan(plan) is False
 
     def test_all_safe_tools_returns_true(self):
         plan = _make_plan(["watchlist.scan", "fundamentals.get", "price.get"])

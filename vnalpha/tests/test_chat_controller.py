@@ -222,7 +222,12 @@ def test_handle_natural_language_calls_ask():
         risks_caveats="",
         tool_trace_summary="1 tool called.",
     )
-    mock_plan = AssistantPlan(intent="scan_candidates", steps=[])
+    from vnalpha.assistant.models import ToolPlanStep
+
+    mock_plan = AssistantPlan(
+        intent="scan_candidates",
+        steps=[ToolPlanStep(step_id="s1", tool_name="watchlist.scan", arguments={}, purpose="scan", required_permission="READ_DATA")],
+    )
 
     with patch.object(ctrl, "_run_ask", return_value=(mock_answer, mock_plan)):
         ctrl.handle_natural_language("What are the top VN30 picks today?")
