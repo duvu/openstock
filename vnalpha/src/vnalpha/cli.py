@@ -7,8 +7,24 @@ from typing import Optional
 import typer
 
 from vnalpha.core.dates import resolve_date
+from vnalpha.core.logging import configure_logging, set_correlation_id
 
 app = typer.Typer(name="vnalpha", help="Alpha discovery research CLI.")
+
+
+@app.callback()
+def _app_callback() -> None:
+    """Configure logging at the start of every CLI invocation."""
+    configure_logging()
+    try:
+        from vnalpha.observability.context import init_run_context
+        from vnalpha.observability.logger import log_app
+
+        init_run_context(surface="cli", actor="cli")
+        log_app("CLI_STARTED", "vnalpha CLI started", module="vnalpha.cli")
+    except Exception:  # noqa: BLE001
+        pass
+
 
 # ---------------------------------------------------------------------------
 # sync sub-app
@@ -22,6 +38,7 @@ def sync_symbols_cmd(
     source: Optional[str] = typer.Option(None, "--source", help="Preferred provider"),
 ):
     """Sync symbol master from vnstock-service."""
+    set_correlation_id()
     from vnalpha.ingestion.sync_symbols import sync_symbols
     from vnalpha.warehouse.connection import get_connection
     from vnalpha.warehouse.migrations import run_migrations
@@ -51,6 +68,7 @@ def sync_ohlcv_cmd(
 
     Resolution order: --symbols > --universe > all active symbols.
     """
+    set_correlation_id()
     from vnalpha.core.universe import parse_symbols_or_universe
     from vnalpha.ingestion.sync_ohlcv import sync_ohlcv
     from vnalpha.warehouse.connection import get_connection
@@ -86,6 +104,7 @@ def sync_index_cmd(
 
     Example: vnalpha sync index --symbol VNINDEX --start 2024-01-01
     """
+    set_correlation_id()
     from vnalpha.ingestion.sync_index import sync_index_ohlcv
     from vnalpha.warehouse.connection import get_connection
     from vnalpha.warehouse.migrations import run_migrations
@@ -113,6 +132,7 @@ def build_canonical_cmd(
     interval: str = typer.Option("1D", "--interval"),
 ):
     """Build canonical OHLCV from raw data."""
+    set_correlation_id()
     from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
     from vnalpha.warehouse.connection import get_connection
 
@@ -136,6 +156,7 @@ def build_features_cmd(
     ),
 ) -> None:
     """Compute technical features for all symbols on the given date."""
+    set_correlation_id()
     from vnalpha.features.build_features import build_features
     from vnalpha.warehouse.connection import get_connection
 
@@ -159,6 +180,7 @@ def build_features_cmd(
 @app.command("init")
 def init() -> None:
     """Initialize the local DuckDB warehouse."""
+    set_correlation_id()
     typer.echo("Initializing warehouse...")
     from vnalpha.warehouse import migrations
 
@@ -180,6 +202,7 @@ def score(
     ),
 ) -> None:
     """Score candidate research setups for the given date and generate the watchlist."""
+    set_correlation_id()
     from vnalpha.scoring.generate_watchlist import generate_watchlist
     from vnalpha.warehouse.connection import get_connection
 
@@ -202,6 +225,7 @@ def watchlist(
     ),
 ) -> None:
     """Show the daily research watchlist for the given date as a Rich table."""
+    set_correlation_id()
     from vnalpha.warehouse.connection import get_connection
     from vnalpha.warehouse.repositories import get_watchlist as _get_watchlist
 
@@ -264,6 +288,7 @@ def tui(
     ),
 ) -> None:
     """Launch the interactive research TUI."""
+    set_correlation_id()
     try:
         from vnalpha.tui.app import VnAlphaApp
     except ImportError as err:
@@ -296,6 +321,7 @@ def outcome_evaluate(
     ),
 ):
     """Evaluate candidate outcomes for a date or date range."""
+    set_correlation_id()
     from vnalpha.core.dates import resolve_date
     from vnalpha.outcomes.evaluator import evaluate_date_range, evaluate_watchlist_date
     from vnalpha.warehouse.connection import get_connection
@@ -341,6 +367,7 @@ def outcome_candidates(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show candidate outcomes for a date and horizon."""
+    set_correlation_id()
     from rich.console import Console
     from rich.table import Table
 
@@ -396,6 +423,7 @@ def outcome_watchlist(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show watchlist outcome summary for a date and horizon."""
+    set_correlation_id()
     from rich.console import Console
     from rich.panel import Panel
 
@@ -449,6 +477,7 @@ def outcome_buckets(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show score bucket performance."""
+    set_correlation_id()
     from rich.console import Console
     from rich.table import Table
 
@@ -491,6 +520,7 @@ def outcome_setups(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show setup type performance."""
+    set_correlation_id()
     from rich.console import Console
     from rich.table import Table
 
@@ -533,6 +563,7 @@ def outcome_risks(
     horizon: int = typer.Option(20, "--horizon", help="Horizon in sessions"),
 ):
     """Show risk flag performance."""
+    set_correlation_id()
     from rich.console import Console
     from rich.table import Table
 
@@ -578,6 +609,7 @@ def outcome_report(
     ),
 ):
     """Generate calibration report."""
+    set_correlation_id()
     from rich.console import Console
     from rich.panel import Panel
 
@@ -625,6 +657,7 @@ def cmd_runner(
         vnalpha cmd "/filter score>=0.70"
         vnalpha cmd "/history --limit 20"
     """
+    set_correlation_id()
     from vnalpha.commands.executor import CommandExecutor
     from vnalpha.commands.renderers.rich_renderer import render_result
     from vnalpha.warehouse.connection import get_connection
@@ -674,6 +707,7 @@ def ask_runner(
         vnalpha ask "Compare FPT, VNM, and MWG"
         vnalpha ask "Which candidates have weak data quality?"
     """
+    set_correlation_id()
     from rich.console import Console
     from rich.panel import Panel
     from rich.text import Text
@@ -754,3 +788,75 @@ def ask_runner(
                 border_style="dim",
             )
         )
+
+
+# ---------------------------------------------------------------------------
+# log command
+# ---------------------------------------------------------------------------
+
+
+@app.command("log")
+def log_cmd(
+    level: str = typer.Option(
+        "ALL", "--level", help="Filter: ALL/DEBUG/INFO/WARNING/ERROR"
+    ),
+    since: Optional[str] = typer.Option(
+        None, "--since", help="Time filter: '30m', '1h', '2d', or ISO datetime"
+    ),
+    grep: Optional[str] = typer.Option(
+        None, "--grep", help="Substring filter on event field"
+    ),
+    tail: int = typer.Option(50, "--tail", help="Show last N records (default 50)"),
+) -> None:
+    """View and filter the vnalpha structured log file.
+
+    Examples:
+        vnalpha log --tail 20
+        vnalpha log --level ERROR
+        vnalpha log --level INFO --since 1h
+        vnalpha log --grep "sync" --tail 30
+    """
+    set_correlation_id()
+    from rich.console import Console
+
+    from vnalpha.log_viewer import (
+        default_log_path,
+        format_record_rich,
+        read_log_records,
+    )
+
+    console = Console()
+    log_path = default_log_path()
+
+    if not log_path.exists():
+        console.print(
+            f"[yellow]Log file not found: {log_path}[/yellow]\n"
+            "[dim]Run any vnalpha command first to create it.[/dim]"
+        )
+        return
+
+    records = read_log_records(
+        log_path,
+        level=level,
+        since=since,
+        grep=grep,
+        tail=tail,
+    )
+
+    if not records:
+        console.print("[dim]No log records match the filters.[/dim]")
+        return
+
+    for rec in records:
+        console.print(format_record_rich(rec))
+
+    console.print(f"\n[dim]Showing {len(records)} record(s) from {log_path}[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# logs sub-app (file-based observability)
+# ---------------------------------------------------------------------------
+
+from vnalpha.observability.cli_logs import logs_app  # noqa: E402
+
+app.add_typer(logs_app, name="logs")
