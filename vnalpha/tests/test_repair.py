@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -276,7 +275,9 @@ class TestRepairBundleGeneration:
                     f".pem file found in raw-logs: {f.name}"
                 )
 
-    def test_manifest_included_files_do_not_have_secrets(self, sample_run_dir, tmp_path):
+    def test_manifest_included_files_do_not_have_secrets(
+        self, sample_run_dir, tmp_path
+    ):
         """13.10 manifest.json included_files list does not contain secret file names."""
         from vnalpha.observability.repair import create_repair_bundle
 
@@ -311,7 +312,11 @@ class TestRepairEvents:
 
         repair_path = isolated_run_ctx.run_dir / "repair.jsonl"
         assert repair_path.exists()
-        events = [json.loads(line) for line in repair_path.read_text().splitlines() if line.strip()]
+        events = [
+            json.loads(line)
+            for line in repair_path.read_text().splitlines()
+            if line.strip()
+        ]
         assert any(e["event_type"] == "REPAIR_PREPARED" for e in events)
 
     def test_repair_event_also_written_to_audit(self, tmp_path, isolated_run_ctx):
@@ -327,7 +332,11 @@ class TestRepairEvents:
 
         audit_path = isolated_run_ctx.audit_path
         assert audit_path.exists()
-        events = [json.loads(line) for line in audit_path.read_text().splitlines() if line.strip()]
+        events = [
+            json.loads(line)
+            for line in audit_path.read_text().splitlines()
+            if line.strip()
+        ]
         assert any(e["event_type"] == "REPAIR_PREPARED" for e in events)
 
     def test_repair_started_event(self, tmp_path, isolated_run_ctx):
@@ -344,7 +353,11 @@ class TestRepairEvents:
         )
 
         repair_path = isolated_run_ctx.run_dir / "repair.jsonl"
-        events = [json.loads(line) for line in repair_path.read_text().splitlines() if line.strip()]
+        events = [
+            json.loads(line)
+            for line in repair_path.read_text().splitlines()
+            if line.strip()
+        ]
         started = [e for e in events if e["event_type"] == "REPAIR_STARTED"]
         assert len(started) == 1
         assert started[0]["metadata"].get("agent") == "claude"
@@ -362,7 +375,11 @@ class TestRepairEvents:
         )
 
         repair_path = isolated_run_ctx.run_dir / "repair.jsonl"
-        events = [json.loads(line) for line in repair_path.read_text().splitlines() if line.strip()]
+        events = [
+            json.loads(line)
+            for line in repair_path.read_text().splitlines()
+            if line.strip()
+        ]
         updated = [e for e in events if e["event_type"] == "REPAIR_UPDATED"]
         assert updated[0]["metadata"]["fix_branch"] == "fix/zero-div-error"
 
@@ -379,7 +396,11 @@ class TestRepairEvents:
         )
 
         repair_path = isolated_run_ctx.run_dir / "repair.jsonl"
-        events = [json.loads(line) for line in repair_path.read_text().splitlines() if line.strip()]
+        events = [
+            json.loads(line)
+            for line in repair_path.read_text().splitlines()
+            if line.strip()
+        ]
         assert any(e["metadata"].get("pr_number") == "42" for e in events)
 
     def test_repair_updated_commit_sha(self, tmp_path, isolated_run_ctx):
@@ -395,7 +416,11 @@ class TestRepairEvents:
         )
 
         repair_path = isolated_run_ctx.run_dir / "repair.jsonl"
-        events = [json.loads(line) for line in repair_path.read_text().splitlines() if line.strip()]
+        events = [
+            json.loads(line)
+            for line in repair_path.read_text().splitlines()
+            if line.strip()
+        ]
         assert any(e["metadata"].get("commit_sha") == "abc1234def" for e in events)
 
     def test_repair_validated_event(self, tmp_path, isolated_run_ctx):
@@ -416,10 +441,17 @@ class TestRepairEvents:
         )
 
         repair_path = isolated_run_ctx.run_dir / "repair.jsonl"
-        events = [json.loads(line) for line in repair_path.read_text().splitlines() if line.strip()]
+        events = [
+            json.loads(line)
+            for line in repair_path.read_text().splitlines()
+            if line.strip()
+        ]
         validated = [e for e in events if e["event_type"] == "REPAIR_VALIDATED"]
         assert len(validated) == 1
-        assert validated[0]["metadata"]["validation_commands"] == ["pytest", "make lint"]
+        assert validated[0]["metadata"]["validation_commands"] == [
+            "pytest",
+            "make lint",
+        ]
 
     def test_repair_outcome_accepted(self, tmp_path, isolated_run_ctx):
         """14.9 Outcome accepted/rejected/deferred logged."""
@@ -435,7 +467,11 @@ class TestRepairEvents:
         )
 
         repair_path = isolated_run_ctx.run_dir / "repair.jsonl"
-        events = [json.loads(line) for line in repair_path.read_text().splitlines() if line.strip()]
+        events = [
+            json.loads(line)
+            for line in repair_path.read_text().splitlines()
+            if line.strip()
+        ]
         assert any(e["metadata"].get("outcome") == "accepted" for e in events)
 
     def test_repair_state_persistence(self, tmp_path):
@@ -470,9 +506,20 @@ class TestRepairEvents:
         )
 
         repair_path = isolated_run_ctx.run_dir / "repair.jsonl"
-        events = [json.loads(line) for line in repair_path.read_text().splitlines() if line.strip()]
+        events = [
+            json.loads(line)
+            for line in repair_path.read_text().splitlines()
+            if line.strip()
+        ]
         event = events[0]
 
-        required = ["event_id", "run_id", "created_at", "event_type", "repair_id", "summary"]
+        required = [
+            "event_id",
+            "run_id",
+            "created_at",
+            "event_type",
+            "repair_id",
+            "summary",
+        ]
         for field in required:
             assert field in event, f"Missing field: {field}"

@@ -932,3 +932,384 @@ class TestLogsCLI:
         result = runner.invoke(logs_app, ["bundle", "--latest", "--output", out])
         assert result.exit_code == 0
         assert Path(out).exists()
+
+
+# ===========================================================================
+# Section 2 (additional): log_audit extended fields + event coverage
+# ===========================================================================
+
+
+class TestAuditExtendedFields:
+    """Tasks 2.5-2.8: test log_audit optional kwargs + event type coverage."""
+
+    def test_log_audit_module_field_written(self, isolated_run_ctx):
+        """Task 2.5: log_audit(..., module=...) writes module field to audit.jsonl."""
+        from vnalpha.observability.audit import log_audit
+        from vnalpha.observability.context import set_correlation_id
+
+        set_correlation_id()
+        log_audit(
+            "TEST_EVENT",
+            "test with module",
+            module="vnalpha.test",
+            run_ctx=isolated_run_ctx,
+        )
+        records = [
+            json.loads(line)
+            for line in isolated_run_ctx.audit_path.read_text().splitlines()
+            if line.strip()
+        ]
+        r = next(r for r in records if r["event_type"] == "TEST_EVENT")
+        assert r["module"] == "vnalpha.test"
+
+    def test_log_audit_function_field_written(self, isolated_run_ctx):
+        """Task 2.5: log_audit(..., function=...) writes function field."""
+        from vnalpha.observability.audit import log_audit
+        from vnalpha.observability.context import set_correlation_id
+
+        set_correlation_id()
+        log_audit(
+            "TEST_EVENT2",
+            "test with function",
+            function="do_something",
+            run_ctx=isolated_run_ctx,
+        )
+        records = [
+            json.loads(line)
+            for line in isolated_run_ctx.audit_path.read_text().splitlines()
+            if line.strip()
+        ]
+        r = next(r for r in records if r["event_type"] == "TEST_EVENT2")
+        assert r["function"] == "do_something"
+
+    def test_log_audit_session_and_object_fields(self, isolated_run_ctx):
+        """Task 2.5: session_id, object_type, object_id round-trip."""
+        from vnalpha.observability.audit import log_audit
+        from vnalpha.observability.context import set_correlation_id
+
+        set_correlation_id()
+        log_audit(
+            "TEST_OBJ",
+            "test with object fields",
+            session_id="sess-abc",
+            object_type="tool",
+            object_id="tool-001",
+            run_ctx=isolated_run_ctx,
+        )
+        records = [
+            json.loads(line)
+            for line in isolated_run_ctx.audit_path.read_text().splitlines()
+            if line.strip()
+        ]
+        r = next(r for r in records if r["event_type"] == "TEST_OBJ")
+        assert r["session_id"] == "sess-abc"
+        assert r["object_type"] == "tool"
+        assert r["object_id"] == "tool-001"
+
+    def test_log_audit_without_optional_fields_no_extra_keys(self, isolated_run_ctx):
+        """Task 2.3: calling log_audit without optional kwargs does not add spurious keys."""
+        from vnalpha.observability.audit import log_audit
+        from vnalpha.observability.context import set_correlation_id
+
+        set_correlation_id()
+        log_audit("PLAIN_EVENT", "no extra", run_ctx=isolated_run_ctx)
+        records = [
+            json.loads(line)
+            for line in isolated_run_ctx.audit_path.read_text().splitlines()
+            if line.strip()
+        ]
+        r = next(r for r in records if r["event_type"] == "PLAIN_EVENT")
+        for key in ("module", "function", "session_id", "object_type", "object_id"):
+            assert key not in r
+
+    def test_assistant_answer_logged_event(self, isolated_run_ctx):
+        """Task 2.7: ASSISTANT_ANSWER_LOGGED is written directly via log_audit."""
+        from vnalpha.observability.audit import log_audit
+        from vnalpha.observability.context import set_correlation_id
+
+        set_correlation_id()
+        log_audit(
+            "ASSISTANT_ANSWER_LOGGED",
+            "Answer delivered to user",
+            run_ctx=isolated_run_ctx,
+        )
+        records = [
+            json.loads(line)
+            for line in isolated_run_ctx.audit_path.read_text().splitlines()
+            if line.strip()
+        ]
+        assert any(r["event_type"] == "ASSISTANT_ANSWER_LOGGED" for r in records)
+
+    def test_chat_refusal_event(self, isolated_run_ctx):
+        """Task 2.8: CHAT_REFUSAL is written on refusal paths via log_audit."""
+        from vnalpha.observability.audit import log_audit
+        from vnalpha.observability.context import set_correlation_id
+
+        set_correlation_id()
+        log_audit(
+            "CHAT_REFUSAL",
+            "Request refused: out of scope",
+            status="REFUSED",
+            run_ctx=isolated_run_ctx,
+        )
+        records = [
+            json.loads(line)
+            for line in isolated_run_ctx.audit_path.read_text().splitlines()
+            if line.strip()
+        ]
+        r = next(r for r in records if r["event_type"] == "CHAT_REFUSAL")
+        assert r["status"] == "REFUSED"
+
+
+# ===========================================================================
+# Section 3 (additional): CLI lifecycle wrapper integration tests
+# ===========================================================================
+
+
+class TestCommandLifecycleWrapper:
+    """Tasks 3.22-3.24: CLI lifecycle context manager tests."""
+
+    def test_command_lifecycle_success_path(self, isolated_run_ctx):
+        """Task 3.23: command_lifecycle emits STARTED + SUCCEEDED on success."""
+        from vnalpha.observability.commands import command_lifecycle
+        from vnalpha.observability.context import set_correlation_id
+        from vnalpha.observability.jsonl import read_jsonl
+
+        set_correlation_id()
+        with command_lifecycle("test cmd", run_ctx=isolated_run_ctx):
+            pass  # success
+
+        records = read_jsonl(isolated_run_ctx.commands_path)
+        types = [r["event_type"] for r in records]
+        assert "COMMAND_STARTED" in types
+        assert "COMMAND_SUCCEEDED" in types
+
+    def test_command_lifecycle_failure_path(self, isolated_run_ctx):
+        """Task 3.24: command_lifecycle emits STARTED + FAILED + captures exception."""
+        from vnalpha.observability.commands import command_lifecycle
+        from vnalpha.observability.context import set_correlation_id
+        from vnalpha.observability.jsonl import read_jsonl
+
+        set_correlation_id()
+        with pytest.raises(ValueError, match="boom"):
+            with command_lifecycle("fail cmd", run_ctx=isolated_run_ctx):
+                raise ValueError("boom")
+
+        cmd_records = read_jsonl(isolated_run_ctx.commands_path)
+        types = [r["event_type"] for r in cmd_records]
+        assert "COMMAND_STARTED" in types
+        assert "COMMAND_FAILED" in types
+        # Exception should be captured in errors.jsonl
+        err_records = read_jsonl(isolated_run_ctx.errors_path)
+        assert any(r.get("error_type") == "ValueError" for r in err_records)
+
+    def test_command_lifecycle_sets_correlation_id(self, isolated_run_ctx):
+        """Task 3.3: lifecycle auto-assigns correlation ID if unset."""
+        from vnalpha.observability.commands import command_lifecycle
+        from vnalpha.observability.context import get_correlation_id, set_correlation_id
+
+        # Reset correlation ID
+        set_correlation_id("unset")
+        with command_lifecycle("test-cid", run_ctx=isolated_run_ctx):
+            cid_inside = get_correlation_id()
+
+        assert cid_inside != "" and cid_inside != "unset"
+
+    def test_command_lifecycle_duration_ms_present(self, isolated_run_ctx):
+        """Task 3.8: COMMAND_SUCCEEDED has duration_ms field."""
+        from vnalpha.observability.commands import command_lifecycle
+        from vnalpha.observability.context import set_correlation_id
+        from vnalpha.observability.jsonl import read_jsonl
+
+        set_correlation_id()
+        with command_lifecycle("timed cmd", run_ctx=isolated_run_ctx):
+            pass
+
+        records = read_jsonl(isolated_run_ctx.commands_path)
+        succeeded = next(r for r in records if r["event_type"] == "COMMAND_SUCCEEDED")
+        assert "duration_ms" in succeeded
+        assert succeeded["duration_ms"] >= 0
+
+
+class TestCapturedSwallowedExceptions:
+    def test_slash_command_exception_captured(self, isolated_run_ctx):
+        from unittest.mock import patch
+
+        from vnalpha.observability.jsonl import read_jsonl
+
+        with patch(
+            "vnalpha.observability.context._CURRENT_RUN_CONTEXT", isolated_run_ctx
+        ):
+            with patch(
+                "vnalpha.commands.executor.CommandExecutor.execute",
+                side_effect=RuntimeError("slash boom"),
+            ):
+                from vnalpha.chat.controller import ChatController
+
+                ctrl = ChatController(on_message=lambda s, t: None)
+                result = ctrl.handle_slash_command("/scan")
+
+        assert result is not None
+        err_records = read_jsonl(isolated_run_ctx.errors_path)
+        assert any(r.get("error_type") == "RuntimeError" for r in err_records)
+
+    def test_natural_language_exception_captured(self, isolated_run_ctx):
+        from unittest.mock import patch
+
+        from vnalpha.observability.jsonl import read_jsonl
+
+        with patch(
+            "vnalpha.observability.context._CURRENT_RUN_CONTEXT", isolated_run_ctx
+        ):
+            with patch(
+                "vnalpha.chat.controller.ChatController._run_ask",
+                side_effect=RuntimeError("nlp boom"),
+            ):
+                from vnalpha.chat.controller import ChatController
+
+                ctrl = ChatController(on_message=lambda s, t: None)
+                result = ctrl.handle_natural_language("what is VNM?")
+
+        assert result is not None
+        err_records = read_jsonl(isolated_run_ctx.errors_path)
+        assert any(r.get("error_type") == "RuntimeError" for r in err_records)
+
+
+class TestToolTraceObservability:
+    def _make_executor(self, tmp_path, *, trace_events=None):
+        import duckdb
+
+        from vnalpha.tools.executor import TracedLocalToolExecutor
+        from vnalpha.tools.models import ToolOutput, ToolPermission, ToolSpec
+        from vnalpha.tools.registry import LocalToolRegistry
+        from vnalpha.warehouse.migrations import run_migrations
+
+        conn = duckdb.connect(str(tmp_path / "db.duckdb"))
+        run_migrations(conn=conn)
+
+        registry = LocalToolRegistry()
+        spec = ToolSpec(
+            name="test_tool",
+            description="test",
+            permission=ToolPermission.READ_WATCHLIST,
+        )
+        registry.register(spec, lambda **kwargs: ToolOutput(data=None, summary="ok"))
+
+        cb = trace_events.append if trace_events is not None else None
+        return TracedLocalToolExecutor(
+            conn,
+            registry,
+            session_id=None,
+            assistant_session_id=None,
+            trace_event_callback=cb,
+        ), conn
+
+    def test_successful_tool_trace_has_correlation_id(self, tmp_path, isolated_run_ctx):
+        from unittest.mock import patch
+
+        from vnalpha.observability.context import set_correlation_id
+        from vnalpha.observability.jsonl import read_jsonl
+        from vnalpha.tools.models import ToolPermission
+
+        set_correlation_id()
+        events = []
+        executor, conn = self._make_executor(tmp_path, trace_events=events)
+
+        with patch(
+            "vnalpha.observability.context._CURRENT_RUN_CONTEXT", isolated_run_ctx
+        ):
+            executor.call(
+                "test_tool", granted_permissions={ToolPermission.READ_WATCHLIST}
+            )
+
+        trace_records = read_jsonl(isolated_run_ctx.trace_path)
+        succeeded = [
+            r for r in trace_records if r.get("event_type") == "TOOL_CALL_SUCCEEDED"
+        ]
+        assert len(succeeded) >= 1
+        for rec in succeeded:
+            assert rec.get("correlation_id", "unset") != "unset"
+
+    def test_failed_tool_writes_errors_jsonl(self, tmp_path, isolated_run_ctx):
+        from unittest.mock import patch
+
+        import duckdb
+
+        from vnalpha.observability.jsonl import read_jsonl
+        from vnalpha.tools.executor import TracedLocalToolExecutor
+        from vnalpha.tools.models import ToolPermission, ToolSpec
+        from vnalpha.tools.registry import LocalToolRegistry
+        from vnalpha.warehouse.migrations import run_migrations
+
+        conn = duckdb.connect(str(tmp_path / "db2.duckdb"))
+        run_migrations(conn=conn)
+
+        registry = LocalToolRegistry()
+        spec = ToolSpec(
+            name="fail_tool",
+            description="fails",
+            permission=ToolPermission.READ_WATCHLIST,
+        )
+
+        def _fail(**kwargs):
+            raise ValueError("tool exploded")
+
+        registry.register(spec, _fail)
+
+        executor = TracedLocalToolExecutor(conn, registry)
+        with patch(
+            "vnalpha.observability.context._CURRENT_RUN_CONTEXT", isolated_run_ctx
+        ):
+            with pytest.raises(ValueError, match="tool exploded"):
+                executor.call(
+                    "fail_tool", granted_permissions={ToolPermission.READ_WATCHLIST}
+                )
+
+        err_records = read_jsonl(isolated_run_ctx.errors_path)
+        assert any(r.get("error_type") == "ValueError" for r in err_records)
+
+    def test_refused_tool_emits_audit_and_trace(self, tmp_path, isolated_run_ctx):
+        from unittest.mock import patch
+
+        import duckdb
+
+        from vnalpha.observability.jsonl import read_jsonl
+        from vnalpha.tools.errors import ToolPermissionError
+        from vnalpha.tools.executor import TracedLocalToolExecutor
+        from vnalpha.tools.models import ToolOutput, ToolPermission, ToolSpec
+        from vnalpha.tools.registry import LocalToolRegistry
+        from vnalpha.warehouse.migrations import run_migrations
+
+        conn = duckdb.connect(str(tmp_path / "db3.duckdb"))
+        run_migrations(conn=conn)
+
+        registry = LocalToolRegistry()
+        spec = ToolSpec(
+            name="write_note_tool",
+            description="writes notes",
+            permission=ToolPermission.WRITE_NOTE,
+        )
+        registry.register(spec, lambda **kwargs: ToolOutput(data=None, summary="never"))
+
+        events = []
+        executor = TracedLocalToolExecutor(
+            conn, registry, trace_event_callback=events.append
+        )
+
+        with patch(
+            "vnalpha.observability.context._CURRENT_RUN_CONTEXT", isolated_run_ctx
+        ):
+            with pytest.raises(ToolPermissionError):
+                executor.call(
+                    "write_note_tool",
+                    granted_permissions={ToolPermission.READ_WATCHLIST},
+                )
+
+        audit_records = read_jsonl(isolated_run_ctx.audit_path)
+        assert any(r.get("event_type") == "TOOL_REFUSED" for r in audit_records)
+
+        trace_records = read_jsonl(isolated_run_ctx.trace_path)
+        assert any(r.get("event_type") == "TOOL_CALL_REFUSED" for r in trace_records)
+
+        failed_events = [e for e in events if e.status == "FAILED"]
+        assert len(failed_events) >= 1

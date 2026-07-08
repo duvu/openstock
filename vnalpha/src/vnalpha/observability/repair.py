@@ -54,8 +54,15 @@ All changes must remain in data/analysis/observability scope only.
 
 # Files excluded from repair bundles (same policy as log bundles)
 _EXCLUDED_PATTERNS: tuple[str, ...] = (
-    "*.key", "*.pem", "*.p12", "*.pfx", "*.env", ".env*",
-    "*.credentials", "secrets*", "*.password",
+    "*.key",
+    "*.pem",
+    "*.p12",
+    "*.pfx",
+    "*.env",
+    ".env*",
+    "*.credentials",
+    "secrets*",
+    "*.password",
 )
 
 
@@ -85,10 +92,12 @@ def _short_id() -> str:
 # Repair bundle directory resolution
 # ---------------------------------------------------------------------------
 
+
 def resolve_bundles_root(log_root: Path | None = None) -> Path:
     """Return the bundles/ directory under the log root."""
     if log_root is None:
         from vnalpha.observability.context import resolve_log_root
+
         log_root = resolve_log_root()
     return log_root / "bundles"
 
@@ -96,6 +105,7 @@ def resolve_bundles_root(log_root: Path | None = None) -> Path:
 # ---------------------------------------------------------------------------
 # Bundle content generators
 # ---------------------------------------------------------------------------
+
 
 def _collect_git_commit() -> str:
     try:
@@ -174,7 +184,9 @@ def _generate_ai_coding_prompt(
             lines.append(f"{cmd} {args}".strip())
             lines.append(f"# exit_code={exit_code}")
             if fc.get("stderr_tail"):
-                lines.append(f"# stderr: {redact_str(str(fc['stderr_tail']), mode)[:200]}")
+                lines.append(
+                    f"# stderr: {redact_str(str(fc['stderr_tail']), mode)[:200]}"
+                )
             lines.append("```")
             lines.append("")
     else:
@@ -289,6 +301,7 @@ def _generate_reproduction_md(
 # Main repair bundle creator
 # ---------------------------------------------------------------------------
 
+
 def create_repair_bundle(
     run_dir: Path,
     bundles_root: Path | None = None,
@@ -344,7 +357,8 @@ def create_repair_bundle(
         if count >= 2:
             suspicious.append(f"Error type `{et}` repeated {count} times.")
     slow_cmds = [
-        c for c in commands
+        c
+        for c in commands
         if isinstance(c.get("duration_ms"), (int, float)) and c["duration_ms"] > 10000
     ]
     for sc in slow_cmds:
@@ -353,15 +367,10 @@ def create_repair_bundle(
         )
 
     # Involved modules
-    modules: list[str] = list({
-        e.get("module", "")
-        for e in errors
-        if e.get("module")
-    } | {
-        t.get("module", "")
-        for t in traces
-        if t.get("module")
-    })
+    modules: list[str] = list(
+        {e.get("module", "") for e in errors if e.get("module")}
+        | {t.get("module", "") for t in traces if t.get("module")}
+    )
 
     # Environment
     env_path = run_dir / "environment.json"
@@ -380,20 +389,24 @@ def create_repair_bundle(
         src = run_dir / fname
         if src.exists() and _is_safe(src):
             import shutil
+
             shutil.copy2(src, raw_logs_dir / fname)
 
     # Copy environment.json
     if env_path.exists() and _is_safe(env_path):
         import shutil
+
         shutil.copy2(env_path, bundle_dir / "environment.json")
 
     # Copy or regenerate ai-agent-summary.md
     summary_src = run_dir / "ai-agent-summary.md"
     if summary_src.exists():
         import shutil
+
         shutil.copy2(summary_src, bundle_dir / "ai-agent-summary.md")
     else:
         from vnalpha.observability.summary import generate_summary
+
         md = generate_summary(run_dir)
         (bundle_dir / "ai-agent-summary.md").write_text(md, encoding="utf-8")
 
@@ -437,7 +450,12 @@ def create_repair_bundle(
         ]
         + [
             f"raw-logs/{fname}"
-            for fname in ["audit.jsonl", "errors.jsonl", "trace.jsonl", "commands.jsonl"]
+            for fname in [
+                "audit.jsonl",
+                "errors.jsonl",
+                "trace.jsonl",
+                "commands.jsonl",
+            ]
             if (raw_logs_dir / fname).exists()
         ],
         "error_count": len(errors),
@@ -468,6 +486,7 @@ def create_repair_bundle(
 # ---------------------------------------------------------------------------
 # Repair event logger
 # ---------------------------------------------------------------------------
+
 
 def log_repair_event(
     event_type: str,
@@ -510,6 +529,7 @@ def log_repair_event(
 # ---------------------------------------------------------------------------
 # Repair state store
 # ---------------------------------------------------------------------------
+
 
 def _repair_state_path(bundle_dir: Path) -> Path:
     return bundle_dir / "repair-state.json"

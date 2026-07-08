@@ -167,6 +167,12 @@ class ChatController:
             error_text = format_runtime_error(str(exc))
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+            try:
+                from vnalpha.observability.errors import capture_exception
+
+                capture_exception(exc)
+            except Exception:  # noqa: BLE001
+                pass
             return error_text
         finally:
             conn.close()
@@ -338,6 +344,12 @@ class ChatController:
             error_text = format_runtime_error(str(exc))
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+            try:
+                from vnalpha.observability.errors import capture_exception
+
+                capture_exception(exc)
+            except Exception:  # noqa: BLE001
+                pass
             return error_text
 
     def _evaluate_plan_permissions(self, plan: "AssistantPlan") -> str | None:

@@ -121,12 +121,29 @@ class TracedLocalToolExecutor:
                 status="FAILED",
                 error={"message": str(exc), "error_type": type(exc).__name__},
             )
+            if self._trace_event_callback is not None:
+                self._trace_event_callback(
+                    TraceEvent(
+                        tool_name=name,
+                        status="FAILED",
+                        duration_ms=duration_ms,
+                        tool_trace_id=trace_id,
+                    )
+                )
             try:
                 from vnalpha.observability.audit import log_audit
+                from vnalpha.observability.trace import log_trace
 
                 log_audit(
                     "TOOL_REFUSED",
                     f"Tool '{name}' refused: {exc}",
+                    module="vnalpha.tools",
+                )
+                log_trace(
+                    "TOOL_CALL_REFUSED",
+                    name,
+                    status="FAILED",
+                    duration_ms=duration_ms,
                     module="vnalpha.tools",
                 )
             except Exception:  # noqa: BLE001
@@ -151,6 +168,7 @@ class TracedLocalToolExecutor:
                     )
                 )
             try:
+                from vnalpha.observability.errors import capture_exception
                 from vnalpha.observability.trace import log_trace
 
                 log_trace(
@@ -160,6 +178,7 @@ class TracedLocalToolExecutor:
                     duration_ms=duration_ms,
                     module="vnalpha.tools",
                 )
+                capture_exception(exc)
             except Exception:  # noqa: BLE001
                 pass
             raise

@@ -10,12 +10,28 @@ LOG_ROOT="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
 LOG_DIR="${LOG_ROOT}/runs/${RUN_ID}"
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
 
+_json_escape() {
+  local s="$1"
+  printf '%s' "$s" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr -d '\000-\031'
+}
+
 log_jsonl() {
   local event_type="$1"
   local summary="${2:-}"
   local status="${3:-OK}"
-  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event_type\":\"${event_type}\",\"run_id\":\"${RUN_ID}\",\"correlation_id\":\"${RUN_ID}\",\"summary\":\"${summary}\",\"status\":\"${status}\"}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
+  local escaped_summary
+  escaped_summary="$(_json_escape "${summary}")"
+  printf '{"ts":"%s","event_type":"%s","run_id":"%s","correlation_id":"%s","summary":"%s","status":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "${event_type}" \
+    "${RUN_ID}" \
+    "${RUN_ID}" \
+    "${escaped_summary}" \
+    "${status}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
 }
+
+# Current check name — set by each check_* function (task 7.8)
+_CURRENT_CHECK=""
 
 log_jsonl "VERIFY_STARTED" "openstock-verify started" "STARTED"
 
@@ -54,13 +70,14 @@ for arg in "$@"; do
 done
 
 # --- helper functions ---
-ok()   { echo "[OK]   $*"; PASS=$(( PASS + 1 )); }
-warn() { echo "[WARN] $*"; WARN=$(( WARN + 1 )); }
-fail() { echo "[FAIL] $*"; FAIL=$(( FAIL + 1 )); }
-skip() { echo "[SKIP] $*"; }
+ok()   { echo "[OK]   $*"; PASS=$(( PASS + 1 )); log_jsonl "VERIFY_CHECK_PASSED"  "check=${_CURRENT_CHECK} details=$*" "OK"; }
+warn() { echo "[WARN] $*"; WARN=$(( WARN + 1 )); log_jsonl "VERIFY_CHECK_WARNED"  "check=${_CURRENT_CHECK} details=$*" "WARN"; }
+fail() { echo "[FAIL] $*"; FAIL=$(( FAIL + 1 )); log_jsonl "VERIFY_CHECK_FAILED"  "check=${_CURRENT_CHECK} details=$*" "FAILED"; }
+skip() { echo "[SKIP] $*";                         log_jsonl "VERIFY_CHECK_SKIPPED" "check=${_CURRENT_CHECK} details=$*" "SKIPPED"; }
 
 # --- check 6.2: docker binary + docker compose ---
 check_docker() {
+  _CURRENT_CHECK="check_docker"
   if ! command -v docker > /dev/null 2>&1; then
     fail "docker binary not found in PATH"
     return
@@ -78,6 +95,7 @@ check_docker() {
 
 # --- check 6.3: systemd openstock-data-platform service ---
 check_systemd() {
+  _CURRENT_CHECK="check_systemd"
   if "$CI_MODE"; then
     skip "systemd check (--ci mode)"
     return
@@ -99,6 +117,7 @@ check_systemd() {
 
 # --- check 6.4: vnstock-service container running ---
 check_container() {
+  _CURRENT_CHECK="check_container"
   if "$CI_MODE"; then
     skip "container status check (--ci mode)"
     return
@@ -128,6 +147,7 @@ check_container() {
 
 # --- check 6.5: healthz endpoint ---
 check_healthz() {
+  _CURRENT_CHECK="check_healthz"
   if "$CI_MODE"; then
     skip "healthz check (--ci mode): ${VNSTOCK_HEALTHZ_URL}"
     return
@@ -150,6 +170,7 @@ check_healthz() {
 
 # --- check 6.6: forbidden endpoints return 404 ---
 check_forbidden() {
+  _CURRENT_CHECK="check_forbidden"
   if "$CI_MODE"; then
     skip "forbidden endpoint checks (--ci mode)"
     return
@@ -177,6 +198,7 @@ check_forbidden() {
 
 # --- check 6.7: warehouse directory exists ---
 check_warehouse_dir() {
+  _CURRENT_CHECK="check_warehouse_dir"
   if [ -d "$WAREHOUSE_DIR" ]; then
     ok "warehouse directory exists: ${WAREHOUSE_DIR}"
   else
@@ -186,6 +208,7 @@ check_warehouse_dir() {
 
 # --- check 6.8: warehouse file exists or init ---
 check_warehouse_init() {
+  _CURRENT_CHECK="check_warehouse_init"
   if [ -f "$WAREHOUSE_PATH" ]; then
     ok "warehouse file exists: ${WAREHOUSE_PATH}"
     return
@@ -241,6 +264,7 @@ check_warehouse_init() {
 
 # --- check 6.9: pipeline smoke test ---
 check_pipeline_smoke() {
+  _CURRENT_CHECK="check_pipeline_smoke"
   if [[ "$CI_MODE" == "true" ]]; then
     skip "6.9 Pipeline smoke test (--ci mode)"
     return
@@ -264,6 +288,7 @@ check_pipeline_smoke() {
 
 # --- check 6.10: vnalpha --help ---
 check_vnalpha_help() {
+  _CURRENT_CHECK="check_vnalpha_help"
   if command -v vnalpha &>/dev/null; then
     if vnalpha --help &>/dev/null 2>&1; then
       ok "6.10 vnalpha --help: OK"
@@ -277,6 +302,7 @@ check_vnalpha_help() {
 
 # --- check 6.11: vnalpha watchlist ---
 check_vnalpha_watchlist() {
+  _CURRENT_CHECK="check_vnalpha_watchlist"
   if [[ "$CI_MODE" == "true" ]]; then
     skip "6.11 vnalpha watchlist (--ci mode)"
     return
@@ -295,6 +321,7 @@ check_vnalpha_watchlist() {
 
 # --- check 6.12: TUI import check ---
 check_tui_import() {
+  _CURRENT_CHECK="check_tui_import"
   if command -v vnalpha &>/dev/null; then
     if vnalpha tui --help &>/dev/null 2>&1; then
       ok "6.12 TUI entrypoint: vnalpha tui --help OK"
@@ -315,6 +342,7 @@ check_tui_import() {
 
 # --- check 6.13: optional assistant check ---
 check_assistant() {
+  _CURRENT_CHECK="check_assistant"
   if [[ "$CI_MODE" == "true" ]]; then
     skip "6.13 Assistant check (--ci mode)"
     return
@@ -332,6 +360,7 @@ check_assistant() {
 
 # --- check ci.1: docker compose config ---
 check_ci_compose_config() {
+  _CURRENT_CHECK="check_ci_compose_config"
   if ! "$CI_MODE"; then return; fi
   if ! command -v docker >/dev/null 2>&1; then
     skip "CI: docker compose config (docker not available)"
@@ -346,6 +375,7 @@ check_ci_compose_config() {
 
 # --- check ci.2: localhost-only binding ---
 check_ci_localhost_binding() {
+  _CURRENT_CHECK="check_ci_localhost_binding"
   if ! "$CI_MODE"; then return; fi
   local compose_file="docker-compose.yml"
   if [ ! -f "$compose_file" ]; then
@@ -361,6 +391,7 @@ check_ci_localhost_binding() {
 
 # --- check ci.3: vnalpha-worker is profile-gated ---
 check_ci_worker_profile() {
+  _CURRENT_CHECK="check_ci_worker_profile"
   if ! "$CI_MODE"; then return; fi
   local compose_file="docker-compose.yml"
   if [ ! -f "$compose_file" ]; then
@@ -376,6 +407,7 @@ check_ci_worker_profile() {
 
 # --- check ci.4: worker warehouse env/mount ---
 check_ci_worker_warehouse_env() {
+  _CURRENT_CHECK="check_ci_worker_warehouse_env"
   if ! "$CI_MODE"; then return; fi
   local compose_file="docker-compose.yml"
   if [ ! -f "$compose_file" ]; then
@@ -391,6 +423,7 @@ check_ci_worker_warehouse_env() {
 
 # --- check ci.5: bash -n on deploy scripts ---
 check_ci_script_syntax() {
+  _CURRENT_CHECK="check_ci_script_syntax"
   if ! "$CI_MODE"; then return; fi
   local script_dir
   script_dir="$(dirname "$0")"
@@ -416,6 +449,7 @@ check_ci_script_syntax() {
 
 # --- check ci.6: systemd-analyze verify ---
 check_ci_systemd_analyze() {
+  _CURRENT_CHECK="check_ci_systemd_analyze"
   if ! "$CI_MODE"; then return; fi
   if ! command -v systemd-analyze >/dev/null 2>&1; then
     skip "CI: systemd-analyze not available"
@@ -441,6 +475,7 @@ check_ci_systemd_analyze() {
 
 # --- check ci.7: package metadata/launcher files ---
 check_ci_package_files() {
+  _CURRENT_CHECK="check_ci_package_files"
   if ! "$CI_MODE"; then return; fi
   local script_dir
   script_dir="$(dirname "$0")"
@@ -464,6 +499,7 @@ check_ci_package_files() {
 
 # --- check ci.8: no TUI daemon configured ---
 check_ci_no_tui_daemon() {
+  _CURRENT_CHECK="check_ci_no_tui_daemon"
   if ! "$CI_MODE"; then return; fi
   local script_dir
   script_dir="$(dirname "$0")"

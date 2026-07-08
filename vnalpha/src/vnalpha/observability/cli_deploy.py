@@ -37,7 +37,10 @@ def deploy_verify(
         None, "--deployment-id", help="Deployment ID (auto-generated if omitted)"
     ),
     command: Optional[list[str]] = typer.Option(  # noqa: B008
-        None, "--command", "-c", help="Verification command (repeatable; uses defaults if omitted)"
+        None,
+        "--command",
+        "-c",
+        help="Verification command (repeatable; uses defaults if omitted)",
     ),
     output_json: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
@@ -89,9 +92,13 @@ def deploy_promote(
     deployment_id: str = typer.Option(
         ..., "--deployment-id", help="Deployment ID from verify step"
     ),
-    previous: str = typer.Option("", "--previous", help="Previous version (for rollback reference)"),
+    previous: str = typer.Option(
+        "", "--previous", help="Previous version (for rollback reference)"
+    ),
     force: bool = typer.Option(
-        False, "--force", help="Promote even if verification did not pass (not recommended)"
+        False,
+        "--force",
+        help="Promote even if verification did not pass (not recommended)",
     ),
     output_json: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
@@ -127,11 +134,11 @@ def deploy_promote(
         prev = state.get("previous_version", "")
         if prev:
             typer.echo(f"Previous version: {prev}")
-            typer.echo(
-                f"Rollback available: vnalpha deploy rollback {deployment_id}"
-            )
+            typer.echo(f"Rollback available: vnalpha deploy rollback {deployment_id}")
         else:
-            typer.echo("Rollback: available (use vnalpha deploy rollback <deployment-id>)")
+            typer.echo(
+                "Rollback: available (use vnalpha deploy rollback <deployment-id>)"
+            )
 
     raise typer.Exit(code=0)
 
@@ -167,7 +174,9 @@ def deploy_rollback(
 
 @deploy_app.command("smoke")
 def deploy_smoke(
-    deployment_id: str = typer.Argument(..., help="Deployment ID to record smoke result for"),
+    deployment_id: str = typer.Argument(
+        ..., help="Deployment ID to record smoke result for"
+    ),
     passed: bool = typer.Option(
         ..., "--passed/--failed", help="Whether the smoke test passed"
     ),

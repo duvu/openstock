@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -67,18 +65,21 @@ def failed_run_dir(tmp_path):
         "\n".join(json.dumps(e) for e in events) + "\n"
     )
     (run_dir / "audit.jsonl").write_text(
-        json.dumps({
-            "event_id": "cmd_fail",
-            "run_id": "run_failed_001",
-            "created_at": "2024-01-01T00:01:00Z",
-            "level": "INFO",
-            "event_type": "COMMAND_FAILED",
-            "surface": "cli",
-            "correlation_id": "corr_fail",
-            "summary": "make build-features exited with code 1",
-            "redaction_status": "redacted",
-            "metadata": {},
-        }) + "\n"
+        json.dumps(
+            {
+                "event_id": "cmd_fail",
+                "run_id": "run_failed_001",
+                "created_at": "2024-01-01T00:01:00Z",
+                "level": "INFO",
+                "event_type": "COMMAND_FAILED",
+                "surface": "cli",
+                "correlation_id": "corr_fail",
+                "summary": "make build-features exited with code 1",
+                "redaction_status": "redacted",
+                "metadata": {},
+            }
+        )
+        + "\n"
     )
 
     return run_dir
@@ -106,7 +107,11 @@ class TestDeployEvents:
 
         deploy_path = isolated_run_ctx.run_dir / "deploy.jsonl"
         assert deploy_path.exists()
-        events = [json.loads(l) for l in deploy_path.read_text().splitlines() if l.strip()]
+        events = [
+            json.loads(line)
+            for line in deploy_path.read_text().splitlines()
+            if line.strip()
+        ]
         assert any(e["event_type"] == "DEPLOY_VERIFY_STARTED" for e in events)
 
     def test_deploy_event_also_in_audit(self, tmp_path, isolated_run_ctx):
@@ -121,7 +126,11 @@ class TestDeployEvents:
         )
 
         audit_path = isolated_run_ctx.audit_path
-        events = [json.loads(l) for l in audit_path.read_text().splitlines() if l.strip()]
+        events = [
+            json.loads(line)
+            for line in audit_path.read_text().splitlines()
+            if line.strip()
+        ]
         assert any(e["event_type"] == "DEPLOY_VERIFY_STARTED" for e in events)
 
     def test_deploy_verify_completed_event(self, tmp_path, isolated_run_ctx):
@@ -137,7 +146,11 @@ class TestDeployEvents:
         )
 
         deploy_path = isolated_run_ctx.run_dir / "deploy.jsonl"
-        events = [json.loads(l) for l in deploy_path.read_text().splitlines() if l.strip()]
+        events = [
+            json.loads(line)
+            for line in deploy_path.read_text().splitlines()
+            if line.strip()
+        ]
         assert any(e["event_type"] == "DEPLOY_VERIFY_COMPLETED" for e in events)
 
     def test_deploy_promoted_event(self, tmp_path, isolated_run_ctx):
@@ -154,7 +167,11 @@ class TestDeployEvents:
         )
 
         deploy_path = isolated_run_ctx.run_dir / "deploy.jsonl"
-        events = [json.loads(l) for l in deploy_path.read_text().splitlines() if l.strip()]
+        events = [
+            json.loads(line)
+            for line in deploy_path.read_text().splitlines()
+            if line.strip()
+        ]
         promoted = [e for e in events if e["event_type"] == "DEPLOY_PROMOTED"]
         assert promoted[0]["metadata"]["previous_version"] == "v1"  # 15.5
         assert promoted[0]["metadata"]["candidate_version"] == "v2"  # 15.6
@@ -172,7 +189,11 @@ class TestDeployEvents:
         )
 
         deploy_path = isolated_run_ctx.run_dir / "deploy.jsonl"
-        events = [json.loads(l) for l in deploy_path.read_text().splitlines() if l.strip()]
+        events = [
+            json.loads(line)
+            for line in deploy_path.read_text().splitlines()
+            if line.strip()
+        ]
         assert any(e["event_type"] == "DEPLOY_SMOKE_COMPLETED" for e in events)
 
     def test_rollback_events(self, tmp_path, isolated_run_ctx):
@@ -197,7 +218,11 @@ class TestDeployEvents:
         )
 
         deploy_path = isolated_run_ctx.run_dir / "deploy.jsonl"
-        events = [json.loads(l) for l in deploy_path.read_text().splitlines() if l.strip()]
+        events = [
+            json.loads(line)
+            for line in deploy_path.read_text().splitlines()
+            if line.strip()
+        ]
         types = {e["event_type"] for e in events}
         assert "DEPLOY_ROLLBACK_STARTED" in types  # 15.10
         assert "DEPLOY_ROLLED_BACK" in types  # 15.11
@@ -207,19 +232,22 @@ class TestDeployEvents:
         from vnalpha.observability.deploy import (
             DeployGateError,
             promote_candidate,
-            save_deploy_state,
         )
 
         dep_id = "dep_blocked"
         # Simulate a failed verification state
         state_dir = tmp_path / "deployments"
         state_dir.mkdir(parents=True)
-        (state_dir / f"{dep_id}.json").write_text(json.dumps({
-            "deployment_id": dep_id,
-            "candidate_version": "v2",
-            "verification_status": "FAILED",
-            "deploy_status": "PENDING",
-        }))
+        (state_dir / f"{dep_id}.json").write_text(
+            json.dumps(
+                {
+                    "deployment_id": dep_id,
+                    "candidate_version": "v2",
+                    "verification_status": "FAILED",
+                    "deploy_status": "PENDING",
+                }
+            )
+        )
 
         with pytest.raises(DeployGateError):
             promote_candidate("v2", deployment_id=dep_id, log_root=tmp_path)
@@ -231,12 +259,16 @@ class TestDeployEvents:
         dep_id = "dep_ok"
         state_dir = tmp_path / "deployments"
         state_dir.mkdir(parents=True)
-        (state_dir / f"{dep_id}.json").write_text(json.dumps({
-            "deployment_id": dep_id,
-            "candidate_version": "v2",
-            "verification_status": "PASSED",
-            "deploy_status": "PENDING",
-        }))
+        (state_dir / f"{dep_id}.json").write_text(
+            json.dumps(
+                {
+                    "deployment_id": dep_id,
+                    "candidate_version": "v2",
+                    "verification_status": "PASSED",
+                    "deploy_status": "PENDING",
+                }
+            )
+        )
 
         result = promote_candidate(
             "v2",
@@ -259,10 +291,21 @@ class TestDeployEvents:
         )
 
         deploy_path = isolated_run_ctx.run_dir / "deploy.jsonl"
-        events = [json.loads(l) for l in deploy_path.read_text().splitlines() if l.strip()]
+        events = [
+            json.loads(line)
+            for line in deploy_path.read_text().splitlines()
+            if line.strip()
+        ]
         event = events[0]
 
-        required = ["event_id", "run_id", "created_at", "event_type", "deployment_id", "summary"]
+        required = [
+            "event_id",
+            "run_id",
+            "created_at",
+            "event_type",
+            "deployment_id",
+            "summary",
+        ]
         for field in required:
             assert field in event, f"Missing field: {field}"
 
@@ -273,13 +316,17 @@ class TestDeployEvents:
         dep_id = "dep_rb"
         state_dir = tmp_path / "deployments"
         state_dir.mkdir(parents=True)
-        (state_dir / f"{dep_id}.json").write_text(json.dumps({
-            "deployment_id": dep_id,
-            "candidate_version": "v3",
-            "previous_version": "v2",
-            "verification_status": "PASSED",
-            "deploy_status": "PROMOTED",
-        }))
+        (state_dir / f"{dep_id}.json").write_text(
+            json.dumps(
+                {
+                    "deployment_id": dep_id,
+                    "candidate_version": "v3",
+                    "previous_version": "v2",
+                    "verification_status": "PASSED",
+                    "deploy_status": "PROMOTED",
+                }
+            )
+        )
 
         rollback_deployment(dep_id, reason="smoke failed", log_root=tmp_path)
         state = load_deploy_state(dep_id, tmp_path)
@@ -327,12 +374,16 @@ class TestEndToEndScenario:
         dep_id = "e2e_dep_fail"
         state_dir = tmp_path / "deployments"
         state_dir.mkdir(parents=True)
-        (state_dir / f"{dep_id}.json").write_text(json.dumps({
-            "deployment_id": dep_id,
-            "candidate_version": "v5",
-            "verification_status": "FAILED",
-            "deploy_status": "PENDING",
-        }))
+        (state_dir / f"{dep_id}.json").write_text(
+            json.dumps(
+                {
+                    "deployment_id": dep_id,
+                    "candidate_version": "v5",
+                    "verification_status": "FAILED",
+                    "deploy_status": "PENDING",
+                }
+            )
+        )
 
         with pytest.raises(DeployGateError) as exc_info:
             promote_candidate("v5", deployment_id=dep_id, log_root=tmp_path)
@@ -346,14 +397,20 @@ class TestEndToEndScenario:
         dep_id = "e2e_dep_pass"
         state_dir = tmp_path / "deployments"
         state_dir.mkdir(parents=True)
-        (state_dir / f"{dep_id}.json").write_text(json.dumps({
-            "deployment_id": dep_id,
-            "candidate_version": "v6",
-            "verification_status": "PASSED",
-            "deploy_status": "PENDING",
-        }))
+        (state_dir / f"{dep_id}.json").write_text(
+            json.dumps(
+                {
+                    "deployment_id": dep_id,
+                    "candidate_version": "v6",
+                    "verification_status": "PASSED",
+                    "deploy_status": "PENDING",
+                }
+            )
+        )
 
-        promote_candidate("v6", deployment_id=dep_id, previous_version="v5", log_root=tmp_path)
+        promote_candidate(
+            "v6", deployment_id=dep_id, previous_version="v5", log_root=tmp_path
+        )
         state = load_deploy_state(dep_id, tmp_path)
 
         assert state["deploy_status"] == "PROMOTED"
@@ -365,15 +422,12 @@ class TestEndToEndScenario:
         """16.1 Full scenario: failure → bundle → repair events → deploy verify → promote → smoke."""
         from vnalpha.observability.context import RunContext, reset_run_context
         from vnalpha.observability.deploy import (
-            log_deploy_event,
             promote_candidate,
             record_post_deploy_smoke,
-            save_deploy_state,
         )
         from vnalpha.observability.repair import (
             create_repair_bundle,
             log_repair_event,
-            update_repair_state,
         )
 
         reset_run_context()
@@ -385,7 +439,9 @@ class TestEndToEndScenario:
         )
 
         # Step 1: Runtime failure captured → create repair bundle
-        bundle_dir = create_repair_bundle(failed_run_dir, bundles_root=tmp_path / "bundles")
+        bundle_dir = create_repair_bundle(
+            failed_run_dir, bundles_root=tmp_path / "bundles"
+        )
         assert bundle_dir.exists()
 
         # Step 2: Log REPAIR_PREPARED
@@ -395,36 +451,51 @@ class TestEndToEndScenario:
 
         # Step 3: AI agent starts work
         log_repair_event(
-            "REPAIR_STARTED", "Agent started", repair_id=bundle_dir.name,
-            status="STARTED", run_ctx=ctx
+            "REPAIR_STARTED",
+            "Agent started",
+            repair_id=bundle_dir.name,
+            status="STARTED",
+            run_ctx=ctx,
         )
 
         # Step 4: Fix branch created
         log_repair_event(
-            "REPAIR_UPDATED", "Fix branch", repair_id=bundle_dir.name, run_ctx=ctx,
-            extra={"fix_branch": "fix/e2e-test"}
+            "REPAIR_UPDATED",
+            "Fix branch",
+            repair_id=bundle_dir.name,
+            run_ctx=ctx,
+            extra={"fix_branch": "fix/e2e-test"},
         )
 
         # Step 5: Validation
         log_repair_event(
-            "REPAIR_VALIDATED", "Validation PASSED", repair_id=bundle_dir.name,
-            status="PASSED", run_ctx=ctx,
-            extra={"validation_status": "PASSED", "commands_passed": 1}
+            "REPAIR_VALIDATED",
+            "Validation PASSED",
+            repair_id=bundle_dir.name,
+            status="PASSED",
+            run_ctx=ctx,
+            extra={"validation_status": "PASSED", "commands_passed": 1},
         )
 
         # Step 6: Deploy verify
         dep_id = "e2e_dep_001"
         state_dir = tmp_path / "deployments"
         state_dir.mkdir(parents=True)
-        (state_dir / f"{dep_id}.json").write_text(json.dumps({
-            "deployment_id": dep_id,
-            "candidate_version": "v2",
-            "verification_status": "PASSED",
-            "deploy_status": "PENDING",
-        }))
+        (state_dir / f"{dep_id}.json").write_text(
+            json.dumps(
+                {
+                    "deployment_id": dep_id,
+                    "candidate_version": "v2",
+                    "verification_status": "PASSED",
+                    "deploy_status": "PENDING",
+                }
+            )
+        )
 
         # Step 7: Promote
-        promote_candidate("v2", deployment_id=dep_id, previous_version="v1", log_root=tmp_path)
+        promote_candidate(
+            "v2", deployment_id=dep_id, previous_version="v1", log_root=tmp_path
+        )
 
         # Step 8: Post-deploy smoke
         smoke_state = record_post_deploy_smoke(
@@ -436,7 +507,11 @@ class TestEndToEndScenario:
 
         # Repair events written
         repair_path = ctx.run_dir / "repair.jsonl"
-        repair_events = [json.loads(l) for l in repair_path.read_text().splitlines() if l.strip()]
+        repair_events = [
+            json.loads(line)
+            for line in repair_path.read_text().splitlines()
+            if line.strip()
+        ]
         repair_types = {e["event_type"] for e in repair_events}
         assert "REPAIR_PREPARED" in repair_types
         assert "REPAIR_STARTED" in repair_types

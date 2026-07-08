@@ -15,11 +15,25 @@ LOG_ROOT="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
 LOG_DIR="${LOG_ROOT}/runs/${RUN_ID}"
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
 
+# --- safe JSONL helper (task 6.1, 6.2) ---
+_json_escape() {
+  local s="$1"
+  printf '%s' "$s" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr -d '\000-\031'
+}
+
 log_jsonl() {
   local event_type="$1"
   local summary="${2:-}"
   local status="${3:-OK}"
-  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event_type\":\"${event_type}\",\"run_id\":\"${RUN_ID}\",\"correlation_id\":\"${RUN_ID}\",\"summary\":\"${summary}\",\"status\":\"${status}\"}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
+  local escaped_summary
+  escaped_summary="$(_json_escape "${summary}")"
+  printf '{"ts":"%s","event_type":"%s","run_id":"%s","correlation_id":"%s","summary":"%s","status":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "${event_type}" \
+    "${RUN_ID}" \
+    "${RUN_ID}" \
+    "${escaped_summary}" \
+    "${status}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
 }
 
 for arg in "$@"; do
@@ -46,15 +60,18 @@ WAREHOUSE_PATH="${OPENSTOCK_WAREHOUSE_PATH:-/var/lib/openstock/warehouse/warehou
 WAREHOUSE_DIR="${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}"
 BACKUP_DIR="${WAREHOUSE_DIR}/backups"
 
-# Writer-job guard (task 7.4)
+# Writer-job guard — task 8.2: log BACKUP_FAILED when lock file held
 if [ -f "$LOCK_FILE" ] && [ "$FORCE" = "false" ]; then
   echo "[FAIL] Pipeline lock file $LOCK_FILE exists. A writer job may be running." >&2
   echo "       Use --force to override." >&2
+  log_jsonl "BACKUP_FAILED" "Backup blocked by pipeline lock lock_file=${LOCK_FILE}" "FAILED"
   exit 1
 fi
 
+# task 8.3: log BACKUP_FAILED when warehouse missing
 if [ ! -f "$WAREHOUSE_PATH" ]; then
   echo "[FAIL] Warehouse not found at: $WAREHOUSE_PATH" >&2
+  log_jsonl "BACKUP_FAILED" "Backup failed warehouse not found path=${WAREHOUSE_PATH}" "FAILED"
   exit 1
 fi
 
@@ -64,14 +81,26 @@ TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_PATH="${BACKUP_DIR}/warehouse-${TIMESTAMP}.duckdb"
 
 echo "[INFO] Backing up $WAREHOUSE_PATH -> $BACKUP_PATH"
-log_jsonl "BACKUP_STARTED" "Backup started ${WAREHOUSE_PATH}" "STARTED"
-cp "$WAREHOUSE_PATH" "$BACKUP_PATH"
+log_jsonl "BACKUP_STARTED" "Backup started src=${WAREHOUSE_PATH} dest=${BACKUP_PATH}" "STARTED"
+
+# task 8.4: log BACKUP_FAILED on copy failure
+if ! cp "$WAREHOUSE_PATH" "$BACKUP_PATH" 2>/dev/null; then
+  echo "[FAIL] Backup copy failed: $WAREHOUSE_PATH -> $BACKUP_PATH" >&2
+  log_jsonl "BACKUP_FAILED" "Backup copy failed src=${WAREHOUSE_PATH} dest=${BACKUP_PATH}" "FAILED"
+  exit 1
+fi
 
 if [ -f "$BACKUP_PATH" ]; then
   echo "[OK] Backup created: $BACKUP_PATH"
-  log_jsonl "BACKUP_CREATED" "Backup created ${BACKUP_PATH}" "OK"
+  log_jsonl "BACKUP_CREATED" "Backup created dest=${BACKUP_PATH}" "OK"
 else
-  echo "[FAIL] Backup failed" >&2
-  log_jsonl "BACKUP_FAILED" "Backup failed ${WAREHOUSE_PATH}" "FAILED"
+  echo "[FAIL] Backup failed: file not found after copy" >&2
+  log_jsonl "BACKUP_FAILED" "Backup file missing after copy dest=${BACKUP_PATH}" "FAILED"
   exit 1
 fi
+
+# task 8.7: placeholder restore stub — restore script is not currently implemented.
+# When openstock-restore-warehouse is added, it should call:
+#   log_jsonl "RESTORE_STARTED" "Restore started src=${BACKUP_PATH}" "STARTED"
+#   log_jsonl "RESTORE_COMPLETED" "Restore complete dest=${WAREHOUSE_PATH}" "OK"
+#   log_jsonl "RESTORE_FAILED" "Restore failed ..." "FAILED"

@@ -96,7 +96,9 @@ def repair_prepare(
         resolve_bundles_root,
     )
 
-    bundles_root = Path(output) if output else (resolve_bundles_root(root) if root else None)
+    bundles_root = (
+        Path(output) if output else (resolve_bundles_root(root) if root else None)
+    )
 
     try:
         bundle_dir = create_repair_bundle(run_dir, bundles_root=bundles_root)
@@ -212,9 +214,15 @@ def repair_start(
 @repair_app.command("update")
 def repair_update(
     repair_id: str = typer.Argument(..., help="Repair bundle ID to update"),
-    fix_branch: Optional[str] = typer.Option(None, "--fix-branch", help="Fix branch name"),
-    pr_number: Optional[str] = typer.Option(None, "--pr-number", help="PR number or URL"),
-    commit_sha: Optional[str] = typer.Option(None, "--commit-sha", help="Commit SHA(s) involved"),
+    fix_branch: Optional[str] = typer.Option(
+        None, "--fix-branch", help="Fix branch name"
+    ),
+    pr_number: Optional[str] = typer.Option(
+        None, "--pr-number", help="PR number or URL"
+    ),
+    commit_sha: Optional[str] = typer.Option(
+        None, "--commit-sha", help="Commit SHA(s) involved"
+    ),
     outcome: Optional[str] = typer.Option(
         None,
         "--outcome",
@@ -247,7 +255,10 @@ def repair_update(
         updates["outcome"] = outcome
 
     if not updates:
-        typer.echo("No fields to update. Provide --fix-branch, --pr-number, --commit-sha, or --outcome.", err=True)
+        typer.echo(
+            "No fields to update. Provide --fix-branch, --pr-number, --commit-sha, or --outcome.",
+            err=True,
+        )
         raise typer.Exit(code=1)
 
     log_repair_event(

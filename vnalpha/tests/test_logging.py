@@ -185,3 +185,55 @@ def test_correlation_id_different_per_invocation(tmp_path: Path) -> None:
     configure_logging(level="INFO", log_path=tmp_path / "test.log")
     ids = {set_correlation_id() for _ in range(10)}
     assert len(ids) == 10, "set_correlation_id produced duplicate IDs"
+
+
+# ---------------------------------------------------------------------------
+# Task 1.8 — correlation ID unification: core and observability share one value
+# ---------------------------------------------------------------------------
+
+
+def test_correlation_id_shared_between_core_and_observability(tmp_path: Path) -> None:
+    from vnalpha.core.logging import configure_logging
+    from vnalpha.core.logging import get_correlation_id as core_get
+    from vnalpha.core.logging import set_correlation_id as core_set
+    from vnalpha.observability.context import get_correlation_id as obs_get
+
+    configure_logging(level="INFO", log_path=tmp_path / "test.log")
+    cid = core_set()
+    assert core_get() == cid
+    assert obs_get() == cid, (
+        f"observability get_correlation_id={obs_get()!r} != core {cid!r}"
+    )
+
+
+def test_observability_set_visible_to_core(tmp_path: Path) -> None:
+    from vnalpha.core.logging import configure_logging
+    from vnalpha.core.logging import get_correlation_id as core_get
+    from vnalpha.observability.context import set_correlation_id as obs_set
+
+    configure_logging(level="INFO", log_path=tmp_path / "test.log")
+    cid = obs_set()
+    assert core_get() == cid, (
+        f"core get_correlation_id={core_get()!r} != observability {cid!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.9 — regression: no "unset" correlation IDs in instrumented commands
+# ---------------------------------------------------------------------------
+
+
+def test_no_unset_correlation_id_after_set(tmp_path: Path) -> None:
+    from vnalpha.core.logging import (
+        configure_logging,
+        get_correlation_id,
+        set_correlation_id,
+    )
+
+    configure_logging(level="INFO", log_path=tmp_path / "test.log")
+    set_correlation_id()
+    cid = get_correlation_id()
+    assert cid != "unset", (
+        "correlation_id must not be 'unset' after set_correlation_id()"
+    )
+    assert cid != "", "correlation_id must not be empty after set_correlation_id()"

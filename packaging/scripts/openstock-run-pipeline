@@ -29,11 +29,27 @@ LOG_ROOT="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
 LOG_DIR="${LOG_ROOT}/runs/${RUN_ID}"
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
 
+# --- safe JSONL helper (task 6.1, 6.2) ---
+# Escapes a string for safe embedding in a JSON value (no raw echo of arbitrary text).
+_json_escape() {
+  local s="$1"
+  # Replace backslash, double-quote, control chars
+  printf '%s' "$s" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr -d '\000-\031'
+}
+
 log_jsonl() {
   local event_type="$1"
   local summary="${2:-}"
   local status="${3:-OK}"
-  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event_type\":\"${event_type}\",\"run_id\":\"${RUN_ID}\",\"correlation_id\":\"${RUN_ID}\",\"summary\":\"${summary}\",\"status\":\"${status}\"}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
+  local escaped_summary
+  escaped_summary="$(_json_escape "${summary}")"
+  printf '{"ts":"%s","event_type":"%s","run_id":"%s","correlation_id":"%s","summary":"%s","status":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "${event_type}" \
+    "${RUN_ID}" \
+    "${RUN_ID}" \
+    "${escaped_summary}" \
+    "${status}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
 }
 
 ok()   { echo "[OK]   $*"; }
@@ -101,11 +117,56 @@ _run() {
   return 0
 }
 
-_vnalpha() {
-  if [ -n "$_COMPOSE_CMD" ]; then
-    _run "$_COMPOSE_CMD $*"
+# --- per-step wrapper with PIPELINE_STEP_* events (tasks 6.4-6.6, 6.9) ---
+_run_step() {
+  local step_name="$1"
+  shift
+  local full_cmd="$*"
+  local t_start t_end duration_ms exit_code=0
+
+  log_jsonl "PIPELINE_STEP_STARTED" "step=${step_name} cmd=${full_cmd}" "STARTED"
+  t_start="$(date +%s%3N 2>/dev/null || date +%s)000"
+
+  if "$DRY_RUN"; then
+    echo "[DRY-RUN] $full_cmd"
+    t_end="$(date +%s%3N 2>/dev/null || date +%s)000"
+    duration_ms=$(( t_end - t_start ))
+    log_jsonl "PIPELINE_STEP_SUCCEEDED" "step=${step_name} duration_ms=${duration_ms} cmd=${full_cmd}" "OK"
+    return 0
+  fi
+
+  info "Running: $full_cmd"
+  local output
+  if output="$(eval "$full_cmd" 2>&1)"; then
+    exit_code=0
   else
-    _run "vnalpha $*"
+    exit_code=$?
+  fi
+
+  t_end="$(date +%s%3N 2>/dev/null || date +%s)000"
+  duration_ms=$(( t_end - t_start ))
+  # bounded stdout tail (last 10 lines) — task 6.9
+  local stdout_tail
+  stdout_tail="$(printf '%s' "$output" | tail -10 | tr '\n' '|' | sed 's/|$//')"
+
+  if [ "$exit_code" -eq 0 ]; then
+    ok "Done: $full_cmd"
+    log_jsonl "PIPELINE_STEP_SUCCEEDED" "step=${step_name} duration_ms=${duration_ms} exit_code=0 cmd=${full_cmd}" "OK"
+  else
+    fail "Command failed (exit=${exit_code}): $full_cmd"
+    log_jsonl "PIPELINE_STEP_FAILED" "step=${step_name} duration_ms=${duration_ms} exit_code=${exit_code} cmd=${full_cmd} stdout_tail=${stdout_tail}" "FAILED"
+    return "$exit_code"
+  fi
+  return 0
+}
+
+_vnalpha_step() {
+  local step_name="$1"
+  shift
+  if [ -n "$_COMPOSE_CMD" ]; then
+    _run_step "$step_name" "$_COMPOSE_CMD $*"
+  else
+    _run_step "$step_name" "vnalpha $*"
   fi
 }
 
@@ -117,6 +178,7 @@ _acquire_lock() {
   eval "exec ${LOCK_FD}>\"${LOCK_FILE}\""
   if ! flock -n "$LOCK_FD"; then
     fail "Pipeline already running (lock held at $LOCK_FILE)"
+    log_jsonl "PIPELINE_FAILED" "Pipeline already running lock=${LOCK_FILE}" "FAILED"
     exit 1
   fi
   ok "Acquired pipeline lock: $LOCK_FILE"
@@ -130,7 +192,15 @@ _release_lock() {
   rm -f "$LOCK_FILE" 2>/dev/null || true
 }
 
-trap '_release_lock' EXIT
+_on_exit() {
+  local exit_code="$?"
+  _release_lock
+  if [ "$exit_code" -ne 0 ]; then
+    log_jsonl "PIPELINE_FAILED" "Pipeline exited with code=${exit_code}" "FAILED"
+  fi
+}
+
+trap '_on_exit' EXIT
 
 echo "openstock-run-pipeline"
 echo "  date=${DATE_ARG}  start=${START_ARG}  ci-fixture=${CI_FIXTURE}  dry-run=${DRY_RUN}"
@@ -140,17 +210,17 @@ log_jsonl "PIPELINE_STARTED" "Pipeline started date=${DATE_ARG}" "STARTED"
 _acquire_lock
 
 if ! "$CI_FIXTURE"; then
-  _vnalpha sync symbols || exit 1
-  _vnalpha sync ohlcv --universe VN30 --start "$START_ARG" || exit 1
-  _vnalpha sync index --symbol VNINDEX --start "$START_ARG" || exit 1
+  _vnalpha_step "sync-symbols" sync symbols || exit 1
+  _vnalpha_step "sync-ohlcv" sync ohlcv --universe VN30 --start "$START_ARG" || exit 1
+  _vnalpha_step "sync-index" sync index --symbol VNINDEX --start "$START_ARG" || exit 1
 else
   info "CI-fixture mode: skipping provider-backed sync steps"
 fi
 
-_vnalpha build canonical || exit 1
-_vnalpha build features --date "$DATE_ARG" || exit 1
-_vnalpha score --date "$DATE_ARG" || exit 1
-_vnalpha watchlist --date "$DATE_ARG" || exit 1
+_vnalpha_step "build-canonical" build canonical || exit 1
+_vnalpha_step "build-features" build features --date "$DATE_ARG" || exit 1
+_vnalpha_step "score" score --date "$DATE_ARG" || exit 1
+_vnalpha_step "watchlist" watchlist --date "$DATE_ARG" || exit 1
 
 ok "Pipeline complete for date=${DATE_ARG}"
 log_jsonl "PIPELINE_COMPLETED" "Pipeline complete date=${DATE_ARG}" "OK"

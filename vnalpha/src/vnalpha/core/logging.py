@@ -4,6 +4,12 @@ Public surface:
     configure_logging(level, log_path)  — idempotent setup, called once at CLI entry.
     get_logger(name)                    — returns a structlog BoundLogger.
     set_correlation_id()                — generates UUID4 and stores in ContextVar.
+
+Correlation ID unification (task 1.2-1.3):
+    The single source-of-truth for the correlation ID is
+    ``vnalpha.observability.context``.  Both structlog events and file-based
+    observability events therefore carry the same value.  ``set_correlation_id``
+    and ``get_correlation_id`` below delegate to that module.
 """
 
 from __future__ import annotations
@@ -12,31 +18,42 @@ import logging
 import logging.handlers
 import os
 import queue
-from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 import structlog
 from structlog.types import EventDict, WrappedLogger
 
 # ---------------------------------------------------------------------------
-# Correlation ID ContextVar
+# Correlation ID — unified with observability.context
 # ---------------------------------------------------------------------------
-
-_CORRELATION_ID: ContextVar[str] = ContextVar("_CORRELATION_ID", default="")
 
 
 def set_correlation_id() -> str:
-    """Generate a new UUID4 correlation ID and bind it to the current context."""
-    cid = uuid4().hex
-    _CORRELATION_ID.set(cid)
-    return cid
+    """Generate a new UUID4 correlation ID, bind it, and return it.
+
+    Delegates to ``vnalpha.observability.context`` so that structlog events and
+    file-based observability events always share the same value.
+    """
+    from vnalpha.observability.context import (
+        set_correlation_id as _obs_set,  # noqa: PLC0415
+    )
+
+    return _obs_set()
 
 
 def get_correlation_id() -> str:
-    """Return the current correlation ID (empty string if not set)."""
-    return _CORRELATION_ID.get()
+    """Return the current correlation ID (empty string if not set).
+
+    Delegates to ``vnalpha.observability.context`` — the single source of truth.
+    """
+    from vnalpha.observability.context import (
+        get_correlation_id as _obs_get,  # noqa: PLC0415
+    )
+
+    cid = _obs_get()
+    # observability defaults to "unset"; normalise to "" for backwards compat
+    return "" if cid == "unset" else cid
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +64,7 @@ def get_correlation_id() -> str:
 def _inject_correlation_id(
     _logger: WrappedLogger, _method: str, event_dict: EventDict
 ) -> EventDict:
-    cid = _CORRELATION_ID.get()
+    cid = get_correlation_id()
     if cid:
         event_dict["correlation_id"] = cid
     return event_dict

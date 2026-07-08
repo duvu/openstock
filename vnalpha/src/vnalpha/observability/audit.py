@@ -24,6 +24,11 @@ def log_audit(
     run_ctx=None,
     extra: dict | None = None,
     mode: str | None = None,
+    module: str | None = None,
+    function: str | None = None,
+    session_id: str | None = None,
+    object_type: str | None = None,
+    object_id: str | None = None,
 ) -> None:
     """Write an audit event to audit.jsonl.  Best-effort: never raises."""
     try:
@@ -44,6 +49,16 @@ def log_audit(
             "redaction_status": redaction_status(mode),
             "metadata": redact_dict(extra or {}, mode),
         }
+        if module is not None:
+            record["module"] = module
+        if function is not None:
+            record["function"] = function
+        if session_id is not None:
+            record["session_id"] = session_id
+        if object_type is not None:
+            record["object_type"] = object_type
+        if object_id is not None:
+            record["object_id"] = object_id
         append_jsonl(ctx.audit_path, record)
     except Exception:  # noqa: BLE001
         pass

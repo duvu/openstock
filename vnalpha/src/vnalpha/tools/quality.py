@@ -202,6 +202,13 @@ def get_many_quality_status(
         for r in rows
     ]
     warnings = [f"No canonical data for: {', '.join(missing)}"] if missing else []
+    if warnings:
+        try:
+            from vnalpha.observability.domain import log_data_quality_warning
+
+            log_data_quality_warning(warnings[0], module="vnalpha.tools.quality")
+        except Exception:  # noqa: BLE001
+            pass
     suffix = f" as of {date}" if date else ""
     return ToolOutput(
         data=data,

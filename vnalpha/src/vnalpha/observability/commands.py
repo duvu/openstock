@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from typing import Generator
 from uuid import uuid4
 
 from vnalpha.observability.audit import log_audit
@@ -10,7 +13,9 @@ from vnalpha.observability.context import (
     RunContext,
     get_correlation_id,
     get_run_context,
+    set_correlation_id,
 )
+from vnalpha.observability.errors import capture_exception
 from vnalpha.observability.jsonl import append_jsonl
 from vnalpha.observability.redaction import redact_str, redaction_status
 
@@ -161,6 +166,7 @@ def log_command_failure(
 # Restore logging stub (task 9.6)
 # ---------------------------------------------------------------------------
 
+
 def log_restore_event(
     event_type: str,
     summary: str,
@@ -190,3 +196,59 @@ def log_restore_event(
     # When implemented, mirror the pattern from log_command_start / log_command_end:
     # write a record to run_ctx.commands_path and call log_audit().
     pass
+
+
+@contextmanager
+def command_lifecycle(
+    command: str,
+    args: str = "",
+    *,
+    run_ctx: RunContext | None = None,
+    mode: str | None = None,
+) -> Generator[None, None, None]:
+    """Context manager that emits COMMAND_STARTED/SUCCEEDED/FAILED and captures exceptions.
+
+    Usage::
+
+        with command_lifecycle("sync symbols"):
+            do_work()
+
+    On normal exit:   COMMAND_SUCCEEDED written with duration_ms.
+    On exception:     exception captured to errors.jsonl, COMMAND_FAILED written, exception re-raised.
+    Correlation ID is generated if not already set.
+    """
+    ctx = run_ctx or get_run_context()
+    if ctx is None:
+        yield
+        return
+
+    if get_correlation_id() in ("", "unset"):
+        set_correlation_id()
+
+    log_command_start(command, args, run_ctx=ctx, mode=mode)
+    t0 = time.monotonic()
+    try:
+        yield
+    except Exception as exc:
+        duration_ms = (time.monotonic() - t0) * 1000
+        capture_exception(exc, run_ctx=ctx, mode=mode)
+        log_command_failure(
+            command,
+            args,
+            duration_ms=duration_ms,
+            exit_code=1,
+            error_message=str(exc),
+            run_ctx=ctx,
+            mode=mode,
+        )
+        raise
+    else:
+        duration_ms = (time.monotonic() - t0) * 1000
+        log_command_success(
+            command,
+            args,
+            duration_ms=duration_ms,
+            exit_code=0,
+            run_ctx=ctx,
+            mode=mode,
+        )

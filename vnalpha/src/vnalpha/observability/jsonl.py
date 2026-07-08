@@ -10,6 +10,27 @@ import sys
 from pathlib import Path
 
 
+def read_jsonl(path: Path) -> list[dict]:
+    """Read all JSON lines from *path* and return as a list of dicts.
+
+    Returns an empty list if the file does not exist or any line fails to parse.
+    """
+    if not path.exists():
+        return []
+    records: list[dict] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+    except Exception:  # noqa: BLE001
+        pass
+    return records
+
+
 def append_jsonl(path: Path, record: dict) -> None:  # noqa: C901
     """Append *record* as one JSON line to *path*.
 

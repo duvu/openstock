@@ -50,6 +50,7 @@ def _collect_git_commit() -> str:
 def _deploy_state_dir(log_root: Path | None = None) -> Path:
     if log_root is None:
         from vnalpha.observability.context import resolve_log_root
+
         log_root = resolve_log_root()
     return log_root / "deployments"
 
@@ -221,7 +222,6 @@ def verify_deploy_candidate(
         short = uuid4().hex[:8]
         deployment_id = f"deploy_{ts}_{short}"
 
-
     log_deploy_event(
         "DEPLOY_VERIFY_STARTED",
         f"Verifying candidate {candidate_version}",
@@ -289,8 +289,7 @@ def promote_candidate(
 
     if not state:
         raise DeployGateError(
-            f"No deploy state found for {deployment_id}. "
-            "Run verify first."
+            f"No deploy state found for {deployment_id}. Run verify first."
         )
 
     verification_status = state.get("verification_status", "UNKNOWN")

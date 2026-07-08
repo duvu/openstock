@@ -163,6 +163,12 @@ class AssistantApp:
                 status="FAILED",
                 error={"error_type": type(exc).__name__, "message": str(exc)},
             )
+            try:
+                from vnalpha.observability.errors import capture_exception
+
+                capture_exception(exc)
+            except Exception:  # noqa: BLE001
+                pass
             raise
         except Exception as exc:
             finish_assistant_session(
@@ -171,6 +177,12 @@ class AssistantApp:
                 status="FAILED",
                 error={"error_type": "RuntimeError", "message": str(exc)},
             )
+            try:
+                from vnalpha.observability.errors import capture_exception
+
+                capture_exception(exc)
+            except Exception:  # noqa: BLE001
+                pass
             raise
 
     def _run(
