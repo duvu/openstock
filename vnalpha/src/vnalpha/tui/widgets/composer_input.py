@@ -40,10 +40,16 @@ if _TEXTUAL_AVAILABLE:
         DEFAULT_CSS = """
         ComposerInput {
             height: 3;
-            border: round $accent;
+            min-height: 3;
+            padding: 0;
+            width: 100%;
         }
         ComposerInput > Input {
-            height: 1fr;
+            height: 3;
+            min-height: 3;
+            border: round $accent;
+            padding: 0 1;
+            width: 100%;
         }
         """
 
@@ -59,6 +65,7 @@ if _TEXTUAL_AVAILABLE:
 
         def on_input_submitted(self, event: Input.Submitted) -> None:
             """Post ComposerSubmitted for non-empty text and clear the input."""
+            event.stop()
             raw = event.value.strip()
             if not raw:
                 return
@@ -86,7 +93,10 @@ if _TEXTUAL_AVAILABLE:
         def set_disabled(self, disabled: bool) -> None:
             """Enable/disable the input to indicate busy state."""
             try:
-                self.query_one("#composer-input-field", Input).disabled = disabled
+                inp = self.query_one("#composer-input-field", Input)
+                inp.disabled = disabled
+                if not disabled:
+                    inp.focus()
             except Exception:
                 pass
 

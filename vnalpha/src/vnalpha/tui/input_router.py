@@ -89,8 +89,16 @@ class TuiInputRouter:
     def _setup_executor(self) -> None:
         try:
             from vnalpha.commands.executor import CommandExecutor
+            from vnalpha.warehouse.connection import get_connection
+            from vnalpha.warehouse.migrations import run_migrations
 
-            self._command_executor = CommandExecutor(target_date=self._target_date)
+            conn = get_connection()
+            run_migrations(conn=conn)
+            self._command_executor = CommandExecutor(
+                conn,
+                surface="tui",
+                default_date=self._target_date,
+            )
         except Exception:
             self._command_executor = None
 
@@ -115,6 +123,12 @@ class TuiInputRouter:
             self._handle_approve()
             return
         if raw in ("/cancel", "cancel"):
+            self._handle_cancel()
+            return
+        if raw == "a" and self._has_pending_plan():
+            self._handle_approve()
+            return
+        if raw in ("n", "no") and self._has_pending_plan():
             self._handle_cancel()
             return
 
@@ -176,6 +190,12 @@ class TuiInputRouter:
     # ------------------------------------------------------------------
     # Plan control
     # ------------------------------------------------------------------
+
+    def _has_pending_plan(self) -> bool:
+        return (
+            self._chat_controller is not None
+            and getattr(self._chat_controller, "_pending_plan", None) is not None
+        )
 
     def _handle_approve(self) -> None:
         self._emit_routed("approve", "/approve")

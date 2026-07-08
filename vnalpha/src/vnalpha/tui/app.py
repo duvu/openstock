@@ -6,6 +6,18 @@ from typing import Optional
 
 from vnalpha.core.dates import resolve_date
 
+
+def _load_dotenv() -> None:
+    """Load .env from the workspace root (best-effort, never raises)."""
+    try:
+        from dotenv import find_dotenv, load_dotenv
+
+        env_file = find_dotenv(usecwd=True)
+        if env_file:
+            load_dotenv(env_file, override=False)
+    except Exception:  # noqa: BLE001
+        pass
+
 try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
@@ -46,9 +58,11 @@ if _TEXTUAL_AVAILABLE:
         }
         OutputStream {
             height: 1fr;
+            min-height: 5;
         }
         ComposerInput {
             height: 3;
+            min-height: 3;
         }
         """
 
@@ -62,6 +76,7 @@ if _TEXTUAL_AVAILABLE:
         ]
 
         def __init__(self, date: Optional[str] = None, **kwargs):
+            _load_dotenv()
             super().__init__(**kwargs)
             self.target_date: str = resolve_date(date)
             self._router = None
@@ -75,6 +90,10 @@ if _TEXTUAL_AVAILABLE:
             """Initialise the input router after widgets are mounted."""
             self._setup_router()
             self._emit_tui_started()
+            try:
+                self.query_one("#composer-input", ComposerInput).focus_input()
+            except Exception:
+                pass
 
         def _setup_router(self) -> None:
             from vnalpha.tui.input_router import TuiInputRouter

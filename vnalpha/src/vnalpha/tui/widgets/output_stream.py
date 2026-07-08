@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from vnalpha.tools.executor import TraceEvent
 
 try:
+    from rich.console import RenderableType
     from textual.app import ComposeResult
     from textual.widget import Widget
     from textual.widgets import RichLog
 
     _TEXTUAL_AVAILABLE = True
 except ImportError:
+    RenderableType = str  # type: ignore[assignment,misc]
     _TEXTUAL_AVAILABLE = False
 
 
@@ -59,10 +61,10 @@ if _TEXTUAL_AVAILABLE:
             else:
                 self._write(text)
 
-        def show_command_result(self, command: str, markup: str) -> None:
+        def show_command_result(self, command: str, result: "RenderableType") -> None:
             """Render a command result preceded by the command name."""
             self._write(f"[dim]$ {command}[/dim]")
-            self._write(markup)
+            self._write(result)
 
         def show_error(self, message: str, source: str | None = None) -> None:
             """Render an error message, optionally with a source label."""
@@ -93,8 +95,8 @@ if _TEXTUAL_AVAILABLE:
                 )
                 self._write(f"[red]✗ {event.tool_name} FAILED{ms}[/red]")
 
-        def show_table_or_markup(self, markup: str) -> None:
-            """Render arbitrary rich markup or table text."""
+        def show_table_or_markup(self, markup: "RenderableType") -> None:
+            """Render arbitrary rich markup or Rich Renderable."""
             self._write(markup)
 
         def show_repair_bundle(self, path: str, repair_id: str | None = None) -> None:
@@ -125,8 +127,8 @@ if _TEXTUAL_AVAILABLE:
         # Internal helpers
         # ------------------------------------------------------------------
 
-        def _write(self, text: str) -> None:
-            """Append a line to the RichLog (best-effort)."""
+        def _write(self, text: "RenderableType") -> None:
+            """Append a line or Rich renderable to the RichLog (best-effort)."""
             try:
                 self.query_one("#output-log", RichLog).write(text)
             except Exception:
@@ -148,7 +150,7 @@ else:
         def show_assistant_message(self, text: str, style: str | None = None) -> None:
             pass
 
-        def show_command_result(self, command: str, markup: str) -> None:
+        def show_command_result(self, command: str, result: "RenderableType") -> None:
             pass
 
         def show_error(self, message: str, source: str | None = None) -> None:
@@ -160,7 +162,7 @@ else:
         def show_trace_event(self, event: "TraceEvent") -> None:
             pass
 
-        def show_table_or_markup(self, markup: str) -> None:
+        def show_table_or_markup(self, markup: "RenderableType") -> None:
             pass
 
         def show_repair_bundle(self, path: str, repair_id: str | None = None) -> None:

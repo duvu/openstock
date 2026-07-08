@@ -34,6 +34,13 @@ if _TEXTUAL_AVAILABLE:
             yield Static("", id="assistant-plan")
             yield Footer()
 
+        def on_mount(self) -> None:
+            """Auto-focus the input when the screen is mounted."""
+            try:
+                self.query_one("#assistant-input", Input).focus()
+            except Exception:
+                pass
+
         def on_input_submitted(self, event: Input.Submitted) -> None:
             question = event.value.strip()
             if not question:

@@ -1,13 +1,27 @@
-"""Textual renderer stub for TUI command result display."""
+"""Textual renderer for TUI command result display.
+
+Returns a Rich ``Group`` so that tables render with proper column
+alignment and wrap responsively inside any ``RichLog`` widget.
+"""
 
 from __future__ import annotations
+
+from rich.console import Group, RenderableType
+from rich.table import Table
+from rich.text import Text
 
 from vnalpha.commands.models import CommandResult
 
 
-def result_to_markup(result: CommandResult) -> str:
-    """Convert a CommandResult to Rich markup for TUI display."""
-    lines = []
+def result_to_markup(result: CommandResult) -> RenderableType:
+    """Convert a CommandResult to a Rich renderable for TUI display.
+
+    Uses ``rich.table.Table`` for tabular data so columns are sized and
+    wrapped responsively by Rich rather than truncated as plain text.
+    Returns a ``rich.console.Group`` containing the ordered renderables
+    (title, summary, tables, panels, warnings, error).
+    """
+    parts: list[RenderableType] = []
 
     status_color = {
         "SUCCESS": "green",
@@ -15,33 +29,44 @@ def result_to_markup(result: CommandResult) -> str:
         "VALIDATION_ERROR": "yellow",
     }.get(result.status, "white")
 
-    lines.append(f"[{status_color}]{result.title}[/{status_color}]")
+    parts.append(Text.from_markup(f"[{status_color}]{result.title}[/{status_color}]"))
 
     if result.summary:
-        lines.append(result.summary)
+        parts.append(Text.from_markup(result.summary))
 
     for rt in result.tables:
-        lines.append(f"\n[bold]{rt.title}[/bold]")
-        headers = " | ".join(c.title for c in rt.columns)
-        lines.append(f"[dim]{headers}[/dim]")
+        parts.append(Text.from_markup(f"\n[bold]{rt.title}[/bold]"))
+        tbl = Table(
+            box=None,
+            show_header=True,
+            header_style="dim",
+            expand=True,
+            padding=(0, 1),
+        )
+        for col in rt.columns:
+            tbl.add_column(col.title, no_wrap=False)
         for row in rt.rows:
-            lines.append(" | ".join(str(c) if c is not None else "—" for c in row))
+            tbl.add_row(*(str(c) if c is not None else "—" for c in row))
+        parts.append(tbl)
 
     for rp in result.panels:
-        lines.append(f"\n[bold]{rp.title}[/bold]")
+        parts.append(Text.from_markup(f"\n[bold]{rp.title}[/bold]"))
         if isinstance(rp.content, dict):
-            for k, v in rp.content.items():
-                if v is not None:
-                    lines.append(f"  {k}: {v}")
+            lines = "\n".join(
+                f"  {k}: {v}" for k, v in rp.content.items() if v is not None
+            )
+            parts.append(Text(lines))
         else:
-            lines.append(str(rp.content))
+            parts.append(Text(str(rp.content)))
 
     for w in result.warnings:
-        lines.append(f"[yellow]⚠ {w}[/yellow]")
+        parts.append(Text.from_markup(f"[yellow]⚠ {w}[/yellow]"))
 
     if result.error:
-        lines.append(
-            f"[red]Error ({result.error.error_type}): {result.error.message}[/red]"
+        parts.append(
+            Text.from_markup(
+                f"[red]Error ({result.error.error_type}): {result.error.message}[/red]"
+            )
         )
 
-    return "\n".join(lines)
+    return Group(*parts)

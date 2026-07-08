@@ -16,6 +16,17 @@ class WatchlistScreen(Screen):
     """Shows ranked watchlist candidates for a given date."""
 
     TITLE = "Daily Watchlist"
+
+    DEFAULT_CSS = """
+    WatchlistScreen > Vertical {
+        height: 1fr;
+    }
+    WatchlistScreen #wl-table {
+        height: 1fr;
+        min-height: 5;
+    }
+    """
+
     BINDINGS = [
         Binding("r", "refresh", "Refresh"),
         Binding("enter", "select_symbol", "Detail"),
@@ -32,7 +43,7 @@ class WatchlistScreen(Screen):
                 f"[bold]Research Candidates — {self._target_date}[/bold]", id="wl-title"
             ),
             Static("Loading...", id="wl-status"),
-            DataTable(id="wl-table"),
+            DataTable(id="wl-table", cursor_type="row"),
             id="wl-container",
         )
         yield Footer()

@@ -5,6 +5,7 @@ from __future__ import annotations
 try:
     from textual.app import ComposeResult
     from textual.binding import Binding
+    from textual.containers import ScrollableContainer
     from textual.screen import Screen
     from textual.widgets import DataTable, Footer, Header, Label, Static
 
@@ -24,6 +25,13 @@ if _TEXTUAL_AVAILABLE:
 
         BINDINGS = [Binding("escape", "app.pop_screen", "Back")]
 
+        DEFAULT_CSS = """
+        OutcomeScreen > ScrollableContainer {
+            height: 1fr;
+            width: 100%;
+        }
+        """
+
         def __init__(
             self, target_date: str = "today", horizon: int = 20, **kwargs
         ) -> None:
@@ -33,20 +41,21 @@ if _TEXTUAL_AVAILABLE:
 
         def compose(self) -> ComposeResult:
             yield Header()
-            yield Label(
-                f"Outcome Review — {self.target_date} | Horizon {self.horizon} sessions",
-                id="outcome-title",
-            )
-            yield Static(self._build_summary(), id="outcome-summary")
-            yield Label("Candidate Outcomes", id="outcome-candidates-label")
-            yield DataTable(id="outcome-candidates-table")
-            yield Label("Score Bucket Performance", id="outcome-buckets-label")
-            yield DataTable(id="outcome-buckets-table")
-            yield Label("Setup Type Performance", id="outcome-setups-label")
-            yield DataTable(id="outcome-setups-table")
-            yield Label("Risk Flag Performance", id="outcome-risks-label")
-            yield DataTable(id="outcome-risks-table")
-            yield Static(self._build_pending_panel(), id="outcome-pending-panel")
+            with ScrollableContainer(id="outcome-scroll"):
+                yield Label(
+                    f"Outcome Review — {self.target_date} | Horizon {self.horizon} sessions",
+                    id="outcome-title",
+                )
+                yield Static(self._build_summary(), id="outcome-summary")
+                yield Label("Candidate Outcomes", id="outcome-candidates-label")
+                yield DataTable(id="outcome-candidates-table")
+                yield Label("Score Bucket Performance", id="outcome-buckets-label")
+                yield DataTable(id="outcome-buckets-table")
+                yield Label("Setup Type Performance", id="outcome-setups-label")
+                yield DataTable(id="outcome-setups-table")
+                yield Label("Risk Flag Performance", id="outcome-risks-label")
+                yield DataTable(id="outcome-risks-table")
+                yield Static(self._build_pending_panel(), id="outcome-pending-panel")
             yield Footer()
 
         def _build_summary(self) -> str:

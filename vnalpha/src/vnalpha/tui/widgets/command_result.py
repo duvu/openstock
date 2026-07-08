@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rich.console import RenderableType
 from textual.widgets import RichLog
 
 
@@ -27,10 +28,10 @@ class CommandResultPanel(RichLog):
     def __init__(self, **kwargs) -> None:
         super().__init__(highlight=True, markup=True, wrap=True, **kwargs)
 
-    def show_result(self, command: str, markup: str) -> None:
+    def show_result(self, command: str, result: RenderableType) -> None:
         """Append a command prompt line followed by its result."""
         self.write(f"[bold cyan]> {command}[/bold cyan]")
-        self.write(markup)
+        self.write(result)
         self.write("")  # blank separator
 
     def show_error(self, command: str, message: str) -> None:

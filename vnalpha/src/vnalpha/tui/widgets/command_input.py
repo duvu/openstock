@@ -15,6 +15,25 @@ class CommandInput(Static):
     Shows a '/' prefix label to signal command mode.
     """
 
+    DEFAULT_CSS = """
+    CommandInput {
+        layout: horizontal;
+        height: 3;
+        min-height: 3;
+        width: 100%;
+    }
+    CommandInput > Label {
+        width: auto;
+        height: 3;
+        content-align: left middle;
+        padding: 0 1;
+    }
+    CommandInput > Input {
+        width: 1fr;
+        height: 3;
+    }
+    """
+
     BINDINGS = [
         Binding("escape", "clear_input", "Clear"),
     ]
