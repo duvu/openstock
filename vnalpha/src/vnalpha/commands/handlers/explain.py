@@ -8,6 +8,9 @@ from vnalpha.commands.models import (
     ResultPanel,
 )
 from vnalpha.commands.normalizers import normalize_date, normalize_symbol
+from vnalpha.core.logging import get_logger
+
+logger = get_logger("commands.explain")
 
 
 def handle_explain(
@@ -15,7 +18,11 @@ def handle_explain(
     conn=None,
     **kwargs,
 ) -> CommandResult:
-    """Explain a symbol from persisted candidate score artifacts."""
+    """Explain a symbol from persisted candidate score artifacts.
+
+    Automatically provisions missing data (OHLCV, canonical, features, score)
+    before running the analysis.
+    """
     if conn is None:
         return CommandResult(
             status="FAILED", title="/explain", summary="No database connection."
@@ -30,6 +37,14 @@ def handle_explain(
 
     symbol = normalize_symbol(parsed.positional[0])
     date = normalize_date(parsed.options.get("date"))
+
+    ensure_result = None
+    try:
+        from vnalpha.data_availability import ensure_symbol_analysis_ready
+
+        ensure_result = ensure_symbol_analysis_ready(conn, symbol, date)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Data provisioning failed for %s: %s", symbol, exc)
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
@@ -68,10 +83,19 @@ def handle_explain(
         ResultPanel(title="Data Quality", content={"rows": quality_output.data or []}),
         ResultPanel(title="Lineage", content=lineage),
     ]
+    if ensure_result is not None:
+        panels.append(
+            ResultPanel(title="Data Readiness", content=ensure_result.to_panel_dict())
+        )
+
+    all_warnings = list(output.warnings)
+    if ensure_result is not None:
+        all_warnings.extend(ensure_result.warnings)
+
     return CommandResult(
         status="SUCCESS",
         title=f"/explain {symbol} — {date}",
         summary=output.summary,
         panels=panels,
-        warnings=output.warnings,
+        warnings=all_warnings,
     )

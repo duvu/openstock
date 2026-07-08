@@ -9,6 +9,9 @@ from vnalpha.commands.models import (
     ResultTable,
 )
 from vnalpha.commands.normalizers import normalize_date, normalize_symbols
+from vnalpha.core.logging import get_logger
+
+logger = get_logger("commands.compare")
 
 
 def handle_compare(
@@ -31,6 +34,19 @@ def handle_compare(
 
     symbols = normalize_symbols(parsed.positional)
     date = normalize_date(parsed.options.get("date"))
+
+    ensure_warnings: list[str] = []
+    try:
+        from vnalpha.data_availability import ensure_symbol_analysis_ready
+
+        for sym in symbols:
+            try:
+                ensure_result = ensure_symbol_analysis_ready(conn, sym, date)
+                ensure_warnings.extend(ensure_result.warnings)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Data provisioning failed for %s: %s", sym, exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Data provisioning import failed: %s", exc)
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
@@ -83,12 +99,13 @@ def handle_compare(
         ],
         rows=rows,
     )
+    all_warnings = list(output.warnings) + ensure_warnings
     return CommandResult(
         status="SUCCESS",
         title=f"/compare — {date}",
         summary=output.summary,
         tables=[table],
-        warnings=output.warnings,
+        warnings=all_warnings,
     )
 
 
