@@ -17,9 +17,13 @@ Steps:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable, Optional
 
 import duckdb
+
+if TYPE_CHECKING:
+    from vnalpha.clients.vnstock.client import VnstockClient
 
 from vnalpha.core.logging import get_logger
 from vnalpha.data_availability.checks import (
@@ -30,6 +34,7 @@ from vnalpha.data_availability.checks import (
     get_feature_snapshot_status,
     get_symbol_master_status,
 )
+from vnalpha.data_availability.lock import EnsureLock
 from vnalpha.data_availability.models import (
     EnsureDataAction,
     EnsureDataResult,
@@ -71,13 +76,14 @@ def ensure_symbol_analysis_ready(
     target_date: str,
     *,
     policy: DataAvailabilityPolicy = DEFAULT_POLICY,
-    # Dependency-injection hooks for testability (default to real implementations)
+    client: Optional["VnstockClient"] = None,
     _sync_symbols_fn: Optional[Callable] = None,
     _sync_ohlcv_fn: Optional[Callable] = None,
     _sync_index_fn: Optional[Callable] = None,
     _build_canonical_fn: Optional[Callable] = None,
     _build_features_fn: Optional[Callable] = None,
     _score_universe_fn: Optional[Callable] = None,
+    _lock_dir: Optional["Path"] = None,
 ) -> EnsureDataResult:
     """Ensure all data required to analyse *symbol* on *target_date* is present.
 
@@ -100,6 +106,16 @@ def ensure_symbol_analysis_ready(
 
     # Compute lookback window
     lookback_start = compute_lookback_start(target_date, policy.lookback_days)
+
+    # Acquire per-symbol/date lock to prevent duplicate provisioning
+    lock = EnsureLock(symbol, target_date, lock_dir=_lock_dir)
+    if not lock.acquire():
+        # Another flow is already provisioning this symbol/date
+        result.warnings.append(
+            f"Another ensure flow is active for {symbol}/{target_date}. Skipping."
+        )
+        result.status = EnsureDataStatus.PARTIAL
+        return result
 
     try:
         log_ensure_started(symbol, target_date)
@@ -124,6 +140,7 @@ def ensure_symbol_analysis_ready(
             log_ensure_cache_hit(symbol, target_date)
         except Exception:  # noqa: BLE001
             pass
+        lock.release()
         return result
 
     # Step 4 — symbol_master check
@@ -133,7 +150,14 @@ def ensure_symbol_analysis_ready(
             try:
                 log_ensure_symbols_sync_started(symbol)
                 sync_fn = _sync_symbols_fn or _get_sync_symbols()
-                sync_fn(conn)
+                sync_kwargs: dict = {}
+                if policy.source:
+                    sync_kwargs["source"] = policy.source
+                if policy.base_url:
+                    sync_kwargs["base_url"] = policy.base_url
+                if client:
+                    sync_kwargs["client"] = client
+                sync_fn(conn, **sync_kwargs)
                 result.actions_taken.append(EnsureDataAction.SYMBOLS_SYNCED)
                 symbol_known = get_symbol_master_status(conn, symbol)
                 log_ensure_symbols_sync_succeeded(symbol)
@@ -151,6 +175,7 @@ def ensure_symbol_analysis_ready(
                 log_ensure_failed(symbol, target_date, result.errors)
             except Exception:  # noqa: BLE001
                 pass
+            lock.release()
             return result
 
     # Step 5 — canonical OHLCV
@@ -162,9 +187,18 @@ def ensure_symbol_analysis_ready(
         try:
             log_ensure_ohlcv_sync_started(symbol)
             sync_ohlcv_fn = _sync_ohlcv_fn or _get_sync_ohlcv()
-            ohlcv_result = sync_ohlcv_fn(
-                conn, universe=[symbol], start=lookback_start, end=target_date
-            )
+            ohlcv_kwargs: dict = {
+                "universe": [symbol],
+                "start": lookback_start,
+                "end": target_date,
+            }
+            if policy.source:
+                ohlcv_kwargs["source"] = policy.source
+            if policy.base_url:
+                ohlcv_kwargs["base_url"] = policy.base_url
+            if client:
+                ohlcv_kwargs["client"] = client
+            ohlcv_result = sync_ohlcv_fn(conn, **ohlcv_kwargs)
             inserted = ohlcv_result.get("inserted", 0)
             result.actions_taken.append(EnsureDataAction.OHLCV_SYNCED)
             log_ensure_ohlcv_sync_succeeded(symbol, inserted)
@@ -210,9 +244,18 @@ def ensure_symbol_analysis_ready(
         try:
             log_ensure_benchmark_sync_started(benchmark)
             sync_index_fn = _sync_index_fn or _get_sync_index()
-            index_result = sync_index_fn(
-                conn, symbol=benchmark, start=lookback_start, end=target_date
-            )
+            index_kwargs: dict = {
+                "symbol": benchmark,
+                "start": lookback_start,
+                "end": target_date,
+            }
+            if policy.source:
+                index_kwargs["source"] = policy.source
+            if policy.base_url:
+                index_kwargs["base_url"] = policy.base_url
+            if client:
+                index_kwargs["client"] = client
+            index_result = sync_index_fn(conn, **index_kwargs)
             inserted = index_result.get("inserted", 0)
             result.actions_taken.append(EnsureDataAction.BENCHMARK_SYNCED)
             log_ensure_benchmark_sync_succeeded(benchmark, inserted)
@@ -325,6 +368,7 @@ def ensure_symbol_analysis_ready(
         except Exception:  # noqa: BLE001
             pass
 
+    lock.release()
     return result
 
 
