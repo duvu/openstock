@@ -5,6 +5,20 @@
 #   --init   Initialize warehouse if not found (runs vnalpha init via docker compose)
 set -uo pipefail
 
+RUN_ID="verify_$(date -u +%Y%m%dT%H%M%S)_$$"
+LOG_ROOT="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
+LOG_DIR="${LOG_ROOT}/runs/${RUN_ID}"
+mkdir -p "${LOG_DIR}" 2>/dev/null || true
+
+log_jsonl() {
+  local event_type="$1"
+  local summary="${2:-}"
+  local status="${3:-OK}"
+  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event_type\":\"${event_type}\",\"run_id\":\"${RUN_ID}\",\"correlation_id\":\"${RUN_ID}\",\"summary\":\"${summary}\",\"status\":\"${status}\"}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
+}
+
+log_jsonl "VERIFY_STARTED" "openstock-verify started" "STARTED"
+
 # --- config ---
 VNSTOCK_SERVICE_BASE="${VNSTOCK_SERVICE_URL:-http://127.0.0.1:6900}"
 VNSTOCK_HEALTHZ_URL="${VNSTOCK_SERVICE_BASE}/healthz"
@@ -511,8 +525,10 @@ echo "Results: ${PASS} OK  ${WARN} WARN  ${FAIL} FAIL"
 
 if [ "$FAIL" -eq 0 ]; then
   echo "Status: PASS"
+  log_jsonl "VERIFY_RUN_COMPLETED" "openstock-verify PASS pass=${PASS} warn=${WARN} fail=${FAIL}" "OK"
   exit 0
 else
   echo "Status: FAIL (${FAIL} required check(s) failed)"
+  log_jsonl "VERIFY_RUN_COMPLETED" "openstock-verify FAIL pass=${PASS} warn=${WARN} fail=${FAIL}" "FAILED"
   exit 1
 fi

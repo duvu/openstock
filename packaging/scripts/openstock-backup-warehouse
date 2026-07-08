@@ -10,6 +10,18 @@ set -euo pipefail
 LOCK_FILE="/run/openstock-pipeline.lock"
 FORCE=false
 
+RUN_ID="backup_$(date -u +%Y%m%dT%H%M%S)_$$"
+LOG_ROOT="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
+LOG_DIR="${LOG_ROOT}/runs/${RUN_ID}"
+mkdir -p "${LOG_DIR}" 2>/dev/null || true
+
+log_jsonl() {
+  local event_type="$1"
+  local summary="${2:-}"
+  local status="${3:-OK}"
+  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event_type\":\"${event_type}\",\"run_id\":\"${RUN_ID}\",\"correlation_id\":\"${RUN_ID}\",\"summary\":\"${summary}\",\"status\":\"${status}\"}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
+}
+
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=true ;;
@@ -52,11 +64,14 @@ TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_PATH="${BACKUP_DIR}/warehouse-${TIMESTAMP}.duckdb"
 
 echo "[INFO] Backing up $WAREHOUSE_PATH -> $BACKUP_PATH"
+log_jsonl "BACKUP_STARTED" "Backup started ${WAREHOUSE_PATH}" "STARTED"
 cp "$WAREHOUSE_PATH" "$BACKUP_PATH"
 
 if [ -f "$BACKUP_PATH" ]; then
   echo "[OK] Backup created: $BACKUP_PATH"
+  log_jsonl "BACKUP_CREATED" "Backup created ${BACKUP_PATH}" "OK"
 else
   echo "[FAIL] Backup failed" >&2
+  log_jsonl "BACKUP_FAILED" "Backup failed ${WAREHOUSE_PATH}" "FAILED"
   exit 1
 fi

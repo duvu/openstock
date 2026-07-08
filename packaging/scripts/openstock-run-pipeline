@@ -24,6 +24,18 @@ START_ARG="2024-01-01"
 CI_FIXTURE=false
 DRY_RUN=false
 
+RUN_ID="pipeline_$(date -u +%Y%m%dT%H%M%S)_$$"
+LOG_ROOT="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
+LOG_DIR="${LOG_ROOT}/runs/${RUN_ID}"
+mkdir -p "${LOG_DIR}" 2>/dev/null || true
+
+log_jsonl() {
+  local event_type="$1"
+  local summary="${2:-}"
+  local status="${3:-OK}"
+  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event_type\":\"${event_type}\",\"run_id\":\"${RUN_ID}\",\"correlation_id\":\"${RUN_ID}\",\"summary\":\"${summary}\",\"status\":\"${status}\"}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
+}
+
 ok()   { echo "[OK]   $*"; }
 warn() { echo "[WARN] $*"; }
 fail() { echo "[FAIL] $*"; }
@@ -124,6 +136,7 @@ echo "openstock-run-pipeline"
 echo "  date=${DATE_ARG}  start=${START_ARG}  ci-fixture=${CI_FIXTURE}  dry-run=${DRY_RUN}"
 echo ""
 
+log_jsonl "PIPELINE_STARTED" "Pipeline started date=${DATE_ARG}" "STARTED"
 _acquire_lock
 
 if ! "$CI_FIXTURE"; then
@@ -140,3 +153,4 @@ _vnalpha score --date "$DATE_ARG" || exit 1
 _vnalpha watchlist --date "$DATE_ARG" || exit 1
 
 ok "Pipeline complete for date=${DATE_ARG}"
+log_jsonl "PIPELINE_COMPLETED" "Pipeline complete date=${DATE_ARG}" "OK"
