@@ -1,23 +1,20 @@
 # openstock docker-compose.yml
-# Orchestrates vnstock-service for local research workflow,
-# and vnalpha-worker for on-demand data pipeline jobs.
+# Runs vnstock-service (Docker) + vnalpha CLI on host.
 #
-# Usage:
-#   docker compose up -d                   # start data platform
-#   docker compose down                    # stop
-#   docker compose logs -f                 # follow logs
+# Start:  docker compose up -d
+# Stop:   docker compose down
 #
-# Run a pipeline job (profile-gated, does not start automatically):
-#   docker compose run --rm vnalpha-worker init
-#   docker compose run --rm vnalpha-worker sync symbols
-#   docker compose run --rm vnalpha-worker sync ohlcv --universe VN30
-#   docker compose run --rm vnalpha-worker build canonical
-#   docker compose run --rm vnalpha-worker build features
-#   docker compose run --rm vnalpha-worker score
-#   docker compose run --rm vnalpha-worker watchlist
+# vnalpha pipeline (run on host, connects to vnstock-service at :6900):
+#   vnalpha init
+#   vnalpha sync symbols
+#   vnalpha sync ohlcv --universe VN30
+#   vnalpha build canonical
+#   vnalpha build features
+#   vnalpha score
+#   vnalpha watchlist
+#   vnalpha tui
 #
-# Warehouse volume (created by Docker if absent):
-#   /var/lib/openstock/warehouse  →  /warehouse  inside the worker
+# Warehouse: ~/.local/share/openstock/warehouse/warehouse.duckdb (host)
 
 services:
   vnstock-service:
@@ -70,4 +67,4 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /var/lib/openstock/warehouse
+      device: /home/beou/.local/share/openstock/warehouse
