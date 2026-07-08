@@ -173,13 +173,18 @@ def test_handle_natural_language_emits_classifying_and_final():
         messages.append((style, text))
 
     # Build a minimal fake answer
+    from vnalpha.assistant.models import ToolPlanStep
+
     fake_answer = AssistantAnswer(
         summary="VPB price is 18,500.",
         basis="Market data",
         risks_caveats="",
         tool_trace_summary="",
     )
-    fake_plan = AssistantPlan(intent="lookup", steps=[])
+    fake_plan = AssistantPlan(
+        intent="lookup",
+        steps=[ToolPlanStep(step_id="s1", tool_name="price.get", arguments={"symbol": "VPB"}, purpose="get price", required_permission="READ_DATA")],
+    )
 
     controller = ChatController(
         on_message=_on_message,
@@ -223,13 +228,18 @@ def test_handle_natural_language_emits_planning_and_synthesizing():
     def _on_message(style: str, text: str) -> None:
         messages.append((style, text))
 
+    from vnalpha.assistant.models import ToolPlanStep
+
     fake_answer = AssistantAnswer(
         summary="Result.",
         basis="Market data",
         risks_caveats="",
         tool_trace_summary="",
     )
-    fake_plan = AssistantPlan(intent="lookup", steps=[])
+    fake_plan = AssistantPlan(
+        intent="lookup",
+        steps=[ToolPlanStep(step_id="s1", tool_name="watchlist.scan", arguments={}, purpose="scan", required_permission="READ_DATA")],
+    )
 
     controller = ChatController(
         on_message=_on_message,

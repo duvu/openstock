@@ -32,6 +32,7 @@ ASSISTANT_TOOL_ALLOWLIST: frozenset[str] = frozenset(
         "lineage.get_symbol_lineage",
         "note.create",
         "history.list_sessions",
+        "data.fetch",
     }
 )
 

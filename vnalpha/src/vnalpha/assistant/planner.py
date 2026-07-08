@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
 
 from vnalpha.assistant.errors import PlanBuildError, PlanValidationError
@@ -23,8 +24,16 @@ TOOL_ALLOWLIST: frozenset[str] = frozenset(
         "lineage.get_symbol_lineage",
         "note.create",
         "history.list_sessions",
+        "data.fetch",
     }
 )
+
+
+def _resolve_symbol(entities: dict) -> str:
+    symbols_list = entities.get("symbols", [])
+    if symbols_list:
+        return str(symbols_list[0])
+    return str(entities.get("symbol", ""))
 
 
 def _step(tool: str, args: dict, purpose: str, permission: str) -> ToolPlanStep:
@@ -118,7 +127,7 @@ def _build_compare_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_explain_plan(entities: dict) -> AssistantPlan:
-    symbol = entities.get("symbol", "")
+    symbol = _resolve_symbol(entities)
     date = entities.get("date")
     args: dict[str, Any] = {"symbol": symbol}
     if date:
@@ -148,7 +157,7 @@ def _build_explain_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_quality_plan(entities: dict) -> AssistantPlan:
-    symbol = entities.get("symbol")
+    symbol = _resolve_symbol(entities) or None
     args: dict[str, Any] = {}
     if symbol:
         args["symbol"] = symbol
@@ -166,7 +175,7 @@ def _build_quality_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_lineage_plan(entities: dict) -> AssistantPlan:
-    symbol = entities.get("symbol", "")
+    symbol = _resolve_symbol(entities)
     args: dict[str, Any] = {"symbol": symbol}
     if entities.get("date"):
         args["date"] = entities["date"]
@@ -200,7 +209,7 @@ def _build_summarize_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_note_plan(entities: dict) -> AssistantPlan:
-    symbol = entities.get("symbol", "")
+    symbol = _resolve_symbol(entities)
     text = entities.get("note_text", "")
     tags = entities.get("tags", [])
     args: dict[str, Any] = {"symbol": symbol, "note_text": text}
@@ -229,6 +238,48 @@ def _build_history_plan(entities: dict) -> AssistantPlan:
     )
 
 
+def _build_fetch_plan(entities: dict) -> AssistantPlan:
+    # LLM may return "symbols" (list) or "symbol" (string) — handle both
+    symbols_list = entities.get("symbols", [])
+    if symbols_list:
+        symbols = [str(s) for s in symbols_list if s]
+    else:
+        single = entities.get("symbol", "")
+        symbols = [single] if single else []
+
+    extra: dict = {}
+    if entities.get("start"):
+        extra["start"] = entities["start"]
+    else:
+        extra["start"] = (date.today() - timedelta(days=365)).strftime("%Y-%m-%d")
+    if entities.get("end"):
+        extra["end"] = entities["end"]
+    if entities.get("interval"):
+        extra["interval"] = entities["interval"]
+
+    if not symbols:
+        return AssistantPlan(
+            intent="fetch_data",
+            steps=[],
+            refusal_reason="No symbol specified. Please provide a stock symbol to fetch data for.",
+        )
+
+    steps = [
+        _step(
+            "data.fetch",
+            {"symbol": sym, **extra},
+            f"Fetch OHLCV data for {sym}",
+            "WRITE_DATA",
+        )
+        for sym in symbols
+    ]
+    return AssistantPlan(
+        intent="fetch_data",
+        steps=steps,
+        required_artifacts=[],
+    )
+
+
 def _build_refusal_plan(entities: dict) -> AssistantPlan:
     reason = entities.get(
         "reason", "This request is not supported in the research assistant."
@@ -250,6 +301,7 @@ _PLAN_BUILDERS = {
     "summarize_watchlist": _build_summarize_plan,
     "create_research_note": _build_note_plan,
     "show_history": _build_history_plan,
+    "fetch_data": _build_fetch_plan,
     "unsupported_or_unsafe": _build_refusal_plan,
 }
 

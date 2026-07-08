@@ -45,6 +45,7 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset(
         "summarize_watchlist",
         "create_research_note",
         "show_history",
+        "fetch_data",
         "unsupported_or_unsafe",
     }
 )

@@ -13,9 +13,22 @@ from vnalpha.observability.commands import command_lifecycle
 app = typer.Typer(name="vnalpha", help="Alpha discovery research CLI.")
 
 
+def _load_dotenv() -> None:
+    """Load .env from the workspace root (best-effort, never raises)."""
+    try:
+        from dotenv import find_dotenv, load_dotenv
+
+        env_file = find_dotenv(usecwd=True)
+        if env_file:
+            load_dotenv(env_file, override=False)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 @app.callback()
 def _app_callback() -> None:
     """Configure logging at the start of every CLI invocation."""
+    _load_dotenv()
     configure_logging()
     try:
         from vnalpha.observability.context import init_run_context

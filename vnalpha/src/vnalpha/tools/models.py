@@ -23,6 +23,7 @@ class ToolPermission(str, Enum):
     READ_LINEAGE = "READ_LINEAGE"
     WRITE_NOTE = "WRITE_NOTE"
     READ_HISTORY = "READ_HISTORY"
+    WRITE_DATA = "WRITE_DATA"
 
 
 # Forbidden permissions — must never appear in any tool spec

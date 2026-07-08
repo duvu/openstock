@@ -3,6 +3,25 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+
+def _log_llm_error(
+    stage: str, exc: Exception, *, attempt: int | None = None, cause: Exception | None = None
+) -> None:
+    try:
+        import structlog
+
+        log = structlog.get_logger("assistant.gateway")
+        log.error(
+            "LLM call failed",
+            stage=stage,
+            error_type=type(exc).__name__,
+            error=str(exc),
+            attempt=attempt,
+            cause=str(cause) if cause else None,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
@@ -91,6 +110,7 @@ class LLMGatewayClient:
         import httpx
 
         from vnalpha.assistant.errors import (
+            LLMConfigError,
             LLMResponseError,
             LLMTimeoutError,
         )
@@ -98,6 +118,16 @@ class LLMGatewayClient:
         api_key = os.environ.get("VNALPHA_LLM_API_KEY") or os.environ.get(
             "OPENAI_API_KEY", ""
         )
+
+        # Early validation — avoid httpx LocalProtocolError on empty Bearer token
+        if not api_key or not api_key.strip():
+            err = LLMConfigError(
+                "LLM API key is not set. "
+                "Set VNALPHA_LLM_API_KEY (or OPENAI_API_KEY) in your environment or .env file."
+            )
+            _log_llm_error(stage, err)
+            raise err
+
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -111,7 +141,7 @@ class LLMGatewayClient:
             payload["response_format"] = {"type": "json_object"}
 
         last_exc: Exception | None = None
-        for _attempt in range(self._config.max_retries + 1):
+        for attempt in range(self._config.max_retries + 1):
             try:
                 resp = httpx.post(
                     self._config.endpoint,
@@ -127,14 +157,18 @@ class LLMGatewayClient:
             except httpx.TimeoutException as exc:
                 last_exc = exc
             except httpx.HTTPStatusError as exc:
-                raise LLMResponseError(
+                err = LLMResponseError(
                     f"LLM HTTP {exc.response.status_code}: {exc.response.text[:200]}"
-                ) from exc
+                )
+                _log_llm_error(stage, err, attempt=attempt)
+                raise err from exc
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
-        raise LLMTimeoutError(
+        timeout_err = LLMTimeoutError(
             f"LLM call failed after {self._config.max_retries + 1} attempts"
-        ) from last_exc
+        )
+        _log_llm_error(stage, timeout_err, cause=last_exc)
+        raise timeout_err from last_exc
 
     @property
     def config(self) -> LLMGatewayConfig:

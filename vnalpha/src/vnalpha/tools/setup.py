@@ -16,11 +16,13 @@ TOOL_PERMISSIONS: dict[str, ToolPermission] = {
     "lineage.get_symbol_lineage": ToolPermission.READ_LINEAGE,
     "note.create": ToolPermission.WRITE_NOTE,
     "history.list_sessions": ToolPermission.READ_HISTORY,
+    "data.fetch": ToolPermission.WRITE_DATA,
 }
 
 
 def build_local_tool_registry(conn) -> LocalToolRegistry:
     """Build a LocalToolRegistry wired to a live DuckDB connection."""
+    from vnalpha.tools.fetch import fetch_symbol_data
     from vnalpha.tools.lineage import get_symbol_lineage
     from vnalpha.tools.notes import create_note, list_sessions
     from vnalpha.tools.quality import get_many_quality_status, get_quality_status
@@ -109,6 +111,14 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
         ),
         lambda **kwargs: list_sessions(conn, limit=kwargs.get("limit", 20)),
     )
+    registry.register(
+        ToolSpec(
+            name="data.fetch",
+            description="Fetch OHLCV data for a symbol from vnstock-service into the warehouse",
+            permission=ToolPermission.WRITE_DATA,
+        ),
+        lambda **kwargs: _fetch_data(fetch_symbol_data, conn, **kwargs),
+    )
     return registry
 
 
@@ -163,4 +173,17 @@ def _create_note(impl, conn, **kwargs):
         note_text=note_text,
         session_id=kwargs.get("session_id"),
         tags=kwargs.get("tags"),
+    )
+
+
+def _fetch_data(impl, conn, **kwargs):
+    symbol = kwargs.get("symbol")
+    if symbol is None:
+        raise ToolExecutionError("data.fetch requires 'symbol' argument.")
+    return impl(
+        conn,
+        symbol=symbol,
+        start=kwargs.get("start"),
+        end=kwargs.get("end"),
+        interval=kwargs.get("interval", "1D"),
     )

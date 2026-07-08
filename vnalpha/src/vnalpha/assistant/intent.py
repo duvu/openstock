@@ -5,8 +5,12 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import structlog
+
 from vnalpha.assistant.errors import IntentClassificationError
 from vnalpha.assistant.models import SUPPORTED_INTENTS, IntentResult
+
+_log = structlog.get_logger("assistant.intent")
 
 if TYPE_CHECKING:
     from vnalpha.assistant.gateway import LLMGatewayClient
@@ -63,11 +67,13 @@ Classify the user's research question into exactly one of these intents:
 - summarize_watchlist: high-level summary of today's watchlist
 - create_research_note: save a note about a symbol or session
 - show_history: research session history
+- fetch_data: download, sync, or update OHLCV data for one or more symbols from the data service
 - unsupported_or_unsafe: trading execution, web search, code execution, broker, account/allocation management, or unsupported request
 
 Rules:
 - Any buy/sell/order/trade/broker/account/allocation request MUST be classified as unsupported_or_unsafe.
 - Any web search, Python execution, or MCP tool request MUST be classified as unsupported_or_unsafe.
+- Requests to download/sync/fetch/update data for a symbol MUST be classified as fetch_data.
 - Respond ONLY with valid JSON matching: {"intent": "<name>", "confidence": 0.0-1.0, "entities": {}, "needs_clarification": false, "clarification_question": null, "safety_flags": []}
 """
 
@@ -79,9 +85,21 @@ def _build_classifier_messages(user_prompt: str) -> list[dict]:
     ]
 
 
+def _strip_markdown_fence(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        first_newline = stripped.find("\n")
+        if first_newline != -1:
+            stripped = stripped[first_newline + 1 :]
+        if stripped.endswith("```"):
+            stripped = stripped[: stripped.rfind("```")]
+    return stripped.strip()
+
+
 def _parse_classifier_response(response_text: str, user_prompt: str) -> IntentResult:
+    clean_text = _strip_markdown_fence(response_text)
     try:
-        data = json.loads(response_text)
+        data = json.loads(clean_text)
     except json.JSONDecodeError as exc:
         raise IntentClassificationError(
             f"Invalid JSON from classifier: {response_text[:100]}"
@@ -123,4 +141,12 @@ class IntentClassifier:
         except Exception as exc:
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
         self.last_usage = usage
-        return _parse_classifier_response(response_text, user_prompt)
+        result = _parse_classifier_response(response_text, user_prompt)
+        _log.info(
+            "intent_classified",
+            intent=result.intent,
+            confidence=result.confidence,
+            entities=result.entities,
+            raw_response=response_text[:200],
+        )
+        return result

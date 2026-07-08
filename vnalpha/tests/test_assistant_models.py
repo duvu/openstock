@@ -73,7 +73,7 @@ def test_llm_stage_values():
 
 
 # ---------------------------------------------------------------------------
-# 4. SUPPORTED_INTENTS contains all 10 intent names
+# 4. SUPPORTED_INTENTS contains all 11 intent names
 # ---------------------------------------------------------------------------
 
 
@@ -88,10 +88,11 @@ def test_supported_intents_all_ten():
         "summarize_watchlist",
         "create_research_note",
         "show_history",
+        "fetch_data",
         "unsupported_or_unsafe",
     }
     assert SUPPORTED_INTENTS == expected
-    assert len(SUPPORTED_INTENTS) == 10
+    assert len(SUPPORTED_INTENTS) == 11
 
 
 # ---------------------------------------------------------------------------

@@ -50,3 +50,7 @@ class LLMTimeoutError(LLMGatewayError):
 
 class LLMResponseError(LLMGatewayError):
     """Raised when the LLM returns an HTTP or parse error."""
+
+
+class LLMConfigError(LLMGatewayError):
+    """Raised when the LLM gateway is misconfigured (e.g. missing API key)."""
