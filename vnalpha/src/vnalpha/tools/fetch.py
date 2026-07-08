@@ -17,7 +17,9 @@ def fetch_symbol_data(
     from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
     from vnalpha.ingestion.sync_ohlcv import sync_ohlcv
 
-    sync_result = sync_ohlcv(conn, universe=[symbol], start=start, end=end, interval=interval)
+    sync_result = sync_ohlcv(
+        conn, universe=[symbol], start=start, end=end, interval=interval
+    )
     inserted_raw = sync_result.get("inserted", 0)
 
     canonical_result = build_canonical_ohlcv(conn, symbol=symbol, interval=interval)

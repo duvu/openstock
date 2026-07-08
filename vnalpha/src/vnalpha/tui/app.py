@@ -18,6 +18,7 @@ def _load_dotenv() -> None:
     except Exception:  # noqa: BLE001
         pass
 
+
 try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding

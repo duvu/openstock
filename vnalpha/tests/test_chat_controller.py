@@ -226,7 +226,15 @@ def test_handle_natural_language_calls_ask():
 
     mock_plan = AssistantPlan(
         intent="scan_candidates",
-        steps=[ToolPlanStep(step_id="s1", tool_name="watchlist.scan", arguments={}, purpose="scan", required_permission="READ_DATA")],
+        steps=[
+            ToolPlanStep(
+                step_id="s1",
+                tool_name="watchlist.scan",
+                arguments={},
+                purpose="scan",
+                required_permission="READ_DATA",
+            )
+        ],
     )
 
     with patch.object(ctrl, "_run_ask", return_value=(mock_answer, mock_plan)):

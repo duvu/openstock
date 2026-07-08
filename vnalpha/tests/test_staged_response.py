@@ -183,7 +183,15 @@ def test_handle_natural_language_emits_classifying_and_final():
     )
     fake_plan = AssistantPlan(
         intent="lookup",
-        steps=[ToolPlanStep(step_id="s1", tool_name="price.get", arguments={"symbol": "VPB"}, purpose="get price", required_permission="READ_DATA")],
+        steps=[
+            ToolPlanStep(
+                step_id="s1",
+                tool_name="price.get",
+                arguments={"symbol": "VPB"},
+                purpose="get price",
+                required_permission="READ_DATA",
+            )
+        ],
     )
 
     controller = ChatController(
@@ -238,7 +246,15 @@ def test_handle_natural_language_emits_planning_and_synthesizing():
     )
     fake_plan = AssistantPlan(
         intent="lookup",
-        steps=[ToolPlanStep(step_id="s1", tool_name="watchlist.scan", arguments={}, purpose="scan", required_permission="READ_DATA")],
+        steps=[
+            ToolPlanStep(
+                step_id="s1",
+                tool_name="watchlist.scan",
+                arguments={},
+                purpose="scan",
+                required_permission="READ_DATA",
+            )
+        ],
     )
 
     controller = ChatController(

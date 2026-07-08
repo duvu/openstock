@@ -5,7 +5,11 @@ from dataclasses import dataclass
 
 
 def _log_llm_error(
-    stage: str, exc: Exception, *, attempt: int | None = None, cause: Exception | None = None
+    stage: str,
+    exc: Exception,
+    *,
+    attempt: int | None = None,
+    cause: Exception | None = None,
 ) -> None:
     try:
         import structlog
@@ -21,6 +25,7 @@ def _log_llm_error(
         )
     except Exception:  # noqa: BLE001
         pass
+
 
 # ---------------------------------------------------------------------------
 # Defaults
