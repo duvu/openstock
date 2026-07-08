@@ -52,7 +52,7 @@ if _TEXTUAL_AVAILABLE:
 
         def show_user_input(self, text: str) -> None:
             """Echo the user's raw input back into the stream."""
-            self._write(f"[bold cyan]> {text}[/bold cyan]")
+            self._write(f"[bold cyan]❯ {text}[/bold cyan]")
 
         def show_assistant_message(self, text: str, style: str | None = None) -> None:
             """Render an assistant message, optionally with a style."""
@@ -62,38 +62,52 @@ if _TEXTUAL_AVAILABLE:
                 self._write(text)
 
         def show_command_result(self, command: str, result: "RenderableType") -> None:
-            """Render a command result preceded by the command name."""
+            """Render a command result preceded by the command label."""
             self._write(f"[dim]$ {command}[/dim]")
             self._write(result)
+            self._write("")  # spacing after command output
 
         def show_error(self, message: str, source: str | None = None) -> None:
             """Render an error message, optionally with a source label."""
-            src = f"[dim] ({source})[/dim]" if source else ""
+            src = f" ({source})" if source else ""
             self._write(f"[bold red]✗ Error{src}:[/bold red] {message}")
 
         def show_warning(self, message: str, source: str | None = None) -> None:
             """Render a warning message, optionally with a source label."""
-            src = f"[dim] ({source})[/dim]" if source else ""
+            src = f" ({source})" if source else ""
             self._write(f"[yellow]⚠ Warning{src}:[/yellow] {message}")
 
         def show_trace_event(self, event: "TraceEvent") -> None:
-            """Render a tool TraceEvent inline."""
+            """Render a tool TraceEvent inline with consistent formatting."""
             if event.status == "RUNNING":
-                self._write(f"[dim]⟳ {event.tool_name} RUNNING…[/dim]")
+                self._write(f"  [dim]⟳ {event.tool_name}…[/dim]")
             elif event.status == "SUCCESS":
                 ms = (
-                    f" {event.duration_ms:.0f}ms"
+                    f" ({event.duration_ms:.0f}ms)"
                     if event.duration_ms is not None
                     else ""
                 )
-                self._write(f"[green]✓ {event.tool_name} SUCCESS{ms}[/green]")
+                self._write(f"  [green]✓ {event.tool_name}{ms}[/green]")
             else:
                 ms = (
-                    f" {event.duration_ms:.0f}ms"
+                    f" ({event.duration_ms:.0f}ms)"
                     if event.duration_ms is not None
                     else ""
                 )
-                self._write(f"[red]✗ {event.tool_name} FAILED{ms}[/red]")
+                self._write(f"  [red]✗ {event.tool_name}{ms}[/red]")
+
+        def show_data_ensure_progress(
+            self, step: str, status: str, detail: str = ""
+        ) -> None:
+            """Show data provisioning progress inline."""
+            if status == "running":
+                self._write(f"  [dim yellow]⟳ {step}…[/dim yellow]")
+            elif status == "done":
+                suffix = f" — {detail}" if detail else ""
+                self._write(f"  [green]✓ {step}{suffix}[/green]")
+            else:
+                suffix = f" — {detail}" if detail else ""
+                self._write(f"  [red]✗ {step}{suffix}[/red]")
 
         def show_table_or_markup(self, markup: "RenderableType") -> None:
             """Render arbitrary rich markup or Rich Renderable."""
@@ -115,6 +129,10 @@ if _TEXTUAL_AVAILABLE:
             )
             detail = f" — {details}" if details else ""
             self._write(f"[{colour}]⬡ Deploy: {status}{detail}[/{colour}]")
+
+        def show_section_break(self) -> None:
+            """Render a visual separator between logical output sections."""
+            self._write("[dim]───────────────────────────────────────[/dim]")
 
         def clear_visible(self) -> None:
             """Clear the visible stream only. Does NOT delete logs or history."""
@@ -162,6 +180,11 @@ else:
         def show_trace_event(self, event: "TraceEvent") -> None:
             pass
 
+        def show_data_ensure_progress(
+            self, step: str, status: str, detail: str = ""
+        ) -> None:
+            pass
+
         def show_table_or_markup(self, markup: "RenderableType") -> None:
             pass
 
@@ -169,6 +192,9 @@ else:
             pass
 
         def show_deploy_status(self, status: str, details: str | None = None) -> None:
+            pass
+
+        def show_section_break(self) -> None:
             pass
 
         def clear_visible(self) -> None:

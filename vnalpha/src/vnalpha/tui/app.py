@@ -22,9 +22,11 @@ def _load_dotenv() -> None:
 try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
+    from textual.widgets import Static
 
     from vnalpha.tui.widgets.composer_input import ComposerInput
     from vnalpha.tui.widgets.output_stream import OutputStream
+    from vnalpha.tui.widgets.status_bar import StatusBar
 
     _TEXTUAL_AVAILABLE = True
 except ImportError:
@@ -39,8 +41,10 @@ if _TEXTUAL_AVAILABLE:
 
         Layout
         ------
+        StatusBar      (compact 1-row status strip at the top)
         OutputStream   (scrollable, fills remaining terminal height)
         ComposerInput  (fixed 3-row input bar at the bottom)
+        FooterHint     (compact 1-row keybinding hints at the very bottom)
 
         Input routing
         -------------
@@ -57,6 +61,10 @@ if _TEXTUAL_AVAILABLE:
         Screen {
             layout: vertical;
         }
+        StatusBar {
+            height: 1;
+            max-height: 1;
+        }
         OutputStream {
             height: 1fr;
             min-height: 5;
@@ -64,6 +72,14 @@ if _TEXTUAL_AVAILABLE:
         ComposerInput {
             height: 3;
             min-height: 3;
+        }
+        #footer-hint {
+            height: 1;
+            max-height: 1;
+            width: 100%;
+            background: $surface-darken-1;
+            color: $text-muted;
+            padding: 0 1;
         }
         """
 
@@ -83,9 +99,14 @@ if _TEXTUAL_AVAILABLE:
             self._router = None
 
         def compose(self) -> ComposeResult:
-            """Yield OutputStream then ComposerInput — single workspace layout."""
+            """Yield StatusBar, OutputStream, ComposerInput, FooterHint."""
+            yield StatusBar(id="status-bar")
             yield OutputStream(id="output-stream")
             yield ComposerInput(id="composer-input")
+            yield Static(
+                "Enter submit · ↑/↓ history · Ctrl+L clear · /help commands · Esc cancel",
+                id="footer-hint",
+            )
 
         def on_mount(self) -> None:
             """Initialise the input router after widgets are mounted."""
@@ -100,6 +121,7 @@ if _TEXTUAL_AVAILABLE:
             from vnalpha.tui.input_router import TuiInputRouter
 
             output = self.query_one("#output-stream", OutputStream)
+            status_bar = self.query_one("#status-bar", StatusBar)
 
             def _on_busy(busy: bool) -> None:
                 try:
@@ -112,6 +134,7 @@ if _TEXTUAL_AVAILABLE:
                 output_stream=output,
                 target_date=self.target_date,
                 on_busy_change=_on_busy,
+                status_bar=status_bar,
             )
 
         def _emit_tui_started(self) -> None:

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from vnalpha.tui.widgets.output_stream import OutputStream
+    from vnalpha.tui.widgets.status_bar import StatusBar
 
 
 class TuiInputRouter:
@@ -32,10 +33,12 @@ class TuiInputRouter:
         output_stream: "OutputStream",
         target_date: str | None = None,
         on_busy_change: Callable[[bool], None] | None = None,
+        status_bar: "StatusBar | None" = None,
     ) -> None:
         self._output = output_stream
         self._target_date = target_date
         self._on_busy_change = on_busy_change
+        self._status_bar = status_bar
         self._busy = False
         self._chat_controller = None
         self._command_executor = None
@@ -76,6 +79,7 @@ class TuiInputRouter:
 
             def _on_trace(event) -> None:
                 self._output.show_trace_event(event)
+                self._update_trace_status(event)
 
             self._chat_controller = ChatController(
                 target_date=self._target_date,
@@ -137,11 +141,16 @@ class TuiInputRouter:
             return
 
         self._set_busy(True)
+        self._set_status_routing()
         try:
             if raw.startswith("/"):
                 await self._route_command(raw)
             else:
                 await self._route_chat(raw)
+        except Exception as exc:
+            self._set_status_error(str(exc))
+            self._output.show_error(str(exc), source="router")
+            self._capture_render_error(exc)
         finally:
             self._set_busy(False)
 
@@ -152,15 +161,24 @@ class TuiInputRouter:
     async def _route_command(self, raw: str) -> None:
         """Execute a slash command via CommandExecutor and render result."""
         self._emit_routed("command", raw)
+        self._set_status_command(raw)
         try:
             if self._command_executor is None:
                 self._output.show_error("CommandExecutor unavailable.", source="router")
+                self._set_status_error("CommandExecutor unavailable")
                 return
             result = await asyncio.to_thread(self._command_executor.execute, raw)
             markup = self._result_to_markup(result)
             self._output.show_command_result(raw, markup)
+            # Check for warnings in result
+            warnings = getattr(result, "warnings", None)
+            if warnings:
+                self._set_status_warning("; ".join(warnings[:2]))
+            else:
+                self._set_status_ready()
         except Exception as exc:
             self._output.show_error(str(exc), source="command")
+            self._set_status_error(str(exc))
             self._capture_render_error(exc)
 
     def _result_to_markup(self, result) -> str:
@@ -178,13 +196,17 @@ class TuiInputRouter:
     async def _route_chat(self, raw: str) -> None:
         """Dispatch natural-language text to ChatController."""
         self._emit_routed("chat", raw)
+        self._set_status_chat()
         try:
             if self._chat_controller is None:
                 self._output.show_error("ChatController unavailable.", source="router")
+                self._set_status_error("ChatController unavailable")
                 return
             await asyncio.to_thread(self._chat_controller.handle_turn, raw)
+            self._set_status_ready()
         except Exception as exc:
             self._output.show_error(str(exc), source="chat")
+            self._set_status_error(str(exc))
             self._capture_render_error(exc)
 
     # ------------------------------------------------------------------
@@ -212,6 +234,47 @@ class TuiInputRouter:
                 self._chat_controller.cancel_pending_plan()
             except Exception as exc:
                 self._output.show_error(str(exc), source="cancel")
+
+    # ------------------------------------------------------------------
+    # Status bar helpers
+    # ------------------------------------------------------------------
+
+    def _set_status_routing(self) -> None:
+        self._update_status("ROUTING_INPUT", label="Routing…")
+
+    def _set_status_command(self, raw: str) -> None:
+        self._update_status("COMMAND_RUNNING", label=raw[:40])
+
+    def _set_status_chat(self) -> None:
+        self._update_status("CHAT_THINKING", label="Thinking…")
+
+    def _set_status_ready(self) -> None:
+        self._update_status("READY")
+
+    def _set_status_error(self, detail: str) -> None:
+        self._update_status("ERROR", detail=detail[:80])
+
+    def _set_status_warning(self, detail: str) -> None:
+        self._update_status("WARNING", detail=detail[:80])
+
+    def _update_trace_status(self, event) -> None:
+        """Update status bar based on tool trace events."""
+        if event.status == "RUNNING":
+            self._update_status("TOOL_RUNNING", label=event.tool_name)
+
+    def _update_status(
+        self, state_name: str, label: str = "", detail: str = ""
+    ) -> None:
+        if self._status_bar is None:
+            return
+        try:
+            from vnalpha.tui.runtime_status import RuntimeState, RuntimeStatus
+
+            state = RuntimeState(state_name)
+            new_status = RuntimeStatus(state=state, label=label, detail=detail)
+            self._status_bar.update_status(new_status)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Observability helpers
