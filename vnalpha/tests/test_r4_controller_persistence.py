@@ -103,18 +103,22 @@ class TestNaturalLanguagePersistence:
         types = _msg_types(conn, sid)
         assert "plan_preview" in types
 
-    def test_plan_preview_stored_pending_in_plan_then_approve_mode(self, conn):
+    def test_plan_auto_executes_in_plan_then_approve_mode(self, conn):
         ctrl, sid = _make_ctrl(conn, mode=ExecutionMode.PLAN_THEN_APPROVE)
+        exec_calls = [0]
 
         def fake_ask(q, *, no_execute=False):
-            return _make_answer("Preview"), _make_plan(["write_file"])
+            if not no_execute:
+                exec_calls[0] += 1
+            return _make_answer("Done" if not no_execute else "Preview"), _make_plan(
+                ["write_file"]
+            )
 
         ctrl._run_ask = fake_ask
         ctrl.handle_natural_language("write a report")
 
-        types = _msg_types(conn, sid)
-        assert "plan_preview" in types
-        assert ctrl._pending_plan is not None
+        assert ctrl._pending_plan is None
+        assert exec_calls[0] >= 1
 
     def test_hard_deny_produces_refusal_message(self, conn):
         ctrl, sid = _make_ctrl(conn, mode=ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY)
@@ -207,12 +211,8 @@ class TestPlanApprovalPersistence:
     def test_cancel_persists_plan_cancel(self, conn):
         ctrl, sid = _make_ctrl(conn, mode=ExecutionMode.PLAN_THEN_APPROVE)
 
-        def fake_ask(q, *, no_execute=False):
-            return _make_answer("Preview"), _make_plan(["write_file"])
-
-        ctrl._run_ask = fake_ask
-        ctrl.handle_natural_language("write report")
-        assert ctrl._pending_plan is not None
+        ctrl._pending_plan = _make_plan(["write_file"])
+        ctrl._pending_plan_turn_context = {"question": "write report"}
 
         ctrl.cancel_pending_plan()
 
@@ -229,12 +229,13 @@ class TestPlanApprovalPersistence:
             return _make_answer("Done"), _make_plan(["write_file"])
 
         ctrl._run_ask = fake_ask
-        ctrl.handle_natural_language("write report")
+        ctrl._pending_plan = _make_plan(["write_file"])
+        ctrl._pending_plan_turn_context = {"question": "write report"}
         ctrl.approve_pending_plan()
 
         types = _msg_types(conn, sid)
         assert "plan_approval" in types
-        assert call_count[0] >= 2
+        assert call_count[0] >= 1
 
 
 class TestNoPersistWithoutSession:

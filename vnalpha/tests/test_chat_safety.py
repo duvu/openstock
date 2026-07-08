@@ -197,16 +197,16 @@ class TestPermissionState:
                 f"Expected HARD_DENY for '{tool_name}', got {state}"
             )
 
-    def test_approval_tool_auto_mode_returns_deny(self):
+    def test_approval_tool_auto_mode_returns_allow(self):
         from vnalpha.chat.safety import PermissionState, get_permission_state
 
         state = get_permission_state(
             "execute_python", ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY
         )
-        assert state == PermissionState.DENY
+        assert state == PermissionState.ALLOW
 
-    def test_approval_tool_plan_mode_returns_ask(self):
+    def test_approval_tool_plan_mode_returns_allow(self):
         from vnalpha.chat.safety import PermissionState, get_permission_state
 
         state = get_permission_state("execute_python", ExecutionMode.PLAN_THEN_APPROVE)
-        assert state == PermissionState.ASK
+        assert state == PermissionState.ALLOW

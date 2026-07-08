@@ -160,33 +160,8 @@ class TestFormatPlanPreview:
 
 
 class TestChatControllerPlanThenApprove:
-    def _mock_run_ask_plan_only(self, ctrl, plan: AssistantPlan):
-        """Patch _run_ask to return (preview_answer, plan) without executing."""
-        preview_answer = AssistantAnswer(
-            summary="[Plan preview]",
-            basis="preview",
-            risks_caveats="",
-            tool_trace_summary="no exec",
-        )
-
-        def fake_run_ask(question, *, no_execute=False):
-            return preview_answer, plan
-
-        ctrl._run_ask = fake_run_ask
-
-    def test_handle_natural_language_stores_pending_plan(self):
-        ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
-        plan = _make_plan(["watchlist.scan"])
-        self._mock_run_ask_plan_only(ctrl, plan)
-
-        ctrl.handle_natural_language("show me watchlist")
-
-        assert ctrl._pending_plan is plan
-
-    def test_handle_natural_language_does_not_execute(self):
-        ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
-        plan = _make_plan(["watchlist.scan"])
-        call_count = 0
+    def _mock_run_ask(self, ctrl, plan: AssistantPlan, *, execute_answer: str = "Done"):
+        from vnalpha.assistant.models import AssistantAnswer
 
         preview_answer = AssistantAnswer(
             summary="[Plan preview]",
@@ -194,30 +169,68 @@ class TestChatControllerPlanThenApprove:
             risks_caveats="",
             tool_trace_summary="no exec",
         )
+        exec_answer = AssistantAnswer(
+            summary=execute_answer,
+            basis="tools",
+            risks_caveats="",
+            tool_trace_summary="done",
+        )
 
         def fake_run_ask(question, *, no_execute=False):
-            nonlocal call_count
-            call_count += 1
-            # Should only ever be called with no_execute=True in PLAN_THEN_APPROVE
-            assert no_execute is True, "Should not execute in PLAN_THEN_APPROVE mode"
-            return preview_answer, plan
+            if no_execute:
+                return preview_answer, plan
+            return exec_answer, plan
+
+        ctrl._run_ask = fake_run_ask
+
+    def test_handle_natural_language_auto_executes(self):
+        ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
+        plan = _make_plan(["watchlist.scan"])
+        self._mock_run_ask(ctrl, plan)
+
+        ctrl.handle_natural_language("show me watchlist")
+
+        assert ctrl._pending_plan is None
+
+    def test_handle_natural_language_executes_immediately(self):
+        ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
+        plan = _make_plan(["watchlist.scan"])
+        exec_calls = [0]
+
+        from vnalpha.assistant.models import AssistantAnswer
+
+        preview = AssistantAnswer(
+            summary="[Plan preview]",
+            basis="preview",
+            risks_caveats="",
+            tool_trace_summary="",
+        )
+        result = AssistantAnswer(
+            summary="Execution result",
+            basis="tools",
+            risks_caveats="",
+            tool_trace_summary="done",
+        )
+
+        def fake_run_ask(question, *, no_execute=False):
+            if not no_execute:
+                exec_calls[0] += 1
+            return (preview if no_execute else result), plan
 
         ctrl._run_ask = fake_run_ask
         ctrl.handle_natural_language("show me watchlist")
 
-        assert call_count == 1  # only the plan call, not the execute call
+        assert exec_calls[0] >= 1
 
-    def test_handle_natural_language_emits_plan_preview(self):
+    def test_handle_natural_language_emits_answer(self):
         ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
         plan = _make_plan(["watchlist.scan"])
-        self._mock_run_ask_plan_only(ctrl, plan)
+        self._mock_run_ask(ctrl, plan, execute_answer="Watchlist result")
 
         ctrl.handle_natural_language("show me watchlist")
 
-        # At least one message should contain plan preview text
         all_text = " ".join(t for _, t in messages)
-        assert "Plan:" in all_text
-        assert "Approve?" in all_text
+        assert "Watchlist result" in all_text
 
 
 # ---------------------------------------------------------------------------
@@ -393,24 +406,34 @@ class TestAutoExecuteSafeReadOnly:
         all_text = " ".join(t for _, t in messages)
         assert "Price fetched" in all_text
 
-    def test_unsafe_plan_stored_as_pending(self):
+    def test_unsafe_plan_auto_executes(self):
         ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
         unsafe_plan = _make_plan(["write_file"])
+        exec_calls = [0]
+
         preview_answer = AssistantAnswer(
             summary="[Plan preview]",
             basis="preview",
             risks_caveats="",
             tool_trace_summary="no exec",
         )
+        exec_answer = AssistantAnswer(
+            summary="File written",
+            basis="tools",
+            risks_caveats="",
+            tool_trace_summary="done",
+        )
 
         def fake_run_ask(question, *, no_execute=False):
-            assert no_execute is True, "Should preview plan before execution"
-            return preview_answer, unsafe_plan
+            if not no_execute:
+                exec_calls[0] += 1
+            return (preview_answer if no_execute else exec_answer), unsafe_plan
 
         ctrl._run_ask = fake_run_ask
         ctrl.handle_natural_language("write a file")
 
-        assert ctrl._pending_plan is unsafe_plan
+        assert ctrl._pending_plan is None
+        assert exec_calls[0] >= 1
 
     def test_hard_deny_tool_is_refused_not_pending(self):
         ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY)

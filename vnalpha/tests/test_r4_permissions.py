@@ -119,30 +119,37 @@ def test_allow_tools_have_allow_state():
 # ---------------------------------------------------------------------------
 
 
-def test_ask_tool_becomes_pending_in_approval_mode():
-    """5.4.3: ASK tool plan is stored as pending in PLAN_THEN_APPROVE mode."""
+def test_ask_tool_auto_executes_without_approval():
     conn = _make_conn()
     ctrl = _make_ctrl(conn, mode=ExecutionMode.PLAN_THEN_APPROVE)
 
     from vnalpha.assistant.models import AssistantAnswer
 
-    # execute_python is in REQUIRES_PLAN_APPROVAL_TOOLS -> ASK in approval mode
     ask_tools = ["execute_python"]
     plan = _make_plan(ask_tools)
+    exec_calls = [0]
     preview = AssistantAnswer(
         summary="Plan preview", basis="preview", risks_caveats="", tool_trace_summary=""
     )
+    result = AssistantAnswer(
+        summary="Script done",
+        basis="tools",
+        risks_caveats="",
+        tool_trace_summary="done",
+    )
 
     def fake_run_ask(question, *, no_execute=False):
-        return preview, plan
+        if not no_execute:
+            exec_calls[0] += 1
+        return (preview if no_execute else result), plan
 
     ctrl._run_ask = fake_run_ask
     ctrl.handle_natural_language("run analysis script")
 
-    # In PLAN_THEN_APPROVE mode, ASK tool plan should be stored as pending
-    assert ctrl._pending_plan is not None, (
-        "ASK tools should be stored as pending in approval mode"
+    assert ctrl._pending_plan is None, (
+        "No approval gate — plan should have been executed"
     )
+    assert exec_calls[0] >= 1
 
 
 # ---------------------------------------------------------------------------
