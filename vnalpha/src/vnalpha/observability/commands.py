@@ -6,7 +6,11 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from vnalpha.observability.audit import log_audit
-from vnalpha.observability.context import get_correlation_id, get_run_context
+from vnalpha.observability.context import (
+    RunContext,
+    get_correlation_id,
+    get_run_context,
+)
 from vnalpha.observability.jsonl import append_jsonl
 from vnalpha.observability.redaction import redact_str, redaction_status
 
@@ -151,3 +155,38 @@ def log_command_failure(
         )
     except Exception:  # noqa: BLE001
         pass
+
+
+# ---------------------------------------------------------------------------
+# Restore logging stub (task 9.6)
+# ---------------------------------------------------------------------------
+
+def log_restore_event(
+    event_type: str,
+    summary: str,
+    *,
+    run_ctx: RunContext | None = None,
+    status: str = "OK",
+    backup_path: str = "",
+    restore_target: str = "",
+    mode: str = "redacted",
+) -> None:
+    """Log a warehouse-restore event to commands.jsonl and audit.jsonl.
+
+    Stub — wired once ``openstock-restore-warehouse`` script is created.
+    Until then this function is a no-op placeholder so callers can be
+    written and tested before the shell script exists.
+
+    Args:
+        event_type:    e.g. ``RESTORE_STARTED``, ``RESTORE_COMPLETED``, ``RESTORE_FAILED``
+        summary:       human-readable description
+        run_ctx:       active RunContext (uses thread-local default if None)
+        status:        OK | FAILED | STARTED
+        backup_path:   source backup file being restored
+        restore_target: destination warehouse path
+        mode:          redaction mode
+    """
+    # TODO(9.6): implement when openstock-restore-warehouse script is added.
+    # When implemented, mirror the pattern from log_command_start / log_command_end:
+    # write a record to run_ctx.commands_path and call log_audit().
+    pass

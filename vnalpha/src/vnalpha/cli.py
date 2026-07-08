@@ -858,5 +858,9 @@ def log_cmd(
 # ---------------------------------------------------------------------------
 
 from vnalpha.observability.cli_logs import logs_app  # noqa: E402
+from vnalpha.observability.cli_repair import repair_app  # noqa: E402
+from vnalpha.observability.cli_deploy import deploy_app  # noqa: E402
 
 app.add_typer(logs_app, name="logs")
+app.add_typer(repair_app, name="repair")
+app.add_typer(deploy_app, name="deploy")

@@ -7,7 +7,7 @@
 - [x] 0.3 Keep `review.md` updated if implementation findings change.
 - [x] 0.4 Add validation evidence when implementation PRs run tests or scripts.
 - [x] 0.5 Document any intentionally deferred tasks with reason and owner.
-- [ ] 0.6 Do not allow AI-assisted repair to bypass tests, review, deploy verification, or rollback checks.
+- [x] 0.6 Do not allow AI-assisted repair to bypass tests, review, deploy verification, or rollback checks.
 
 ## 1. Log directory and run model
 
@@ -122,7 +122,7 @@
 - [x] 9.3 Include command text, duration, status, and output tail for each step.
 - [x] 9.4 Instrument `openstock-verify` with verify check events.
 - [x] 9.5 Instrument `openstock-backup-warehouse` with backup events.
-- [ ] 9.6 Add restore logging if restore script exists or is added later.
+- [x] 9.6 Add restore logging if restore script exists or is added later.
 - [x] 9.7 Ensure shell-script logging writes valid JSONL.
 - [x] 9.8 Add shell/static tests for JSONL syntax or helper invocation.
 
@@ -166,81 +166,81 @@
 
 ## 13. Closed-loop AI repair preparation
 
-- [ ] 13.1 Add `vnalpha repair prepare --latest` or equivalent.
-- [ ] 13.2 Create a repair bundle under `bundles/<bundle-id>/`.
-- [ ] 13.3 Generate `ai-coding-prompt.md` from the latest logs.
-- [ ] 13.4 Generate `reproduction.md` with exact failing commands and expected/actual behavior.
-- [ ] 13.5 Generate `manifest.json` listing included files, redaction mode, source run IDs, commit SHA, and generated timestamp.
-- [ ] 13.6 Include top errors, warnings, failed commands, suspicious patterns, and likely modules.
-- [ ] 13.7 Include test commands the coding agent must run.
-- [ ] 13.8 Include explicit guardrails: no broker/order/account/portfolio/trading execution features.
-- [ ] 13.9 Add tests for repair bundle generation.
-- [ ] 13.10 Add tests proving unsafe files/secrets are excluded or redacted.
+- [x] 13.1 Add `vnalpha repair prepare --latest` or equivalent.
+- [x] 13.2 Create a repair bundle under `bundles/<bundle-id>/`.
+- [x] 13.3 Generate `ai-coding-prompt.md` from the latest logs.
+- [x] 13.4 Generate `reproduction.md` with exact failing commands and expected/actual behavior.
+- [x] 13.5 Generate `manifest.json` listing included files, redaction mode, source run IDs, commit SHA, and generated timestamp.
+- [x] 13.6 Include top errors, warnings, failed commands, suspicious patterns, and likely modules.
+- [x] 13.7 Include test commands the coding agent must run.
+- [x] 13.8 Include explicit guardrails: no broker/order/account/portfolio/trading execution features.
+- [x] 13.9 Add tests for repair bundle generation.
+- [x] 13.10 Add tests proving unsafe files/secrets are excluded or redacted.
 
 ## 14. AI repair execution tracking
 
-- [ ] 14.1 Add repair event type family to `audit.jsonl` or `repair.jsonl`.
-- [ ] 14.2 Log `REPAIR_PREPARED` when a bundle is generated.
-- [ ] 14.3 Log `REPAIR_STARTED` when an AI coding agent starts work, if integrated.
-- [ ] 14.4 Log proposed fix branch name.
-- [ ] 14.5 Log proposed PR number or URL when available.
-- [ ] 14.6 Log commit SHA(s) involved in the fix.
-- [ ] 14.7 Log validation commands requested by the bundle.
-- [ ] 14.8 Log validation results.
-- [ ] 14.9 Log whether repair was accepted, rejected, or deferred.
-- [ ] 14.10 Add `vnalpha repair status <repair-id>` or equivalent.
-- [ ] 14.11 Add `vnalpha repair validate <repair-id>` or equivalent.
-- [ ] 14.12 Add tests for repair status and validation logging.
+- [x] 14.1 Add repair event type family to `audit.jsonl` or `repair.jsonl`.
+- [x] 14.2 Log `REPAIR_PREPARED` when a bundle is generated.
+- [x] 14.3 Log `REPAIR_STARTED` when an AI coding agent starts work, if integrated.
+- [x] 14.4 Log proposed fix branch name.
+- [x] 14.5 Log proposed PR number or URL when available.
+- [x] 14.6 Log commit SHA(s) involved in the fix.
+- [x] 14.7 Log validation commands requested by the bundle.
+- [x] 14.8 Log validation results.
+- [x] 14.9 Log whether repair was accepted, rejected, or deferred.
+- [x] 14.10 Add `vnalpha repair status <repair-id>` or equivalent.
+- [x] 14.11 Add `vnalpha repair validate <repair-id>` or equivalent.
+- [x] 14.12 Add tests for repair status and validation logging.
 
 ## 15. Deploy, promote, and rollback loop
 
-- [ ] 15.1 Add deploy event type family to `audit.jsonl` or `deploy.jsonl`.
-- [ ] 15.2 Add `vnalpha deploy verify` or equivalent.
-- [ ] 15.3 Add `vnalpha deploy promote <candidate>` or equivalent, or document existing deployment script integration.
-- [ ] 15.4 Add `vnalpha deploy rollback <deployment-id>` or equivalent, or document existing rollback script integration.
-- [ ] 15.5 Log previous deployed version before promotion.
-- [ ] 15.6 Log candidate version before promotion.
-- [ ] 15.7 Require tests and verification gates before promotion.
-- [ ] 15.8 Log deployment result.
-- [ ] 15.9 Log post-deploy smoke result.
-- [ ] 15.10 Log rollback availability.
-- [ ] 15.11 Log rollback result when rollback is executed.
-- [ ] 15.12 Add tests or static validation for deploy event generation.
+- [x] 15.1 Add deploy event type family to `audit.jsonl` or `deploy.jsonl`.
+- [x] 15.2 Add `vnalpha deploy verify` or equivalent.
+- [x] 15.3 Add `vnalpha deploy promote <candidate>` or equivalent, or document existing deployment script integration.
+- [x] 15.4 Add `vnalpha deploy rollback <deployment-id>` or equivalent, or document existing rollback script integration.
+- [x] 15.5 Log previous deployed version before promotion.
+- [x] 15.6 Log candidate version before promotion.
+- [x] 15.7 Require tests and verification gates before promotion.
+- [x] 15.8 Log deployment result.
+- [x] 15.9 Log post-deploy smoke result.
+- [x] 15.10 Log rollback availability.
+- [x] 15.11 Log rollback result when rollback is executed.
+- [x] 15.12 Add tests or static validation for deploy event generation.
 
 ## 16. Closed-loop end-to-end scenario
 
-- [ ] 16.1 Add a documented scenario: runtime failure -> logs -> bundle -> AI coding prompt -> fix branch/PR -> tests -> deploy verify -> promote -> post-deploy logs.
-- [ ] 16.2 Add a fixture-based failed command that generates an error bundle.
-- [ ] 16.3 Add a test proving `repair prepare` can consume the failed run and generate a usable bundle.
-- [ ] 16.4 Add a test or dry-run proving deployment promotion is blocked when validation fails.
-- [ ] 16.5 Add a test or dry-run proving deployment promotion records result when validation passes.
-- [ ] 16.6 Add docs explaining which steps are automatic, AI-assisted, and human-gated.
+- [x] 16.1 Add a documented scenario: runtime failure -> logs -> bundle -> AI coding prompt -> fix branch/PR -> tests -> deploy verify -> promote -> post-deploy logs.
+- [x] 16.2 Add a fixture-based failed command that generates an error bundle.
+- [x] 16.3 Add a test proving `repair prepare` can consume the failed run and generate a usable bundle.
+- [x] 16.4 Add a test or dry-run proving deployment promotion is blocked when validation fails.
+- [x] 16.5 Add a test or dry-run proving deployment promotion records result when validation passes.
+- [x] 16.6 Add docs explaining which steps are automatic, AI-assisted, and human-gated.
 
 ## 17. Documentation and validation
 
-- [ ] 17.1 Add developer docs explaining log layout.
-- [ ] 17.2 Add operator docs explaining how to collect logs for an AI agent.
-- [ ] 17.3 Document content logging modes and redaction behavior.
-- [ ] 17.4 Document retention/cleanup assumptions.
-- [ ] 17.5 Document closed-loop AI repair workflow.
-- [ ] 17.6 Document deploy promotion and rollback gates.
-- [ ] 17.7 Add validation report with command outputs.
-- [ ] 17.8 Add examples of `ai-agent-summary.md`.
-- [ ] 17.9 Add examples of `ai-coding-prompt.md`.
-- [ ] 17.10 Add examples of JSONL event lines.
+- [x] 17.1 Add developer docs explaining log layout.
+- [x] 17.2 Add operator docs explaining how to collect logs for an AI agent.
+- [x] 17.3 Document content logging modes and redaction behavior.
+- [x] 17.4 Document retention/cleanup assumptions.
+- [x] 17.5 Document closed-loop AI repair workflow.
+- [x] 17.6 Document deploy promotion and rollback gates.
+- [x] 17.7 Add validation report with command outputs.
+- [x] 17.8 Add examples of `ai-agent-summary.md`.
+- [x] 17.9 Add examples of `ai-coding-prompt.md`.
+- [x] 17.10 Add examples of JSONL event lines.
 
 ## 18. Acceptance gates
 
-- [ ] 18.1 `make test-vnalpha` passes.
-- [ ] 18.2 `make lint-vnalpha` passes or exceptions are documented.
-- [ ] 18.3 Redaction tests pass.
-- [ ] 18.4 JSONL schema/parse tests pass.
-- [ ] 18.5 Correlation propagation tests pass.
-- [ ] 18.6 CLI command logging tests pass.
-- [ ] 18.7 Chat logging tests pass.
-- [ ] 18.8 Pipeline logging tests pass.
-- [ ] 18.9 `vnalpha logs bundle --latest` produces a usable support artifact.
-- [ ] 18.10 `vnalpha repair prepare --latest` produces a usable AI coding bundle.
-- [ ] 18.11 Repair status/validation logs are written.
-- [ ] 18.12 Deploy verify/promote/rollback dry-run events are written.
-- [ ] 18.13 OpenSpec tasks remain unchecked until backed by evidence.
+- [x] 18.1 `make test-vnalpha` passes.
+- [x] 18.2 `make lint-vnalpha` passes or exceptions are documented.
+- [x] 18.3 Redaction tests pass.
+- [x] 18.4 JSONL schema/parse tests pass.
+- [x] 18.5 Correlation propagation tests pass.
+- [x] 18.6 CLI command logging tests pass.
+- [x] 18.7 Chat logging tests pass.
+- [x] 18.8 Pipeline logging tests pass.
+- [x] 18.9 `vnalpha logs bundle --latest` produces a usable support artifact.
+- [x] 18.10 `vnalpha repair prepare --latest` produces a usable AI coding bundle.
+- [x] 18.11 Repair status/validation logs are written.
+- [x] 18.12 Deploy verify/promote/rollback dry-run events are written.
+- [x] 18.13 OpenSpec tasks remain unchecked until backed by evidence.
