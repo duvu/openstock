@@ -29,6 +29,24 @@ skip_if_no_textual = pytest.mark.skipif(
 )
 
 
+def _empty_conn():
+    import duckdb
+
+    from vnalpha.warehouse.migrations import run_migrations
+
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn)
+    return conn
+
+
+@pytest.fixture
+def mock_get_connection():
+    with patch(
+        "vnalpha.warehouse.connection.get_connection", return_value=_empty_conn()
+    ):
+        yield
+
+
 @skip_if_no_textual
 def test_chat_panel_creates_controller_on_init():
     from vnalpha.tui.widgets.chat_panel import ChatPanel
@@ -109,38 +127,33 @@ def test_no_local_assistant_dispatch_in_panel():
 
 @skip_if_no_textual
 @pytest.mark.asyncio
-async def test_vn_alpha_app_approve_plan_calls_controller():
+async def test_vn_alpha_app_approve_plan_calls_controller(mock_get_connection):
+    """action_approve_plan delegates to TuiInputRouter._handle_approve (new arch)."""
     from vnalpha.tui.app import VnAlphaApp
 
-    with patch("vnalpha.warehouse.connection.get_connection"):
-        app = VnAlphaApp(date="2024-01-10")
-        async with app.run_test(headless=True) as pilot:
-            panel = pilot.app.query_one("#chat-panel")
-            from vnalpha.assistant.models import AssistantPlan
+    app = VnAlphaApp(date="2024-01-10")
+    async with app.run_test(headless=True) as pilot:
+        mock_router = MagicMock()
+        pilot.app._router = mock_router
 
-            mock_ctrl = MagicMock()
-            mock_ctrl._pending_plan = AssistantPlan(intent="scan", steps=[])
-            panel._chat_controller = mock_ctrl
+        pilot.app.action_approve_plan()
+        await pilot.pause()
 
-            pilot.app.action_approve_plan()
-            await pilot.pause()
-
-            mock_ctrl.approve_pending_plan.assert_called_once()
+        mock_router._handle_approve.assert_called_once()
 
 
 @skip_if_no_textual
 @pytest.mark.asyncio
-async def test_vn_alpha_app_cancel_plan_calls_controller():
+async def test_vn_alpha_app_cancel_plan_calls_controller(mock_get_connection):
+    """action_cancel_pending_plan delegates to TuiInputRouter._handle_cancel (new arch)."""
     from vnalpha.tui.app import VnAlphaApp
 
-    with patch("vnalpha.warehouse.connection.get_connection"):
-        app = VnAlphaApp(date="2024-01-10")
-        async with app.run_test(headless=True) as pilot:
-            panel = pilot.app.query_one("#chat-panel")
-            mock_ctrl = MagicMock()
-            panel._chat_controller = mock_ctrl
+    app = VnAlphaApp(date="2024-01-10")
+    async with app.run_test(headless=True) as pilot:
+        mock_router = MagicMock()
+        pilot.app._router = mock_router
 
-            pilot.app.action_cancel_pending_plan()
-            await pilot.pause()
+        pilot.app.action_cancel_pending_plan()
+        await pilot.pause()
 
-            mock_ctrl.cancel_pending_plan.assert_called_once()
+        mock_router._handle_cancel.assert_called_once()

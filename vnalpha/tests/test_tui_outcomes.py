@@ -40,8 +40,10 @@ class TestOutcomeScreenImport:
         assert "escape" in bindings
 
     @pytest.mark.skipif(not HAS_TEXTUAL, reason="textual not installed")
-    def test_tui_app_has_outcomes_binding(self):
+    def test_tui_app_has_composer_input(self):
+        import inspect
+
         from vnalpha.tui.app import VnAlphaApp
 
-        bindings = [b.key for b in VnAlphaApp.BINDINGS]
-        assert "o" in bindings
+        src = inspect.getsource(VnAlphaApp.compose)
+        assert "ComposerInput" in src

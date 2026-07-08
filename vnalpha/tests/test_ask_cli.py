@@ -197,24 +197,24 @@ class TestAskFunctional:
 
 
 class TestTuiAskBinding:
-    def test_tui_app_has_ask_binding(self):
-        """VnAlphaApp BINDINGS must include the 'a' key."""
+    def test_tui_app_uses_composer_input(self):
+        """VnAlphaApp uses ComposerInput in new workspace design."""
         try:
             from vnalpha.tui.app import VnAlphaApp
         except ImportError:
             pytest.skip("textual not installed")
-        keys = [b.key for b in VnAlphaApp.BINDINGS]
-        assert "a" in keys
+        import inspect
 
-    def test_tui_app_ask_binding_label(self):
-        """The 'a' binding must have label 'Ask'."""
+        src = inspect.getsource(VnAlphaApp.compose)
+        assert "ComposerInput" in src
+
+    def test_tui_app_ask_via_chat_controller(self):
+        """Ask functionality routed via ChatController through TuiInputRouter."""
         try:
-            from vnalpha.tui.app import VnAlphaApp
+            from vnalpha.tui.input_router import TuiInputRouter
         except ImportError:
             pytest.skip("textual not installed")
-        binding = next((b for b in VnAlphaApp.BINDINGS if b.key == "a"), None)
-        assert binding is not None
-        assert binding.description == "Ask"
+        assert hasattr(TuiInputRouter, "_route_chat")
 
     def test_assistant_screen_importable(self):
         """AssistantScreen must be importable (skip if textual not installed)."""

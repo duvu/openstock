@@ -43,17 +43,20 @@ class TestCommandWidgets:
 
         assert CommandResultPanel is not None
 
-    def test_app_has_command_binding(self):
-        """TUI app must expose 'c' binding for command workspace."""
+    def test_app_commands_available_via_composer(self):
+        """TUI app routes /command input via ComposerInput (new workspace design)."""
+        import inspect
+
         from vnalpha.tui.app import VnAlphaApp
 
-        binding_keys = [b.key for b in VnAlphaApp.BINDINGS]
-        assert "c" in binding_keys, "Missing 'c' binding for command workspace"
+        src = inspect.getsource(VnAlphaApp.compose)
+        assert "ComposerInput" in src
 
-    def test_app_action_show_commands_exists(self):
-        from vnalpha.tui.app import VnAlphaApp
+    def test_command_screen_still_importable(self):
+        """CommandScreen remains importable (legacy, not mounted by default)."""
+        from vnalpha.tui.screens.command import CommandScreen
 
-        assert hasattr(VnAlphaApp, "action_show_commands")
+        assert CommandScreen is not None
 
 
 class TestCommandWidgetsStatic:
