@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from vnalpha.assistant.errors import SynthesisError
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
+from vnalpha.assistant.response_parser import parse_synthesis_response
 
 if TYPE_CHECKING:
     from vnalpha.assistant.gateway import LLMGatewayClient
@@ -74,35 +75,6 @@ def _build_synthesis_messages(
     ]
 
 
-def _strip_markdown_fence(text: str) -> str:
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines)
-    return text.strip()
-
-
-def _parse_synthesis_response(response_text: str) -> AssistantAnswer:
-    cleaned = _strip_markdown_fence(response_text)
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise SynthesisError(
-            f"Invalid JSON from synthesizer: {response_text[:100]}"
-        ) from exc
-    return AssistantAnswer(
-        summary=data.get("summary", ""),
-        basis=data.get("basis", ""),
-        risks_caveats=data.get("risks_caveats", ""),
-        tool_trace_summary=data.get("tool_trace_summary", ""),
-        missing_data=data.get("missing_data", []),
-        raw_tool_outputs=data.get("raw_tool_outputs", {}),
-    )
-
-
 class AnswerSynthesizer:
     def __init__(self, llm_client: "LLMGatewayClient"):
         self._client = llm_client
@@ -121,4 +93,4 @@ class AnswerSynthesizer:
         except Exception as exc:
             raise SynthesisError(f"LLM synthesis call failed: {exc}") from exc
         self.last_usage = usage
-        return _parse_synthesis_response(response_text)
+        return parse_synthesis_response(response_text)

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 import structlog
 
 from vnalpha.assistant.errors import IntentClassificationError
-from vnalpha.assistant.models import SUPPORTED_INTENTS, IntentResult
+from vnalpha.assistant.models import IntentResult
+from vnalpha.assistant.response_parser import parse_intent_response
 
 _log = structlog.get_logger("assistant.intent")
 
@@ -85,38 +85,6 @@ def _build_classifier_messages(user_prompt: str) -> list[dict]:
     ]
 
 
-def _strip_markdown_fence(text: str) -> str:
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        first_newline = stripped.find("\n")
-        if first_newline != -1:
-            stripped = stripped[first_newline + 1 :]
-        if stripped.endswith("```"):
-            stripped = stripped[: stripped.rfind("```")]
-    return stripped.strip()
-
-
-def _parse_classifier_response(response_text: str, user_prompt: str) -> IntentResult:
-    clean_text = _strip_markdown_fence(response_text)
-    try:
-        data = json.loads(clean_text)
-    except json.JSONDecodeError as exc:
-        raise IntentClassificationError(
-            f"Invalid JSON from classifier: {response_text[:100]}"
-        ) from exc
-    intent = data.get("intent", "unsupported_or_unsafe")
-    if intent not in SUPPORTED_INTENTS:
-        intent = "unsupported_or_unsafe"
-    return IntentResult(
-        intent=intent,
-        confidence=float(data.get("confidence", 0.5)),
-        entities=data.get("entities", {}),
-        needs_clarification=bool(data.get("needs_clarification", False)),
-        clarification_question=data.get("clarification_question"),
-        safety_flags=list(data.get("safety_flags", [])),
-    )
-
-
 class IntentClassifier:
     def __init__(self, llm_client: "LLMGatewayClient"):
         self._client = llm_client
@@ -141,7 +109,7 @@ class IntentClassifier:
         except Exception as exc:
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
         self.last_usage = usage
-        result = _parse_classifier_response(response_text, user_prompt)
+        result = parse_intent_response(response_text, user_prompt)
         _log.info(
             "intent_classified",
             intent=result.intent,
