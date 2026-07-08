@@ -219,8 +219,16 @@ class TestExecutorScanNoData:
 
 
 class TestExecutorExplainMissingData:
-    def test_executor_explain_missing_data_returns_none(self, conn, session_id):
-        """Explain on symbol with no data should return ToolOutput with data=None."""
+    def test_executor_explain_returns_result_or_none(self, conn, session_id):
+        """Explain on a symbol auto-provisions data if service is available.
+
+        With auto-data-provisioning, the executor attempts to sync + build
+        candidate data before running the tool.  The result is either:
+        - data: dict  (provisioning succeeded, service was reachable)
+        - data: None  (provisioning failed or service was down)
+
+        Both are valid outcomes; what must NOT happen is an unhandled exception.
+        """
         executor = AssistantExecutor(conn, assistant_session_id=session_id)
         step = _make_step(
             "candidate.explain",
@@ -230,7 +238,8 @@ class TestExecutorExplainMissingData:
         results = executor.execute(plan)
         assert "step_1" in results
         result = results["step_1"]
-        assert result["data"] is None
+        # data may be a dict (provisioning succeeded) or None (service unreachable)
+        assert result["data"] is None or isinstance(result["data"], dict)
 
 
 class TestExecutorPersistsToolTrace:
