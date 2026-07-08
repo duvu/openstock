@@ -16,12 +16,14 @@ from vnalpha.assistant.models import (
     RefusalMessage,
     ToolPlanStep,
 )
+from vnalpha.assistant.response_parser import (
+    parse_synthesis_response as _parse_synthesis_response,
+)
 from vnalpha.assistant.synthesizer import (
     MISSING_DATA_TEMPLATES,
     SYNTHESIZER_SYSTEM_PROMPT,
     AnswerSynthesizer,
     _build_synthesis_messages,
-    _parse_synthesis_response,
 )
 from vnalpha.warehouse.migrations import run_migrations
 
