@@ -157,3 +157,53 @@ class TestComputeLookbackStart:
         result = compute_lookback_start("not-a-date", 30)
         assert result is not None
         assert len(result) == 10
+
+
+class TestWeekendNonTradingDate:
+    """Task 3.8 — weekend and non-trading target dates work correctly."""
+
+    def test_canonical_bars_counted_up_to_weekend_target(self):
+        conn = _fresh_conn()
+        _insert_symbol(conn, "FPT")
+        _insert_canonical_bar(conn, "FPT", "2025-01-03")  # Friday
+        _insert_canonical_bar(conn, "FPT", "2025-01-02")  # Thursday
+
+        from vnalpha.data_availability.checks import get_canonical_ohlcv_status
+
+        # Target is Saturday — bars on/before Saturday should be counted
+        count = get_canonical_ohlcv_status(conn, "FPT", "2025-01-04", "2025-01-01")
+        assert count == 2
+
+    def test_lookback_start_from_weekend(self):
+        from vnalpha.data_availability.checks import compute_lookback_start
+
+        # Sunday target
+        result = compute_lookback_start("2025-01-05", 7)
+        assert result == "2024-12-29"
+
+    def test_ensure_with_weekend_target_uses_friday_data(self):
+        from vnalpha.data_availability import ensure_symbol_analysis_ready
+        from vnalpha.data_availability.policy import DataAvailabilityPolicy
+
+        conn = _fresh_conn()
+        _insert_symbol(conn, "FPT")
+        _insert_symbol(conn, "VNINDEX")
+        # Add enough bars (weekdays only, simulating market closure on weekends)
+        for day in range(1, 125):
+            from datetime import date, timedelta
+
+            d = date(2024, 6, 1) + timedelta(days=day)
+            if d.weekday() < 5:  # weekday only
+                _insert_canonical_bar(conn, "FPT", d.isoformat())
+                _insert_canonical_bar(conn, "VNINDEX", d.isoformat())
+        _insert_feature_snapshot(conn, "FPT", "2025-01-04")
+        _insert_candidate_score(conn, "FPT", "2025-01-04")
+
+        policy = DataAvailabilityPolicy(auto_sync=False, min_required_bars=50)
+        result = ensure_symbol_analysis_ready(
+            conn,
+            "FPT",
+            "2025-01-04",
+            policy=policy,  # Saturday
+        )
+        assert result.status.value == "READY"

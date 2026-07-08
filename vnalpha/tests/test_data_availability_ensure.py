@@ -313,3 +313,154 @@ class TestResultStructure:
         panel = result.to_panel_dict()
         assert "status" in panel
         assert "actions_taken" in panel
+
+
+class TestClientDI:
+    """Task 5.2 — VnstockClient DI is threaded to sync functions."""
+
+    def test_client_passed_to_sync_symbols(self):
+        from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
+        from vnalpha.data_availability.policy import DataAvailabilityPolicy
+
+        received_kwargs: list[dict] = []
+
+        def _capture_sync(conn, **kwargs):
+            received_kwargs.append(kwargs)
+            _insert_symbol(conn, "FPT")
+            return {"total": 1, "inserted": 1}
+
+        conn = _fresh_conn()
+        fake_client = object()
+        policy = DataAvailabilityPolicy(auto_sync=True, min_required_bars=1)
+        ensure_symbol_analysis_ready(
+            conn,
+            "FPT",
+            "2025-06-30",
+            policy=policy,
+            client=fake_client,
+            _sync_symbols_fn=_capture_sync,
+            _sync_ohlcv_fn=_noop_sync_ohlcv,
+            _build_canonical_fn=_noop_build_canonical,
+            _build_features_fn=_noop_build_features,
+            _score_universe_fn=_noop_score_universe,
+        )
+        assert received_kwargs[0].get("client") is fake_client
+
+    def test_client_passed_to_sync_ohlcv(self):
+        from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
+        from vnalpha.data_availability.policy import DataAvailabilityPolicy
+
+        received_kwargs: list[dict] = []
+
+        def _capture_ohlcv(conn, **kwargs):
+            received_kwargs.append(kwargs)
+            return {"inserted": 0, "skipped": 0}
+
+        conn = _fresh_conn()
+        _insert_symbol(conn, "FPT")
+        fake_client = object()
+        policy = DataAvailabilityPolicy(auto_sync=True, min_required_bars=200)
+        ensure_symbol_analysis_ready(
+            conn,
+            "FPT",
+            "2025-06-30",
+            policy=policy,
+            client=fake_client,
+            _sync_symbols_fn=_noop_sync_symbols,
+            _sync_ohlcv_fn=_capture_ohlcv,
+            _build_canonical_fn=_noop_build_canonical,
+            _build_features_fn=_noop_build_features,
+            _score_universe_fn=_noop_score_universe,
+        )
+        assert any(kw.get("client") is fake_client for kw in received_kwargs)
+
+    def test_source_and_base_url_passed_through(self):
+        from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
+        from vnalpha.data_availability.policy import DataAvailabilityPolicy
+
+        received_kwargs: list[dict] = []
+
+        def _capture_sync(conn, **kwargs):
+            received_kwargs.append(kwargs)
+            _insert_symbol(conn, "FPT")
+            return {"total": 1, "inserted": 1}
+
+        conn = _fresh_conn()
+        policy = DataAvailabilityPolicy(
+            auto_sync=True,
+            min_required_bars=1,
+            source="VCI",
+            base_url="http://test:9999",
+        )
+        ensure_symbol_analysis_ready(
+            conn,
+            "FPT",
+            "2025-06-30",
+            policy=policy,
+            _sync_symbols_fn=_capture_sync,
+            _sync_ohlcv_fn=_noop_sync_ohlcv,
+            _build_canonical_fn=_noop_build_canonical,
+            _build_features_fn=_noop_build_features,
+            _score_universe_fn=_noop_score_universe,
+        )
+        assert received_kwargs[0]["source"] == "VCI"
+        assert received_kwargs[0]["base_url"] == "http://test:9999"
+
+
+class TestFakeProviderFixtures:
+    """Task 5.4 — reusable fake provider response helpers for testing."""
+
+    def test_fake_sync_populates_symbol_master(self):
+        from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
+        from vnalpha.data_availability.models import EnsureDataAction, EnsureDataStatus
+        from vnalpha.data_availability.policy import DataAvailabilityPolicy
+
+        def fake_sync_symbols(conn, **kwargs):
+            _insert_symbol(conn, "HPG")
+            return {"total": 1, "inserted": 1}
+
+        def fake_sync_ohlcv(conn, **kwargs):
+            from datetime import date, timedelta
+
+            base = date(2025, 6, 30)
+            for i in range(130):
+                d = base - timedelta(days=i)
+                if d.weekday() < 5:
+                    _insert_canonical_bars(conn, "HPG", [d.isoformat()])
+            return {"inserted": 130, "skipped": 0}
+
+        def fake_build_canonical(conn, **kwargs):
+            return {"upserted": 130, "rejected": 0}
+
+        def fake_build_features(conn, **kwargs):
+            _insert_feature_snapshot(conn, "HPG", "2025-06-30")
+            return {"built": 1, "skipped": 0}
+
+        def fake_score(conn, **kwargs):
+            _insert_candidate_score(conn, "HPG", "2025-06-30")
+            return 1
+
+        conn = _fresh_conn()
+        _insert_symbol(conn, "VNINDEX")
+        _insert_canonical_bars(conn, "VNINDEX", self._make_dates(130))
+        policy = DataAvailabilityPolicy(auto_sync=True, min_required_bars=50)
+        result = ensure_symbol_analysis_ready(
+            conn,
+            "HPG",
+            "2025-06-30",
+            policy=policy,
+            _sync_symbols_fn=fake_sync_symbols,
+            _sync_ohlcv_fn=fake_sync_ohlcv,
+            _build_canonical_fn=fake_build_canonical,
+            _build_features_fn=fake_build_features,
+            _score_universe_fn=fake_score,
+        )
+        assert result.status == EnsureDataStatus.READY
+        assert EnsureDataAction.SYMBOLS_SYNCED in result.actions_taken
+        assert EnsureDataAction.SCORED in result.actions_taken
+
+    def _make_dates(self, n=130):
+        from datetime import date, timedelta
+
+        base = date(2025, 6, 30)
+        return [(base - timedelta(days=i)).isoformat() for i in range(n)]
