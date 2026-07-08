@@ -38,6 +38,7 @@ if _TEXTUAL_AVAILABLE:
             super().__init__(**kwargs)
             self.target_date = target_date
             self.horizon = horizon
+            self._conn = None
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -46,7 +47,7 @@ if _TEXTUAL_AVAILABLE:
                     f"Outcome Review — {self.target_date} | Horizon {self.horizon} sessions",
                     id="outcome-title",
                 )
-                yield Static(self._build_summary(), id="outcome-summary")
+                yield Static("Loading...", id="outcome-summary")
                 yield Label("Candidate Outcomes", id="outcome-candidates-label")
                 yield DataTable(id="outcome-candidates-table")
                 yield Label("Score Bucket Performance", id="outcome-buckets-label")
@@ -55,83 +56,112 @@ if _TEXTUAL_AVAILABLE:
                 yield DataTable(id="outcome-setups-table")
                 yield Label("Risk Flag Performance", id="outcome-risks-label")
                 yield DataTable(id="outcome-risks-table")
-                yield Static(self._build_pending_panel(), id="outcome-pending-panel")
+                yield Static("Loading...", id="outcome-pending-panel")
             yield Footer()
 
-        def _build_summary(self) -> str:
+        def _open_connection(self):
+            """Open a single connection for this screen mount. Returns conn or None."""
             try:
-                from vnalpha.outcomes.repositories import get_watchlist_outcome
                 from vnalpha.warehouse.connection import get_connection
                 from vnalpha.warehouse.migrations import run_migrations
 
                 conn = get_connection()
                 run_migrations(conn=conn)
-                result = get_watchlist_outcome(conn, self.target_date, self.horizon)
-                conn.close()
-                if result is None:
-                    return (
-                        f"No outcome data for {self.target_date} horizon={self.horizon}"
-                    )
-                hit_rate_str = (
-                    f"{result['hit_rate']:.1%}"
-                    if result.get("hit_rate") is not None
-                    else "—"
-                )
-                failure_rate_str = (
-                    f"{result['failure_rate']:.1%}"
-                    if result.get("failure_rate") is not None
-                    else "—"
-                )
-                return (
-                    f"Candidates: {result.get('candidate_count')} | "
-                    f"Complete: {result.get('complete_count')} | "
-                    f"Pending: {result.get('pending_count')} | "
-                    f"Hit Rate: {hit_rate_str} | "
-                    f"Failure Rate: {failure_rate_str}"
-                )
+                return conn
             except Exception as exc:
-                logger.warning(f"Error loading outcome summary: {exc}")
-                return "Outcome summary unavailable."
-
-        def _build_pending_panel(self) -> str:
-            try:
-                from vnalpha.outcomes.repositories import get_watchlist_outcome
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
-
-                conn = get_connection()
-                run_migrations(conn=conn)
-                result = get_watchlist_outcome(conn, self.target_date, self.horizon)
-                conn.close()
-                if result is None:
-                    return "No pending/missing data info available."
-                pending = result.get("pending_count") or 0
-                missing = result.get("missing_data_count") or 0
-                return (
-                    f"[Pending/Missing Data] "
-                    f"Pending horizons: {pending} | Missing data: {missing}\n"
-                    "Note: outcomes are retrospective research evaluation only."
-                )
-            except Exception as exc:
-                logger.warning(f"Error loading pending panel: {exc}")
-                return "Pending/missing data unavailable."
+                logger.warning(f"Error opening outcome screen connection: {exc}")
+                return None
 
         def on_mount(self) -> None:
+            self._conn = self._open_connection()
+            self._load_summary()
+            self._load_pending_panel()
             self._populate_candidates_table()
             self._populate_buckets_table()
             self._populate_setups_table()
             self._populate_risks_table()
 
+        def on_unmount(self) -> None:
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+                self._conn = None
+
+        def _load_summary(self) -> None:
+            try:
+                from vnalpha.outcomes.repositories import get_watchlist_outcome
+
+                result = (
+                    get_watchlist_outcome(self._conn, self.target_date, self.horizon)
+                    if self._conn
+                    else None
+                )
+                if result is None:
+                    text = (
+                        f"No outcome data for {self.target_date} horizon={self.horizon}"
+                    )
+                else:
+                    hit_rate_str = (
+                        f"{result['hit_rate']:.1%}"
+                        if result.get("hit_rate") is not None
+                        else "—"
+                    )
+                    failure_rate_str = (
+                        f"{result['failure_rate']:.1%}"
+                        if result.get("failure_rate") is not None
+                        else "—"
+                    )
+                    text = (
+                        f"Candidates: {result.get('candidate_count')} | "
+                        f"Complete: {result.get('complete_count')} | "
+                        f"Pending: {result.get('pending_count')} | "
+                        f"Hit Rate: {hit_rate_str} | "
+                        f"Failure Rate: {failure_rate_str}"
+                    )
+                self.query_one("#outcome-summary", Static).update(text)
+            except Exception as exc:
+                logger.warning(f"Error loading outcome summary: {exc}")
+                self.query_one("#outcome-summary", Static).update(
+                    "Outcome summary unavailable."
+                )
+
+        def _load_pending_panel(self) -> None:
+            try:
+                from vnalpha.outcomes.repositories import get_watchlist_outcome
+
+                result = (
+                    get_watchlist_outcome(self._conn, self.target_date, self.horizon)
+                    if self._conn
+                    else None
+                )
+                if result is None:
+                    text = "No pending/missing data info available."
+                else:
+                    pending = result.get("pending_count") or 0
+                    missing = result.get("missing_data_count") or 0
+                    text = (
+                        f"[Pending/Missing Data] "
+                        f"Pending horizons: {pending} | Missing data: {missing}\n"
+                        "Note: outcomes are retrospective research evaluation only."
+                    )
+                self.query_one("#outcome-pending-panel", Static).update(text)
+            except Exception as exc:
+                logger.warning(f"Error loading pending panel: {exc}")
+                self.query_one("#outcome-pending-panel", Static).update(
+                    "Pending/missing data unavailable."
+                )
+
         def _populate_candidates_table(self) -> None:
             try:
                 from vnalpha.outcomes.repositories import get_candidate_outcomes
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
 
-                conn = get_connection()
-                run_migrations(conn=conn)
-                rows = get_candidate_outcomes(conn, self.target_date, self.horizon)
-                conn.close()
+                rows = (
+                    get_candidate_outcomes(self._conn, self.target_date, self.horizon)
+                    if self._conn
+                    else []
+                )
                 table = self.query_one("#outcome-candidates-table", DataTable)
                 self._reset_table(
                     table,
@@ -181,13 +211,12 @@ if _TEXTUAL_AVAILABLE:
         def _populate_buckets_table(self) -> None:
             try:
                 from vnalpha.outcomes.repositories import list_score_bucket_performance
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
 
-                conn = get_connection()
-                run_migrations(conn=conn)
-                rows = list_score_bucket_performance(conn, self.horizon)
-                conn.close()
+                rows = (
+                    list_score_bucket_performance(self._conn, self.horizon)
+                    if self._conn
+                    else []
+                )
                 table = self.query_one("#outcome-buckets-table", DataTable)
                 self._reset_table(
                     table, "Bucket", "Count", "Avg Fwd Rtn", "Hit Rate", "Failure Rate"
@@ -222,13 +251,12 @@ if _TEXTUAL_AVAILABLE:
         def _populate_setups_table(self) -> None:
             try:
                 from vnalpha.outcomes.repositories import list_setup_type_performance
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
 
-                conn = get_connection()
-                run_migrations(conn=conn)
-                rows = list_setup_type_performance(conn, self.horizon)
-                conn.close()
+                rows = (
+                    list_setup_type_performance(self._conn, self.horizon)
+                    if self._conn
+                    else []
+                )
                 table = self.query_one("#outcome-setups-table", DataTable)
                 self._reset_table(
                     table,
@@ -268,13 +296,12 @@ if _TEXTUAL_AVAILABLE:
         def _populate_risks_table(self) -> None:
             try:
                 from vnalpha.outcomes.repositories import list_risk_flag_performance
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
 
-                conn = get_connection()
-                run_migrations(conn=conn)
-                rows = list_risk_flag_performance(conn, self.horizon)
-                conn.close()
+                rows = (
+                    list_risk_flag_performance(self._conn, self.horizon)
+                    if self._conn
+                    else []
+                )
                 table = self.query_one("#outcome-risks-table", DataTable)
                 self._reset_table(
                     table,
