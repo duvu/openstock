@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CommandEvent",
+  "description": "CLI/TUI/chat command execution detail event",
+  "type": "object",
+  "required": ["event_id", "run_id", "created_at", "level", "event_type", "correlation_id", "command", "status"],
+  "properties": {
+    "event_id": {"type": "string"},
+    "run_id": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "level": {"type": "string"},
+    "event_type": {"type": "string"},
+    "surface": {"type": "string"},
+    "correlation_id": {"type": "string"},
+    "command": {"type": "string"},
+    "args": {"type": "string"},
+    "status": {"type": "string"},
+    "exit_code": {"type": ["integer", "null"]},
+    "duration_ms": {"type": ["number", "null"]},
+    "stdout_tail": {"type": "string"},
+    "stderr_tail": {"type": "string"},
+    "redaction_status": {"type": "string"}
+  }
+}

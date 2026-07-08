@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TraceEvent",
+  "description": "Workflow/tool/pipeline timeline span event",
+  "type": "object",
+  "required": ["event_id", "run_id", "created_at", "level", "event_type", "correlation_id", "span_id", "status"],
+  "properties": {
+    "event_id": {"type": "string"},
+    "run_id": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "level": {"type": "string"},
+    "event_type": {"type": "string"},
+    "surface": {"type": "string"},
+    "correlation_id": {"type": "string"},
+    "span_id": {"type": "string"},
+    "parent_span_id": {"type": "string"},
+    "status": {"type": "string"},
+    "started_at": {"type": "string"},
+    "ended_at": {"type": "string"},
+    "duration_ms": {"type": "number"},
+    "module": {"type": "string"},
+    "operation": {"type": "string"},
+    "redaction_status": {"type": "string"}
+  }
+}
