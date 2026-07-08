@@ -139,7 +139,7 @@ def get_permission_state(
     if not is_tool_allowed_in_chat(tool_name):
         return PermissionState.HARD_DENY
     if requires_plan_approval(tool_name):
-        if execution_mode == ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY:
-            return PermissionState.DENY
-        return PermissionState.ASK
+        if execution_mode == ExecutionMode.PLAN_ONLY:
+            return PermissionState.ASK
+        return PermissionState.ALLOW
     return PermissionState.ALLOW

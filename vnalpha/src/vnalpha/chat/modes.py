@@ -25,6 +25,8 @@ SAFE_READ_ONLY_TOOLS: frozenset[str] = frozenset(
         "detail.get",
         "research.explain",
         "research.compare",
+        "candidate.explain",
+        "candidate.compare",
     }
 )
 

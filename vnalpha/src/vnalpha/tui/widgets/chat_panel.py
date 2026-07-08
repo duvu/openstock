@@ -59,6 +59,7 @@ if _TEXTUAL_AVAILABLE:
             self._target_date = target_date
             self._busy = False
             self._chat_controller = None
+            self._session_bootstrap_failed = False
             self._setup_controller()
 
         def _bootstrap_session(self) -> str | None:
@@ -101,15 +102,19 @@ if _TEXTUAL_AVAILABLE:
                     chat_session_id=session_id,
                 )
                 if session_id is None:
-                    self.post_message_text(
-                        "[yellow]⚠ Chat session bootstrap failed — history will not persist.[/yellow]"
-                    )
+                    self._session_bootstrap_failed = True
             except Exception:
                 self._chat_controller = None
 
         def compose(self) -> ComposeResult:
             yield RichLog(id="chat-log", markup=True, wrap=True)
             yield Input(placeholder="Ask or /command ...", id="chat-input")
+
+        def on_mount(self) -> None:
+            if self._session_bootstrap_failed:
+                self.post_message_text(
+                    "[yellow]⚠ Chat session bootstrap failed — history will not persist.[/yellow]"
+                )
 
         def post_message_text(self, text: str, style: str = "") -> None:
             """Append styled text to the chat log."""

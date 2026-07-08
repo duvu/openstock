@@ -327,34 +327,81 @@ class ChatController:
                         pass
                     return refusal
 
-            import json as _json
+            _original_on_trace = self._on_trace
 
-            plan_json_str = None
-            if plan is not None:
-                try:
-                    plan_json_str = _json.dumps(
-                        [
-                            getattr(s, "tool_name", None) or str(s)
-                            for s in getattr(plan, "steps", [])
-                        ]
+            def _staged_on_trace(event: "TraceEvent") -> None:
+                if _original_on_trace:
+                    _original_on_trace(event)
+                elapsed = (
+                    int(event.duration_ms) if event.duration_ms is not None else None
+                )
+                if event.status == "RUNNING":
+                    self._emit_stage(
+                        AssistantStage.TOOL_START, tool_name=event.tool_name
                     )
-                except Exception:
-                    pass
+                elif event.status == "SUCCESS":
+                    self._emit_stage(
+                        AssistantStage.TOOL_SUCCESS,
+                        tool_name=event.tool_name,
+                        elapsed_ms=elapsed,
+                    )
+                elif event.status == "FAILED":
+                    self._emit_stage(
+                        AssistantStage.TOOL_FAILED,
+                        tool_name=event.tool_name,
+                        elapsed_ms=elapsed,
+                    )
+                    failure_text = format_tool_failure(
+                        event.tool_name,
+                        f"failed after {elapsed}ms"
+                        if elapsed is not None
+                        else "failed",
+                    )
+                    self._persist_error_message(
+                        failure_text,
+                        ChatErrorKind.TOOL_FAILED,
+                        role="error",
+                    )
 
-            self._pending_plan = plan
-            self._pending_plan_turn_context = {"question": question}
-            preview_text = format_plan_preview(plan)
-            self._on_message("dim", preview_text)
-            self._persist_message(
-                "assistant", preview_text, "plan_preview", plan_json=plan_json_str
-            )
+            self._on_trace = _staged_on_trace
             try:
-                from vnalpha.observability.audit import log_audit
+                answer, plan = self._run_ask(question, no_execute=False)
+            finally:
+                self._on_trace = _original_on_trace
+            from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
 
-                step_count = len(getattr(plan, "steps", [])) if plan is not None else 0
-                log_audit("PLAN_PREVIEWED", f"Plan previewed with {step_count} step(s)")
-            except Exception:  # noqa: BLE001
-                pass
+            self._emit_stage(AssistantStage.SYNTHESIZING)
+            if isinstance(answer, AssistantAnswer):
+                self._emit_stage(AssistantStage.FINAL, text=answer.summary)
+                self._on_message("bold green", f"Assistant: {answer.summary}")
+                self._persist_message("assistant", answer.summary, "answer")
+            elif isinstance(answer, RefusalMessage):
+                refusal_text = format_refusal(answer.reason)
+                self._on_message("yellow", refusal_text)
+                self._persist_error_message(
+                    refusal_text,
+                    ChatErrorKind.REFUSAL,
+                    role="assistant",
+                )
+                try:
+                    from vnalpha.observability.audit import log_audit
+
+                    log_audit("CHAT_REFUSAL", f"Refusal: {answer.reason[:120]}")
+                except Exception:  # noqa: BLE001
+                    pass
+                return refusal_text
+            else:
+                refusal_text = f"Refused: {answer.reason}"
+                self._on_message("yellow", refusal_text)
+                self._persist_error_message(
+                    refusal_text, ChatErrorKind.REFUSAL, role="assistant"
+                )
+                try:
+                    from vnalpha.observability.audit import log_audit
+
+                    log_audit("CHAT_REFUSAL", refusal_text[:120])
+                except Exception:  # noqa: BLE001
+                    pass
             return None
 
         except Exception as exc:
