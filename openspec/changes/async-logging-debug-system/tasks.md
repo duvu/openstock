@@ -45,6 +45,6 @@
 
 - [x] 7.1 Run `make test-vnalpha` — all tests pass (773+ passed, 0 failures in new tests)
 - [x] 7.2 Run `make lint-vnalpha` — zero violations including T201
-- [ ] 7.3 Smoke test: `vnalpha sync symbols` → `vnalpha log --level INFO --tail 20` shows sync activity records
-- [ ] 7.4 Smoke test: launch TUI → press `L` → Log Viewer screen opens and shows live entries
+- [x] 7.3 Smoke test: `vnalpha sync symbols` → `vnalpha log --level INFO --tail 20` shows sync activity records
+- [x] 7.4 Smoke test: launch TUI → press `L` → Log Viewer screen opens and shows live entries
 - [x] 7.5 Update `openspec/changes/async-logging-debug-system/tasks.md` to mark all tasks complete

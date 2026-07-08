@@ -40,8 +40,8 @@
 - [x] 3.4 Define stale policy for latest bar date vs target date.
 - [x] 3.5 Handle non-trading target dates by using latest bar on or before target date.
 - [x] 3.6 Expose `auto_sync` policy flag.
-- [ ] 3.7 Expose source/provider override.
-- [ ] 3.8 Add tests for weekend/non-trading target date behavior.
+- [x] 3.7 Expose source/provider override.
+- [x] 3.8 Add tests for weekend/non-trading target date behavior.
 
 ## 4. Ensure-data algorithm
 
@@ -65,9 +65,9 @@
 ## 5. Dependency injection and testability
 
 - [x] 5.1 Allow injecting sync/build/score callables for tests.
-- [ ] 5.2 Allow injecting `VnstockClient` or client factory.
+- [x] 5.2 Allow injecting `VnstockClient` or client factory.
 - [x] 5.3 Ensure tests do not call real vnstock-service.
-- [ ] 5.4 Add fake provider response fixtures.
+- [x] 5.4 Add fake provider response fixtures.
 - [x] 5.5 Add failure fixtures for service unavailable and empty provider data.
 
 ## 6. `/explain SYMBOL` integration
@@ -78,9 +78,9 @@
 - [x] 6.4 If ensure returns `READY`, call existing `candidate.explain` tool.
 - [x] 6.5 Add a `Data Readiness` panel to `/explain` output.
 - [x] 6.6 Include actions taken, cache hits, warnings, freshness, and lineage in the panel.
-- [ ] 6.7 Add tests: `/explain FPT` missing score triggers ensure and returns analysis.
-- [ ] 6.8 Add tests: `/explain FPT` cache hit does not sync/build/score.
-- [ ] 6.9 Add tests: ensure failure returns clear command failure.
+- [x] 6.7 Add tests: `/explain FPT` missing score triggers ensure and returns analysis.
+- [x] 6.8 Add tests: `/explain FPT` cache hit does not sync/build/score.
+- [x] 6.9 Add tests: ensure failure returns clear command failure.
 
 ## 7. `/compare` integration
 
@@ -89,8 +89,8 @@
 - [x] 7.3 Compare ready symbols.
 - [x] 7.4 If some symbols fail, include warnings per symbol.
 - [x] 7.5 If all symbols fail, return command failure.
-- [ ] 7.6 Add a `Data Readiness` panel to compare results.
-- [ ] 7.7 Add tests for mixed ready/failed symbols.
+- [x] 7.6 Add a `Data Readiness` panel to compare results.
+- [x] 7.7 Add tests for mixed ready/failed symbols.
 
 ## 8. Assistant integration
 
@@ -99,14 +99,14 @@
 - [x] 8.3 Do not require the LLM to plan data-sync steps.
 - [x] 8.4 Include ensure-data result in tool output or synthesis context.
 - [x] 8.5 Preserve existing read-tool allowlist behavior.
-- [ ] 8.6 Add tests for natural-language `explain_symbol` path triggering ensure.
-- [ ] 8.7 Add tests for natural-language `compare_symbols` path triggering ensure.
+- [x] 8.6 Add tests for natural-language `explain_symbol` path triggering ensure.
+- [x] 8.7 Add tests for natural-language `compare_symbols` path triggering ensure.
 
 ## 9. Optional `/scan --auto-refresh`
 
 - [x] 9.1 Keep default `/scan` artifact-read behavior unchanged.
-- [ ] 9.2 Add optional `--auto-refresh` only if feasible.
-- [ ] 9.3 If added, document that full-universe refresh can be slow.
+- [x] 9.2 Add optional `--auto-refresh` only if feasible. — DEFERRED: not added; documented as future work.
+- [x] 9.3 If added, document that full-universe refresh can be slow. — DEFERRED: not added; documented as future work.
 - [x] 9.4 If not added in first implementation, document as future work.
 
 ## 10. Observability
@@ -120,15 +120,15 @@
 - [x] 10.7 Emit score started/succeeded/failed events.
 - [x] 10.8 Emit `DATA_ENSURE_READY`, `DATA_ENSURE_PARTIAL`, or `DATA_ENSURE_FAILED`.
 - [x] 10.9 Include symbol, target date, benchmark, action, row count, latest bar date, and error details.
-- [ ] 10.10 Add tests proving observability events are emitted.
+- [x] 10.10 Add tests proving observability events are emitted.
 
 ## 11. Locking and idempotency
 
-- [ ] 11.1 Add local lock per symbol/date ensure flow.
-- [ ] 11.2 Ensure stale locks are detected and handled.
-- [ ] 11.3 Ensure lock is released in `finally`.
-- [ ] 11.4 Do not fail if another request already completed the provisioning while waiting.
-- [ ] 11.5 Add tests for duplicate ensure calls.
+- [x] 11.1 Add local lock per symbol/date ensure flow.
+- [x] 11.2 Ensure stale locks are detected and handled.
+- [x] 11.3 Ensure lock is released in `finally`.
+- [x] 11.4 Do not fail if another request already completed the provisioning while waiting.
+- [x] 11.5 Add tests for duplicate ensure calls.
 
 ## 12. Failure handling
 
@@ -149,7 +149,7 @@
 - [x] 13.2 Document when auto provisioning runs.
 - [x] 13.3 Document freshness policy.
 - [x] 13.4 Document how to disable auto sync.
-- [ ] 13.5 Document manual fallback commands.
+- [x] 13.5 Document manual fallback commands.
 - [x] 13.6 Document troubleshooting for vnstock-service issues.
 - [x] 13.7 Document performance considerations.
 

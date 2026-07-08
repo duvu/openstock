@@ -136,3 +136,30 @@ DATA_ENSURE_READY / _PARTIAL / _FAILED
 ```
 
 Events are logged via `log_audit` (best-effort, never crash the caller).
+
+## Manual fallback commands
+
+If auto provisioning fails or is disabled (`auto_sync=False`), run data pipeline
+steps manually:
+
+```bash
+# Sync symbol master from vnstock-service
+vnalpha sync symbols
+
+# Sync OHLCV for a specific symbol
+vnalpha sync ohlcv --symbol FPT --start 2024-05-01
+
+# Sync benchmark index
+vnalpha sync index --symbol VNINDEX --start 2024-05-01
+
+# Build canonical OHLCV from raw provider data
+vnalpha build canonical --symbol FPT
+
+# Build features for a target date
+vnalpha build features --date 2025-06-30 --symbol FPT
+
+# Score a single symbol
+vnalpha score --date 2025-06-30 --symbol FPT
+```
+
+After manual provisioning, `/explain FPT` will hit the cache and skip auto-sync.
