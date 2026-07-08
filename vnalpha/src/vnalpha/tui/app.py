@@ -16,6 +16,7 @@ try:
     from vnalpha.tui.screens.command import CommandScreen
     from vnalpha.tui.screens.detail import DetailScreen
     from vnalpha.tui.screens.home import HomeScreen
+    from vnalpha.tui.screens.log_viewer import LogScreen
     from vnalpha.tui.screens.outcomes import OutcomeScreen
     from vnalpha.tui.screens.quality import QualityScreen
     from vnalpha.tui.screens.rejected import RejectedScreen
@@ -60,6 +61,7 @@ if _TEXTUAL_AVAILABLE:
             Binding("r", "show_rejected", "Rejected"),
             Binding("p", "show_quality", "Quality"),
             Binding("o", "show_outcomes", "Outcomes"),
+            Binding("l", "show_log", "Log"),
             Binding("q", "quit", "Quit"),
             Binding("ctrl+backslash", "toggle_chat", "Toggle chat"),
             Binding("ctrl+slash", "focus_chat", "Focus chat"),
@@ -82,6 +84,7 @@ if _TEXTUAL_AVAILABLE:
                 yield RejectedScreen(target_date=self.target_date, id="rejected")
                 yield QualityScreen(id="quality")
                 yield OutcomeScreen(target_date=self.target_date, id="outcomes")
+                yield LogScreen(id="log")
             yield ChatPanel(target_date=self.target_date, id="chat-panel")
 
         def _switch_to(self, screen_id: str) -> None:
@@ -112,6 +115,9 @@ if _TEXTUAL_AVAILABLE:
 
         def action_show_outcomes(self) -> None:
             self.query_one("#main-workspace", ContentSwitcher).current = "outcomes"
+
+        def action_show_log(self) -> None:
+            self.query_one("#main-workspace", ContentSwitcher).current = "log"
 
         def show_detail(self, symbol: str) -> None:
             """Push a detail screen over the current workspace (overlay)."""
@@ -178,6 +184,7 @@ else:
             _FallbackBinding("r", "show_rejected", "Rejected"),
             _FallbackBinding("p", "show_quality", "Quality"),
             _FallbackBinding("o", "show_outcomes", "Outcomes"),
+            _FallbackBinding("l", "show_log", "Log"),
             _FallbackBinding("q", "quit", "Quit"),
             _FallbackBinding("ctrl+backslash", "toggle_chat", "Toggle chat"),
             _FallbackBinding("ctrl+slash", "focus_chat", "Focus chat"),

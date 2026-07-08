@@ -1,4 +1,4 @@
-"""Command workspace screen with input bar, result panel, and command history."""
+"""Command workspace screen — unified input + scrollable history/result log."""
 
 from __future__ import annotations
 
@@ -15,8 +15,7 @@ class CommandScreen(Screen):
 
     Contains:
     - A command input bar that accepts slash commands
-    - A result panel that shows output
-    - A history summary (recent commands in the current session)
+    - A scrollable log that shows command history and results together
     """
 
     TITLE = "Command Workspace"
@@ -24,7 +23,6 @@ class CommandScreen(Screen):
     def __init__(self, target_date: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self.target_date = target_date
-        self._history: list[str] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -32,23 +30,27 @@ class CommandScreen(Screen):
             f"[bold]Phase 5.8 Research Command Workspace[/bold] | date: {self.target_date}",
             id="cmd-screen-title",
         )
-        yield CommandInput(id="cmd-bar")
         yield CommandResultPanel(id="cmd-result")
+        yield CommandInput(id="cmd-bar")
         yield Footer()
+
+    def on_mount(self) -> None:
+        """Focus the input on mount."""
+        self.query_one("#cmd-bar", CommandInput).focus_input()
 
     def on_command_input_command_submitted(
         self, event: CommandInput.CommandSubmitted
     ) -> None:
         """Handle a submitted slash command."""
         text = event.text
-        self._history.append(text)
-        result_panel = self.query_one("#cmd-result", CommandResultPanel)
+        log = self.query_one("#cmd-result", CommandResultPanel)
+
+        self.query_one("#cmd-bar", CommandInput).action_clear_input()
 
         try:
             from vnalpha.commands.executor import CommandExecutor
             from vnalpha.commands.renderers.textual_renderer import result_to_markup
 
-            # Get warehouse connection (may not be available in TUI context without conn)
             conn = None
             try:
                 from vnalpha.warehouse.connection import get_connection
@@ -65,7 +67,7 @@ class CommandScreen(Screen):
                 default_date=self.target_date,
             ).execute(text)
             markup = result_to_markup(result)
-            result_panel.show_result(markup)
+            log.show_result(text, markup)
 
         except Exception as exc:
-            result_panel.show_error(str(exc))
+            log.show_error(text, str(exc))

@@ -1,36 +1,40 @@
-"""CommandResultPanel — displays command results in the TUI."""
+"""CommandResultPanel — unified command history + result log for the TUI."""
 
 from __future__ import annotations
 
-from textual.widgets import Static
+from textual.widgets import RichLog
 
 
-class CommandResultPanel(Static):
-    """Panel that displays the result of a slash command execution.
+class CommandResultPanel(RichLog):
+    """Scrollable log that shows command history and results in one place.
 
-    Accepts Rich markup text for display.
-    Shows a placeholder when no command has been run.
+    Each submission appends:
+      > /command
+      <result or error markup>
+
+    Older entries scroll up naturally — no separate history panel needed.
     """
 
     DEFAULT_CSS = """
     CommandResultPanel {
         border: round $panel;
-        padding: 1;
-        height: auto;
-        min-height: 3;
+        padding: 0 1;
+        height: 1fr;
+        min-height: 5;
     }
     """
 
     def __init__(self, **kwargs) -> None:
-        super().__init__(
-            "[dim]Run a slash command (e.g. /help, /scan, /explain FPT)[/dim]",
-            **kwargs,
-        )
+        super().__init__(highlight=True, markup=True, wrap=True, **kwargs)
 
-    def show_result(self, markup: str) -> None:
-        """Update the panel with new command result markup."""
-        self.update(markup)
+    def show_result(self, command: str, markup: str) -> None:
+        """Append a command prompt line followed by its result."""
+        self.write(f"[bold cyan]> {command}[/bold cyan]")
+        self.write(markup)
+        self.write("")  # blank separator
 
-    def show_error(self, message: str) -> None:
-        """Update the panel with an error message."""
-        self.update(f"[red]Error: {message}[/red]")
+    def show_error(self, command: str, message: str) -> None:
+        """Append a command prompt line followed by an error."""
+        self.write(f"[bold cyan]> {command}[/bold cyan]")
+        self.write(f"[red]Error: {message}[/red]")
+        self.write("")  # blank separator
