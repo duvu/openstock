@@ -90,6 +90,7 @@ if _TEXTUAL_AVAILABLE:
             Binding("q", "quit", "Quit"),
             Binding("ctrl+l", "clear_stream", "Clear output", show=False),
             Binding("escape", "cancel_pending_plan", "Cancel plan", show=False),
+            Binding("f12", "toggle_log_viewer", "Log Viewer", show=False),
         ]
 
         def __init__(self, date: Optional[str] = None, **kwargs):
@@ -104,7 +105,7 @@ if _TEXTUAL_AVAILABLE:
             yield OutputStream(id="output-stream")
             yield ComposerInput(id="composer-input")
             yield Static(
-                "Enter submit · ↑/↓ history · Ctrl+L clear · /help commands · Esc cancel",
+                "Enter submit · ↑/↓ history · Ctrl+L clear · F12 logs · /help commands · Esc cancel",
                 id="footer-hint",
             )
 
@@ -192,6 +193,19 @@ if _TEXTUAL_AVAILABLE:
                     self._router._handle_approve()
                 except Exception:
                     pass
+
+        # ------------------------------------------------------------------
+        # Log viewer
+        # ------------------------------------------------------------------
+
+        def action_toggle_log_viewer(self) -> None:
+            """Push the LogScreen overlay so users can view live logs."""
+            try:
+                from vnalpha.tui.screens.log_viewer import LogScreen
+
+                self.push_screen(LogScreen())
+            except Exception:
+                pass
 
         # ------------------------------------------------------------------
         # Stream control actions
