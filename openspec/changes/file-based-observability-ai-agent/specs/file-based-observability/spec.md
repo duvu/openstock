@@ -1,4 +1,4 @@
-# Specification: File-based observability for AI-agent-readable logs
+# Specification: File-based observability and closed-loop AI repair
 
 ## ADDED Requirements
 
@@ -29,7 +29,7 @@ OpenStock SHALL write structured operational logs to disk so a human or AI agent
 
 ---
 
-### Requirement: Log directory layout shall be stable
+### Requirement: Log and bundle directory layout shall be stable
 
 OpenStock SHALL use a stable file layout for AI-agent handoff.
 
@@ -44,6 +44,12 @@ OpenStock SHALL use a stable file layout for AI-agent handoff.
 - **GIVEN** at least one run exists
 - **WHEN** a user or AI agent requests the latest run
 - **THEN** OpenStock SHALL expose the latest run through a `latest` symlink or equivalent pointer file.
+
+#### Scenario: Repair bundle contains standard files
+
+- **GIVEN** a repair bundle is prepared
+- **WHEN** the bundle is written
+- **THEN** it SHALL contain `ai-agent-summary.md`, `ai-coding-prompt.md`, `reproduction.md`, `manifest.json`, `environment.json`, and selected raw logs.
 
 #### Scenario: Log root is configurable
 
@@ -79,9 +85,9 @@ Every JSONL line SHALL be a complete JSON object that can be parsed independentl
 
 ---
 
-### Requirement: Audit, command, trace, app, and error logs shall be separated
+### Requirement: Audit, command, trace, app, error, repair, and deploy logs shall be separated
 
-OpenStock SHALL write different event families to separate files.
+OpenStock SHALL write different event families to separate files or clearly typed records.
 
 #### Scenario: Audit events are written to audit file
 
@@ -107,11 +113,17 @@ OpenStock SHALL write different event families to separate files.
 - **WHEN** an error event is emitted
 - **THEN** the event SHALL be written to `errors.jsonl`.
 
-#### Scenario: App lifecycle events are written to app file
+#### Scenario: Repair events are written
 
-- **GIVEN** low-level app lifecycle information is logged
-- **WHEN** an app log event is emitted
-- **THEN** the event SHALL be written to `app.jsonl`.
+- **GIVEN** a repair bundle, fix attempt, validation result, or repair decision occurs
+- **WHEN** a repair event is emitted
+- **THEN** the event SHALL be written as a repair event with repair ID and correlation ID.
+
+#### Scenario: Deploy events are written
+
+- **GIVEN** deploy verify, promote, post-deploy smoke, or rollback occurs
+- **WHEN** a deploy event is emitted
+- **THEN** the event SHALL include previous version, candidate version, status, and rollback information where available.
 
 ---
 
@@ -131,23 +143,28 @@ Related events SHALL share a correlation ID so an AI agent can reconstruct a wor
 - **WHEN** it creates prompt, plan, tool, answer, refusal, trace, or error events
 - **THEN** all events for that turn SHALL share the same `correlation_id`.
 
-#### Scenario: Pipeline step has parent correlation
+#### Scenario: Repair attempt links to source run
 
-- **GIVEN** a pipeline run starts
-- **WHEN** a pipeline step runs
-- **THEN** the step SHALL have its own span or step identifier
-- **AND** SHALL remain linked to the parent pipeline correlation ID.
+- **GIVEN** a repair bundle is generated from one or more log runs
+- **WHEN** repair events are emitted
+- **THEN** they SHALL link to the source run IDs and repair correlation ID.
+
+#### Scenario: Deploy attempt links to repair
+
+- **GIVEN** a deployment candidate comes from a repair attempt
+- **WHEN** deploy events are emitted
+- **THEN** they SHALL link to the repair ID, candidate commit SHA, and deploy correlation ID.
 
 ---
 
-### Requirement: Logging shall be redacted by default
+### Requirement: Logging and bundles shall be redacted by default
 
 OpenStock SHALL avoid writing sensitive runtime values unless explicitly configured.
 
 #### Scenario: Default content mode is safe
 
 - **GIVEN** no content logging override is set
-- **WHEN** prompt, answer, command output, environment metadata, or tool output is logged
+- **WHEN** prompt, answer, command output, environment metadata, tool output, or repair bundle content is logged
 - **THEN** OpenStock SHALL log only metadata or redacted content.
 
 #### Scenario: Full content requires explicit opt-in
@@ -157,11 +174,11 @@ OpenStock SHALL avoid writing sensitive runtime values unless explicitly configu
 - **THEN** OpenStock MAY write full content
 - **AND** SHALL mark events with `redaction_status` or equivalent.
 
-#### Scenario: Redaction runs before file write
+#### Scenario: Redaction runs before file write and bundle write
 
-- **GIVEN** an event contains values requiring redaction
-- **WHEN** the event is written
-- **THEN** redaction SHALL occur before the JSONL line is persisted.
+- **GIVEN** an event or repair bundle contains values requiring redaction
+- **WHEN** the event or bundle is written
+- **THEN** redaction SHALL occur before persistence.
 
 ---
 
@@ -316,9 +333,121 @@ OpenStock SHALL provide a user-facing way to locate, inspect, summarize, and bun
 
 ---
 
-### Requirement: Observability implementation shall be tested
+### Requirement: Repair preparation shall create an AI coding bundle
 
-The logging system SHALL have automated test coverage.
+OpenStock SHALL prepare a repair bundle from recent logs for an AI coding agent.
+
+#### Scenario: Repair bundle is prepared from latest logs
+
+- **GIVEN** the latest run contains errors, warnings, or failed commands
+- **WHEN** the user runs `vnalpha repair prepare --latest` or equivalent
+- **THEN** OpenStock SHALL create a repair bundle
+- **AND** SHALL write a `REPAIR_PREPARED` event.
+
+#### Scenario: AI coding prompt contains actionable context
+
+- **GIVEN** a repair bundle is generated
+- **WHEN** `ai-coding-prompt.md` is written
+- **THEN** it SHALL include observed failures, reproduction commands, relevant modules, required tests, guardrails, and expected output format for the coding agent.
+
+#### Scenario: Repair bundle manifest is complete
+
+- **GIVEN** a repair bundle is generated
+- **WHEN** `manifest.json` is written
+- **THEN** it SHALL include bundle ID, source run IDs, source commit SHA, redaction mode, included files, generated timestamp, and checksum or size metadata where feasible.
+
+---
+
+### Requirement: Repair execution shall be tracked
+
+AI-assisted fix attempts SHALL be auditable from preparation through validation.
+
+#### Scenario: Repair status records fix branch
+
+- **GIVEN** an AI coding agent creates a fix branch
+- **WHEN** the repair status is updated
+- **THEN** OpenStock SHALL record the branch name and repair ID.
+
+#### Scenario: Repair status records PR and commits
+
+- **GIVEN** a draft PR or commit is created for a repair
+- **WHEN** the repair status is updated
+- **THEN** OpenStock SHALL record PR number or URL and commit SHA(s) where available.
+
+#### Scenario: Repair validation records test results
+
+- **GIVEN** repair validation runs tests or verify commands
+- **WHEN** validation completes
+- **THEN** OpenStock SHALL record command names, status, duration, and output tails.
+
+#### Scenario: Failed validation blocks promotion
+
+- **GIVEN** repair validation fails
+- **WHEN** deployment promotion is requested
+- **THEN** promotion SHALL be blocked or require explicit override
+- **AND** the block reason SHALL be logged.
+
+---
+
+### Requirement: Deploy promotion and rollback shall be logged and gated
+
+Deployment actions SHALL be evidence-gated and auditable.
+
+#### Scenario: Deploy verify records candidate state
+
+- **GIVEN** a candidate fix exists
+- **WHEN** `vnalpha deploy verify` or equivalent runs
+- **THEN** OpenStock SHALL record previous version, candidate version, verification commands, and verification result.
+
+#### Scenario: Promotion requires validation gate
+
+- **GIVEN** a candidate fix has not passed required validation
+- **WHEN** promotion is attempted
+- **THEN** OpenStock SHALL block promotion or require explicit override
+- **AND** SHALL log the decision.
+
+#### Scenario: Promotion records deployment result
+
+- **GIVEN** a candidate fix is promoted
+- **WHEN** deployment completes
+- **THEN** OpenStock SHALL log previous version, new version, deploy target, deploy result, and post-deploy smoke result.
+
+#### Scenario: Rollback records rollback result
+
+- **GIVEN** a deployment has a rollback path
+- **WHEN** rollback is executed
+- **THEN** OpenStock SHALL log rollback source version, rollback target version, status, and post-rollback verification result.
+
+---
+
+### Requirement: Closed-loop scenario shall be documented and testable
+
+The system SHALL document and validate the end-to-end loop.
+
+#### Scenario: Runtime failure produces AI repair bundle
+
+- **GIVEN** a fixture command fails
+- **WHEN** logs are bundled and repair preparation runs
+- **THEN** an AI coding bundle SHALL be produced with reproduction steps and required validation commands.
+
+#### Scenario: Failed repair cannot be promoted silently
+
+- **GIVEN** repair validation fails
+- **WHEN** promotion is attempted
+- **THEN** the system SHALL block or require explicit override
+- **AND** the result SHALL be logged.
+
+#### Scenario: Successful repair logs deployment closure
+
+- **GIVEN** a candidate fix passes validation and is promoted
+- **WHEN** post-deploy smoke passes
+- **THEN** the repair/deploy loop SHALL be marked completed in logs.
+
+---
+
+### Requirement: Observability and repair implementation shall be tested
+
+The logging and repair-loop system SHALL have automated test coverage.
 
 #### Scenario: JSONL sink test passes
 
@@ -328,7 +457,7 @@ The logging system SHALL have automated test coverage.
 
 #### Scenario: Redaction test passes
 
-- **GIVEN** sensitive-looking test values are logged
+- **GIVEN** sensitive-looking test values are logged or bundled
 - **WHEN** the files are read
 - **THEN** the unsafe raw values SHALL not appear in default mode.
 
@@ -343,3 +472,9 @@ The logging system SHALL have automated test coverage.
 - **GIVEN** a run contains logs and summary
 - **WHEN** a bundle is created
 - **THEN** the bundle SHALL include required files and exclude unsafe files by default.
+
+#### Scenario: Repair bundle test passes
+
+- **GIVEN** a failed run exists
+- **WHEN** repair preparation runs
+- **THEN** the repair bundle SHALL include prompt, reproduction, manifest, summary, and selected logs.
