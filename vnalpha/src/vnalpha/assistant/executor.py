@@ -17,9 +17,12 @@ if TYPE_CHECKING:
 
 from vnalpha.assistant.errors import RefusalError, ToolExecutionError
 from vnalpha.assistant.models import AssistantPlan, ToolPlanStep
+from vnalpha.core.logging import get_logger
 from vnalpha.tools.errors import ToolError
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import TOOL_PERMISSIONS, build_local_tool_registry
+
+logger = get_logger("assistant.executor")
 
 ASSISTANT_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     {
@@ -36,13 +39,36 @@ ASSISTANT_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     }
 )
 
-# Backward-compatible module name used by tests/source checks.
+_ANALYSIS_TOOLS: frozenset[str] = frozenset({"candidate.explain", "candidate.compare"})
+
 _TOOL_PERMISSIONS = TOOL_PERMISSIONS
 
 
 def _build_tool_registry(conn):
-    """Build a LocalToolRegistry wired to the live DuckDB connection."""
     return build_local_tool_registry(conn)
+
+
+def _ensure_data_for_step(conn, step: ToolPlanStep) -> None:
+    if step.tool_name not in _ANALYSIS_TOOLS:
+        return
+    try:
+        from vnalpha.commands.normalizers import normalize_date
+        from vnalpha.data_availability import ensure_symbol_analysis_ready
+    except Exception:  # noqa: BLE001
+        return
+    args = step.arguments
+    symbols: list[str] = []
+    if "symbol" in args:
+        symbols = [args["symbol"]]
+    elif "symbols" in args:
+        raw = args["symbols"]
+        symbols = list(raw) if isinstance(raw, (list, tuple)) else [raw]
+    date = normalize_date(args.get("date"))
+    for sym in symbols:
+        try:
+            ensure_symbol_analysis_ready(conn, sym, date)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Pre-execution data ensure failed for %s: %s", sym, exc)
 
 
 class AssistantExecutor:
@@ -76,6 +102,7 @@ class AssistantExecutor:
         results: dict[str, Any] = {}
         for step in plan.steps:
             self._check_allowlist(step)
+            _ensure_data_for_step(self._conn, step)
             output = self._execute_step(step)
             results[step.step_id] = output
         return results
