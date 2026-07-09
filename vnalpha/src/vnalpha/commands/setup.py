@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from vnalpha.commands.handlers.compare import handle_compare
+from vnalpha.commands.handlers.context import handle_context
 from vnalpha.commands.handlers.explain import handle_explain
 from vnalpha.commands.handlers.filter import handle_filter
 from vnalpha.commands.handlers.help import handle_help
@@ -99,6 +100,16 @@ def build_default_registry() -> CommandRegistry:
             examples=["/history", "/history --limit 20"],
             permissions=["READ_HISTORY"],
             handler=handle_history,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="context",
+            description="Inspect or compact the active workspace context.",
+            usage="/context <status|compact>",
+            examples=["/context status", "/context compact"],
+            permissions=[],
+            handler=handle_context,
         )
     )
     reg.register(
