@@ -235,7 +235,7 @@ All settings are controlled via environment variables. The gateway reads them at
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VNALPHA_LLM_MODEL` | `gpt-4o-mini` | Model identifier sent to the LLM endpoint |
+| `VNALPHA_LLM_MODEL` | `oc-gpt-5.4-mini` | Model identifier sent to the LLM endpoint |
 | `VNALPHA_LLM_ENDPOINT` | `https://api.openai.com/v1/chat/completions` | Full URL for the chat completions endpoint |
 | `VNALPHA_LLM_API_KEY` | (none) | API key. Falls back to `OPENAI_API_KEY` if not set |
 | `VNALPHA_LLM_TIMEOUT` | `30` | HTTP timeout in seconds per attempt |
@@ -245,7 +245,7 @@ All settings are controlled via environment variables. The gateway reads them at
 ### Example
 
 ```bash
-export VNALPHA_LLM_MODEL=gpt-4o
+export VNALPHA_LLM_MODEL=oc-gpt-5.4-mini
 export VNALPHA_LLM_API_KEY=sk-...
 export VNALPHA_LLM_TIMEOUT=60
 vnalpha ask "Explain FPT"
