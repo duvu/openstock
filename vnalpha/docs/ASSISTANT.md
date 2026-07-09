@@ -239,7 +239,7 @@ All settings are controlled via environment variables. The gateway reads them at
 | `VNALPHA_LLM_ENDPOINT` | `https://api.openai.com/v1/chat/completions` | Full URL for the chat completions endpoint |
 | `VNALPHA_LLM_API_KEY` | (none) | API key. Falls back to `OPENAI_API_KEY` if not set |
 | `VNALPHA_LLM_TIMEOUT` | `30` | HTTP timeout in seconds per attempt |
-| `VNALPHA_LLM_MAX_OUTPUT_TOKENS` | `1024` | Maximum tokens in the LLM response |
+| `VNALPHA_LLM_MAX_OUTPUT_TOKENS` | `16000` | Maximum tokens in the LLM response |
 | `VNALPHA_LLM_STORE_RAW` | `false` | If `1`/`true`/`yes`, store raw prompt/response in traces |
 
 ### Example

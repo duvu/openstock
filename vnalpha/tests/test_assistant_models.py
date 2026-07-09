@@ -240,6 +240,8 @@ def test_llm_gateway_config_defaults(monkeypatch):
     assert cfg.model == "oc-gpt-5.4-mini"
     assert cfg.endpoint == ASSISTANT_ENDPOINT_DEFAULT
     assert cfg.timeout == ASSISTANT_TIMEOUT_DEFAULT
+    assert ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT == 16000
+    assert cfg.max_output_tokens == 16000
     assert cfg.max_output_tokens == ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT
     assert cfg.max_retries == ASSISTANT_MAX_RETRIES_DEFAULT
     assert cfg.store_raw is False
