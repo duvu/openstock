@@ -5,7 +5,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from vnalpha.workspace_context.models import CleanPlan, CleanResult
-from vnalpha.workspace_context.storage import ensure_workspace_layout, load_workspace_state, resolve_workspace_root
+from vnalpha.workspace_context.observability import emit_workspace_audit_event
+from vnalpha.workspace_context.storage import (
+    append_workspace_event,
+    ensure_workspace_layout,
+    load_workspace_state,
+    resolve_workspace_root,
+)
 
 
 def _now_iso() -> str:
@@ -16,7 +22,7 @@ def _rel(path: Path, workspace_dir: Path) -> str:
     return path.relative_to(workspace_dir).as_posix()
 
 
-def _protected_paths(workspace_dir: Path, pinned_artifacts: set[str]) -> tuple[set[str], set[str]]:
+def _protected_paths(active_artifacts: set[str]) -> tuple[set[str], set[str]]:
     keep = {
         "workspace.json",
         "events.jsonl",
@@ -24,12 +30,12 @@ def _protected_paths(workspace_dir: Path, pinned_artifacts: set[str]) -> tuple[s
         "context.md",
     }
     protected = {"audit.jsonl"}
-    keep.update(pinned_artifacts)
+    keep.update(active_artifacts)
     return keep, protected
 
 
-def _classify_workspace(workspace_dir: Path, pinned_artifacts: set[str]) -> CleanPlan:
-    keep, protected = _protected_paths(workspace_dir, pinned_artifacts)
+def _classify_workspace(workspace_dir: Path, active_artifacts: set[str]) -> CleanPlan:
+    keep, protected = _protected_paths(active_artifacts)
     archive: list[str] = []
     remove: list[str] = []
     needs_confirmation: list[str] = []
@@ -45,7 +51,7 @@ def _classify_workspace(workspace_dir: Path, pinned_artifacts: set[str]) -> Clea
         if rel_path.startswith("notes/"):
             needs_confirmation.append(rel_path)
             continue
-        if rel_path.startswith("artifacts/") and rel_path not in pinned_artifacts:
+        if rel_path.startswith("artifacts/"):
             remove.append(rel_path)
             continue
         if rel_path.endswith(".old.jsonl"):
@@ -69,16 +75,36 @@ def _classify_workspace(workspace_dir: Path, pinned_artifacts: set[str]) -> Clea
     )
 
 
-def clean_workspace(workspace_id: str, *, root: Path | None = None, dry_run: bool = True) -> CleanResult:
+def clean_workspace(
+    workspace_id: str,
+    *,
+    root: Path | None = None,
+    dry_run: bool = True,
+    resolved_errors: bool = False,
+) -> CleanResult:
     resolved_root = resolve_workspace_root(root)
     paths = ensure_workspace_layout(root=resolved_root, workspace_id=workspace_id)
     state = load_workspace_state(root=resolved_root, workspace_id=workspace_id)
-    pinned_artifacts = {
-        artifact.path for artifact in state.active_artifacts if artifact.pinned and artifact.path
+    active_artifacts = {
+        artifact.path for artifact in state.active_artifacts if artifact.path
     }
-    plan = _classify_workspace(paths.workspace_dir, pinned_artifacts)
+    resolved_error_artifacts = {
+        artifact.path
+        for artifact in state.active_artifacts
+        if (
+            artifact.artifact_type == "error"
+            and artifact.metadata.get("status") == "resolved"
+            and artifact.path
+        )
+    }
+    protected_artifacts = (
+        active_artifacts - resolved_error_artifacts
+        if resolved_errors
+        else active_artifacts
+    )
+    plan = _classify_workspace(paths.workspace_dir, protected_artifacts)
     if dry_run:
-        return CleanResult(
+        result = CleanResult(
             workspace_id=workspace_id,
             dry_run=True,
             kept=plan.keep,
@@ -86,27 +112,47 @@ def clean_workspace(workspace_id: str, *, root: Path | None = None, dry_run: boo
             generated_at=_now_iso(),
             plan=plan,
         )
+        append_workspace_event(
+            root=resolved_root,
+            workspace_id=workspace_id,
+            event={
+                "event_id": f"evt-{result.generated_at}",
+                "event_type": "WORKSPACE_CLEAN_DRY_RUN",
+                "workspace_id": workspace_id,
+                "created_at": result.generated_at,
+                "metadata": {
+                    "archive_count": len(plan.archive),
+                    "remove_count": len(plan.remove),
+                },
+            },
+        )
+        emit_workspace_audit_event(
+            event_type="WORKSPACE_CLEAN_DRY_RUN",
+            workspace_id=workspace_id,
+            summary="Workspace clean dry run",
+            metadata={
+                "archive_count": len(plan.archive),
+                "remove_count": len(plan.remove),
+            },
+        )
+        return result
 
     archive_root = resolved_root / "archive" / workspace_id
     archive_root.mkdir(parents=True, exist_ok=True)
     archived: list[str] = []
     removed: list[str] = []
 
-    for rel_path in plan.archive:
+    for rel_path in [*plan.archive, *plan.remove]:
         source = paths.workspace_dir / rel_path
         target = archive_root / rel_path
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         source.unlink()
         archived.append(f"archive/{rel_path}")
-
-    for rel_path in plan.remove:
-        source = paths.workspace_dir / rel_path
-        if source.exists():
-            source.unlink()
+        if rel_path in plan.remove:
             removed.append(rel_path)
 
-    return CleanResult(
+    result = CleanResult(
         workspace_id=workspace_id,
         dry_run=False,
         archived=archived,
@@ -126,3 +172,28 @@ def clean_workspace(workspace_id: str, *, root: Path | None = None, dry_run: boo
             summary=plan.summary,
         ),
     )
+    append_workspace_event(
+        root=resolved_root,
+        workspace_id=workspace_id,
+        event={
+            "event_id": f"evt-{result.generated_at}",
+            "event_type": "WORKSPACE_CLEANED",
+            "workspace_id": workspace_id,
+            "created_at": result.generated_at,
+            "metadata": {
+                "archived_count": len(archived),
+                "removed_count": len(removed),
+            },
+        },
+    )
+    emit_workspace_audit_event(
+        event_type="WORKSPACE_CLEANED",
+        workspace_id=workspace_id,
+        summary="Workspace cleaned",
+        metadata={
+            "archived_count": len(archived),
+            "dry_run": False,
+            "removed_count": len(removed),
+        },
+    )
+    return result

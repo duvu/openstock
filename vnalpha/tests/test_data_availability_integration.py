@@ -112,7 +112,7 @@ class TestExplainEnsureIntegration:
         result = reg.execute(
             parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
         )
-        assert result.status == "SUCCESS"
+        assert result.status == "EMPTY_RESULT"
         assert result.summary is not None
 
     def test_explain_shows_data_readiness_panel_on_cache_hit(self, conn_scored, reg):
@@ -162,7 +162,7 @@ class TestCompareEnsureIntegration:
             result = reg.execute(
                 parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
             )
-        assert result.status == "SUCCESS"
+        assert result.status == "PARTIAL"
         assert any("data incomplete" in w for w in result.warnings)
 
     def test_compare_mixed_ready_and_failed(self, conn_scored, reg):
@@ -184,7 +184,7 @@ class TestCompareEnsureIntegration:
             result = reg.execute(
                 parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
             )
-        assert result.status == "SUCCESS"
+        assert result.status == "PARTIAL"
         assert call_count[0] == 2
 
 

@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from vnalpha.assistant.models import (
     AssistantAnswer,
     AssistantPlan,
     ToolPlanStep,
 )
+from vnalpha.assistant.tool_policy import SAFE_TOOLS, is_safe_plan
 from vnalpha.chat.modes import (
-    SAFE_READ_ONLY_TOOLS,
     ExecutionMode,
     format_plan_preview,
-    is_safe_read_only_plan,
 )
 
 # ---------------------------------------------------------------------------
@@ -64,7 +65,13 @@ def _make_controller(
 
 class TestExecutionMode:
     def test_has_auto_value(self):
-        assert ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY.value == "auto"
+        assert ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS.value == "auto"
+
+    def test_legacy_auto_mode_alias_is_compatible(self):
+        assert (
+            ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY
+            is ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS
+        )
 
     def test_has_plan_then_approve_value(self):
         assert ExecutionMode.PLAN_THEN_APPROVE.value == "plan_then_approve"
@@ -77,35 +84,31 @@ class TestExecutionMode:
 
 
 # ---------------------------------------------------------------------------
-# is_safe_read_only_plan
-# ---------------------------------------------------------------------------
-
-
-class TestIsSafeReadOnlyPlan:
+class TestIsSafePlan:
     def test_empty_plan_is_not_safe(self):
         plan = _make_plan([])
-        assert is_safe_read_only_plan(plan) is False
+        assert is_safe_plan(plan) is False
 
     def test_all_safe_tools_returns_true(self):
-        plan = _make_plan(["watchlist.scan", "fundamentals.get", "price.get"])
-        assert is_safe_read_only_plan(plan) is True
+        plan = _make_plan(["watchlist.scan", "note.create"])
+        assert is_safe_plan(plan) is True
 
     def test_all_known_safe_tools(self):
-        for tool in SAFE_READ_ONLY_TOOLS:
+        for tool in SAFE_TOOLS:
             plan = _make_plan([tool])
-            assert is_safe_read_only_plan(plan) is True, f"{tool} should be safe"
+            assert is_safe_plan(plan) is True, f"{tool} should be safe"
 
     def test_unsafe_tool_returns_false(self):
         plan = _make_plan(["broker.place_order"])
-        assert is_safe_read_only_plan(plan) is False
+        assert is_safe_plan(plan) is False
 
     def test_mixed_safe_and_unsafe_returns_false(self):
         plan = _make_plan(["watchlist.scan", "account.transfer"])
-        assert is_safe_read_only_plan(plan) is False
+        assert is_safe_plan(plan) is False
 
     def test_unknown_tool_returns_false(self):
         plan = _make_plan(["unknown.tool"])
-        assert is_safe_read_only_plan(plan) is False
+        assert is_safe_plan(plan) is False
 
 
 # ---------------------------------------------------------------------------
@@ -183,16 +186,16 @@ class TestChatControllerPlanThenApprove:
 
         ctrl._run_ask = fake_run_ask
 
-    def test_handle_natural_language_auto_executes(self):
+    def test_handle_natural_language_stores_safe_plan_for_approval(self):
         ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
         plan = _make_plan(["watchlist.scan"])
         self._mock_run_ask(ctrl, plan)
 
         ctrl.handle_natural_language("show me watchlist")
 
-        assert ctrl._pending_plan is None
+        assert ctrl._pending_plan is plan
 
-    def test_handle_natural_language_executes_immediately(self):
+    def test_handle_natural_language_does_not_execute_before_approval(self):
         ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
         plan = _make_plan(["watchlist.scan"])
         exec_calls = [0]
@@ -220,9 +223,9 @@ class TestChatControllerPlanThenApprove:
         ctrl._run_ask = fake_run_ask
         ctrl.handle_natural_language("show me watchlist")
 
-        assert exec_calls[0] >= 1
+        assert exec_calls == [0]
 
-    def test_handle_natural_language_emits_answer(self):
+    def test_handle_natural_language_emits_plan_preview(self):
         ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
         plan = _make_plan(["watchlist.scan"])
         self._mock_run_ask(ctrl, plan, execute_answer="Watchlist result")
@@ -230,7 +233,54 @@ class TestChatControllerPlanThenApprove:
         ctrl.handle_natural_language("show me watchlist")
 
         all_text = " ".join(t for _, t in messages)
-        assert "Watchlist result" in all_text
+        assert "Plan:" in all_text
+
+    def test_workspace_context_reaches_planning_and_execution(self):
+        ctrl, _messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS)
+        plan = _make_plan(["watchlist.scan"])
+        calls: list[tuple[str, bool, str | None]] = []
+        answer = AssistantAnswer(
+            summary="Done",
+            basis="test",
+            risks_caveats="",
+            tool_trace_summary="",
+        )
+
+        def fake_run_ask(question, *, no_execute=False, workspace_context=None):
+            calls.append((question, no_execute, workspace_context))
+            return answer, plan
+
+        ctrl._run_ask = fake_run_ask
+
+        ctrl.handle_natural_language(
+            "show me watchlist", workspace_context="# Workspace Context\nstate"
+        )
+
+        assert calls == [
+            ("show me watchlist", True, "# Workspace Context\nstate"),
+            ("show me watchlist", False, "# Workspace Context\nstate"),
+        ]
+
+    @pytest.mark.parametrize("no_execute", [True, False])
+    def test_run_ask_forwards_workspace_context_to_assistant_app(self, no_execute):
+        ctrl, _messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
+        with patch("vnalpha.warehouse.connection.get_connection") as get_connection:
+            with patch("vnalpha.warehouse.migrations.run_migrations"):
+                with patch("vnalpha.assistant.app.AssistantApp") as assistant_app:
+                    ctrl._run_ask(
+                        "show me watchlist",
+                        no_execute=no_execute,
+                        workspace_context="# Workspace Context\nstate",
+                    )
+
+        assistant_app.return_value.ask.assert_called_once_with(
+            "show me watchlist",
+            date=None,
+            no_execute=no_execute,
+            on_trace_event=ctrl._on_trace,
+            workspace_context="# Workspace Context\nstate",
+        )
+        get_connection.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +389,32 @@ class TestApprovePendingPlan:
 
         assert called == []
 
+    def test_approve_preserves_workspace_context_for_execution(self):
+        ctrl, _messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
+        plan = _make_plan(["watchlist.scan"])
+        calls: list[tuple[str, bool, str | None]] = []
+        answer = AssistantAnswer(
+            summary="Done",
+            basis="test",
+            risks_caveats="",
+            tool_trace_summary="",
+        )
+
+        def fake_run_ask(question, *, no_execute=False, workspace_context=None):
+            calls.append((question, no_execute, workspace_context))
+            return answer, plan
+
+        ctrl._run_ask = fake_run_ask
+        ctrl._pending_plan = plan
+        ctrl._pending_plan_turn_context = {
+            "question": "show me watchlist",
+            "workspace_context": "# Workspace Context\nstate",
+        }
+
+        ctrl.approve_pending_plan()
+
+        assert calls == [("show me watchlist", False, "# Workspace Context\nstate")]
+
 
 # ---------------------------------------------------------------------------
 # ChatController — AUTO_EXECUTE_SAFE_READ_ONLY mode
@@ -347,8 +423,8 @@ class TestApprovePendingPlan:
 
 class TestAutoExecuteSafeReadOnly:
     def test_safe_plan_auto_executes(self):
-        ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY)
-        safe_plan = _make_plan(["watchlist.scan", "price.get"])
+        ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS)
+        safe_plan = _make_plan(["watchlist.scan", "note.create"])
 
         preview_answer = AssistantAnswer(
             summary="[Plan preview]",
@@ -380,8 +456,8 @@ class TestAutoExecuteSafeReadOnly:
         assert ctrl._pending_plan is None
 
     def test_safe_plan_auto_emits_result(self):
-        ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY)
-        safe_plan = _make_plan(["price.get"])
+        ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS)
+        safe_plan = _make_plan(["watchlist.scan"])
         preview_answer = AssistantAnswer(
             summary="[Plan preview]",
             basis="preview",
@@ -389,7 +465,7 @@ class TestAutoExecuteSafeReadOnly:
             tool_trace_summary="no exec",
         )
         exec_answer = AssistantAnswer(
-            summary="Price fetched",
+            summary="Watchlist loaded",
             basis="tools",
             risks_caveats="",
             tool_trace_summary="done",
@@ -401,14 +477,25 @@ class TestAutoExecuteSafeReadOnly:
             return exec_answer, safe_plan
 
         ctrl._run_ask = fake_run_ask
-        ctrl.handle_natural_language("get price VNM")
+        ctrl.handle_natural_language("scan watchlist")
 
         all_text = " ".join(t for _, t in messages)
-        assert "Price fetched" in all_text
+        assert "Watchlist loaded" in all_text
 
-    def test_unsafe_plan_auto_executes(self):
-        ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
-        unsafe_plan = _make_plan(["write_file"])
+    @pytest.mark.parametrize(
+        ("mode", "tool_name"),
+        [
+            (ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS, "write_file"),
+            (ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS, "unknown.tool"),
+            (ExecutionMode.PLAN_THEN_APPROVE, "write_file"),
+            (ExecutionMode.PLAN_THEN_APPROVE, "unknown.tool"),
+        ],
+    )
+    def test_unsafe_plan_is_refused_without_execution_or_pending(
+        self, mode: ExecutionMode, tool_name: str
+    ):
+        ctrl, messages = _make_controller(mode)
+        unsafe_plan = _make_plan([tool_name])
         exec_calls = [0]
 
         preview_answer = AssistantAnswer(
@@ -417,26 +504,21 @@ class TestAutoExecuteSafeReadOnly:
             risks_caveats="",
             tool_trace_summary="no exec",
         )
-        exec_answer = AssistantAnswer(
-            summary="File written",
-            basis="tools",
-            risks_caveats="",
-            tool_trace_summary="done",
-        )
 
         def fake_run_ask(question, *, no_execute=False):
             if not no_execute:
                 exec_calls[0] += 1
-            return (preview_answer if no_execute else exec_answer), unsafe_plan
+            return preview_answer, unsafe_plan
 
         ctrl._run_ask = fake_run_ask
-        ctrl.handle_natural_language("write a file")
+        ctrl.handle_natural_language("perform an unsafe action")
 
         assert ctrl._pending_plan is None
-        assert exec_calls[0] >= 1
+        assert exec_calls == [0]
+        assert any("Refused" in text for _, text in messages)
 
     def test_hard_deny_tool_is_refused_not_pending(self):
-        ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY)
+        ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS)
         denied_plan = _make_plan(["broker.place_order"])
         preview_answer = AssistantAnswer(
             summary="[Plan preview]",
@@ -504,7 +586,7 @@ class TestPlanOnlyMode:
 
     def test_plan_only_emits_preview(self):
         ctrl, messages = _make_controller(ExecutionMode.PLAN_ONLY)
-        plan = _make_plan(["fundamentals.get"])
+        plan = _make_plan(["watchlist.scan"])
         preview_answer = AssistantAnswer(
             summary="[Plan preview]",
             basis="preview",

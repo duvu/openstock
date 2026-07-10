@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from vnalpha.commands.models import CommandResult
+from vnalpha.commands.models import CommandResult, status_color
 
 
 def render_result(result: CommandResult, console: Console | None = None) -> None:
@@ -15,13 +15,9 @@ def render_result(result: CommandResult, console: Console | None = None) -> None
         console = Console()
 
     # Title
-    status_color = {
-        "SUCCESS": "green",
-        "FAILED": "red",
-        "VALIDATION_ERROR": "yellow",
-    }.get(result.status, "white")
+    color = status_color(result.status)
 
-    console.print(f"[{status_color}]{result.title}[/{status_color}]")
+    console.print(f"[{color}]{result.title}[/{color}]")
 
     if result.summary:
         console.print(result.summary)

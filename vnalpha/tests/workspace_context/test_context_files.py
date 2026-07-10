@@ -1,7 +1,16 @@
 from __future__ import annotations
 
-from vnalpha.workspace_context.integration import render_context_markdown, write_context_markdown
-from vnalpha.workspace_context.models import WorkspaceArtifactRef, WorkspaceInputRef, WorkspaceState, WorkspaceTask
+from vnalpha.workspace_context.integration import (
+    render_context_markdown,
+    write_context_markdown,
+)
+from vnalpha.workspace_context.models import (
+    WorkspaceArtifactRef,
+    WorkspaceInputRef,
+    WorkspaceState,
+    WorkspaceTask,
+)
+from vnalpha.workspace_context.storage import save_workspace_state
 
 
 def _sample_state() -> WorkspaceState:
@@ -79,3 +88,13 @@ def test_write_context_markdown_persists_context_file(tmp_path) -> None:
     content = context_path.read_text(encoding="utf-8")
     assert "FPT workflow" in content
     assert "compact recommended" in content
+
+
+def test_save_workspace_state_refreshes_context_markdown(tmp_path) -> None:
+    state = _sample_state()
+
+    save_workspace_state(root=tmp_path, state=state)
+
+    context_path = tmp_path / state.workspace_id / "context.md"
+    assert context_path.exists()
+    assert "FPT workflow" in context_path.read_text(encoding="utf-8")

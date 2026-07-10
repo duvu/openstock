@@ -1,9 +1,34 @@
-"""Command data models for Phase 5.8 Research Workspace Command Layer."""
+"""Data models for capability-governed research workspace commands."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from enum import Enum
+from typing import Any, Literal, assert_never
+
+
+class CommandStatus(str, Enum):
+    SUCCESS = "SUCCESS"
+    EMPTY_RESULT = "EMPTY_RESULT"
+    PARTIAL = "PARTIAL"
+    FAILED = "FAILED"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+
+
+def status_color(status: CommandStatus) -> str:
+    match status:
+        case CommandStatus.SUCCESS:
+            return "green"
+        case CommandStatus.EMPTY_RESULT:
+            return "cyan"
+        case CommandStatus.PARTIAL:
+            return "yellow"
+        case CommandStatus.FAILED:
+            return "red"
+        case CommandStatus.VALIDATION_ERROR:
+            return "yellow"
+        case unreachable:
+            assert_never(unreachable)
 
 
 @dataclass
@@ -72,7 +97,7 @@ class CommandError:
 class CommandResult:
     """Result of executing a slash command."""
 
-    status: Literal["SUCCESS", "FAILED", "VALIDATION_ERROR"]
+    status: CommandStatus
     title: str
     summary: str | None = None
     tables: list[ResultTable] = field(default_factory=list)
@@ -80,3 +105,6 @@ class CommandResult:
     artifacts: list[ResultArtifact] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     error: CommandError | None = None
+
+    def __post_init__(self) -> None:
+        self.status = CommandStatus(self.status)

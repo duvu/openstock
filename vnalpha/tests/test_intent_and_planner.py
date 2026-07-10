@@ -13,7 +13,8 @@ from vnalpha.assistant.errors import (
 from vnalpha.assistant.gateway import FakeLLMClient
 from vnalpha.assistant.intent import IntentClassifier, _deterministic_precheck
 from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
-from vnalpha.assistant.planner import TOOL_ALLOWLIST, PlanBuilder, _validate_plan
+from vnalpha.assistant.planner import PlanBuilder, _validate_plan
+from vnalpha.assistant.tool_policy import SAFE_TOOLS
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -234,8 +235,17 @@ class TestPlanBuilder:
         assert len(plan.steps) == 1
         assert plan.steps[0].tool_name == "lineage.get_symbol_lineage"
 
+    def test_fetch_data_intent_is_refused_with_explicit_command_guidance(self):
+        # Given: an assistant request to mutate warehouse data
+        # When: the deterministic planner builds the fetch_data intent
+        # Then: it returns a refusal rather than an autonomous data.fetch step
+        plan = self.builder.build(_make_intent("fetch_data", {"symbol": "FPT"}))
+        assert plan.is_refusal()
+        assert plan.steps == []
+        assert plan.refusal_reason is not None
+        assert "explicit" in plan.refusal_reason.lower()
+
     def test_validation_rejects_unknown_tool(self):
-        """Plan with a non-allowlisted tool should raise PlanValidationError."""
         bad_step = ToolPlanStep(
             step_id="abc12345",
             tool_name="broker.execute_trade",
@@ -247,7 +257,7 @@ class TestPlanBuilder:
             intent="scan_candidates",
             steps=[bad_step],
         )
-        with pytest.raises(PlanValidationError, match="not in the Phase 5.9 allowlist"):
+        with pytest.raises(PlanValidationError, match="not allowed"):
             _validate_plan(bad_plan)
 
     def test_preview_includes_intent_and_steps(self):
@@ -278,8 +288,7 @@ class TestPlanBuilder:
         assert len(plan.steps) == 1
         assert plan.steps[0].tool_name == "watchlist.scan"
 
-    def test_plan_all_steps_in_allowlist(self):
-        """Every non-refusal plan step must use an allowlisted tool."""
+    def test_plan_all_steps_in_canonical_policy(self):
         for intent_name in [
             "scan_candidates",
             "filter_candidates",
@@ -294,8 +303,8 @@ class TestPlanBuilder:
             intent = _make_intent(intent_name)
             plan = self.builder.build(intent)
             for step in plan.steps:
-                assert step.tool_name in TOOL_ALLOWLIST, (
-                    f"Intent '{intent_name}' produced non-allowlisted tool '{step.tool_name}'"
+                assert step.tool_name in SAFE_TOOLS, (
+                    f"Intent '{intent_name}' produced non-canonical tool '{step.tool_name}'"
                 )
 
     def test_plan_step_ids_are_unique(self):

@@ -1,23 +1,13 @@
-"""Default local tool registry for Phase 5.8/5.9 execution paths."""
+"""Default local tool registry for policy-governed execution paths."""
 
 from __future__ import annotations
 
+from vnalpha.policy.tool_policy import TOOL_PERMISSIONS_BY_NAME
 from vnalpha.tools.errors import ToolExecutionError
 from vnalpha.tools.models import ToolPermission, ToolSpec
 from vnalpha.tools.registry import LocalToolRegistry
 
-TOOL_PERMISSIONS: dict[str, ToolPermission] = {
-    "watchlist.scan": ToolPermission.READ_WATCHLIST,
-    "watchlist.filter": ToolPermission.READ_WATCHLIST,
-    "candidate.explain": ToolPermission.READ_SCORE,
-    "candidate.compare": ToolPermission.READ_SCORE,
-    "quality.get_status": ToolPermission.READ_QUALITY,
-    "quality.get_many_status": ToolPermission.READ_QUALITY,
-    "lineage.get_symbol_lineage": ToolPermission.READ_LINEAGE,
-    "note.create": ToolPermission.WRITE_NOTE,
-    "history.list_sessions": ToolPermission.READ_HISTORY,
-    "data.fetch": ToolPermission.WRITE_DATA,
-}
+TOOL_PERMISSIONS: dict[str, ToolPermission] = dict(TOOL_PERMISSIONS_BY_NAME)
 
 
 def build_local_tool_registry(conn) -> LocalToolRegistry:

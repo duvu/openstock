@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from vnalpha.workspace_context.models import CompactionResult, WorkspaceState
+from vnalpha.workspace_context.observability import emit_workspace_audit_event
 from vnalpha.workspace_context.storage import (
+    _atomic_write_text,
     append_workspace_event,
     ensure_workspace_layout,
     load_workspace_state,
@@ -29,10 +31,10 @@ def _source_refs(state: WorkspaceState) -> list[str]:
         if ref not in seen:
             seen.add(ref)
             deduped.append(ref)
-    return deduped
+    return deduped[:20]
 
 
-def _render_compact_markdown(state: WorkspaceState) -> str:
+def _render_compact_markdown(state: WorkspaceState, generated_at: str) -> str:
     sources = _source_refs(state)
     lines = [
         "# Compact Workspace Summary",
@@ -40,18 +42,22 @@ def _render_compact_markdown(state: WorkspaceState) -> str:
         f"Workspace ID: `{state.workspace_id}`",
         f"Title: {state.title}",
         f"Mode: {state.mode}",
+        f"Generated At: {generated_at}",
+        "",
+        "## Active Date",
+        f"- {state.active_date or 'None'}",
         "",
         "## Current Goal",
         f"- Continue workspace: {state.title}",
         "",
         "## Active Symbols",
-        *([f"- `{symbol}`" for symbol in state.active_symbols] or ["- None"]),
+        *([f"- `{symbol}`" for symbol in state.active_symbols[:20]] or ["- None"]),
         "",
         "## Findings",
         *(
             [
                 f"- {artifact.summary} (`{artifact.path}`)"
-                for artifact in state.active_artifacts
+                for artifact in state.active_artifacts[:20]
             ]
             or ["- None"]
         ),
@@ -66,10 +72,13 @@ def _render_compact_markdown(state: WorkspaceState) -> str:
         *([f"- {task.text}" for task in state.open_tasks] or ["- None"]),
         "",
         "## Warnings",
-        *([f"- {warning}" for warning in state.warnings] or ["- None"]),
+        *([f"- {warning}" for warning in state.warnings[:20]] or ["- None"]),
+        "",
+        "## Errors",
+        *([f"- {error}" for error in state.errors[:20]] or ["- None"]),
         "",
         "## Recent Inputs",
-        *([f"- {item.summary}" for item in state.recent_inputs] or ["- None"]),
+        *([f"- {item.summary}" for item in state.recent_inputs[:20]] or ["- None"]),
         "",
         "## Source References",
         *([f"- {ref}" for ref in sources] or ["- None"]),
@@ -78,15 +87,16 @@ def _render_compact_markdown(state: WorkspaceState) -> str:
     return "\n".join(lines)
 
 
-def compact_workspace(workspace_id: str, *, root: Path | None = None) -> CompactionResult:
+def compact_workspace(
+    workspace_id: str, *, root: Path | None = None
+) -> CompactionResult:
     resolved_root = resolve_workspace_root(root)
     paths = ensure_workspace_layout(root=resolved_root, workspace_id=workspace_id)
     state = load_workspace_state(root=resolved_root, workspace_id=workspace_id)
     before_size = dict(state.context_size)
-    compact_text = _render_compact_markdown(state)
-    paths.compact_path.write_text(compact_text, encoding="utf-8")
-
     generated_at = _now_iso()
+    compact_text = _render_compact_markdown(state, generated_at)
+    _atomic_write_text(paths.compact_path, compact_text)
     updated_state = WorkspaceState.from_dict(
         {
             **state.to_dict(),
@@ -105,6 +115,12 @@ def compact_workspace(workspace_id: str, *, root: Path | None = None) -> Compact
             "created_at": generated_at,
             "metadata": {"summary_lines": len(compact_text.splitlines())},
         },
+    )
+    emit_workspace_audit_event(
+        event_type="WORKSPACE_COMPACTED",
+        workspace_id=workspace_id,
+        summary="Workspace compacted",
+        metadata={"summary_lines": len(compact_text.splitlines())},
     )
 
     return CompactionResult(

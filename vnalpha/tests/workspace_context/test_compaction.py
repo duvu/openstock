@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+from pytest import MonkeyPatch
+
+import vnalpha.workspace_context.compaction as compaction_module
 from vnalpha.workspace_context.compaction import compact_workspace
-from vnalpha.workspace_context.lifecycle import create_workspace, record_artifact, record_input, record_warning, resume_workspace
-from vnalpha.workspace_context.models import WorkspaceArtifactRef
+from vnalpha.workspace_context.lifecycle import (
+    create_workspace,
+    record_artifact,
+    record_error,
+    record_input,
+    record_warning,
+    resume_workspace,
+)
+from vnalpha.workspace_context.models import WorkspaceArtifactRef, WorkspaceState
+from vnalpha.workspace_context.storage import load_workspace_state, save_workspace_state
 
 
 def test_compact_workspace_writes_compact_file_and_updates_state(tmp_path) -> None:
@@ -26,7 +38,9 @@ def test_compact_workspace_writes_compact_file_and_updates_state(tmp_path) -> No
 
     result = compact_workspace(workspace.workspace_id, root=tmp_path)
     updated = resume_workspace(workspace.workspace_id, root=tmp_path)
-    compact_text = (tmp_path / workspace.workspace_id / "compact.md").read_text(encoding="utf-8")
+    compact_text = (tmp_path / workspace.workspace_id / "compact.md").read_text(
+        encoding="utf-8"
+    )
 
     assert result.workspace_id == workspace.workspace_id
     assert result.compact_path == "compact.md"
@@ -80,3 +94,73 @@ def test_compact_workspace_includes_core_sections_and_emits_event(tmp_path) -> N
     assert "recent_inputs" in result.preserved_items
     assert result.generated_at is not None
     assert any(event["event_type"] == "WORKSPACE_COMPACTED" for event in events)
+
+
+def test_compact_workspace_preserves_active_date_and_errors_without_raw_events(
+    tmp_path,
+) -> None:
+    workspace = create_workspace(title="FPT workflow", mode="research", root=tmp_path)
+    state = load_workspace_state(root=tmp_path, workspace_id=workspace.workspace_id)
+    updated_state = WorkspaceState.from_dict(
+        {
+            **state.to_dict(),
+            "active_date": "2026-07-10",
+        }
+    )
+    save_workspace_state(root=tmp_path, state=updated_state)
+    record_error(workspace, "pricing feed unavailable", root=tmp_path)
+    (tmp_path / workspace.workspace_id / "events.jsonl").write_text(
+        '{"event_type":"RAW_TRACE","payload":"unbounded raw event"}\n',
+        encoding="utf-8",
+    )
+
+    result = compact_workspace(workspace.workspace_id, root=tmp_path)
+
+    compact_text = (tmp_path / workspace.workspace_id / "compact.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Active Date" in compact_text
+    assert "2026-07-10" in compact_text
+    assert "## Errors" in compact_text
+    assert "pricing feed unavailable" in compact_text
+    assert "Generated At:" in compact_text
+    assert result.generated_at in compact_text
+    assert "unbounded raw event" not in compact_text
+
+
+def test_compact_workspace_uses_atomic_writer_and_emits_audit_event(
+    tmp_path, monkeypatch: MonkeyPatch
+) -> None:
+    workspace = create_workspace(title="HPG workflow", mode="research", root=tmp_path)
+    written_paths: list[Path] = []
+    audit_events: list[tuple[str, str, str, dict[str, str | int | float | bool]]] = []
+    original_atomic_write_text = compaction_module._atomic_write_text
+
+    def write_atomically(path: Path, content: str) -> None:
+        written_paths.append(path)
+        original_atomic_write_text(path, content)
+
+    def record_audit_event(
+        *,
+        event_type: str,
+        workspace_id: str,
+        summary: str,
+        metadata: dict[str, str | int | float | bool],
+    ) -> None:
+        audit_events.append((event_type, workspace_id, summary, metadata))
+
+    monkeypatch.setattr(compaction_module, "_atomic_write_text", write_atomically)
+    monkeypatch.setattr(
+        compaction_module, "emit_workspace_audit_event", record_audit_event
+    )
+
+    compact_workspace(workspace.workspace_id, root=tmp_path)
+
+    assert tmp_path / workspace.workspace_id / "compact.md" in written_paths
+    assert len(audit_events) == 1
+    event_type, event_workspace_id, summary, metadata = audit_events[0]
+    assert event_type == "WORKSPACE_COMPACTED"
+    assert event_workspace_id == workspace.workspace_id
+    assert summary == "Workspace compacted"
+    assert set(metadata) == {"summary_lines"}
+    assert isinstance(metadata["summary_lines"], int)

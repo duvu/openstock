@@ -81,7 +81,7 @@ class TestNaturalLanguagePersistence:
         ctrl, sid = _make_ctrl(conn)
 
         def fake_ask(q, *, no_execute=False):
-            return _make_answer("Price is 10"), _make_plan(["get_price"])
+            return _make_answer("Price is 10"), _make_plan(["candidate.explain"])
 
         ctrl._run_ask = fake_ask
         ctrl.handle_natural_language("get price VNM")
@@ -95,7 +95,7 @@ class TestNaturalLanguagePersistence:
         ctrl, sid = _make_ctrl(conn, mode=ExecutionMode.PLAN_ONLY)
 
         def fake_ask(q, *, no_execute=False):
-            return _make_answer("Price is 10"), _make_plan(["get_price"])
+            return _make_answer("Price is 10"), _make_plan(["candidate.explain"])
 
         ctrl._run_ask = fake_ask
         ctrl.handle_natural_language("analyze VNM")
@@ -103,7 +103,7 @@ class TestNaturalLanguagePersistence:
         types = _msg_types(conn, sid)
         assert "plan_preview" in types
 
-    def test_plan_auto_executes_in_plan_then_approve_mode(self, conn):
+    def test_safe_plan_waits_for_approval_in_plan_then_approve_mode(self, conn):
         ctrl, sid = _make_ctrl(conn, mode=ExecutionMode.PLAN_THEN_APPROVE)
         exec_calls = [0]
 
@@ -111,14 +111,14 @@ class TestNaturalLanguagePersistence:
             if not no_execute:
                 exec_calls[0] += 1
             return _make_answer("Done" if not no_execute else "Preview"), _make_plan(
-                ["write_file"]
+                ["note.create"]
             )
 
         ctrl._run_ask = fake_ask
-        ctrl.handle_natural_language("write a report")
+        ctrl.handle_natural_language("create a note")
 
-        assert ctrl._pending_plan is None
-        assert exec_calls[0] >= 1
+        assert ctrl._pending_plan is not None
+        assert exec_calls[0] == 0
 
     def test_hard_deny_produces_refusal_message(self, conn):
         ctrl, sid = _make_ctrl(conn, mode=ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY)
@@ -211,7 +211,7 @@ class TestPlanApprovalPersistence:
     def test_cancel_persists_plan_cancel(self, conn):
         ctrl, sid = _make_ctrl(conn, mode=ExecutionMode.PLAN_THEN_APPROVE)
 
-        ctrl._pending_plan = _make_plan(["write_file"])
+        ctrl._pending_plan = _make_plan(["note.create"])
         ctrl._pending_plan_turn_context = {"question": "write report"}
 
         ctrl.cancel_pending_plan()
@@ -226,10 +226,10 @@ class TestPlanApprovalPersistence:
 
         def fake_ask(q, *, no_execute=False):
             call_count[0] += 1
-            return _make_answer("Done"), _make_plan(["write_file"])
+            return _make_answer("Done"), _make_plan(["note.create"])
 
         ctrl._run_ask = fake_ask
-        ctrl._pending_plan = _make_plan(["write_file"])
+        ctrl._pending_plan = _make_plan(["note.create"])
         ctrl._pending_plan_turn_context = {"question": "write report"}
         ctrl.approve_pending_plan()
 

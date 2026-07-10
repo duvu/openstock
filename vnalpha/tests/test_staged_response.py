@@ -186,7 +186,7 @@ def test_handle_natural_language_emits_classifying_and_final():
         steps=[
             ToolPlanStep(
                 step_id="s1",
-                tool_name="price.get",
+                tool_name="candidate.explain",
                 arguments={"symbol": "VPB"},
                 purpose="get price",
                 required_permission="READ_DATA",

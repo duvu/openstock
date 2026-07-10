@@ -10,7 +10,7 @@ from rich.console import Group, RenderableType
 from rich.table import Table
 from rich.text import Text
 
-from vnalpha.commands.models import CommandResult
+from vnalpha.commands.models import CommandResult, status_color
 
 
 def result_to_markup(result: CommandResult) -> RenderableType:
@@ -23,13 +23,9 @@ def result_to_markup(result: CommandResult) -> RenderableType:
     """
     parts: list[RenderableType] = []
 
-    status_color = {
-        "SUCCESS": "green",
-        "FAILED": "red",
-        "VALIDATION_ERROR": "yellow",
-    }.get(result.status, "white")
+    color = status_color(result.status)
 
-    parts.append(Text.from_markup(f"[{status_color}]{result.title}[/{status_color}]"))
+    parts.append(Text.from_markup(f"[{color}]{result.title}[/{color}]"))
 
     if result.summary:
         parts.append(Text.from_markup(result.summary))

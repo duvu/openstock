@@ -17,13 +17,16 @@ except ImportError:
 def _group_items(items: list[TodoItem]) -> dict[str, list[TodoItem]]:
     active_items = [item for item in items if item.status == "active"]
     blocked_items = [item for item in items if item.status == "blocked"]
-    next_items = [item for item in items if item.status not in {"active", "blocked"}]
+    done_items = [item for item in items if item.status == "done"]
+    next_items = [
+        item for item in items if item.status not in {"active", "blocked", "done"}
+    ]
     return {
         "ACTIVE": active_items,
         "BLOCKED": blocked_items,
         "NEXT": next_items,
+        "RECENTLY DONE": done_items,
     }
-
 
 
 def _item_line(item: TodoItem) -> Text:
@@ -33,13 +36,12 @@ def _item_line(item: TodoItem) -> Text:
     )
 
 
-
 def _render_items(items: list[TodoItem]) -> Group:
     if not items:
         return Group(
             Text("TODOs", style="bold"),
             Text("No TODOs yet", style="dim"),
-            Text('Use /context task add "..." when task commands land.', style="dim"),
+            Text('Use /todo add "..." to add a task.', style="dim"),
         )
 
     parts: list[Text] = [Text("TODOs", style="bold")]
@@ -77,7 +79,7 @@ if _TEXTUAL_AVAILABLE:
         ) -> None:
             super().__init__(**kwargs)
             self._source = source if source is not None else FallbackTodoSource()
-            self._items = list(items) if items is not None else []
+            self._items = list(items) if items is not None else None
             self.can_focus = False
             self.refresh_items()
 
@@ -87,9 +89,10 @@ if _TEXTUAL_AVAILABLE:
         def refresh_items(self) -> None:
             """Reload items from the source and refresh the renderable."""
 
-            loaded_items = self._items or self._source.load_items()
+            loaded_items = (
+                self._items if self._items is not None else self._source.load_items()
+            )
             self.renderable = _render_items(loaded_items)
-            self._items = loaded_items
             self._emit_refreshed(loaded_items)
 
         def set_items(self, items: list[TodoItem]) -> None:
@@ -124,15 +127,16 @@ else:
             **kwargs,
         ) -> None:
             self._source = source if source is not None else FallbackTodoSource()
-            self._items = list(items) if items is not None else []
+            self._items = list(items) if items is not None else None
             self.display = True
             self.can_focus = False
             self.refresh_items()
 
         def refresh_items(self) -> None:
-            loaded_items = self._items or self._source.load_items()
+            loaded_items = (
+                self._items if self._items is not None else self._source.load_items()
+            )
             self.renderable = _render_items(loaded_items)
-            self._items = loaded_items
 
         def set_items(self, items: list[TodoItem]) -> None:
             self._items = list(items)

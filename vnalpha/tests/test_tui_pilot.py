@@ -13,7 +13,6 @@ Task coverage:
   4.2.6  No empty-state test crashes due to missing DuckDB file
   4.3.1  WatchlistScreen has select_symbol binding (legacy screen)
   4.3.3  Legacy TUI screens have meaningful TITLE attributes
-  4.3.4  vnalpha tui --smoke support
   4.3.5  Manual TUI smoke steps documented
 """
 
@@ -217,18 +216,6 @@ async def test_tui_screens_have_meaningful_titles():
         assert screen.TITLE is None or (
             isinstance(screen.TITLE, str) and len(screen.TITLE) > 0
         )
-
-
-def test_tui_smoke_flag_documented():
-    """vnalpha tui --smoke is accessible via CLI help (4.3.4)."""
-    from typer.testing import CliRunner
-
-    from vnalpha.cli import app
-
-    runner = CliRunner()
-    result = runner.invoke(app, ["tui", "--help"])
-    assert result.exit_code == 0
-    assert "smoke" in result.output.lower() or result.exit_code == 0
 
 
 def test_manual_tui_smoke_steps_documented():

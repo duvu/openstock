@@ -8,28 +8,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from vnalpha.assistant.models import AssistantPlan
 
-# ---------------------------------------------------------------------------
-# Safe read-only tool allowlist
-# ---------------------------------------------------------------------------
-
-# Tools on this list are considered safe for AUTO_EXECUTE_SAFE_READ_ONLY mode.
-# Broker, order, allocation, or account tools must NEVER appear here.
-SAFE_READ_ONLY_TOOLS: frozenset[str] = frozenset(
-    {
-        "watchlist.scan",
-        "quality.get_status",
-        "quality.get_many_status",
-        "fundamentals.get",
-        "price.get",
-        "price.get_range",
-        "detail.get",
-        "research.explain",
-        "research.compare",
-        "candidate.explain",
-        "candidate.compare",
-    }
-)
-
 
 # ---------------------------------------------------------------------------
 # ExecutionMode
@@ -39,25 +17,17 @@ SAFE_READ_ONLY_TOOLS: frozenset[str] = frozenset(
 class ExecutionMode(str, Enum):
     """Controls how the chat controller handles a planned tool sequence."""
 
+    AUTO_EXECUTE_SAFE_TOOLS = "auto"
+    """Execute immediately when every plan step is canonically safe."""
+
     AUTO_EXECUTE_SAFE_READ_ONLY = "auto"
-    """Execute immediately when all plan steps are safe read-only tools."""
+    """Deprecated compatibility alias for AUTO_EXECUTE_SAFE_TOOLS."""
 
     PLAN_THEN_APPROVE = "plan_then_approve"
     """Always preview the plan and wait for explicit user approval before executing."""
 
     PLAN_ONLY = "plan_only"
     """Preview the plan but never execute it under any circumstances."""
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def is_safe_read_only_plan(plan: "AssistantPlan") -> bool:
-    if not plan.steps:
-        return False
-    return all(step.tool_name in SAFE_READ_ONLY_TOOLS for step in plan.steps)
 
 
 def format_plan_preview(plan: "AssistantPlan") -> str:

@@ -70,6 +70,10 @@ def _noop_sync_ohlcv(conn, universe, start, end, **kwargs):
     return {"inserted": 0, "skipped": 0}
 
 
+def _noop_sync_index(conn, symbol, start, end, **kwargs):
+    return {"inserted": 0}
+
+
 def _noop_build_canonical(conn, symbol, **kwargs):
     return {"upserted": 0, "rejected": 0}
 
@@ -164,6 +168,7 @@ class TestAutoSyncPath:
             policy=policy,
             _sync_symbols_fn=_track_sync_symbols,
             _sync_ohlcv_fn=_noop_sync_ohlcv,
+            _sync_index_fn=_noop_sync_index,
             _build_canonical_fn=_noop_build_canonical,
             _build_features_fn=_noop_build_features,
             _score_universe_fn=_noop_score_universe,
@@ -194,6 +199,7 @@ class TestAutoSyncPath:
             policy=policy,
             _sync_symbols_fn=_noop_sync_symbols,
             _sync_ohlcv_fn=_track_ohlcv,
+            _sync_index_fn=_noop_sync_index,
             _build_canonical_fn=_track_canonical,
             _build_features_fn=_noop_build_features,
             _score_universe_fn=_noop_score_universe,

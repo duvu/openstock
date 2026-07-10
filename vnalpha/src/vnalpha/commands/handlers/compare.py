@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from typing import assert_never
+
 from vnalpha.commands.models import (
     CommandResult,
+    CommandStatus,
     ParsedCommand,
     ResultColumn,
     ResultTable,
 )
 from vnalpha.commands.normalizers import normalize_date, normalize_symbols
 from vnalpha.core.logging import get_logger
+from vnalpha.data_availability.models import EnsureDataStatus
 
 logger = get_logger("commands.compare")
 
@@ -22,12 +26,14 @@ def handle_compare(
     """Compare a list of symbols using their persisted candidate scores."""
     if conn is None:
         return CommandResult(
-            status="FAILED", title="/compare", summary="No database connection."
+            status=CommandStatus.FAILED,
+            title="/compare",
+            summary="No database connection.",
         )
 
     if not parsed.positional:
         return CommandResult(
-            status="VALIDATION_ERROR",
+            status=CommandStatus.VALIDATION_ERROR,
             title="/compare",
             summary="Usage: /compare SYMBOL1 SYMBOL2 [SYMBOL3...]",
         )
@@ -36,6 +42,7 @@ def handle_compare(
     date = normalize_date(parsed.options.get("date"))
 
     ensure_warnings: list[str] = []
+    provisioning_degraded = False
     try:
         from vnalpha.data_availability import ensure_symbol_analysis_ready
 
@@ -43,6 +50,13 @@ def handle_compare(
             try:
                 ensure_result = ensure_symbol_analysis_ready(conn, sym, date)
                 ensure_warnings.extend(ensure_result.warnings)
+                match ensure_result.status:
+                    case EnsureDataStatus.READY:
+                        pass
+                    case EnsureDataStatus.PARTIAL | EnsureDataStatus.FAILED:
+                        provisioning_degraded = True
+                    case unreachable:
+                        assert_never(unreachable)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Data provisioning failed for %s: %s", sym, exc)
     except Exception as exc:  # noqa: BLE001
@@ -51,17 +65,19 @@ def handle_compare(
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
         return CommandResult(
-            status="FAILED", title="/compare", summary="No tool executor available."
+            status=CommandStatus.FAILED,
+            title="/compare",
+            summary="No tool executor available.",
         )
     output = tool_executor.call("candidate.compare", symbols=symbols, date=date)
     records = output.data or []
 
     if not records:
         return CommandResult(
-            status="SUCCESS",
+            status=CommandStatus.EMPTY_RESULT,
             title=f"/compare — {date}",
             summary=f"No scores found for {symbols} on {date}.",
-            warnings=output.warnings,
+            warnings=list(output.warnings) + ensure_warnings,
         )
 
     rows = [
@@ -101,7 +117,9 @@ def handle_compare(
     )
     all_warnings = list(output.warnings) + ensure_warnings
     return CommandResult(
-        status="SUCCESS",
+        status=(
+            CommandStatus.PARTIAL if provisioning_degraded else CommandStatus.SUCCESS
+        ),
         title=f"/compare — {date}",
         summary=output.summary,
         tables=[table],

@@ -21,10 +21,8 @@ if TYPE_CHECKING:
     from vnalpha.chat.context import ChatContext
     from vnalpha.tools.executor import TraceEvent
 
-from vnalpha.assistant.errors import (
-    AssistantError,
-    RefusalError,
-)
+from vnalpha.assistant.context import prefix_assistant_prompt
+from vnalpha.assistant.errors import AssistantError, RefusalError
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.intent import IntentClassifier
 from vnalpha.assistant.models import (
@@ -68,19 +66,12 @@ class AssistantApp:
         no_execute: bool = False,
         on_trace_event: "Callable[[TraceEvent], None] | None" = None,
         chat_context: "ChatContext | None" = None,
+        workspace_context: str | None = None,
     ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
-        """
-        Process a natural-language research question.
-        Returns (answer_or_refusal, plan).
-        If no_execute=True, return a plan preview without executing tools.
-        If chat_context is provided, a context prefix is prepended to user_prompt.
-        """
-        if chat_context is not None:
-            from vnalpha.chat.context import build_context_prompt_prefix
-
-            prefix = build_context_prompt_prefix(chat_context)
-            if prefix:
-                user_prompt = prefix + user_prompt
+        """Process a natural-language research question."""
+        user_prompt = prefix_assistant_prompt(
+            user_prompt, workspace_context, chat_context
+        )
 
         session_id = create_assistant_session(
             self._conn,

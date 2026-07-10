@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from vnalpha.workspace_context import lifecycle
 from vnalpha.workspace_context.lifecycle import (
     archive_workspace,
     create_workspace,
@@ -14,7 +15,11 @@ from vnalpha.workspace_context.lifecycle import (
     record_warning,
     resume_workspace,
 )
-from vnalpha.workspace_context.models import WorkspaceArtifactRef
+from vnalpha.workspace_context.models import WorkspaceArtifactRef, WorkspaceState
+from vnalpha.workspace_context.storage import (
+    load_latest_workspace_id,
+    save_workspace_state,
+)
 
 
 def test_create_resume_and_status_flow(tmp_path) -> None:
@@ -71,7 +76,10 @@ def test_record_input_artifact_warning_error_and_archive(tmp_path) -> None:
     updated = resume_workspace(workspace.workspace_id, root=tmp_path)
     archived = archive_workspace(workspace.workspace_id, root=tmp_path)
     events_path = tmp_path / workspace.workspace_id / "events.jsonl"
-    events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines()]
+    events = [
+        json.loads(line)
+        for line in events_path.read_text(encoding="utf-8").splitlines()
+    ]
 
     assert updated.recent_inputs[-1].redaction_status == "redacted"
     assert updated.recent_inputs[-1].summary.endswith("[REDACTED] compare FPT and HPG")
@@ -86,3 +94,138 @@ def test_record_input_artifact_warning_error_and_archive(tmp_path) -> None:
         "WORKSPACE_ERROR",
         "WORKSPACE_ARCHIVED",
     }
+
+
+def test_record_input_never_persists_raw_sensitive_content(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("VNALPHA_LOG_CONTENT_MODE", "full")
+    workspace = create_workspace(root=tmp_path)
+
+    record_input(
+        workspace,
+        "api_key=top-secret compare FPT",
+        "user",
+        root=tmp_path,
+    )
+
+    saved = resume_workspace(workspace.workspace_id, root=tmp_path)
+    input_ref = saved.recent_inputs[-1]
+    assert "top-secret" not in input_ref.summary
+    assert "top-secret" not in (input_ref.content or "")
+    assert input_ref.redaction_status == "redacted"
+
+
+def test_new_workspace_compacts_archives_and_keeps_old_workspace_resumable(
+    tmp_path,
+) -> None:
+    previous = create_workspace(title="FPT research", mode="research", root=tmp_path)
+    record_input(
+        previous,
+        "api_key=top-secret compare FPT and HPG",
+        "user",
+        root=tmp_path,
+    )
+
+    current = lifecycle.new_workspace(root=tmp_path)
+    resumed = resume_workspace(previous.workspace_id, root=tmp_path)
+    previous_events = (tmp_path / previous.workspace_id / "events.jsonl").read_text(
+        encoding="utf-8"
+    )
+
+    assert current.workspace_id != previous.workspace_id
+    assert current.status == "active"
+    assert (tmp_path / previous.workspace_id / "compact.md").exists()
+    assert resumed.status == "archived"
+    assert load_latest_workspace_id(root=tmp_path) == previous.workspace_id
+    assert "WORKSPACE_RESUMED" in previous_events
+    assert "top-secret" not in previous_events
+
+
+def test_new_workspace_skips_compaction_only_when_requested(tmp_path) -> None:
+    previous = create_workspace(root=tmp_path)
+
+    lifecycle.new_workspace(no_compact=True, root=tmp_path)
+
+    assert not (tmp_path / previous.workspace_id / "compact.md").exists()
+    assert resume_workspace(previous.workspace_id, root=tmp_path).status == "archived"
+
+
+def test_resume_summary_and_list_are_structured_and_deterministic(tmp_path) -> None:
+    first = create_workspace(title="First", mode="research", root=tmp_path)
+    second = create_workspace(title="Second", mode="watchlist", root=tmp_path)
+    save_workspace_state(
+        root=tmp_path,
+        state=WorkspaceState.from_dict(
+            {
+                **first.to_dict(),
+                "updated_at": "2026-07-09T00:00:00+00:00",
+            }
+        ),
+    )
+    save_workspace_state(
+        root=tmp_path,
+        state=WorkspaceState.from_dict(
+            {
+                **second.to_dict(),
+                "updated_at": "2026-07-10T00:00:00+00:00",
+            }
+        ),
+    )
+
+    summary = lifecycle.get_resume_summary(second.workspace_id, root=tmp_path)
+    listed = lifecycle.list_workspaces(root=tmp_path)
+
+    assert summary.workspace_id == second.workspace_id
+    assert summary.title == "Second"
+    assert [item.workspace_id for item in listed] == [
+        second.workspace_id,
+        first.workspace_id,
+    ]
+    assert all(
+        {"workspace_id", "title", "mode", "status", "updated_at"}
+        <= item.to_dict().keys()
+        for item in listed
+    )
+
+
+def test_status_reports_missing_artifacts_and_context_threshold(tmp_path) -> None:
+    workspace = create_workspace(root=tmp_path)
+    record_artifact(
+        workspace,
+        WorkspaceArtifactRef(
+            artifact_id="missing-artifact",
+            artifact_type="report",
+            path="artifacts/missing.json",
+            summary="Missing report",
+            created_at="2026-07-09T00:00:00+00:00",
+        ),
+        root=tmp_path,
+    )
+    state = resume_workspace(workspace.workspace_id, root=tmp_path)
+    save_workspace_state(
+        root=tmp_path,
+        state=WorkspaceState.from_dict(
+            {
+                **state.to_dict(),
+                "context_size": {"events": 100, "inputs": 50, "artifacts": 50},
+            }
+        ),
+    )
+
+    report = get_status(workspace.workspace_id, root=tmp_path)
+
+    assert report.stale_artifacts == ["missing-artifact"]
+    assert report.suggested_action == "/context compact"
+
+
+def test_workspace_events_exclude_raw_user_text(tmp_path) -> None:
+    workspace = create_workspace(title="api_key=top-secret", root=tmp_path)
+    record_warning(workspace, "api_key=top-secret", root=tmp_path)
+    record_error(workspace, "api_key=top-secret", root=tmp_path)
+
+    events = (tmp_path / workspace.workspace_id / "events.jsonl").read_text(
+        encoding="utf-8"
+    )
+
+    assert "top-secret" not in events

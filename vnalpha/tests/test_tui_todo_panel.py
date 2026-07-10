@@ -64,7 +64,6 @@ def test_responsive_layout_policy_matches_breakpoint_rules() -> None:
     assert controller.should_show_todo(140, user_preference=True) is True
 
 
-
 def test_workspace_todo_source_maps_workspace_state_to_items() -> None:
     from vnalpha.tui.todo_source import WorkspaceTodoSource
     from vnalpha.workspace_context.models import WorkspaceState, WorkspaceTask
@@ -98,6 +97,33 @@ def test_workspace_todo_source_maps_workspace_state_to_items() -> None:
     assert items[1].status == "blocked"
     assert items[1].source == "system"
 
+
+def test_workspace_todo_source_maps_completed_tasks_to_done_items() -> None:
+    from vnalpha.tui.todo_source import WorkspaceTodoSource
+    from vnalpha.workspace_context.models import WorkspaceState, WorkspaceTask
+
+    state = WorkspaceState(
+        workspace_id="ws-1",
+        title="FPT workspace",
+        status="active",
+        mode="research",
+        created_at="2026-07-10T00:00:00+00:00",
+        updated_at="2026-07-10T00:05:00+00:00",
+        open_tasks=[
+            WorkspaceTask(
+                task_id="task-complete",
+                text="Review completed FPT setup",
+                status="completed",
+                priority="medium",
+                created_at="2026-07-10T00:00:00+00:00",
+                updated_at="2026-07-10T00:04:00+00:00",
+            )
+        ],
+    )
+
+    items = WorkspaceTodoSource(loader=lambda: state).load_items()
+
+    assert [(item.id, item.status) for item in items] == [("task-complete", "done")]
 
 
 def test_composite_todo_source_deduplicates_items() -> None:
@@ -143,28 +169,32 @@ def test_composite_todo_source_deduplicates_items() -> None:
 async def test_todo_panel_visibility_matches_widths(
     width: int, expected_visible: bool, mock_get_connection, tmp_path, monkeypatch
 ) -> None:
-    from textual.widgets import ContentSwitcher, Input
+    from textual.widgets import ContentSwitcher, Input, Static
 
     from vnalpha.tui.app import VnAlphaApp
     from vnalpha.tui.widgets.chat_panel import ChatPanel
     from vnalpha.tui.widgets.composer_input import ComposerInput
     from vnalpha.tui.widgets.output_stream import OutputStream
+    from vnalpha.tui.widgets.status_bar import StatusBar
     from vnalpha.tui.widgets.todo_panel import TodoPanel
 
     _workspace_root(tmp_path, monkeypatch)
     app = VnAlphaApp(date="2024-01-10")
     async with app.run_test(headless=True, size=(width, 40)) as pilot:
         await pilot.pause()
+        assert len(pilot.app.query(StatusBar)) == 1
         assert len(pilot.app.query(OutputStream)) == 1
         assert len(pilot.app.query(ComposerInput)) == 1
         assert len(pilot.app.query(Input)) == 1
+        assert len(pilot.app.query("#footer-hint")) == 1
+        assert isinstance(pilot.app.query_one("#footer-hint"), Static)
+        assert pilot.app.focused is pilot.app.query_one(Input)
         assert len(pilot.app.query(ContentSwitcher)) == 0
         assert len(pilot.app.query(ChatPanel)) == 0
         panels = pilot.app.query(TodoPanel)
         assert len(panels) == 1
         assert panels.first().display is expected_visible
         assert len(panels.first().query(Input)) == 0
-
 
 
 @skip_if_no_textual
@@ -211,7 +241,6 @@ async def test_toggle_cannot_force_panel_visible_on_narrow_terminal(
         assert panel.display is False
 
 
-
 @skip_if_no_textual
 @pytest.mark.asyncio
 async def test_todo_panel_renders_empty_and_populated_states() -> None:
@@ -239,6 +268,9 @@ async def test_todo_panel_renders_empty_and_populated_states() -> None:
             TodoItem(id="1", title="Review FPT", status="active", priority="p0"),
             TodoItem(id="2", title="Stale benchmark", status="blocked", priority="p1"),
             TodoItem(id="3", title="Compact workspace", status="open", priority="p2"),
+            TodoItem(
+                id="4", title="Completed FPT review", status="done", priority="p2"
+            ),
         ]
     )
     populated_app = TodoPanelHarness(populated_panel)
@@ -248,9 +280,49 @@ async def test_todo_panel_renders_empty_and_populated_states() -> None:
         assert "ACTIVE" in text
         assert "BLOCKED" in text
         assert "NEXT" in text
+        assert "RECENTLY DONE" in text
         assert "Review FPT" in text
         assert "Stale benchmark" in text
         assert "Compact workspace" in text
+        assert "Completed FPT review" in text
+
+
+@skip_if_no_textual
+@pytest.mark.asyncio
+async def test_todo_panel_refresh_reloads_its_source() -> None:
+    from textual.app import App, ComposeResult
+
+    from vnalpha.tui.todo_source import TodoItem, TodoSource
+    from vnalpha.tui.widgets.todo_panel import TodoPanel
+
+    class MutableSource(TodoSource):
+        def __init__(self) -> None:
+            self.items = [TodoItem(id="1", title="Initial task", status="open")]
+
+        def load_items(self) -> list[TodoItem]:
+            return list(self.items)
+
+    class TodoPanelHarness(App[None]):
+        def __init__(self, panel: TodoPanel) -> None:
+            super().__init__()
+            self._panel = panel
+
+        def compose(self) -> ComposeResult:
+            yield self._panel
+
+    source = MutableSource()
+    panel = TodoPanel(source=source)
+    app = TodoPanelHarness(panel)
+    async with app.run_test(headless=True) as pilot:
+        await pilot.pause()
+        source.items = [TodoItem(id="2", title="Completed task", status="done")]
+        panel.refresh_items()
+        await pilot.pause()
+
+        text = _renderable_text(panel.renderable)
+        assert "Initial task" not in text
+        assert "RECENTLY DONE" in text
+        assert "Completed task" in text
 
 
 @skip_if_no_textual

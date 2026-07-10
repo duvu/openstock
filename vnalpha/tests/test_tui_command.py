@@ -97,15 +97,21 @@ class TestCommandWidgetsStatic:
                 f"Forbidden word '{word}' found in command.py"
             )
 
-    def test_textual_renderer_returns_string(self):
-        """textual_renderer.result_to_markup must return a string."""
+    def test_textual_renderer_returns_rich_renderable(self):
+        from io import StringIO
+
+        from rich.console import Console, Group
+
         from vnalpha.commands.models import CommandResult
         from vnalpha.commands.renderers.textual_renderer import result_to_markup
 
         result = CommandResult(status="SUCCESS", title="test", summary="ok")
         markup = result_to_markup(result)
-        assert isinstance(markup, str)
-        assert "test" in markup
+        assert isinstance(markup, Group)
+
+        output = StringIO()
+        Console(file=output, highlight=False).print(markup)
+        assert "test" in output.getvalue()
 
     def test_rich_renderer_runs(self):
         """Rich renderer must accept a CommandResult without crashing."""

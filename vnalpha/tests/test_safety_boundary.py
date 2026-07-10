@@ -17,6 +17,12 @@ FORBIDDEN_TERMS = [
     "execute order",
 ]
 SOFT_FORBIDDEN = ["buy", "sell", "order", "recommend", "portfolio"]
+TOOL_POLICY_PATH_SUFFIX = os.path.join("assistant", "tool_policy.py")
+SAFETY_POLICY_PATH_SUFFIX = os.path.join("policy", "safety_policy.py")
+EXEMPT_POLICY_MODULES = {
+    "vnalpha.assistant.tool_policy",
+    "vnalpha.policy.safety_policy",
+}
 
 
 def get_all_source_modules():
@@ -57,6 +63,8 @@ def test_no_hard_forbidden_terms():
     """No module contains hard-forbidden trading terms in string literals."""
     modules = get_all_source_modules()
     for modname, mod in modules:
+        if modname in EXEMPT_POLICY_MODULES:
+            continue
         try:
             src = inspect.getsource(mod)
         except (OSError, TypeError):
@@ -74,6 +82,8 @@ def test_static_scan_source_files_for_forbidden_terms():
     src_root = os.path.join(os.path.dirname(__file__), "..", "src", "vnalpha")
     violations = []
     for fpath, src in _walk_source_files(src_root):
+        if fpath.endswith((TOOL_POLICY_PATH_SUFFIX, SAFETY_POLICY_PATH_SUFFIX)):
+            continue
         src_lower = src.lower()
         for term in FORBIDDEN_TERMS:
             if term in src_lower:

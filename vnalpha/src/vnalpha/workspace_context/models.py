@@ -214,6 +214,23 @@ class WorkspaceStatusReport:
 
 
 @dataclass(frozen=True)
+class WorkspaceResumeSummary:
+    workspace_id: str
+    title: str
+    mode: str
+    status: str
+    active_date: str | None = None
+    active_symbols: list[str] = field(default_factory=list)
+    open_task_count: int = 0
+    last_compacted_at: str | None = None
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> JsonDict:
+        return _to_dict(self)
+
+
+@dataclass(frozen=True)
 class CompactionResult:
     workspace_id: str
     compact_path: str

@@ -96,7 +96,7 @@ def test_evaluate_plan_allows_safe_tool():
     """5.4.1 + 5.4.2: ALLOW tool returns None (no refusal) from permission evaluator."""
     conn = _make_conn()
     ctrl = _make_ctrl(conn)
-    plan = _make_plan(["watchlist.query"])
+    plan = _make_plan(["watchlist.scan"])
     result = ctrl._evaluate_plan_permissions(plan)
     assert result is None, "Safe tool should return None (not refused)"
 
@@ -108,7 +108,7 @@ def test_evaluate_plan_allows_safe_tool():
 
 def test_allow_tools_have_allow_state():
     """5.4.2: Safe read-only tools have PermissionState.ALLOW in AUTO mode."""
-    safe_tools = ["watchlist.query", "features.query", "score.query", "outcome.query"]
+    safe_tools = ["watchlist.scan", "note.create"]
     for tool in safe_tools:
         state = get_permission_state(tool, ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY)
         assert state == PermissionState.ALLOW, f"Expected ALLOW for {tool}, got {state}"
@@ -119,7 +119,7 @@ def test_allow_tools_have_allow_state():
 # ---------------------------------------------------------------------------
 
 
-def test_ask_tool_auto_executes_without_approval():
+def test_unsafe_tool_is_refused_without_approval():
     conn = _make_conn()
     ctrl = _make_ctrl(conn, mode=ExecutionMode.PLAN_THEN_APPROVE)
 
@@ -146,10 +146,8 @@ def test_ask_tool_auto_executes_without_approval():
     ctrl._run_ask = fake_run_ask
     ctrl.handle_natural_language("run analysis script")
 
-    assert ctrl._pending_plan is None, (
-        "No approval gate — plan should have been executed"
-    )
-    assert exec_calls[0] >= 1
+    assert ctrl._pending_plan is None
+    assert exec_calls == [0]
 
 
 # ---------------------------------------------------------------------------

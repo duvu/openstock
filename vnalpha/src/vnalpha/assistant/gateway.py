@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Mapping
 
 
 def _log_llm_error(
@@ -106,6 +107,9 @@ class LLMGatewayClient:
         response_schema: dict | None = None,
         *,
         stage: str = "unknown",
+        task_type: str | None = None,
+        model_profile: str | None = None,
+        route_metadata: Mapping[str, str] | None = None,
     ) -> tuple[str, dict]:
         """Send a chat completion request.
 
@@ -199,6 +203,9 @@ class FakeLLMClient:
         response_schema: dict | None = None,
         *,
         stage: str = "unknown",
+        task_type: str | None = None,
+        model_profile: str | None = None,
+        route_metadata: Mapping[str, str] | None = None,
     ) -> tuple[str, dict]:
         self.calls.append(messages)
         if self._responses:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import shlex
-from typing import Literal
+from typing import Final, Literal
 
 from vnalpha.commands.errors import CommandParseError
 from vnalpha.commands.grammar import COMMAND_NAME_RE, OPTION_PREFIX
@@ -17,6 +17,14 @@ _FILTER_RE = re.compile(
     r"(not_contains|contains|!=|>=|<=|>|<|=)"
     r"\s*(.+)$"
 )
+
+_CONTEXT_ALIASES: Final[dict[str, str]] = {
+    "clean": "clean",
+    "compact": "compact",
+    "new": "new",
+    "resume": "resume",
+    "status": "status",
+}
 
 
 def parse(text: str) -> ParsedCommand:
@@ -51,7 +59,9 @@ def parse(text: str) -> ParsedCommand:
             "Must start with a letter and contain only [a-z0-9_-]."
         )
 
-    positional: list[str] = []
+    context_subcommand = _CONTEXT_ALIASES.get(name)
+    command_name = "context" if context_subcommand else name
+    positional: list[str] = [context_subcommand] if context_subcommand else []
     filters: list[CommandFilter] = []
     options: dict[str, str | bool] = {}
 
@@ -92,7 +102,7 @@ def parse(text: str) -> ParsedCommand:
         i += 1
 
     return ParsedCommand(
-        command_name=name,
+        command_name=command_name,
         raw_text=raw,
         positional=positional,
         filters=filters,

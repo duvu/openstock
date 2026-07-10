@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from typing import assert_never
+
 from vnalpha.commands.models import (
     CommandResult,
+    CommandStatus,
     ParsedCommand,
     ResultPanel,
 )
 from vnalpha.commands.normalizers import normalize_date, normalize_symbol
 from vnalpha.core.logging import get_logger
+from vnalpha.data_availability.models import EnsureDataStatus
 
 logger = get_logger("commands.explain")
 
@@ -25,12 +29,14 @@ def handle_explain(
     """
     if conn is None:
         return CommandResult(
-            status="FAILED", title="/explain", summary="No database connection."
+            status=CommandStatus.FAILED,
+            title="/explain",
+            summary="No database connection.",
         )
 
     if not parsed.positional:
         return CommandResult(
-            status="VALIDATION_ERROR",
+            status=CommandStatus.VALIDATION_ERROR,
             title="/explain",
             summary="Usage: /explain SYMBOL [--date DATE]",
         )
@@ -39,17 +45,25 @@ def handle_explain(
     date = normalize_date(parsed.options.get("date"))
 
     ensure_result = None
+    provisioning_degraded = False
     try:
         from vnalpha.data_availability import ensure_symbol_analysis_ready
 
         ensure_result = ensure_symbol_analysis_ready(conn, symbol, date)
+        match ensure_result.status:
+            case EnsureDataStatus.READY:
+                pass
+            case EnsureDataStatus.PARTIAL | EnsureDataStatus.FAILED:
+                provisioning_degraded = True
+            case unreachable:
+                assert_never(unreachable)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Data provisioning failed for %s: %s", symbol, exc)
 
     tool_executor = kwargs.get("tool_executor")
     if tool_executor is None:
         return CommandResult(
-            status="FAILED",
+            status=CommandStatus.FAILED,
             title=f"/explain {symbol}",
             summary="No tool executor available.",
         )
@@ -58,7 +72,7 @@ def handle_explain(
 
     if output.data is None:
         return CommandResult(
-            status="SUCCESS",
+            status=CommandStatus.EMPTY_RESULT,
             title=f"/explain {symbol} — {date}",
             summary=output.summary,
             warnings=output.warnings,
@@ -93,7 +107,9 @@ def handle_explain(
         all_warnings.extend(ensure_result.warnings)
 
     return CommandResult(
-        status="SUCCESS",
+        status=(
+            CommandStatus.PARTIAL if provisioning_degraded else CommandStatus.SUCCESS
+        ),
         title=f"/explain {symbol} — {date}",
         summary=output.summary,
         panels=panels,

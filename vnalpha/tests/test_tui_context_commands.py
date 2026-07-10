@@ -32,10 +32,13 @@ async def test_context_command_output_rendered_into_stream():
         ],
     )
 
-    with patch("asyncio.to_thread", new_callable=AsyncMock) as mock_thread:
+    with patch(
+        "vnalpha.tui.routing.command_path.anyio.to_thread.run_sync",
+        new_callable=AsyncMock,
+    ) as mock_thread:
         mock_thread.return_value = command_result
         with patch(
-            "vnalpha.tui.input_router.TuiInputRouter._result_to_markup",
+            "vnalpha.tui.routing.command_path.CommandPath.result_to_markup",
             return_value="[green]/context status[/green]",
         ):
             await router.route("/context status")

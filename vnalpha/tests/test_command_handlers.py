@@ -209,7 +209,7 @@ class TestExplainHandler:
         result = reg.execute(
             parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
         )
-        assert result.status == "SUCCESS"
+        assert result.status == "EMPTY_RESULT"
         assert result.summary is not None
 
 

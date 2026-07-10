@@ -5,6 +5,7 @@ from __future__ import annotations
 import duckdb
 import pytest
 
+from vnalpha.assistant import executor as executor_module
 from vnalpha.assistant.errors import RefusalError, ToolExecutionError
 from vnalpha.assistant.executor import AssistantExecutor
 from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
@@ -162,12 +163,9 @@ class TestCheckIntentPolicy:
 
 class TestExecutorAllowlist:
     def test_executor_allowlist_blocks_unknown_tool(self, executor):
-        """Tool not in allowlist must raise ToolExecutionError."""
         step = _make_step("network.fetch", {"url": "http://example.com"})
         plan = _make_plan(step)
-        with pytest.raises(
-            ToolExecutionError, match="not in the assistant tool allowlist"
-        ):
+        with pytest.raises(ToolExecutionError, match="not allowed"):
             executor.execute(plan)
 
     def test_executor_allowlist_blocks_sql_tool(self, executor):
@@ -176,6 +174,98 @@ class TestExecutorAllowlist:
         plan = _make_plan(step)
         with pytest.raises(ToolExecutionError):
             executor.execute(plan)
+
+    def test_executor_blocks_unknown_before_preflight_or_execution(
+        self, executor, monkeypatch
+    ):
+        events: list[str] = []
+
+        def track_ensure(conn, step):
+            events.append("ensure")
+
+        def track_execute(step):
+            events.append("execute")
+            return {}
+
+        monkeypatch.setattr(executor_module, "_ensure_data_for_step", track_ensure)
+        monkeypatch.setattr(executor, "_execute_step", track_execute)
+
+        with pytest.raises(ToolExecutionError, match="not allowed"):
+            executor.execute(_make_plan(_make_step("network.fetch", {})))
+
+        assert events == []
+
+    def test_executor_runs_supported_note_tool(self, executor, monkeypatch):
+        events: list[str] = []
+
+        def track_ensure(conn, step):
+            events.append("ensure")
+
+        def track_execute(step):
+            events.append("execute")
+            return {"tool_name": step.tool_name}
+
+        monkeypatch.setattr(executor_module, "_ensure_data_for_step", track_ensure)
+        monkeypatch.setattr(executor, "_execute_step", track_execute)
+
+        results = executor.execute(
+            _make_plan(
+                _make_step(
+                    "note.create", {"symbol": "FPT", "note_text": "Research note"}
+                )
+            )
+        )
+
+        assert events == ["ensure", "execute"]
+        assert results == {"step_1": {"tool_name": "note.create"}}
+
+    def test_executor_blocks_data_fetch_before_preflight_or_execution(
+        self, executor, monkeypatch
+    ):
+        # Given: a manually available but assistant-ineligible mutation tool
+        # When: an assistant executor receives a data.fetch plan step
+        # Then: it rejects before either ensure or tool execution occurs
+        events: list[str] = []
+
+        def track_ensure(conn, step):
+            events.append("ensure")
+
+        def track_execute(step):
+            events.append("execute")
+            return {}
+
+        monkeypatch.setattr(executor_module, "_ensure_data_for_step", track_ensure)
+        monkeypatch.setattr(executor, "_execute_step", track_execute)
+
+        with pytest.raises(ToolExecutionError, match="not allowed"):
+            executor.execute(_make_plan(_make_step("data.fetch", {"symbol": "FPT"})))
+
+        assert events == []
+
+    def test_executor_preserves_ensure_for_analysis_tools(self, executor, monkeypatch):
+        # Given: an assistant analysis tool that depends on data readiness
+        # When: the executor runs candidate.explain
+        # Then: deterministic ensure runs before the tool implementation
+        events: list[str] = []
+
+        def track_ensure(conn, step):
+            events.append("ensure")
+
+        def track_execute(step):
+            events.append("execute")
+            return {"tool_name": step.tool_name}
+
+        monkeypatch.setattr(executor_module, "_ensure_data_for_step", track_ensure)
+        monkeypatch.setattr(executor, "_execute_step", track_execute)
+
+        results = executor.execute(
+            _make_plan(
+                _make_step("candidate.explain", {"symbol": "FPT", "date": "2026-07-10"})
+            )
+        )
+
+        assert events == ["ensure", "execute"]
+        assert results == {"step_1": {"tool_name": "candidate.explain"}}
 
 
 class TestExecutorRefusal:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Literal
 
+from vnalpha.assistant.tool_policy import is_safe_plan
 from vnalpha.chat.errors import (
     ChatErrorKind,
     error_to_message_type,
@@ -17,11 +18,7 @@ from vnalpha.chat.events import (
     format_stage_event,
     stage_to_style,
 )
-from vnalpha.chat.modes import (
-    ExecutionMode,
-    format_plan_preview,
-    is_safe_read_only_plan,
-)
+from vnalpha.chat.modes import ExecutionMode, format_plan_preview
 from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
 from vnalpha.warehouse.migrations import run_migrations
@@ -54,7 +51,7 @@ class ChatController:
         on_message: Callable[[str, str], None],
         on_trace: Callable[["TraceEvent"], None] | None = None,
         chat_session_id: str | None = None,
-        execution_mode: ExecutionMode = ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY,
+        execution_mode: ExecutionMode = ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS,
     ) -> None:
         self._connection_factory = connection_factory or _make_connection_factory()
         self._target_date = target_date
@@ -105,7 +102,9 @@ class ChatController:
             return "slash_command"
         return "natural_language"
 
-    def handle_turn(self, raw: str) -> str | None:
+    def handle_turn(
+        self, raw: str, *, workspace_context: str | None = None
+    ) -> str | None:
         try:
             kind = self.classify_input(raw)
             if kind == "slash_command":
@@ -114,7 +113,9 @@ class ChatController:
                 self._handle_chat_local(raw)
                 return None
             else:
-                return self.handle_natural_language(raw)
+                return self.handle_natural_language(
+                    raw, workspace_context=workspace_context
+                )
         except Exception as exc:
             error_text = format_runtime_error(str(exc))
             self._on_message("red", error_text)
@@ -177,7 +178,9 @@ class ChatController:
         finally:
             conn.close()
 
-    def handle_natural_language(self, question: str) -> str | None:
+    def handle_natural_language(
+        self, question: str, *, workspace_context: str | None = None
+    ) -> str | None:
         self._on_message("bold cyan", f"You: {question}")
         self._persist_message("user", question, "prompt")
         try:
@@ -189,7 +192,12 @@ class ChatController:
         try:
             self._emit_stage(AssistantStage.CLASSIFYING)
             self._emit_stage(AssistantStage.PLANNING)
-            answer, plan = self._run_ask(question, no_execute=True)
+            if workspace_context is None:
+                answer, plan = self._run_ask(question, no_execute=True)
+            else:
+                answer, plan = self._run_ask(
+                    question, no_execute=True, workspace_context=workspace_context
+                )
 
             from vnalpha.assistant.models import RefusalMessage as _RefusalMessage
 
@@ -207,6 +215,16 @@ class ChatController:
                 except Exception:  # noqa: BLE001
                     pass
                 return refusal_text
+
+            if plan is None or not is_safe_plan(plan):
+                refusal = self._evaluate_plan_permissions(plan) or (
+                    "Refused: the plan is not safe for execution."
+                )
+                self._on_message("yellow", refusal)
+                self._persist_error_message(
+                    refusal, ChatErrorKind.REFUSAL, role="assistant"
+                )
+                return refusal
 
             if self.execution_mode == ExecutionMode.PLAN_ONLY:
                 import json as _json
@@ -231,8 +249,19 @@ class ChatController:
                 )
                 return None
 
-            if self.execution_mode == ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY:
-                if is_safe_read_only_plan(plan):
+            if self.execution_mode == ExecutionMode.PLAN_THEN_APPROVE:
+                self._pending_plan = plan
+                self._pending_plan_turn_context = {
+                    "question": question,
+                    "workspace_context": workspace_context,
+                }
+                preview_text = format_plan_preview(plan)
+                self._on_message("dim", preview_text)
+                self._persist_message("assistant", preview_text, "plan_preview")
+                return None
+
+            if self.execution_mode == ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS:
+                if is_safe_plan(plan):
                     _original_on_trace = self._on_trace
 
                     def _staged_on_trace(event: "TraceEvent") -> None:
@@ -273,7 +302,14 @@ class ChatController:
 
                     self._on_trace = _staged_on_trace
                     try:
-                        answer, plan = self._run_ask(question, no_execute=False)
+                        if workspace_context is None:
+                            answer, plan = self._run_ask(question, no_execute=False)
+                        else:
+                            answer, plan = self._run_ask(
+                                question,
+                                no_execute=False,
+                                workspace_context=workspace_context,
+                            )
                     finally:
                         self._on_trace = _original_on_trace
                     from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
@@ -312,96 +348,6 @@ class ChatController:
                             pass
                     return None
 
-            if plan is not None and hasattr(plan, "steps"):
-                refusal = self._evaluate_plan_permissions(plan)
-                if refusal is not None:
-                    self._on_message("yellow", refusal)
-                    self._persist_error_message(
-                        refusal, ChatErrorKind.REFUSAL, role="assistant"
-                    )
-                    try:
-                        from vnalpha.observability.audit import log_audit
-
-                        log_audit("CHAT_REFUSAL", refusal[:120])
-                    except Exception:  # noqa: BLE001
-                        pass
-                    return refusal
-
-            _original_on_trace = self._on_trace
-
-            def _staged_on_trace(event: "TraceEvent") -> None:
-                if _original_on_trace:
-                    _original_on_trace(event)
-                elapsed = (
-                    int(event.duration_ms) if event.duration_ms is not None else None
-                )
-                if event.status == "RUNNING":
-                    self._emit_stage(
-                        AssistantStage.TOOL_START, tool_name=event.tool_name
-                    )
-                elif event.status == "SUCCESS":
-                    self._emit_stage(
-                        AssistantStage.TOOL_SUCCESS,
-                        tool_name=event.tool_name,
-                        elapsed_ms=elapsed,
-                    )
-                elif event.status == "FAILED":
-                    self._emit_stage(
-                        AssistantStage.TOOL_FAILED,
-                        tool_name=event.tool_name,
-                        elapsed_ms=elapsed,
-                    )
-                    failure_text = format_tool_failure(
-                        event.tool_name,
-                        f"failed after {elapsed}ms"
-                        if elapsed is not None
-                        else "failed",
-                    )
-                    self._persist_error_message(
-                        failure_text,
-                        ChatErrorKind.TOOL_FAILED,
-                        role="error",
-                    )
-
-            self._on_trace = _staged_on_trace
-            try:
-                answer, plan = self._run_ask(question, no_execute=False)
-            finally:
-                self._on_trace = _original_on_trace
-            from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
-
-            self._emit_stage(AssistantStage.SYNTHESIZING)
-            if isinstance(answer, AssistantAnswer):
-                self._emit_stage(AssistantStage.FINAL, text=answer.summary)
-                self._on_message("bold green", f"Assistant: {answer.summary}")
-                self._persist_message("assistant", answer.summary, "answer")
-            elif isinstance(answer, RefusalMessage):
-                refusal_text = format_refusal(answer.reason)
-                self._on_message("yellow", refusal_text)
-                self._persist_error_message(
-                    refusal_text,
-                    ChatErrorKind.REFUSAL,
-                    role="assistant",
-                )
-                try:
-                    from vnalpha.observability.audit import log_audit
-
-                    log_audit("CHAT_REFUSAL", f"Refusal: {answer.reason[:120]}")
-                except Exception:  # noqa: BLE001
-                    pass
-                return refusal_text
-            else:
-                refusal_text = f"Refused: {answer.reason}"
-                self._on_message("yellow", refusal_text)
-                self._persist_error_message(
-                    refusal_text, ChatErrorKind.REFUSAL, role="assistant"
-                )
-                try:
-                    from vnalpha.observability.audit import log_audit
-
-                    log_audit("CHAT_REFUSAL", refusal_text[:120])
-                except Exception:  # noqa: BLE001
-                    pass
             return None
 
         except Exception as exc:
@@ -416,33 +362,27 @@ class ChatController:
                 pass
             return error_text
 
-    def _evaluate_plan_permissions(self, plan: "AssistantPlan") -> str | None:
-        from vnalpha.chat.safety import PermissionState, get_permission_state
+    def _evaluate_plan_permissions(self, plan: "AssistantPlan | None") -> str | None:
+        if plan is None or not plan.steps:
+            return "Refused: the plan has no executable steps."
 
-        for step in plan.steps:
-            tool_name = (
-                getattr(step, "tool_name", None)
-                or getattr(step, "tool", None)
-                or str(step)
-            )
-            state = get_permission_state(tool_name, self.execution_mode)
-            if state == PermissionState.HARD_DENY:
-                return (
-                    f"Refused: tool '{tool_name}' is permanently forbidden. "
-                    "This request cannot be approved."
-                )
-            if state == PermissionState.DENY:
-                return (
-                    f"Refused: tool '{tool_name}' is not permitted in current mode ({self.execution_mode.value}). "
-                    "Use /plan on to enable plan-then-approve mode."
-                )
-        return None
+        if is_safe_plan(plan):
+            return None
+
+        from vnalpha.assistant.tool_policy import unsafe_tools_in_plan
+
+        unsafe_tools = unsafe_tools_in_plan(plan)
+        if unsafe_tools:
+            return f"Refused: tool '{unsafe_tools[0]}' is not allowed by the assistant tool policy."
+        return "Refused: the plan is not safe for execution."
 
     def approve_pending_plan(self) -> None:
         if self._pending_plan is None:
             return
-        refusal = self._evaluate_plan_permissions(self._pending_plan)
-        if refusal is not None:
+        if not is_safe_plan(self._pending_plan):
+            refusal = self._evaluate_plan_permissions(self._pending_plan) or (
+                "Refused: the plan is not safe for execution."
+            )
             self._on_message("yellow", refusal)
             self._persist_error_message(
                 refusal, ChatErrorKind.REFUSAL, role="assistant"
@@ -452,6 +392,7 @@ class ChatController:
             return
         ctx = self._pending_plan_turn_context or {}
         question = ctx.get("question", "")
+        workspace_context = ctx.get("workspace_context")
         self._persist_message("user", "Approved.", "plan_approval")
         try:
             from vnalpha.observability.audit import log_audit
@@ -462,7 +403,14 @@ class ChatController:
         self._pending_plan = None
         self._pending_plan_turn_context = None
         try:
-            answer, _plan = self._run_ask(question, no_execute=False)
+            if workspace_context is None:
+                answer, _plan = self._run_ask(question, no_execute=False)
+            else:
+                answer, _plan = self._run_ask(
+                    question,
+                    no_execute=False,
+                    workspace_context=workspace_context,
+                )
             from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
 
             if isinstance(answer, AssistantAnswer):
@@ -716,7 +664,13 @@ class ChatController:
         ]
         return "\n".join(lines)
 
-    def _run_ask(self, question: str, *, no_execute: bool = False):
+    def _run_ask(
+        self,
+        question: str,
+        *,
+        no_execute: bool = False,
+        workspace_context: str | None = None,
+    ):
         from vnalpha.assistant.app import AssistantApp
         from vnalpha.warehouse.connection import get_connection
         from vnalpha.warehouse.migrations import run_migrations
@@ -729,6 +683,7 @@ class ChatController:
             date=self._target_date,
             no_execute=no_execute,
             on_trace_event=self._on_trace,
+            workspace_context=workspace_context,
         )
 
     def _emit_stage(

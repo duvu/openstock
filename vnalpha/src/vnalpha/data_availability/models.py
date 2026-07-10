@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TypeAlias
+
+JsonValue: TypeAlias = (
+    str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+)
 
 
 class EnsureDataStatus(str, Enum):
@@ -38,19 +42,23 @@ class EnsureDataResult:
     canonical_bars: int = 0
     feature_snapshot_exists: bool = False
     candidate_score_exists: bool = False
-    extra: dict[str, Any] = field(default_factory=dict)
+    freshness: str = "unknown"
+    lineage_actions: list[str] = field(default_factory=list)
+    extra: dict[str, JsonValue] = field(default_factory=dict)
 
     @property
     def is_ready(self) -> bool:
         return self.status == EnsureDataStatus.READY
 
-    def to_panel_dict(self) -> dict[str, Any]:
+    def to_panel_dict(self) -> dict[str, JsonValue]:
         """Return a dict suitable for a ResultPanel."""
         return {
             "status": self.status.value,
             "canonical_bars": self.canonical_bars,
             "feature_snapshot": self.feature_snapshot_exists,
             "candidate_score": self.candidate_score_exists,
+            "freshness": self.freshness,
+            "lineage_actions": self.lineage_actions,
             "actions_taken": [a.value for a in self.actions_taken],
             "warnings": self.warnings,
             "errors": self.errors,

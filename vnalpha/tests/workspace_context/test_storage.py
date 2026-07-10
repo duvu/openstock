@@ -4,8 +4,8 @@ import json
 
 from vnalpha.workspace_context.models import WorkspaceState
 from vnalpha.workspace_context.storage import (
-    append_workspace_event,
     acquire_workspace_lock,
+    append_workspace_event,
     ensure_workspace_layout,
     load_latest_workspace_id,
     load_workspace_index,
@@ -56,7 +56,10 @@ def test_ensure_layout_and_state_round_trip(tmp_path) -> None:
     loaded = load_workspace_state(root=root, workspace_id=state.workspace_id)
 
     assert loaded == state
-    assert json.loads(workspace.workspace_json_path.read_text(encoding="utf-8"))["title"] == "Test workspace"
+    assert (
+        json.loads(workspace.workspace_json_path.read_text(encoding="utf-8"))["title"]
+        == "Test workspace"
+    )
 
 
 def test_latest_pointer_and_event_append(tmp_path) -> None:

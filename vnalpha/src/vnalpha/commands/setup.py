@@ -1,4 +1,4 @@
-"""Build and return the default command registry with all Phase 5.8 commands."""
+"""Build the default registry of policy-governed research commands."""
 
 from __future__ import annotations
 
@@ -12,11 +12,13 @@ from vnalpha.commands.handlers.lineage import handle_lineage
 from vnalpha.commands.handlers.note import handle_note
 from vnalpha.commands.handlers.quality import handle_quality
 from vnalpha.commands.handlers.scan import handle_scan
+from vnalpha.commands.handlers.todo import handle_todo
 from vnalpha.commands.registry import CommandMeta, CommandRegistry
+from vnalpha.policy.command_policy import permission_names
 
 
 def build_default_registry() -> CommandRegistry:
-    """Return a CommandRegistry pre-populated with all Phase 5.8 commands."""
+    """Return a registry populated with capability-approved research commands."""
     reg = CommandRegistry()
 
     reg.register(
@@ -25,7 +27,7 @@ def build_default_registry() -> CommandRegistry:
             description="Scan the daily watchlist for research candidates.",
             usage="/scan [UNIVERSE] [--date DATE]",
             examples=["/scan", "/scan VN30", "/scan --date 2026-07-06"],
-            permissions=["READ_WATCHLIST"],
+            permissions=permission_names("scan"),
             handler=handle_scan,
         )
     )
@@ -38,7 +40,7 @@ def build_default_registry() -> CommandRegistry:
                 "/filter score>=0.70",
                 "/filter class=STRONG_CANDIDATE setup=ACCUMULATION_BASE",
             ],
-            permissions=["READ_SCORE"],
+            permissions=permission_names("filter"),
             handler=handle_filter,
         )
     )
@@ -48,7 +50,7 @@ def build_default_registry() -> CommandRegistry:
             description="Compare a list of symbols by score, setup, and risk.",
             usage="/compare SYMBOL1 SYMBOL2 [SYMBOL3...] [--date DATE]",
             examples=["/compare FPT VNM MWG"],
-            permissions=["READ_SCORE"],
+            permissions=permission_names("compare"),
             handler=handle_compare,
         )
     )
@@ -58,7 +60,7 @@ def build_default_registry() -> CommandRegistry:
             description="Explain a symbol from persisted candidate score artifacts.",
             usage="/explain SYMBOL [--date DATE]",
             examples=["/explain FPT", "/explain FPT --date 2026-07-06"],
-            permissions=["READ_SCORE", "READ_LINEAGE", "READ_QUALITY"],
+            permissions=permission_names("explain"),
             handler=handle_explain,
         )
     )
@@ -68,7 +70,7 @@ def build_default_registry() -> CommandRegistry:
             description="Show data quality for a symbol or the latest watchlist.",
             usage="/quality [SYMBOL] [--date DATE]",
             examples=["/quality", "/quality FPT"],
-            permissions=["READ_QUALITY"],
+            permissions=permission_names("quality"),
             handler=handle_quality,
         )
     )
@@ -78,7 +80,7 @@ def build_default_registry() -> CommandRegistry:
             description="Show provider, ingestion, feature date, and scoring version for a symbol.",
             usage="/lineage SYMBOL [--date DATE]",
             examples=["/lineage FPT"],
-            permissions=["READ_LINEAGE"],
+            permissions=permission_names("lineage"),
             handler=handle_lineage,
         )
     )
@@ -88,7 +90,7 @@ def build_default_registry() -> CommandRegistry:
             description="Create a research note linked to a symbol.",
             usage='/note SYMBOL "note text" [--tags tag1,tag2]',
             examples=['/note FPT "watch relative strength"'],
-            permissions=["WRITE_NOTE"],
+            permissions=permission_names("note"),
             handler=handle_note,
         )
     )
@@ -98,18 +100,48 @@ def build_default_registry() -> CommandRegistry:
             description="Show recent research sessions.",
             usage="/history [--limit N]",
             examples=["/history", "/history --limit 20"],
-            permissions=["READ_HISTORY"],
+            permissions=permission_names("history"),
             handler=handle_history,
         )
     )
     reg.register(
         CommandMeta(
             name="context",
-            description="Inspect or compact the active workspace context.",
-            usage="/context <status|compact>",
-            examples=["/context status", "/context compact"],
-            permissions=[],
+            description="Inspect, maintain, resume, list, or export workspace context.",
+            usage=(
+                "/context <status|compact|clean|new|resume|list|export> "
+                "[--execute|--no-compact|--resolved-errors]; aliases: "
+                "/status, /compact, /clean, /new, /resume"
+            ),
+            examples=[
+                "/context status",
+                "/context compact",
+                "/context clean",
+                "/context clean --execute",
+                "/context new --no-compact",
+                "/context resume [WORKSPACE_ID]",
+                "/context list",
+                "/context export [WORKSPACE_ID]",
+                "Aliases: /status, /compact, /clean, /new, /resume",
+            ],
+            permissions=permission_names("context"),
             handler=handle_context,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="todo",
+            description="List and mutate persisted workspace TODO items.",
+            usage="/todo <list|add|done|block|clear-done> [text|id]",
+            examples=[
+                "/todo list",
+                "/todo add Review FPT",
+                "/todo done task-1234",
+                "/todo block task-1234",
+                "/todo clear-done",
+            ],
+            permissions=permission_names("todo"),
+            handler=handle_todo,
         )
     )
     reg.register(
@@ -118,7 +150,7 @@ def build_default_registry() -> CommandRegistry:
             description="List available commands and usage.",
             usage="/help",
             examples=["/help"],
-            permissions=[],
+            permissions=permission_names("help"),
             handler=handle_help,
         )
     )

@@ -1,4 +1,5 @@
 """vnalpha TUI application — opencode-like chat-first workspace."""
+# allow: SIZE_OK — Textual application lifecycle is the owned TUI composition boundary.
 
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from vnalpha.tui.todo_source import (
 
 if TYPE_CHECKING:
     from vnalpha.tui.widgets.todo_panel import TodoPanel
+    from vnalpha.workspace_context.models import WorkspaceResumeSummary, WorkspaceState
 
 
 def _load_dotenv() -> None:
@@ -112,6 +114,7 @@ if _TEXTUAL_AVAILABLE:
             super().__init__(**kwargs)
             self.target_date: str = resolve_date(date)
             self._router = None
+            self._workspace: WorkspaceState | None = None
             self._layout_controller = ResponsiveLayoutController()
             self._todo_preference: bool | None = None
             self._todo_source = CompositeTodoSource(
@@ -130,10 +133,15 @@ if _TEXTUAL_AVAILABLE:
 
         def on_mount(self) -> None:
             """Initialise the input router after widgets are mounted."""
+            self._start_workspace_lifecycle()
             self._setup_router()
             self._emit_tui_started()
             self._apply_responsive_layout()
             self._ensure_composer_focus()
+
+        def on_unmount(self) -> None:
+            if self._router is not None:
+                self._router.close()
 
         def on_resize(self, event: Resize) -> None:
             """Recompute TODO panel visibility when terminal size changes."""
@@ -148,7 +156,6 @@ if _TEXTUAL_AVAILABLE:
             self._emit_input_submitted(event.text)
             if self._router is not None:
                 self.run_worker(self._router.route(event.text), exclusive=False)
-                self._refresh_todo_panel()
 
         def action_cancel_pending_plan(self) -> None:
             """Cancel pending plan via the router's ChatController."""
@@ -184,7 +191,9 @@ if _TEXTUAL_AVAILABLE:
 
         def action_toggle_todo_panel(self) -> None:
             """Toggle the TODO side rail on wide terminals only."""
-            can_show = self._layout_controller.should_show_todo(self._current_width(), None)
+            can_show = self._layout_controller.should_show_todo(
+                self._current_width(), None
+            )
             if not can_show:
                 self._apply_responsive_layout()
                 self._ensure_composer_focus()
@@ -225,7 +234,33 @@ if _TEXTUAL_AVAILABLE:
                 target_date=self.target_date,
                 on_busy_change=_on_busy,
                 status_bar=status_bar,
+                workspace=self._workspace,
+                on_workspace_change=self._on_workspace_change,
+                ui_dispatcher=self.call_from_thread,
             )
+
+        def _start_workspace_lifecycle(self) -> None:
+            from vnalpha.tui.workspace_presentation import (
+                initialize_workspace,
+            )
+
+            self._workspace, summary = initialize_workspace()
+            self._render_workspace_resume(summary)
+
+        def _on_workspace_change(self, workspace: "WorkspaceState") -> None:
+            from vnalpha.tui.workspace_presentation import resume_summary_for
+
+            self._workspace = workspace
+            self._render_workspace_resume(resume_summary_for(workspace))
+            self._refresh_todo_panel()
+
+        def _render_workspace_resume(self, summary: "WorkspaceResumeSummary") -> None:
+            from vnalpha.tui.workspace_presentation import render_workspace_resume
+
+            status_bar = self.query_one("#status-bar", StatusBar)
+            output = self.query_one("#output-stream", OutputStream)
+            render_workspace_resume(summary, status_bar, output)
+            self._refresh_footer_hint()
 
         def _emit_tui_started(self) -> None:
             _emit_audit_event("TUI_STARTED", "vnalpha tui workspace mounted")
@@ -237,16 +272,23 @@ if _TEXTUAL_AVAILABLE:
             return self.size.width if self.size.width > 0 else 120
 
         def _footer_hint_text(self) -> str:
+            workspace_hint = (
+                f"ws={self._workspace.workspace_id} · {self._workspace.mode}"
+                if self._workspace is not None
+                else "ws=loading"
+            )
+            if self._current_width() < 100:
+                return f"{workspace_hint} · Enter submit · /help · Esc cancel"
             if self._layout_controller.should_show_todo(
                 self._current_width(), self._todo_preference
             ):
                 return (
-                    "Enter submit · ↑/↓ history · Ctrl+L clear · Ctrl+T TODOs · "
-                    "F12 logs · /help commands · Esc cancel"
+                    f"{workspace_hint} · Enter submit · ↑/↓ history · Ctrl+L clear · "
+                    "Ctrl+T TODOs · /help · Esc cancel"
                 )
             return (
-                "Enter submit · ↑/↓ history · Ctrl+L clear · TODOs hidden: narrow terminal · "
-                "F12 logs · /help commands · Esc cancel"
+                f"{workspace_hint} · Enter submit · ↑/↓ history · Ctrl+L clear · "
+                "TODOs hidden · /help · Esc cancel"
             )
 
         def _apply_responsive_layout(self) -> None:

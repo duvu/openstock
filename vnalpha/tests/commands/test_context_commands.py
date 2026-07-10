@@ -99,7 +99,7 @@ def test_context_clean_dry_run_returns_clean_plan(conn, tmp_path, monkeypatch) -
     stale_path.parent.mkdir(parents=True, exist_ok=True)
     stale_path.write_text("old", encoding="utf-8")
 
-    result = CommandExecutor(conn, surface="cli").execute("/context clean --dry-run")
+    result = CommandExecutor(conn, surface="cli").execute("/context clean")
 
     assert result.status == "SUCCESS"
     assert result.title == "/context clean"
@@ -110,7 +110,9 @@ def test_context_clean_dry_run_returns_clean_plan(conn, tmp_path, monkeypatch) -
     assert stale_path.exists()
 
 
-def test_context_clean_execution_archives_and_removes_files(conn, tmp_path, monkeypatch) -> None:
+def test_context_clean_execution_archives_and_removes_files(
+    conn, tmp_path, monkeypatch
+) -> None:
     from vnalpha.commands.executor import CommandExecutor
     from vnalpha.workspace_context.lifecycle import create_workspace
 
@@ -123,7 +125,7 @@ def test_context_clean_execution_archives_and_removes_files(conn, tmp_path, monk
     stale_path.write_text("old", encoding="utf-8")
     old_events_path.write_text("old events", encoding="utf-8")
 
-    result = CommandExecutor(conn, surface="cli").execute("/context clean")
+    result = CommandExecutor(conn, surface="cli").execute("/context clean --execute")
 
     assert result.status == "SUCCESS"
     assert result.title == "/context clean"
@@ -135,12 +137,88 @@ def test_context_clean_execution_archives_and_removes_files(conn, tmp_path, monk
     assert (root / "archive" / workspace.workspace_id / "events.old.jsonl").exists()
 
 
-def test_context_requires_supported_subcommand(conn) -> None:
+def test_context_lifecycle_subcommands_return_structured_panels(
+    conn, tmp_path, monkeypatch
+) -> None:
+    from vnalpha.commands.executor import CommandExecutor
+    from vnalpha.workspace_context.lifecycle import create_workspace
+
+    root = _workspace_root(tmp_path, monkeypatch)
+    workspace = create_workspace(title="Lifecycle workflow", mode="research", root=root)
+    executor = CommandExecutor(conn, surface="cli")
+
+    for command, title, panel_title in [
+        ("/context new --no-compact", "/context new", "New Workspace"),
+        ("/context resume", "/context resume", "Resume Summary"),
+        ("/context list", "/context list", "Workspaces"),
+        ("/context export", "/context export", "Workspace Export"),
+    ]:
+        result = executor.execute(command)
+
+        assert result.status == "SUCCESS"
+        assert result.title == title
+        assert result.panels[0].title == panel_title
+
+    assert workspace.workspace_id != result.panels[0].content["workspace_id"]
+
+
+def test_context_help_documents_subcommands_and_aliases(conn) -> None:
     from vnalpha.commands.executor import CommandExecutor
 
-    result = CommandExecutor(conn, surface="cli").execute("/context resume")
+    result = CommandExecutor(conn, surface="cli").execute("/help")
+    context_rows = [row for row in result.tables[0].rows if row[0] == "/context"]
 
-    assert result.status == "VALIDATION_ERROR"
-    assert result.error is not None
-    assert result.error.error_type == "CommandValidationError"
-    assert "Unsupported /context subcommand" in result.error.message
+    assert len(context_rows) == 1
+    usage = context_rows[0][2]
+    for subcommand in [
+        "status",
+        "compact",
+        "clean",
+        "new",
+        "resume",
+        "list",
+        "export",
+    ]:
+        assert subcommand in usage
+    for alias in ["/status", "/compact", "/clean", "/new", "/resume"]:
+        assert alias in usage
+
+
+@pytest.mark.parametrize(
+    ("alias", "canonical", "title", "panel_title"),
+    [
+        ("/status", "/context status", "/context status", "Workspace Health"),
+        ("/compact", "/context compact", "/context compact", "Compaction"),
+        ("/clean", "/context clean", "/context clean", "Clean Plan"),
+        (
+            "/new --no-compact",
+            "/context new --no-compact",
+            "/context new",
+            "New Workspace",
+        ),
+        ("/resume", "/context resume", "/context resume", "Resume Summary"),
+    ],
+)
+def test_context_aliases_normalize_to_canonical_results(
+    conn, tmp_path, monkeypatch, alias, canonical, title, panel_title
+) -> None:
+    from vnalpha.commands.executor import CommandExecutor
+    from vnalpha.commands.parser import parse
+    from vnalpha.workspace_context.lifecycle import create_workspace
+
+    root = _workspace_root(tmp_path, monkeypatch)
+    create_workspace(title="Alias workflow", mode="research", root=root)
+    executor = CommandExecutor(conn, surface="cli")
+
+    parsed_alias = parse(alias)
+    parsed_canonical = parse(canonical)
+    alias_result = executor.execute(alias)
+    canonical_result = executor.execute(canonical)
+
+    assert parsed_alias.command_name == parsed_canonical.command_name == "context"
+    assert parsed_alias.positional == parsed_canonical.positional
+    assert alias_result.status == canonical_result.status == "SUCCESS"
+    assert alias_result.title == canonical_result.title == title
+    assert (
+        alias_result.panels[0].title == canonical_result.panels[0].title == panel_title
+    )

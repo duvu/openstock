@@ -15,6 +15,29 @@ from vnalpha.core.universe import parse_symbols_or_universe, resolve_universe
 runner = CliRunner()
 
 
+class TestCliModuleCompatibility:
+    def test_cli_shim_exports_modular_app(self):
+        from vnalpha.cli_app.app import app as modular_app
+
+        assert app is modular_app
+
+    def test_modular_app_registers_existing_command_groups(self):
+        from vnalpha.cli_app.app import app as modular_app
+
+        result = runner.invoke(modular_app, ["--help"])
+
+        assert result.exit_code == 0
+        for command_name in (
+            "sync",
+            "build",
+            "outcome",
+            "logs",
+            "repair",
+            "deploy",
+        ):
+            assert command_name in result.output
+
+
 # ---------------------------------------------------------------------------
 # CLI flag contract tests
 # ---------------------------------------------------------------------------

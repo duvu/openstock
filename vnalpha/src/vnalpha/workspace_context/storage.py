@@ -42,7 +42,9 @@ def resolve_workspace_root(root: Path | None = None) -> Path:
     return DEFAULT_WORKSPACE_ROOT
 
 
-def ensure_workspace_layout(*, root: Path | None = None, workspace_id: str) -> WorkspacePaths:
+def ensure_workspace_layout(
+    *, root: Path | None = None, workspace_id: str
+) -> WorkspacePaths:
     resolved_root = resolve_workspace_root(root)
     workspace_dir = resolved_root / workspace_id
     artifacts_dir = workspace_dir / "artifacts"
@@ -72,8 +74,12 @@ def ensure_workspace_layout(*, root: Path | None = None, workspace_id: str) -> W
 
 def _atomic_write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as handle:
+    with NamedTemporaryFile(
+        "w", encoding="utf-8", dir=path.parent, delete=False
+    ) as handle:
         handle.write(content)
+        handle.flush()
+        os.fsync(handle.fileno())
         temp_path = Path(handle.name)
     temp_path.replace(path)
 
@@ -82,7 +88,9 @@ def _index_path(root: Path | None = None) -> Path:
     return resolve_workspace_root(root) / INDEX_NAME
 
 
-def _write_workspace_index(*, root: Path | None = None, workspace_ids: list[str]) -> Path:
+def _write_workspace_index(
+    *, root: Path | None = None, workspace_ids: list[str]
+) -> Path:
     index_path = _index_path(root)
     payload = {
         "workspace_ids": sorted(workspace_ids),
@@ -122,6 +130,9 @@ def save_workspace_state(*, root: Path | None = None, state: WorkspaceState) -> 
         paths.workspace_json_path,
         json.dumps(state.to_dict(), indent=2, sort_keys=True),
     )
+    from vnalpha.workspace_context.integration import render_context_markdown
+
+    _atomic_write_text(paths.context_path, render_context_markdown(state))
     existing_index = load_workspace_index(root=paths.root)
     workspace_ids = set(existing_index["workspace_ids"])
     workspace_ids.add(state.workspace_id)
@@ -129,7 +140,9 @@ def save_workspace_state(*, root: Path | None = None, state: WorkspaceState) -> 
     return paths.workspace_json_path
 
 
-def load_workspace_state(*, root: Path | None = None, workspace_id: str) -> WorkspaceState:
+def load_workspace_state(
+    *, root: Path | None = None, workspace_id: str
+) -> WorkspaceState:
     paths = ensure_workspace_layout(root=root, workspace_id=workspace_id)
     payload = json.loads(paths.workspace_json_path.read_text(encoding="utf-8"))
     return WorkspaceState.from_dict(payload)

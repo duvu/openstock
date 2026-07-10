@@ -258,6 +258,7 @@ class TestObservabilityEvents:
                 _lock_dir=tmp_path,
                 _sync_symbols_fn=_sync_symbols_that_inserts,
                 _sync_ohlcv_fn=_noop_sync_ohlcv,
+                _sync_index_fn=_noop_sync_ohlcv,
                 _build_canonical_fn=_noop_build_canonical,
                 _build_features_fn=_noop_build_features,
                 _score_universe_fn=_noop_score_universe,

@@ -1,32 +1,16 @@
-"""Plan builder: maps IntentResult to AssistantPlan using Phase 5.8 tool allowlist."""
+"""Plan builder: maps intents to plans using assistant-approved tool capabilities."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
 
 from vnalpha.assistant.errors import PlanBuildError, PlanValidationError
 from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
+from vnalpha.assistant.tool_policy import assert_safe_tool
 
 if TYPE_CHECKING:
     pass
-
-# Phase 5.8 allowlisted tools for Phase 5.9
-TOOL_ALLOWLIST: frozenset[str] = frozenset(
-    {
-        "watchlist.scan",
-        "watchlist.filter",
-        "candidate.compare",
-        "candidate.explain",
-        "quality.get_status",
-        "quality.get_many_status",
-        "lineage.get_symbol_lineage",
-        "note.create",
-        "history.list_sessions",
-        "data.fetch",
-    }
-)
 
 
 def _resolve_symbol(entities: dict) -> str:
@@ -239,44 +223,13 @@ def _build_history_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_fetch_plan(entities: dict) -> AssistantPlan:
-    # LLM may return "symbols" (list) or "symbol" (string) — handle both
-    symbols_list = entities.get("symbols", [])
-    if symbols_list:
-        symbols = [str(s) for s in symbols_list if s]
-    else:
-        single = entities.get("symbol", "")
-        symbols = [single] if single else []
-
-    extra: dict = {}
-    if entities.get("start"):
-        extra["start"] = entities["start"]
-    else:
-        extra["start"] = (date.today() - timedelta(days=365)).strftime("%Y-%m-%d")
-    if entities.get("end"):
-        extra["end"] = entities["end"]
-    if entities.get("interval"):
-        extra["interval"] = entities["interval"]
-
-    if not symbols:
-        return AssistantPlan(
-            intent="fetch_data",
-            steps=[],
-            refusal_reason="No symbol specified. Please provide a stock symbol to fetch data for.",
-        )
-
-    steps = [
-        _step(
-            "data.fetch",
-            {"symbol": sym, **extra},
-            f"Fetch OHLCV data for {sym}",
-            "WRITE_DATA",
-        )
-        for sym in symbols
-    ]
     return AssistantPlan(
         intent="fetch_data",
-        steps=steps,
-        required_artifacts=[],
+        steps=[],
+        refusal_reason=(
+            "Warehouse data fetches require an explicit manual command or tool path; "
+            "the assistant cannot run data.fetch autonomously."
+        ),
     )
 
 
@@ -307,15 +260,11 @@ _PLAN_BUILDERS = {
 
 
 def _validate_plan(plan: AssistantPlan) -> None:
-    """Raise PlanValidationError if any step uses a non-allowlisted tool."""
+    """Raise PlanValidationError if a plan step uses an unsafe tool."""
     if plan.is_refusal():
         return
     for step in plan.steps:
-        if step.tool_name not in TOOL_ALLOWLIST:
-            raise PlanValidationError(
-                f"Tool '{step.tool_name}' is not in the Phase 5.9 allowlist. "
-                f"Allowed tools: {sorted(TOOL_ALLOWLIST)}"
-            )
+        assert_safe_tool(step.tool_name, error_type=PlanValidationError)
 
 
 class PlanBuilder:

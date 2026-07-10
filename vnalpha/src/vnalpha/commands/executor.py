@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import assert_never
+
 from vnalpha.commands.errors import (
     CommandError as CommandException,
 )
@@ -10,7 +12,12 @@ from vnalpha.commands.errors import (
     CommandValidationError,
     UnknownCommandError,
 )
-from vnalpha.commands.models import CommandError, CommandResult, ParsedCommand
+from vnalpha.commands.models import (
+    CommandError,
+    CommandResult,
+    CommandStatus,
+    ParsedCommand,
+)
 from vnalpha.commands.parser import parse as parse_command
 from vnalpha.commands.registry import CommandRegistry
 from vnalpha.commands.setup import build_default_registry
@@ -105,13 +112,10 @@ class CommandExecutor:
         except Exception as exc:
             return self._finish_failed(session_id, "RuntimeError", str(exc))
 
-        session_status = result.status if result.status == "SUCCESS" else "FAILED"
-        if result.status == "VALIDATION_ERROR":
-            session_status = "VALIDATION_ERROR"
         finish_research_session(
             self._conn,
             session_id,
-            status=session_status,
+            status=_research_session_status(result.status),
             result_summary={"title": result.title, "summary": result.summary},
             error={
                 "error_type": result.error.error_type,
@@ -133,7 +137,7 @@ class CommandExecutor:
         finish_research_session(
             self._conn,
             session_id,
-            status="VALIDATION_ERROR",
+            status=CommandStatus.VALIDATION_ERROR,
             error={"error_type": error_type, "message": message},
         )
         return CommandResult(
@@ -149,7 +153,7 @@ class CommandExecutor:
         finish_research_session(
             self._conn,
             session_id,
-            status="FAILED",
+            status=CommandStatus.FAILED,
             error={"error_type": error_type, "message": message},
         )
         return CommandResult(
@@ -166,3 +170,19 @@ def _parsed_args(parsed: ParsedCommand) -> dict:
         "filters": [(f.key, f.op, f.value) for f in parsed.filters],
         "options": dict(parsed.options),
     }
+
+
+def _research_session_status(status: CommandStatus) -> str:
+    match status:
+        case CommandStatus.SUCCESS:
+            return status.value
+        case CommandStatus.EMPTY_RESULT:
+            return status.value
+        case CommandStatus.PARTIAL:
+            return status.value
+        case CommandStatus.FAILED:
+            return status.value
+        case CommandStatus.VALIDATION_ERROR:
+            return status.value
+        case unreachable:
+            assert_never(unreachable)

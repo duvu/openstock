@@ -30,6 +30,17 @@ No screen switcher. No secondary chat panel. One input, one output stream.
 
 ---
 
+## Routing module paths
+
+The active router is `vnalpha.tui.routing.router.TuiInputRouter`. Focused
+routing code lives in `vnalpha.tui.routing.command_path`,
+`vnalpha.tui.routing.chat_path`, `vnalpha.tui.routing.status_adapter`,
+`vnalpha.tui.routing.lifecycle_hooks`, and `vnalpha.tui.routing.events`.
+Existing imports of `vnalpha.tui.input_router.TuiInputRouter` remain compatible
+and re-export the routing router class.
+
+---
+
 ## Input Routing Rules
 
 `TuiInputRouter` routes every submitted text according to these rules (evaluated top-to-bottom):
@@ -40,7 +51,8 @@ No screen switcher. No secondary chat panel. One input, one output stream.
 | `/clear` | `OutputStream.clear_visible()` — visible output only, no audit log deletion |
 | `/approve` or `approve` | `ChatController.approve_pending_plan()` |
 | `/cancel` or `cancel` | `ChatController.cancel_pending_plan()` |
-| starts with `/` | `CommandExecutor.execute(text)` → result rendered inline |
+| operational route | Routed before the generic executor, then rendered inline |
+| other text starting with `/` | `CommandExecutor.execute(text)` → result rendered inline |
 | anything else | `ChatController.handle_turn(text)` → assistant reply rendered inline |
 
 ---
@@ -53,14 +65,32 @@ No screen switcher. No secondary chat panel. One input, one output stream.
 /explain SMA_CROSSOVER       # Explain a pattern
 /filter ...                  # Filter watchlist
 /history AAPL                # Show price history
-/logs list                   # List recent run logs
-/logs show <run-id>          # Show a run's events
+/logs errors --latest        # Show errors from the latest run
+/logs summarize --latest     # Summarize the latest run
 /repair prepare --latest     # Create repair bundle from latest run
 /repair status <repair-id>   # Check repair status
 /deploy verify <candidate>   # Verify a deploy candidate
-/deploy promote <candidate>  # Promote candidate (requires verified)
+/deploy promote <candidate> --deployment-id <id>  # Promote verified candidate
 /deploy rollback <dep-id>    # Rollback a deployment
 ```
+
+The seven operational routes are handled before the generic command executor:
+
+1. `/logs errors --latest`
+2. `/logs summarize --latest`
+3. `/repair prepare --latest`
+4. `/repair status <id>`
+5. `/deploy verify <candidate>`
+6. `/deploy promote <candidate> --deployment-id <id>`
+7. `/deploy rollback <id>`
+
+### Safe tools and LLM boundary
+
+`SAFE_TOOLS` calls run automatically. Trusted local `note.create` and `data.fetch` calls are included in this policy.
+
+The planner, executor, and chat path refuse unknown or forbidden tools. The LLM is limited to research work. It can explain, summarize, and propose work, but it cannot bypass deterministic routing, invoke forbidden tools, or perform deployment actions outside the operational routes above.
+
+Tool activity follows the run lifecycle and is recorded with sensitive values redacted. When the router finishes, it closes its workspace connection.
 
 ---
 
@@ -84,6 +114,8 @@ Every TUI interaction emits structured events to the run's JSONL logs:
 | `TUI_TODO_PANEL_HIDDEN` | Responsive policy hid the TODO rail |
 | `TUI_TODO_PANEL_TOGGLED` | User toggled the TODO rail on a wide terminal |
 | `TUI_TODO_PANEL_REFRESHED` | TODO rail reloaded items from its source |
+| `TUI_TODO_ITEM_ADDED` | `/todo add` persisted an item (redacted metadata only) |
+| `TUI_TODO_ITEM_UPDATED` | `/todo done`, `/todo block`, or `/todo clear-done` changed items (redacted metadata only) |
 
 Correlation ID is auto-assigned if not already set.
 
@@ -143,9 +175,22 @@ Current TODO items are derived from workspace context state:
 
 Warnings are surfaced as blocked TODO-style items so the operator can see unresolved workspace risks in the same rail. When no workspace TODO data is available, the panel renders an empty-state hint instead of opening an editor.
 
-### Current limitation
+### TODO commands
 
-The footer empty-state hint references `/context task add "..."` as a future capability, but the responsive side panel itself is read-only in this change. This implementation intentionally does not add `/todo` mutation commands or an inline task editor.
+The panel remains read-only; use the primary composer to manage persisted workspace tasks:
+
+```text
+/todo list
+/todo add <text>
+/todo done <id>
+/todo block <id>
+/todo clear-done
+```
+
+`/todo list` returns structured item rows (`id`, `status`, `priority`, `text`, and
+`updated_at`). Adding defaults to `pending` and `medium`; completing uses
+`completed`; blocking uses `blocked`; and `clear-done` removes only `completed`
+or legacy `done` items. Item events and audit metadata redact task text.
 
 ---
 
@@ -235,8 +280,8 @@ Stateful router. Bootstraps `ChatController` and `CommandExecutor` lazily on fir
 - Responsive TODO coverage: `pytest vnalpha/tests/test_tui_todo_panel.py vnalpha/tests/test_tui_pilot.py vnalpha/tests/test_tui_layout_and_history.py` → 40 passed
 - `make verify-r4`: 80 passed
 - `./packaging/scripts/openstock-verify --ci`: PASS (16 OK, 1 WARN, 0 FAIL)
-- `make test-vnalpha`: currently blocked by pre-existing `tests/test_tui_command.py::TestCommandWidgetsStatic::test_textual_renderer_returns_string`
-- `make lint-vnalpha`: currently blocked by unrelated import-order issues under `workspace_context`
+- `make test-vnalpha`: passes with an isolated `VNALPHA_WAREHOUSE_PATH`
+- `make lint-vnalpha`: passes
 - Layout tests: `test_tui_layout_and_history.py` (13 tests)
 - History tests: `test_input_history.py` (22 tests)
 - Status tests: `test_tui_runtime_status.py` (11 tests)

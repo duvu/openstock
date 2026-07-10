@@ -1,8 +1,8 @@
 """
-AssistantExecutor: runs ToolPlanStep list through the Phase 5.8 local tool registry.
+AssistantExecutor: runs ToolPlanStep lists through the policy-governed tool registry.
 
 Rules:
-- Only tools in ASSISTANT_TOOL_ALLOWLIST may be called.
+- Only tools approved by the canonical assistant tool policy may be called.
 - Every call is persisted in tool_trace (linked to assistant_session_id).
 - Network, Python exec, MCP, raw SQL, filesystem, broker/order/allocation are forbidden.
 """
@@ -17,27 +17,13 @@ if TYPE_CHECKING:
 
 from vnalpha.assistant.errors import RefusalError, ToolExecutionError
 from vnalpha.assistant.models import AssistantPlan, ToolPlanStep
+from vnalpha.assistant.tool_policy import assert_safe_tool
 from vnalpha.core.logging import get_logger
 from vnalpha.tools.errors import ToolError
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import TOOL_PERMISSIONS, build_local_tool_registry
 
 logger = get_logger("assistant.executor")
-
-ASSISTANT_TOOL_ALLOWLIST: frozenset[str] = frozenset(
-    {
-        "watchlist.scan",
-        "watchlist.filter",
-        "candidate.compare",
-        "candidate.explain",
-        "quality.get_status",
-        "quality.get_many_status",
-        "lineage.get_symbol_lineage",
-        "note.create",
-        "history.list_sessions",
-        "data.fetch",
-    }
-)
 
 _ANALYSIS_TOOLS: frozenset[str] = frozenset({"candidate.explain", "candidate.compare"})
 
@@ -101,17 +87,11 @@ class AssistantExecutor:
             )
         results: dict[str, Any] = {}
         for step in plan.steps:
-            self._check_allowlist(step)
+            assert_safe_tool(step.tool_name)
             _ensure_data_for_step(self._conn, step)
             output = self._execute_step(step)
             results[step.step_id] = output
         return results
-
-    def _check_allowlist(self, step: ToolPlanStep) -> None:
-        if step.tool_name not in ASSISTANT_TOOL_ALLOWLIST:
-            raise ToolExecutionError(
-                f"Tool '{step.tool_name}' is not in the assistant tool allowlist."
-            )
 
     def _execute_step(self, step: ToolPlanStep) -> Any:
         try:

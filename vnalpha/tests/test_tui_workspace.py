@@ -271,7 +271,10 @@ async def test_9_12_router_slash_command_routes_to_executor():
     router._command_executor = mock_executor
     router._chat_controller = MagicMock()
 
-    with patch("asyncio.to_thread", new_callable=AsyncMock) as mock_thread:
+    with patch(
+        "vnalpha.tui.routing.command_path.anyio.to_thread.run_sync",
+        new_callable=AsyncMock,
+    ) as mock_thread:
         mock_thread.return_value = "result"
         await router.route("/watchlist")
 
@@ -298,13 +301,17 @@ async def test_9_13_router_plain_text_routes_to_chat():
     router._chat_controller = mock_controller
     router._command_executor = MagicMock()
 
-    with patch("asyncio.to_thread", new_callable=AsyncMock) as mock_thread:
+    with patch(
+        "vnalpha.tui.routing.chat_path.anyio.to_thread.run_sync",
+        new_callable=AsyncMock,
+    ) as mock_thread:
         mock_thread.return_value = None
         await router.route("what is the trend for FPT?")
 
     mock_thread.assert_called_once()
     call_args = mock_thread.call_args[0]
-    assert call_args[0] == mock_controller.handle_turn
+    assert call_args[0].func == mock_controller.handle_turn
+    assert call_args[0].args == ("what is the trend for FPT?",)
 
 
 @pytest.mark.asyncio
@@ -377,9 +384,13 @@ async def test_9_16_render_errors_captured_by_observability():
     router._chat_controller = MagicMock()
 
     exc = RuntimeError("boom")
-    with patch("asyncio.to_thread", new_callable=AsyncMock, side_effect=exc):
+    with patch(
+        "vnalpha.tui.routing.command_path.anyio.to_thread.run_sync",
+        new_callable=AsyncMock,
+        side_effect=exc,
+    ):
         with patch(
-            "vnalpha.tui.input_router.TuiInputRouter._capture_render_error"
+            "vnalpha.tui.routing.command_path.events.capture_render_error"
         ) as mock_capture:
             await router.route("/score")
 

@@ -219,22 +219,18 @@ openstock-backup-warehouse
 
 | Type | Evidence |
 |---|---|
-| implementation | `VnAlphaApp` with ContentSwitcher, all screens implemented |
-| implementation | `ChatPanel` with `_chat_controller` wiring |
-| unit | `tests/test_tui_pilot.py` — pilot tests for all screens, empty states |
-| unit | `tests/test_tui.py` — smoke/import tests |
-| unit | `tests/test_tui_layout.py`, `tests/test_tui_outcomes.py`, `tests/test_tui_command.py` |
-| runtime | All TUI pilot tests pass with headless Textual |
+| implementation | `VnAlphaApp` mounts a single chat-first workspace with `OutputStream`, `ComposerInput`, status, and footer |
+| implementation | `TuiInputRouter` owns command/chat routing, operational routes, resource cleanup, and worker-safe UI dispatch |
+| unit | `tests/test_tui_pilot.py`, `tests/test_tui_workspace.py`, `tests/test_tui_operational_router.py`, `tests/test_tui_thread_dispatch.py` |
+| runtime | Headless Textual tests cover mount, routing, lifecycle events, and shutdown |
 
 ### TUI Pilot Test Coverage
 
-- `test_app_mounts` — app mounts without errors
-- `test_initial_screen_is_home` — home is initial screen
-- `test_switch_to_watchlist/commands/assistant/rejected/quality/outcomes` — all screens
-- `test_chat_panel_remains_mounted_after_switching` — ChatPanel persistence
-- `test_chat_toggle_via_binding` — Ctrl+backslash toggle
-- `test_*_empty_state_no_crash` — empty warehouse coverage for all screens
-- `test_watchlist_row_selection_action` — row selection binding exists
+- `test_app_mounts` — the chat-first app mounts without errors
+- `test_operational_commands_bypass_research_executor` — operational routes have precedence
+- `test_unsupported_operational_command_records_redacted_failure` — unsupported routes preserve lifecycle evidence
+- `test_router_close_closes_command_connection_once` — router resource cleanup is idempotent
+- `test_app_unmount_closes_router` — application teardown closes the router
 
 ### Manual TUI Smoke Steps
 
@@ -242,15 +238,14 @@ openstock-backup-warehouse
 # Start TUI with demo date
 vnalpha tui --date 2026-07-07
 
-# Navigate: h=Home, w=Watchlist, c=Commands, a=Assistant, r=Rejected, p=Quality, o=Outcomes
-# Chat: Ctrl+/ to focus input, Ctrl+\ to toggle
+# Submit research questions or slash commands through the composer
+# Use /logs, /repair, and /deploy only with the documented operational forms
 # Quit: q
 ```
 
 ### Remaining Deferred Work
 
 - Full visual regression tests (requires TTY)
-- `vnalpha tui --smoke` non-interactive smoke command
 - Keyboard shortcut comprehensive coverage
 
 ---
@@ -266,9 +261,9 @@ vnalpha tui --date 2026-07-07
 
 | Type | Evidence |
 |---|---|
-| implementation | `ChatPanel` delegates to `ChatController.handle_turn()` |
-| implementation | `ChatPanel` approval/cancel calls `ChatController.approve_pending_plan()/.cancel_pending_plan()` |
-| implementation | Local dispatch paths (`_dispatch_command_sync`, `_dispatch_assistant`, `_run_ask`, `_VALID_COMMANDS`) removed from ChatPanel |
+| implementation | `TuiInputRouter` delegates natural language and explicit approval/cancel actions to `ChatController` |
+| implementation | `ChatController` owns planning, approval, execution, persistence, and canonical `SAFE_TOOLS` refusal checks |
+| implementation | Bounded workspace context is passed separately from raw user text to `AssistantApp` |
 | implementation | Persistence for all turn types in `chat_message` |
 | implementation | `/clear` preserves transcript via `is_visible`/`hidden_at` columns |
 | implementation | Permission evaluation before pending plan (HARD_DENY never pending) |
@@ -280,17 +275,17 @@ vnalpha tui --date 2026-07-07
 | unit | `tests/test_r4_trace.py` — trace persistence and `/trace` tests |
 | unit | `tests/test_r4_session.py` — session lifecycle tests |
 
-### ChatPanel Wiring
+### Router and Controller Wiring
 
 After this change:
 
 ```python
-ChatPanel.on_input_submitted(raw) → self._chat_controller.handle_turn(raw)
-ChatPanel.action_approve_plan()   → self._chat_controller.approve_pending_plan()
-ChatPanel.action_cancel_plan()    → self._chat_controller.cancel_pending_plan()
+TuiInputRouter.route(raw)          → ChatController.handle_turn(raw)
+TuiInputRouter._handle_approve()   → ChatController.approve_pending_plan()
+TuiInputRouter._handle_cancel()    → ChatController.cancel_pending_plan()
 ```
 
-All local orchestration paths removed from ChatPanel.
+The router does not duplicate chat planning or execution logic.
 
 ### Chat Persistence Semantics
 
@@ -322,7 +317,7 @@ Before storing a pending plan, all tools are classified:
 
 | Level | Behavior |
 |---|---|
-| ALLOW | may auto-run in safe-read mode |
+| ALLOW | may auto-run in safe-tools mode, including trusted local note/data writes |
 | ASK | may become pending, needs approval |
 | DENY | refused in current mode, not pending |
 | HARD_DENY | refused permanently, never pending, never approvable |
