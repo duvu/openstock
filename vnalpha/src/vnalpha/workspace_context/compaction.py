@@ -36,6 +36,16 @@ def _source_refs(state: WorkspaceState) -> list[str]:
 
 def _render_compact_markdown(state: WorkspaceState, generated_at: str) -> str:
     sources = _source_refs(state)
+    findings = [
+        artifact
+        for artifact in state.active_artifacts
+        if artifact.artifact_type != "decision"
+    ]
+    decisions = [
+        artifact
+        for artifact in state.active_artifacts
+        if artifact.artifact_type == "decision"
+    ]
     lines = [
         "# Compact Workspace Summary",
         "",
@@ -55,10 +65,7 @@ def _render_compact_markdown(state: WorkspaceState, generated_at: str) -> str:
         "",
         "## Findings",
         *(
-            [
-                f"- {artifact.summary} (`{artifact.path}`)"
-                for artifact in state.active_artifacts[:20]
-            ]
+            [f"- {artifact.summary} (`{artifact.path}`)" for artifact in findings[:20]]
             or ["- None"]
         ),
         "",
@@ -66,7 +73,10 @@ def _render_compact_markdown(state: WorkspaceState, generated_at: str) -> str:
         *([f"- {assumption}" for assumption in state.assumptions] or ["- None"]),
         "",
         "## Decisions",
-        *([f"- {warning}" for warning in state.warnings] or ["- None"]),
+        *(
+            [f"- {artifact.summary} (`{artifact.path}`)" for artifact in decisions[:20]]
+            or ["- None"]
+        ),
         "",
         "## Open Tasks",
         *([f"- {task.text}" for task in state.open_tasks] or ["- None"]),

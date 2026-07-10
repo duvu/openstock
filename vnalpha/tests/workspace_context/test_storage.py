@@ -4,6 +4,7 @@ import json
 
 from vnalpha.workspace_context.models import WorkspaceState
 from vnalpha.workspace_context.storage import (
+    DEFAULT_WORKSPACE_ROOT,
     acquire_workspace_lock,
     append_workspace_event,
     ensure_workspace_layout,
@@ -38,6 +39,15 @@ def test_resolve_workspace_root_prefers_env_override(monkeypatch, tmp_path) -> N
     resolved = resolve_workspace_root()
 
     assert resolved == override
+
+
+def test_resolve_workspace_root_defaults_to_workspace_directory(monkeypatch) -> None:
+    monkeypatch.delenv("VNALPHA_WORKSPACE_ROOT", raising=False)
+
+    resolved = resolve_workspace_root()
+
+    assert resolved == DEFAULT_WORKSPACE_ROOT
+    assert resolved.as_posix() == ".vnalpha/workspaces"
 
 
 def test_ensure_layout_and_state_round_trip(tmp_path) -> None:

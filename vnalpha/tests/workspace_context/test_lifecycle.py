@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import vnalpha.workspace_context.persistence as persistence_module
 from vnalpha.workspace_context import lifecycle
 from vnalpha.workspace_context.lifecycle import (
     archive_workspace,
@@ -149,6 +150,38 @@ def test_new_workspace_skips_compaction_only_when_requested(tmp_path) -> None:
 
     assert not (tmp_path / previous.workspace_id / "compact.md").exists()
     assert resume_workspace(previous.workspace_id, root=tmp_path).status == "archived"
+
+
+def test_new_workspace_emits_workspace_and_audit_events(tmp_path, monkeypatch) -> None:
+    audit_events: list[tuple[str, str, str, dict[str, str | int | float | bool]]] = []
+
+    def record_audit_event(
+        *,
+        event_type: str,
+        workspace_id: str,
+        summary: str,
+        metadata: dict[str, str | int | float | bool],
+    ) -> None:
+        audit_events.append((event_type, workspace_id, summary, metadata))
+
+    monkeypatch.setattr(
+        persistence_module, "emit_workspace_audit_event", record_audit_event
+    )
+    create_workspace(root=tmp_path)
+
+    current = lifecycle.new_workspace(no_compact=True, root=tmp_path)
+
+    events = [
+        json.loads(line)
+        for line in (tmp_path / current.workspace_id / "events.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert any(event["event_type"] == "WORKSPACE_NEW_STARTED" for event in events)
+    assert any(
+        event_type == "WORKSPACE_NEW_STARTED" and workspace_id == current.workspace_id
+        for event_type, workspace_id, _, _ in audit_events
+    )
 
 
 def test_resume_summary_and_list_are_structured_and_deterministic(tmp_path) -> None:

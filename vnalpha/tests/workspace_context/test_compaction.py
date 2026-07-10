@@ -96,6 +96,32 @@ def test_compact_workspace_includes_core_sections_and_emits_event(tmp_path) -> N
     assert any(event["event_type"] == "WORKSPACE_COMPACTED" for event in events)
 
 
+def test_compact_workspace_separates_decisions_from_warnings(tmp_path) -> None:
+    workspace = create_workspace(title="Decision workflow", root=tmp_path)
+    record_warning(workspace, "Provider latency is elevated", root=tmp_path)
+    record_artifact(
+        workspace,
+        WorkspaceArtifactRef(
+            artifact_id="decision-1",
+            artifact_type="decision",
+            path="artifacts/decision.md",
+            summary="Use the daily close for the watchlist review",
+            created_at="2026-07-10T00:00:00+00:00",
+        ),
+        root=tmp_path,
+    )
+
+    compact_workspace(workspace.workspace_id, root=tmp_path)
+
+    compact_text = (tmp_path / workspace.workspace_id / "compact.md").read_text(
+        encoding="utf-8"
+    )
+    decisions = compact_text.split("## Decisions\n", 1)[1].split("## Open Tasks", 1)[0]
+
+    assert "Use the daily close for the watchlist review" in decisions
+    assert "Provider latency is elevated" not in decisions
+
+
 def test_compact_workspace_preserves_active_date_and_errors_without_raw_events(
     tmp_path,
 ) -> None:
