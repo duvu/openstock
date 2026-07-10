@@ -17,6 +17,15 @@ class RouteMetadata(TypedDict, total=False):
     artifact_count: int
     context_bytes: int
     requires_deep_reasoning: bool
+    latency_ms: float
+    tokens_in: int
+    tokens_out: int
+    estimated_cost: float
+    error_type: str
+    fallback_from: str
+    fallback_to: str
+    scope: str
+    profile: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,18 +41,7 @@ class ModelRouteEvent:
     metadata: Mapping[str, Any]
 
 
-_ALLOWED_METADATA_KEYS = frozenset(
-    {
-        "request_id",
-        "session_id",
-        "workspace_id",
-        "surface",
-        "symbol_count",
-        "artifact_count",
-        "context_bytes",
-        "requires_deep_reasoning",
-    }
-)
+_ALLOWED_METADATA_KEYS = frozenset(RouteMetadata.__annotations__)
 
 
 def redact_route_metadata(metadata: Mapping[str, Any]) -> RouteMetadata:
