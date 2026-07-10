@@ -80,6 +80,10 @@ Every TUI interaction emits structured events to the run's JSONL logs:
 | `TUI_HISTORY_NEXT` | User navigated to next history item |
 | `TUI_HISTORY_DRAFT_RESTORED` | Draft restored after history navigation |
 | `TUI_STATUS_CHANGED` | Status bar state transition |
+| `TUI_TODO_PANEL_VISIBLE` | Responsive policy made the TODO rail visible |
+| `TUI_TODO_PANEL_HIDDEN` | Responsive policy hid the TODO rail |
+| `TUI_TODO_PANEL_TOGGLED` | User toggled the TODO rail on a wide terminal |
+| `TUI_TODO_PANEL_REFRESHED` | TODO rail reloaded items from its source |
 
 Correlation ID is auto-assigned if not already set.
 
@@ -109,9 +113,39 @@ Screen-switching bindings (`h/w/c/a/r/p/o/l`) are removed. These screens remain 
 | `Enter` | Submit input, push to history |
 | `Up` / `Ctrl+P` | Previous history item |
 | `Down` / `Ctrl+N` | Next history item (restore draft past newest) |
+| `Ctrl+T` | Toggle TODO side panel on wide terminals |
 | `q` | Quit |
 | `Ctrl+L` | Clear visible OutputStream |
 | `Escape` | Cancel pending plan |
+
+---
+
+## Responsive TODO Side Panel
+
+The chat-first layout now keeps the primary stack intact while adding a read-only TODO rail on sufficiently wide terminals.
+
+### Layout behavior
+
+- Width `<120`: the TODO side panel is hidden.
+- Width `>=120`: the TODO side panel is shown beside the main chat stack.
+- `Ctrl+T` toggles the side panel only when the terminal is wide enough.
+- Resize events re-evaluate visibility automatically.
+- Composer focus is restored after mount, clear, toggle, and resize so the single input workflow stays uninterrupted.
+
+### Data model and sources
+
+The panel is display-only. It does **not** mount a second `Input`, and it does not introduce a new command surface.
+
+Current TODO items are derived from workspace context state:
+
+- `WorkspaceState.open_tasks`
+- `WorkspaceState.warnings`
+
+Warnings are surfaced as blocked TODO-style items so the operator can see unresolved workspace risks in the same rail. When no workspace TODO data is available, the panel renders an empty-state hint instead of opening an editor.
+
+### Current limitation
+
+The footer empty-state hint references `/context task add "..."` as a future capability, but the responsive side panel itself is read-only in this change. This implementation intentionally does not add `/todo` mutation commands or an inline task editor.
 
 ---
 
@@ -198,9 +232,11 @@ Stateful router. Bootstraps `ChatController` and `CommandExecutor` lazily on fir
 
 ## Validation Evidence
 
-- Full test suite: 1100+ tests pass (pre-existing DuckDB lock + textual_renderer failures excluded)
-- `make lint-vnalpha`: all checks passed, 224 files formatted
+- Responsive TODO coverage: `pytest vnalpha/tests/test_tui_todo_panel.py vnalpha/tests/test_tui_pilot.py vnalpha/tests/test_tui_layout_and_history.py` → 40 passed
 - `make verify-r4`: 80 passed
+- `./packaging/scripts/openstock-verify --ci`: PASS (16 OK, 1 WARN, 0 FAIL)
+- `make test-vnalpha`: currently blocked by pre-existing `tests/test_tui_command.py::TestCommandWidgetsStatic::test_textual_renderer_returns_string`
+- `make lint-vnalpha`: currently blocked by unrelated import-order issues under `workspace_context`
 - Layout tests: `test_tui_layout_and_history.py` (13 tests)
 - History tests: `test_input_history.py` (22 tests)
 - Status tests: `test_tui_runtime_status.py` (11 tests)
