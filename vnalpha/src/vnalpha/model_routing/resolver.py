@@ -97,11 +97,14 @@ def fallback_route_decisions(
     config: ModelRoutingConfig, decision: ModelRouteDecision
 ) -> tuple[ModelRouteDecision, ...]:
     decisions: list[ModelRouteDecision] = []
-    seen: set[ModelProfile] = {decision.profile}
+    seen_profiles: set[ModelProfile] = {decision.profile}
+    seen_model_ids: set[str] = {decision.model_id}
     for profile in decision.fallback_chain:
-        if profile in seen:
+        model_id = config.model_for(profile)
+        if profile in seen_profiles or model_id in seen_model_ids:
             continue
-        seen.add(profile)
+        seen_profiles.add(profile)
+        seen_model_ids.add(model_id)
         decisions.append(
             decision_for_profile(
                 config,
