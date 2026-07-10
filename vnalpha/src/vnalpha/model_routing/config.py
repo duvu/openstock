@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
 
@@ -67,7 +67,9 @@ def _provider_from_model_id(model_id: str) -> str | None:
 class ModelRoutingConfig:
     default_model_id: str
     profile_models: Mapping[ModelProfile, str]
-    fallback_profiles: Mapping[ModelProfile, tuple[ModelProfile, ...]]
+    fallback_profiles: Mapping[ModelProfile, tuple[ModelProfile, ...]] = field(
+        default_factory=lambda: _DEFAULT_FALLBACKS
+    )
     explicit_profiles: frozenset[ModelProfile] = frozenset()
     allow_raw_override: bool = False
 
@@ -137,7 +139,7 @@ class ModelRoutingConfig:
                 "Missing configured model id for profile(s): " + ", ".join(missing)
             )
         for profile, fallbacks in self.fallback_profiles.items():
-            if profile not in ModelProfile:
+            if not isinstance(profile, ModelProfile):
                 raise ValueError(f"Invalid fallback source profile: {profile!r}")
             for fallback in fallbacks:
                 if fallback not in self.profile_models:
