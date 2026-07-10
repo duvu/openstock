@@ -53,7 +53,12 @@ def handle_context(parsed: ParsedCommand, **kwargs) -> CommandResult:
 
     if subcommand == "compact":
         workspace = get_or_create_latest_workspace()
-        result = compact_workspace(workspace.workspace_id)
+        llm_client = kwargs.get("llm_client")
+        if parsed.options.get("llm", False) is True and llm_client is None:
+            from vnalpha.assistant.gateway import LLMGatewayClient
+
+            llm_client = LLMGatewayClient()
+        result = compact_workspace(workspace.workspace_id, llm_client=llm_client)
         return CommandResult(
             status="SUCCESS",
             title="/context compact",
@@ -67,6 +72,7 @@ def handle_context(parsed: ParsedCommand, **kwargs) -> CommandResult:
                         "workspace_id": result.workspace_id,
                         "compact_path": result.compact_path,
                         "summary_lines": result.after_size.get("summary_lines"),
+                        "llm_requested": parsed.options.get("llm", False) is True,
                         "generated_at": result.generated_at,
                     },
                 )
