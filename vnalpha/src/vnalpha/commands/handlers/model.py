@@ -12,10 +12,15 @@ from vnalpha.model_routing import (
     resolve_model_route,
 )
 
+_PROFILE_NAMES = frozenset(profile.value for profile in ModelProfile)
+_ROUTE_STAGES = frozenset(
+    {"classify", "plan", "synthesize", "compact", "title", "diagnose", "generic"}
+)
+
 
 def handle_model(parsed: ParsedCommand, **_kwargs: Any) -> CommandResult:
     subcommand = parsed.positional[0].lower() if parsed.positional else "status"
-    if subcommand in {profile.value for profile in ModelProfile}:
+    if subcommand in _PROFILE_NAMES:
         parsed = ParsedCommand(
             command_name=parsed.command_name,
             raw_text=parsed.raw_text,
@@ -36,12 +41,13 @@ def handle_model(parsed: ParsedCommand, **_kwargs: Any) -> CommandResult:
     if subcommand == "explain-route":
         return _explain_route_result(parsed)
     raise CommandValidationError(
-        "Unsupported /model subcommand. Use: status, profiles, use, reset, explain-route."
+        "Unsupported /model subcommand. Use: status, profiles, use, reset, "
+        "explain-route."
     )
 
 
 def _status_result() -> CommandResult:
-    config = ModelRoutingConfig.from_env()
+    config = _load_config()
     override = DEFAULT_OVERRIDE_STORE.get_current_override()
     last_route = get_last_route_decision()
     active_profile = override.session_profile or override.workspace_profile
@@ -57,18 +63,22 @@ def _status_result() -> CommandResult:
             ResultPanel(
                 title="Model Routing Status",
                 content={
-                    "active_override": active_profile.value
-                    if active_profile is not None
-                    else None,
-                    "override_source": "session"
-                    if override.session_profile is not None
-                    else "workspace"
-                    if override.workspace_profile is not None
-                    else None,
+                    "active_override": (
+                        active_profile.value if active_profile is not None else None
+                    ),
+                    "override_source": (
+                        "session"
+                        if override.session_profile is not None
+                        else "workspace"
+                        if override.workspace_profile is not None
+                        else None
+                    ),
                     "default_profile": ModelProfile.DEFAULT.value,
                     "resolved_models": _profile_models(config),
                     "fallbacks": _fallbacks(config),
-                    "last_route": last_route.to_dict() if last_route is not None else None,
+                    "last_route": (
+                        last_route.to_dict() if last_route is not None else None
+                    ),
                 },
             )
         ],
@@ -76,7 +86,7 @@ def _status_result() -> CommandResult:
 
 
 def _profiles_result() -> CommandResult:
-    config = ModelRoutingConfig.from_env()
+    config = _load_config()
     return CommandResult(
         status=CommandStatus.SUCCESS,
         title="/model profiles",
@@ -109,13 +119,20 @@ def _profiles_result() -> CommandResult:
 
 def _use_result(parsed: ParsedCommand) -> CommandResult:
     if len(parsed.positional) < 2:
-        raise CommandValidationError("Usage: /model use <profile> [--scope session|workspace].")
+        raise CommandValidationError(
+            "Usage: /model use <profile> [--scope session|workspace]."
+        )
     try:
         profile = ModelProfile.parse(parsed.positional[1])
     except ValueError as exc:
         raise CommandValidationError(str(exc)) from exc
-    scope = str(parsed.options.get("scope", "workspace"))
-    override = DEFAULT_OVERRIDE_STORE.set_override(profile, scope=scope)
+    scope = _validated_scope(
+        parsed.options.get("scope", "workspace"), allowed={"session", "workspace"}
+    )
+    try:
+        override = DEFAULT_OVERRIDE_STORE.set_override(profile, scope=scope)
+    except (RuntimeError, ValueError) as exc:
+        raise CommandValidationError(str(exc)) from exc
     active_profile = override.session_profile or override.workspace_profile
     return CommandResult(
         status=CommandStatus.SUCCESS,
@@ -127,9 +144,9 @@ def _use_result(parsed: ParsedCommand) -> CommandResult:
                 content={
                     "profile": profile.value,
                     "scope": scope,
-                    "active_profile": active_profile.value
-                    if active_profile is not None
-                    else None,
+                    "active_profile": (
+                        active_profile.value if active_profile is not None else None
+                    ),
                 },
             )
         ],
@@ -137,8 +154,14 @@ def _use_result(parsed: ParsedCommand) -> CommandResult:
 
 
 def _reset_result(parsed: ParsedCommand) -> CommandResult:
-    scope = str(parsed.options.get("scope", "all"))
-    DEFAULT_OVERRIDE_STORE.clear_override(scope=scope)
+    scope = _validated_scope(
+        parsed.options.get("scope", "all"),
+        allowed={"all", "session", "workspace"},
+    )
+    try:
+        DEFAULT_OVERRIDE_STORE.clear_override(scope=scope)
+    except ValueError as exc:
+        raise CommandValidationError(str(exc)) from exc
     return CommandResult(
         status=CommandStatus.SUCCESS,
         title="/model reset",
@@ -158,19 +181,23 @@ def _explain_route_result(parsed: ParsedCommand) -> CommandResult:
             "Usage: /model explain-route <stage-or-task> [--stage STAGE]."
         )
     target = parsed.positional[1].strip().lower().replace("-", "_")
-    known_stages = {"classify", "plan", "synthesize", "compact", "title", "diagnose", "generic"}
     stage_option = parsed.options.get("stage")
     if stage_option:
-        stage = str(stage_option)
+        stage = str(stage_option).strip().lower().replace("-", "_")
         task_type = target
-    elif target in known_stages:
+    elif target in _ROUTE_STAGES:
         stage = target
         task_type = None
     else:
         stage = "synthesize"
         task_type = target
+    if stage not in _ROUTE_STAGES:
+        allowed = ", ".join(sorted(_ROUTE_STAGES))
+        raise CommandValidationError(
+            f"Unknown model route stage '{stage}'. Expected one of: {allowed}."
+        )
     decision = resolve_model_route(
-        ModelRoutingConfig.from_env(),
+        _load_config(),
         stage=stage,
         task_type=task_type,
         override=DEFAULT_OVERRIDE_STORE.get_current_override(),
@@ -184,6 +211,23 @@ def _explain_route_result(parsed: ParsedCommand) -> CommandResult:
         ),
         panels=[ResultPanel(title="Route Decision", content=decision.to_dict())],
     )
+
+
+def _validated_scope(value: object, *, allowed: set[str]) -> str:
+    scope = str(value).strip().lower()
+    if scope not in allowed:
+        expected = ", ".join(sorted(allowed))
+        raise CommandValidationError(
+            f"Invalid model override scope '{scope}'. Expected one of: {expected}."
+        )
+    return scope
+
+
+def _load_config() -> ModelRoutingConfig:
+    try:
+        return ModelRoutingConfig.from_env()
+    except ValueError as exc:
+        raise CommandValidationError(f"Invalid model routing configuration: {exc}") from exc
 
 
 def _profile_models(config: ModelRoutingConfig) -> dict[str, str]:
