@@ -125,6 +125,7 @@ def finish_llm_trace(
     error: dict | None = None,
     model: str | None = None,
 ) -> None:
+    resolved_model = model or _model_from_usage(usage)
     conn.execute(
         """
         UPDATE llm_trace SET
@@ -139,10 +140,20 @@ def finish_llm_trace(
         [
             _now(),
             status,
-            model,
+            resolved_model,
             json.dumps(output_summary) if output_summary else None,
             json.dumps(usage) if usage else None,
             json.dumps(error) if error else None,
             trace_id,
         ],
     )
+
+
+def _model_from_usage(usage: dict | None) -> str | None:
+    if not isinstance(usage, dict):
+        return None
+    route = usage.get("model_route")
+    if not isinstance(route, dict):
+        return None
+    model_id = route.get("model_id")
+    return str(model_id) if model_id else None
