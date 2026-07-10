@@ -142,6 +142,8 @@ async def test_legacy_screens_remain_importable(mock_get_connection):
 @pytest.mark.asyncio
 async def test_clear_command_clears_stream(mock_get_connection):
     """OutputStream.clear_visible() is accessible; /clear command clears (4.1.10)."""
+    from textual.widgets import Input
+
     from vnalpha.tui.app import VnAlphaApp
     from vnalpha.tui.widgets.output_stream import OutputStream
 
@@ -150,6 +152,9 @@ async def test_clear_command_clears_stream(mock_get_connection):
         stream = pilot.app.query_one("#output-stream", OutputStream)
         assert hasattr(stream, "clear_visible")
         stream.clear_visible()  # Must not raise
+        await pilot.pause()
+        assert pilot.app.focused is not None
+        assert isinstance(pilot.app.focused, Input)
 
 
 @skip_if_no_textual
