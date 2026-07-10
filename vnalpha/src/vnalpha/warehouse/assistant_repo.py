@@ -1,5 +1,3 @@
-"""Repository helpers for Phase 5.9 assistant session and LLM trace persistence."""
-
 from __future__ import annotations
 
 import json
@@ -18,7 +16,6 @@ def create_assistant_session(
     user_prompt: str,
     intent: str | None = None,
 ) -> str:
-    """Create a new assistant_session row with status RUNNING. Returns assistant_session_id."""
     session_id = str(uuid.uuid4())
     conn.execute(
         """
@@ -99,7 +96,6 @@ def create_llm_trace(
     model: str | None = None,
     input_summary: dict | None = None,
 ) -> str:
-    """Create a new llm_trace row with status RUNNING. Returns llm_trace_id."""
     trace_id = str(uuid.uuid4())
     conn.execute(
         """
@@ -127,12 +123,14 @@ def finish_llm_trace(
     output_summary: dict | None = None,
     usage: dict | None = None,
     error: dict | None = None,
+    model: str | None = None,
 ) -> None:
     conn.execute(
         """
         UPDATE llm_trace SET
             finished_at = ?,
             status = ?,
+            model = COALESCE(?, model),
             output_summary_json = ?,
             usage_json = ?,
             error_json = ?
@@ -141,6 +139,7 @@ def finish_llm_trace(
         [
             _now(),
             status,
+            model,
             json.dumps(output_summary) if output_summary else None,
             json.dumps(usage) if usage else None,
             json.dumps(error) if error else None,
