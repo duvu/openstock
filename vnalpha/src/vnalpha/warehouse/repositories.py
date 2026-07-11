@@ -412,3 +412,61 @@ def get_watchlist_rich(
                 record[field] = _json.loads(record[field])
         results.append(record)
     return results
+
+
+def save_research_scenario_plan(
+    conn: duckdb.DuckDBPyConnection,
+    plan: dict[str, Any],
+) -> None:
+    """Persist one rendered research scenario plan and its artifact links."""
+    references = plan["artifact_references"]
+    deep_analysis = references.get("deep_analysis", {})
+    level_snapshot = references.get("level_snapshot", {})
+    evidence_snapshot = references.get("evidence_snapshot", {})
+    conn.execute(
+        """
+        INSERT INTO research_scenario_plan (
+            scenario_plan_id, symbol, date, generated_at, plan_json,
+            setup_analysis_date, level_snapshot_date, evidence_snapshot_json,
+            correlation_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (symbol, date) DO UPDATE SET
+            scenario_plan_id = excluded.scenario_plan_id,
+            generated_at = excluded.generated_at,
+            plan_json = excluded.plan_json,
+            setup_analysis_date = excluded.setup_analysis_date,
+            level_snapshot_date = excluded.level_snapshot_date,
+            evidence_snapshot_json = excluded.evidence_snapshot_json,
+            correlation_id = excluded.correlation_id
+        """,
+        [
+            plan["scenario_plan_id"],
+            plan["symbol"],
+            plan["as_of_date"],
+            _now_utc(),
+            json.dumps(plan, default=str),
+            deep_analysis.get("date"),
+            level_snapshot.get("date"),
+            json.dumps(evidence_snapshot, default=str),
+            plan["correlation_id"],
+        ],
+    )
+
+
+def get_research_scenario_plan(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    date: str,
+) -> Optional[dict[str, Any]]:
+    """Return one persisted research scenario plan, if available."""
+    row = conn.execute(
+        """
+        SELECT plan_json
+        FROM research_scenario_plan
+        WHERE symbol = ? AND date = ?
+        """,
+        [symbol, date],
+    ).fetchone()
+    if row is None:
+        return None
+    return json.loads(row[0])

@@ -27,6 +27,23 @@ TOOL_CAPABILITIES: Final[tuple[ToolCapability, ...]] = (
     ToolCapability("watchlist.filter", ToolPermission.READ_WATCHLIST, True, True, True),
     ToolCapability("candidate.explain", ToolPermission.READ_SCORE, True, True, True),
     ToolCapability("candidate.compare", ToolPermission.READ_SCORE, True, True, True),
+    ToolCapability(
+        "analysis.deep_symbol", ToolPermission.READ_FEATURES, True, True, True
+    ),
+    ToolCapability(
+        "scenario.generate_research_plan",
+        ToolPermission.READ_FEATURES,
+        True,
+        True,
+        True,
+    ),
+    ToolCapability("market.get_regime", ToolPermission.READ_FEATURES, True, True, True),
+    ToolCapability(
+        "sector.get_strength", ToolPermission.READ_FEATURES, True, True, True
+    ),
+    ToolCapability(
+        "sector.get_symbol_alignment", ToolPermission.READ_FEATURES, True, True, True
+    ),
     ToolCapability("quality.get_status", ToolPermission.READ_QUALITY, True, True, True),
     ToolCapability(
         "quality.get_many_status", ToolPermission.READ_QUALITY, True, True, True

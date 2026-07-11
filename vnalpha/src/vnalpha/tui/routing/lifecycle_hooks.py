@@ -96,9 +96,13 @@ class LifecycleHooks:
                     default_date=self._target_date,
                 ),
             )
-        except Exception:
+        except Exception as exc:
             if connection is not None:
                 connection.close()
+            from vnalpha.observability.errors import capture_exception
+
+            capture_exception(exc)
+            self._output.show_error(f"Command setup failed: {exc}", source="router")
             return ExecutorResources(connection=None, executor=None)
 
     def dispatch_ui(self, callback: Callable[[], None]) -> None:

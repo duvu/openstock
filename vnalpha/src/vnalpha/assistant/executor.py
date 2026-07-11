@@ -96,9 +96,10 @@ class AssistantExecutor:
     def _execute_step(self, step: ToolPlanStep) -> Any:
         try:
             permission = _TOOL_PERMISSIONS[step.tool_name]
-            output = self._tool_executor.call(
-                step.tool_name, {permission}, **step.arguments
-            )
+            arguments = dict(step.arguments)
+            if step.tool_name == "scenario.generate_research_plan":
+                arguments["correlation_id"] = self._assistant_session_id
+            output = self._tool_executor.call(step.tool_name, {permission}, **arguments)
             # Return as dict for synthesizer
             if dataclasses.is_dataclass(output):
                 return dataclasses.asdict(output)

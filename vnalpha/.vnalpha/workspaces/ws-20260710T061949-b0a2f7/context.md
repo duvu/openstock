@@ -191,6 +191,131 @@ Mode: general
 - /clear
 - /score
 - /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
 
 ## Artifacts
 - None

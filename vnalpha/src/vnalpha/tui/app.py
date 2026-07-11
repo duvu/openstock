@@ -266,6 +266,13 @@ if _TEXTUAL_AVAILABLE:
             _emit_audit_event("TUI_STARTED", "vnalpha tui workspace mounted")
 
         def _emit_input_submitted(self, text: str) -> None:
+            from vnalpha.observability.context import (
+                get_correlation_id,
+                set_correlation_id,
+            )
+
+            if get_correlation_id() in {"", "unset"}:
+                set_correlation_id()
             _emit_audit_event("TUI_INPUT_SUBMITTED", f"len={len(text)}")
 
         def _current_width(self) -> int:

@@ -5,8 +5,8 @@
   "assumptions": [],
   "context_size": {
     "artifacts": 0,
-    "events": 180,
-    "inputs": 179
+    "events": 305,
+    "inputs": 304
   },
   "created_at": "2026-07-10T06:19:49.595367+00:00",
   "data_freshness": {},
@@ -2162,11 +2162,1511 @@
       "redaction_status": "redacted",
       "source": "tui",
       "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-10T16:35:53.009745+00:00",
+      "input_id": "input-f8fb7437",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-10T16:36:01.542943+00:00",
+      "input_id": "input-ade99f4b",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-10T16:36:01.587294+00:00",
+      "input_id": "input-d6e29d84",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-10T16:36:01.636129+00:00",
+      "input_id": "input-c9d16669",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T16:36:01.680013+00:00",
+      "input_id": "input-2648ffae",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T16:36:01.733132+00:00",
+      "input_id": "input-0c815212",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-10T17:26:18.525455+00:00",
+      "input_id": "input-18e5be89",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-10T17:26:28.975849+00:00",
+      "input_id": "input-8c734565",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-10T17:26:29.021009+00:00",
+      "input_id": "input-2c8f8722",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-10T17:26:29.075740+00:00",
+      "input_id": "input-52b3304c",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T17:26:29.144454+00:00",
+      "input_id": "input-61f583bc",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T17:26:29.241683+00:00",
+      "input_id": "input-da6c7113",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-10T17:29:38.936905+00:00",
+      "input_id": "input-005f3cb7",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-10T17:29:48.361302+00:00",
+      "input_id": "input-e5bc3d60",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-10T17:29:48.404796+00:00",
+      "input_id": "input-e00a8aab",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-10T17:29:48.451449+00:00",
+      "input_id": "input-efcc53ff",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T17:29:48.492349+00:00",
+      "input_id": "input-4eccd219",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T17:29:48.538364+00:00",
+      "input_id": "input-00245adb",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-10T17:32:26.759458+00:00",
+      "input_id": "input-c29f4cda",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-10T17:32:38.544470+00:00",
+      "input_id": "input-ffbab915",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-10T17:32:38.604539+00:00",
+      "input_id": "input-8470e6ce",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-10T17:32:38.660219+00:00",
+      "input_id": "input-f2030d47",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T17:32:38.718155+00:00",
+      "input_id": "input-56e36805",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T17:32:38.776406+00:00",
+      "input_id": "input-c7d67b3c",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-10T17:36:38.614174+00:00",
+      "input_id": "input-331ac167",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-10T17:36:50.122850+00:00",
+      "input_id": "input-3dc45261",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-10T17:36:50.176364+00:00",
+      "input_id": "input-e7fcb7a5",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-10T17:36:50.233439+00:00",
+      "input_id": "input-d4a102ca",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T17:36:50.274421+00:00",
+      "input_id": "input-c82e8cb4",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-10T17:36:50.321969+00:00",
+      "input_id": "input-6ee767a1",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T00:28:48.979090+00:00",
+      "input_id": "input-126058e0",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T00:28:58.681132+00:00",
+      "input_id": "input-d47b30ad",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T00:28:58.720023+00:00",
+      "input_id": "input-c2e19584",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T00:28:58.763949+00:00",
+      "input_id": "input-be0e055e",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T00:28:58.798129+00:00",
+      "input_id": "input-9e663336",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T00:28:58.856791+00:00",
+      "input_id": "input-09418e56",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T00:32:08.033963+00:00",
+      "input_id": "input-5e2aa4dd",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T00:32:16.866886+00:00",
+      "input_id": "input-d4f707f8",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T00:32:16.915488+00:00",
+      "input_id": "input-6508c60d",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T00:32:16.967825+00:00",
+      "input_id": "input-e04e49ed",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T00:32:17.009991+00:00",
+      "input_id": "input-5f820f68",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T00:32:17.056334+00:00",
+      "input_id": "input-00e53208",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T01:04:12.766459+00:00",
+      "input_id": "input-ab376f0a",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T01:04:12.819704+00:00",
+      "input_id": "input-2f115218",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T01:04:12.879817+00:00",
+      "input_id": "input-79e6986d",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:04:12.935524+00:00",
+      "input_id": "input-a749e95b",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:04:12.992983+00:00",
+      "input_id": "input-4d97223e",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T01:11:48.280409+00:00",
+      "input_id": "input-0331882a",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T01:11:48.330188+00:00",
+      "input_id": "input-cc47b30e",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T01:11:48.391265+00:00",
+      "input_id": "input-32a65aa0",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:11:48.486945+00:00",
+      "input_id": "input-2c45bcbc",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:11:48.547383+00:00",
+      "input_id": "input-a88bdd6f",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T01:16:24.898100+00:00",
+      "input_id": "input-65e6cfd5",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T01:16:33.259811+00:00",
+      "input_id": "input-63267373",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T01:16:33.297547+00:00",
+      "input_id": "input-2abd6df5",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T01:16:33.338668+00:00",
+      "input_id": "input-a6dcb853",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:16:33.378742+00:00",
+      "input_id": "input-ab8de165",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:16:33.420144+00:00",
+      "input_id": "input-af076a4c",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T01:19:01.482825+00:00",
+      "input_id": "input-4949f4f0",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T01:19:08.324823+00:00",
+      "input_id": "input-9723729f",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T01:19:08.371606+00:00",
+      "input_id": "input-eed98ab4",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T01:19:08.424854+00:00",
+      "input_id": "input-ec4cad4d",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:19:08.473517+00:00",
+      "input_id": "input-fa3196ef",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:19:08.516987+00:00",
+      "input_id": "input-3d07a445",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T01:26:37.032023+00:00",
+      "input_id": "input-00c1028b",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T01:28:51.712835+00:00",
+      "input_id": "input-4b77457d",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T01:29:00.980691+00:00",
+      "input_id": "input-9e668160",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T01:29:01.045115+00:00",
+      "input_id": "input-d674e6b1",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T01:29:01.117096+00:00",
+      "input_id": "input-fa062148",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:29:01.185613+00:00",
+      "input_id": "input-56fceefe",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:29:01.252401+00:00",
+      "input_id": "input-42d30c84",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T01:35:12.680211+00:00",
+      "input_id": "input-d5bf0537",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T01:35:12.729720+00:00",
+      "input_id": "input-61f8a6e6",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T01:35:12.792774+00:00",
+      "input_id": "input-22fafc33",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:35:12.852584+00:00",
+      "input_id": "input-f575b4f0",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:35:12.896749+00:00",
+      "input_id": "input-d92f4d9f",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T01:35:12.937551+00:00",
+      "input_id": "input-3e231ad2",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T01:35:52.336978+00:00",
+      "input_id": "input-12c429b7",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T01:35:52.394631+00:00",
+      "input_id": "input-31d7f738",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T01:35:52.470333+00:00",
+      "input_id": "input-5c15fef4",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:35:52.546025+00:00",
+      "input_id": "input-c74a0e5c",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:35:52.613211+00:00",
+      "input_id": "input-0f78388b",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T01:35:52.673804+00:00",
+      "input_id": "input-9db63974",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T01:36:16.814947+00:00",
+      "input_id": "input-a46a00a4",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T01:36:16.865106+00:00",
+      "input_id": "input-ba7a61d0",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T01:36:16.922712+00:00",
+      "input_id": "input-e446da2a",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:36:16.973887+00:00",
+      "input_id": "input-c7d7477d",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T01:36:17.044426+00:00",
+      "input_id": "input-b780d734",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T01:36:17.110856+00:00",
+      "input_id": "input-b1384f5e",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T03:22:39.354639+00:00",
+      "input_id": "input-3fc239b6",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T03:22:49.186025+00:00",
+      "input_id": "input-6e486bee",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T03:22:49.228767+00:00",
+      "input_id": "input-b3e2a99b",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T03:22:49.269638+00:00",
+      "input_id": "input-466d69af",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T03:22:49.323489+00:00",
+      "input_id": "input-48571bda",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T03:22:49.384264+00:00",
+      "input_id": "input-ed25b2e8",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T03:24:43.386541+00:00",
+      "input_id": "input-008ad034",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T03:24:52.082681+00:00",
+      "input_id": "input-0a82c97b",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T03:24:52.141464+00:00",
+      "input_id": "input-c8839b90",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T03:24:52.200447+00:00",
+      "input_id": "input-2846e14c",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T03:24:52.251565+00:00",
+      "input_id": "input-acee81ce",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T03:24:52.306148+00:00",
+      "input_id": "input-25d7606f",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T03:57:26.050841+00:00",
+      "input_id": "input-1ee78f2b",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T03:57:33.773220+00:00",
+      "input_id": "input-953c4465",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T03:57:33.811912+00:00",
+      "input_id": "input-30d5a25d",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T03:57:33.854562+00:00",
+      "input_id": "input-61d68644",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T03:57:33.893718+00:00",
+      "input_id": "input-c60e4839",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T03:57:33.941225+00:00",
+      "input_id": "input-016ee23e",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T05:03:54.982349+00:00",
+      "input_id": "input-487be258",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T05:04:03.886790+00:00",
+      "input_id": "input-dce748d9",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T05:04:03.937002+00:00",
+      "input_id": "input-f07cac98",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T05:04:03.992405+00:00",
+      "input_id": "input-fc13d44a",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T05:04:04.037368+00:00",
+      "input_id": "input-5639ca7b",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T05:04:04.084637+00:00",
+      "input_id": "input-830907c9",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T05:12:23.400753+00:00",
+      "input_id": "input-01b8d463",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T05:12:31.977558+00:00",
+      "input_id": "input-5e575fce",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T05:12:32.025058+00:00",
+      "input_id": "input-203c2e05",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T05:12:32.075901+00:00",
+      "input_id": "input-23dc12f2",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T05:12:32.133758+00:00",
+      "input_id": "input-5ac3ec75",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T05:12:32.198070+00:00",
+      "input_id": "input-0de0fe32",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-11T05:15:46.059482+00:00",
+      "input_id": "input-1c552046",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-11T05:15:53.685232+00:00",
+      "input_id": "input-baa09e71",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-11T05:15:53.741002+00:00",
+      "input_id": "input-fac7244d",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-11T05:15:53.815562+00:00",
+      "input_id": "input-9dc5a855",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T05:15:53.875606+00:00",
+      "input_id": "input-9b8d0d86",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-11T05:15:53.938181+00:00",
+      "input_id": "input-2bd987f5",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
     }
   ],
   "status": "active",
   "title": "Workspace ws-20260710T061949-b0a2f7",
-  "updated_at": "2026-07-10T14:44:48.574185+00:00",
+  "updated_at": "2026-07-11T05:15:53.938181+00:00",
   "warnings": [],
   "workspace_id": "ws-20260710T061949-b0a2f7"
 }

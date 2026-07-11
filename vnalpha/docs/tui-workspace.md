@@ -86,11 +86,17 @@ The seven operational routes are handled before the generic command executor:
 
 ### Safe tools and LLM boundary
 
-`SAFE_TOOLS` calls run automatically. Trusted local `note.create` and `data.fetch` calls are included in this policy.
+Assistant-safe research tools can run automatically. `data.fetch` is a trusted
+manual provisioning command that mutates warehouse data, so assistant and
+autonomous plans refuse it; deterministic analysis readiness remains handled by
+`ensure_symbol_analysis_ready()`.
 
 The planner, executor, and chat path refuse unknown or forbidden tools. The LLM is limited to research work. It can explain, summarize, and propose work, but it cannot bypass deterministic routing, invoke forbidden tools, or perform deployment actions outside the operational routes above.
 
-Tool activity follows the run lifecycle and is recorded with sensitive values redacted. When the router finishes, it closes its workspace connection.
+Tool activity follows the run lifecycle and is recorded with sensitive values redacted.
+`/deploy` only verifies, promotes, or rolls back research artifacts; it never
+places broker or trading actions. When the router finishes, it closes its owned
+DuckDB command connection.
 
 ---
 
@@ -103,6 +109,9 @@ Every TUI interaction emits structured events to the run's JSONL logs:
 | `TUI_INPUT_SUBMITTED` | Any non-empty submitted input |
 | `TUI_COMMAND_ROUTED` | Slash command routing |
 | `TUI_CHAT_ROUTED` | Natural-language routing |
+| `COMMAND_STARTED` | A research or operational command begins |
+| `COMMAND_SUCCEEDED` | A research or operational command completes |
+| `COMMAND_FAILED` | A research or operational command fails and is captured |
 | `TUI_RENDER_ERROR` | Any render exception (also calls `capture_exception`) |
 | `TUI_STARTED` | App mount |
 | `TUI_HISTORY_PUSHED` | Input pushed to history (includes kind and length) |
@@ -271,7 +280,10 @@ Dataclass + enum model for TUI runtime state. Tracks state, label, detail, timin
 
 ### TuiInputRouter (`vnalpha.tui.input_router`)
 
-Stateful router. Bootstraps `ChatController` and `CommandExecutor` lazily on first use. Renders user input and results into OutputStream. All errors are captured via `capture_exception`.
+Stateful router. At setup it opens a DuckDB connection, runs migrations, and
+constructs `CommandExecutor(conn, surface="tui", default_date=target_date)`.
+It owns and closes that connection during app shutdown. Setup failures render an
+actionable inline error and are captured via `capture_exception`.
 
 ---
 

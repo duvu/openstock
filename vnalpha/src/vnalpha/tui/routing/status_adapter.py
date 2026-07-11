@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from vnalpha.commands.models import CommandResult
     from vnalpha.tui.widgets.status_bar import StatusBar
 
 
@@ -38,6 +39,21 @@ class StatusAdapter:
 
     def warning(self, detail: str) -> None:
         self.update("WARNING", detail=detail[:80])
+
+    def command_result(self, result: CommandResult) -> None:
+        from vnalpha.commands.models import CommandStatus
+
+        detail = result.summary or result.title
+        match result.status:
+            case CommandStatus.SUCCESS | CommandStatus.EMPTY_RESULT:
+                if result.warnings:
+                    self.warning("; ".join(result.warnings[:2]))
+                else:
+                    self.update("READY", label=detail[:40])
+            case CommandStatus.PARTIAL:
+                self.warning(detail)
+            case CommandStatus.FAILED | CommandStatus.VALIDATION_ERROR:
+                self.error(result.error.message if result.error is not None else detail)
 
     def trace(self, event: TraceEvent) -> None:
         if event.status == "RUNNING":

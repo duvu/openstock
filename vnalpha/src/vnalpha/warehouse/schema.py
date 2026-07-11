@@ -429,6 +429,77 @@ CREATE TABLE IF NOT EXISTS chat_message (
 
 ALL_DDL_PHASE510 = [CHAT_SESSION_DDL, CHAT_MESSAGE_DDL]
 
+SETUP_ANALYSIS_DDL = """
+CREATE TABLE IF NOT EXISTS setup_analysis (
+    symbol                   VARCHAR NOT NULL,
+    date                     DATE NOT NULL,
+    generated_at             TIMESTAMPTZ NOT NULL,
+    analysis_json            VARCHAR NOT NULL,
+    artifact_references_json VARCHAR NOT NULL,
+    PRIMARY KEY (symbol, date)
+)
+"""
+
+SYMBOL_LEVEL_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS symbol_level_snapshot (
+    symbol     VARCHAR NOT NULL,
+    date       DATE NOT NULL,
+    level_type VARCHAR NOT NULL,
+    value      DOUBLE NOT NULL,
+    strength   VARCHAR NOT NULL,
+    derivation VARCHAR NOT NULL,
+    PRIMARY KEY (symbol, date, level_type)
+)
+"""
+
+ALL_DDL_DEEP_ANALYSIS = [SETUP_ANALYSIS_DDL, SYMBOL_LEVEL_SNAPSHOT_DDL]
+
+MARKET_REGIME_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS market_regime_snapshot (
+    date          DATE PRIMARY KEY,
+    state         VARCHAR NOT NULL,
+    analysis_json VARCHAR NOT NULL,
+    generated_at  TIMESTAMPTZ NOT NULL
+)
+"""
+
+SECTOR_STRENGTH_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS sector_strength_snapshot (
+    date          DATE NOT NULL,
+    sector        VARCHAR NOT NULL,
+    rank          INTEGER NOT NULL,
+    analysis_json VARCHAR NOT NULL,
+    generated_at  TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (date, sector)
+)
+"""
+
+ALL_DDL_MARKET_CONTEXT = [MARKET_REGIME_SNAPSHOT_DDL, SECTOR_STRENGTH_SNAPSHOT_DDL]
+
+RESEARCH_SCENARIO_PLAN_DDL = """
+CREATE TABLE IF NOT EXISTS research_scenario_plan (
+    scenario_plan_id        VARCHAR PRIMARY KEY,
+    symbol                  VARCHAR NOT NULL,
+    date                    DATE NOT NULL,
+    generated_at            TIMESTAMPTZ NOT NULL,
+    plan_json               VARCHAR NOT NULL,
+    setup_analysis_date     DATE,
+    level_snapshot_date     DATE,
+    evidence_snapshot_json  VARCHAR NOT NULL,
+    correlation_id          VARCHAR NOT NULL,
+    UNIQUE (symbol, date)
+)
+"""
+
+ALL_DDL_SCENARIO_PLAN = [RESEARCH_SCENARIO_PLAN_DDL]
+
 ALL_DDL_COMBINED = (
-    ALL_DDL + ALL_DDL_PHASE58 + ALL_DDL_PHASE59 + ALL_DDL_PHASE6 + ALL_DDL_PHASE510
+    ALL_DDL
+    + ALL_DDL_PHASE58
+    + ALL_DDL_PHASE59
+    + ALL_DDL_PHASE6
+    + ALL_DDL_PHASE510
+    + ALL_DDL_DEEP_ANALYSIS
+    + ALL_DDL_MARKET_CONTEXT
+    + ALL_DDL_SCENARIO_PLAN
 )

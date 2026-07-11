@@ -30,6 +30,4 @@ def test_migrations_create_assistant_and_llm_tables(conn):
 def test_migrations_idempotent(conn):
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert (
-        len(tables) == 21
-    )  # 8 phase1-5 + 3 phase5.8 + 2 phase5.9 + 6 phase6 + 2 phase5.10
+    assert len(tables) == 26  # Existing phases plus research_scenario_plan.

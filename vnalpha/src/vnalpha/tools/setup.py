@@ -12,15 +12,63 @@ TOOL_PERMISSIONS: dict[str, ToolPermission] = dict(TOOL_PERMISSIONS_BY_NAME)
 
 def build_local_tool_registry(conn) -> LocalToolRegistry:
     """Build a LocalToolRegistry wired to a live DuckDB connection."""
+    from vnalpha.tools.analysis import deep_analyze_symbol
     from vnalpha.tools.fetch import fetch_symbol_data
     from vnalpha.tools.lineage import get_symbol_lineage
+    from vnalpha.tools.market_context import (
+        get_market_regime,
+        get_sector_strength,
+        get_symbol_sector_alignment,
+    )
     from vnalpha.tools.notes import create_note, list_sessions
     from vnalpha.tools.quality import get_many_quality_status, get_quality_status
+    from vnalpha.tools.scenario import generate_research_plan
     from vnalpha.tools.scoring import compare_candidates, explain_candidate
     from vnalpha.tools.watchlist import filter_watchlist, scan_watchlist
 
     registry = LocalToolRegistry()
 
+    registry.register(
+        ToolSpec(
+            name="market.get_regime",
+            description="Build persisted market regime research context",
+            permission=ToolPermission.READ_FEATURES,
+        ),
+        lambda **kwargs: _market_regime(get_market_regime, conn, **kwargs),
+    )
+    registry.register(
+        ToolSpec(
+            name="sector.get_strength",
+            description="Rank persisted sector strength research context",
+            permission=ToolPermission.READ_FEATURES,
+        ),
+        lambda **kwargs: _sector_strength(get_sector_strength, conn, **kwargs),
+    )
+    registry.register(
+        ToolSpec(
+            name="sector.get_symbol_alignment",
+            description="Compare a symbol with its persisted sector context",
+            permission=ToolPermission.READ_FEATURES,
+        ),
+        lambda **kwargs: _sector_alignment(get_symbol_sector_alignment, conn, **kwargs),
+    )
+
+    registry.register(
+        ToolSpec(
+            name="analysis.deep_symbol",
+            description="Build deterministic research context for one symbol",
+            permission=ToolPermission.READ_FEATURES,
+        ),
+        lambda **kwargs: _analyze(deep_analyze_symbol, conn, **kwargs),
+    )
+    registry.register(
+        ToolSpec(
+            name="scenario.generate_research_plan",
+            description="Build a persisted research-only scenario plan",
+            permission=ToolPermission.READ_FEATURES,
+        ),
+        lambda **kwargs: _scenario(generate_research_plan, conn, **kwargs),
+    )
     registry.register(
         ToolSpec(
             name="watchlist.scan",
@@ -131,6 +179,61 @@ def _explain(impl, conn, **kwargs):
     date = kwargs.get("date")
     if symbol is None or date is None:
         raise ToolExecutionError("candidate.explain requires 'symbol' and 'date'.")
+    return impl(conn, symbol=symbol, date=date)
+
+
+def _analyze(impl, conn, **kwargs):
+    symbol = kwargs.get("symbol")
+    date = kwargs.get("date")
+    if symbol is None or date is None:
+        raise ToolExecutionError("analysis.deep_symbol requires 'symbol' and 'date'.")
+    return impl(
+        conn,
+        symbol=symbol,
+        date=date,
+        with_sector=kwargs.get("with_sector", False),
+        with_regime=kwargs.get("with_regime", False),
+    )
+
+
+def _scenario(impl, conn, **kwargs):
+    symbol = kwargs.get("symbol")
+    date = kwargs.get("date")
+    if symbol is None or date is None:
+        raise ToolExecutionError(
+            "scenario.generate_research_plan requires 'symbol' and 'date'."
+        )
+    return impl(
+        conn,
+        symbol=symbol,
+        date=date,
+        with_evidence=kwargs.get("with_evidence", False),
+        with_regime=kwargs.get("with_regime", False),
+        correlation_id=kwargs.get("correlation_id"),
+    )
+
+
+def _market_regime(impl, conn, **kwargs):
+    date = kwargs.get("date")
+    if date is None:
+        raise ToolExecutionError("market.get_regime requires 'date'.")
+    return impl(conn, date=date)
+
+
+def _sector_strength(impl, conn, **kwargs):
+    date = kwargs.get("date")
+    if date is None:
+        raise ToolExecutionError("sector.get_strength requires 'date'.")
+    return impl(conn, date=date, top=kwargs.get("top", 10))
+
+
+def _sector_alignment(impl, conn, **kwargs):
+    symbol = kwargs.get("symbol")
+    date = kwargs.get("date")
+    if symbol is None or date is None:
+        raise ToolExecutionError(
+            "sector.get_symbol_alignment requires 'symbol' and 'date'."
+        )
     return impl(conn, symbol=symbol, date=date)
 
 

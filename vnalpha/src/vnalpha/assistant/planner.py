@@ -140,6 +140,117 @@ def _build_explain_plan(entities: dict) -> AssistantPlan:
     )
 
 
+def _build_deep_analysis_plan(entities: dict) -> AssistantPlan:
+    symbol = _resolve_symbol(entities)
+    date = entities.get("date")
+    args: dict[str, Any] = {"symbol": symbol}
+    if date:
+        args["date"] = date
+    return AssistantPlan(
+        intent="deep_analyze_symbol",
+        steps=[
+            _step(
+                "analysis.deep_symbol",
+                args,
+                "Build deterministic research context with caveats and missing evidence",
+                "READ_FEATURES",
+            )
+        ],
+        required_artifacts=["feature_snapshot", "candidate_score", "canonical_ohlcv"],
+    )
+
+
+def _build_research_scenario_plan(entities: dict) -> AssistantPlan:
+    symbol = _resolve_symbol(entities)
+    date = entities.get("date")
+    args: dict[str, Any] = {"symbol": symbol}
+    if date:
+        args["date"] = date
+    if entities.get("with_evidence") or entities.get("with-evidence"):
+        args["with_evidence"] = True
+    if entities.get("with_regime") or entities.get("with-regime"):
+        args["with_regime"] = True
+    return AssistantPlan(
+        intent="generate_research_scenario",
+        steps=[
+            _step(
+                "scenario.generate_research_plan",
+                args,
+                "Build a conditional research-only scenario from persisted evidence",
+                "READ_FEATURES",
+            )
+        ],
+        required_artifacts=[
+            "setup_analysis",
+            "symbol_level_snapshot",
+            "candidate_score",
+        ],
+    )
+
+
+def _build_market_regime_plan(entities: dict) -> AssistantPlan:
+    args: dict[str, Any] = {}
+    if entities.get("date"):
+        args["date"] = entities["date"]
+    return AssistantPlan(
+        intent="review_market_regime",
+        steps=[
+            _step(
+                "market.get_regime",
+                args,
+                "Retrieve persisted market regime research context",
+                "READ_FEATURES",
+            )
+        ],
+        required_artifacts=["canonical_ohlcv", "market_regime_snapshot"],
+    )
+
+
+def _build_sector_strength_plan(entities: dict) -> AssistantPlan:
+    args: dict[str, Any] = {}
+    if entities.get("date"):
+        args["date"] = entities["date"]
+    return AssistantPlan(
+        intent="review_sector_strength",
+        steps=[
+            _step(
+                "sector.get_strength",
+                args,
+                "Retrieve persisted sector strength research context",
+                "READ_FEATURES",
+            )
+        ],
+        required_artifacts=[
+            "canonical_ohlcv",
+            "symbol_master",
+            "sector_strength_snapshot",
+        ],
+    )
+
+
+def _build_symbol_sector_alignment_plan(entities: dict) -> AssistantPlan:
+    symbol = _resolve_symbol(entities)
+    args: dict[str, Any] = {"symbol": symbol}
+    if entities.get("date"):
+        args["date"] = entities["date"]
+    return AssistantPlan(
+        intent="review_symbol_sector_alignment",
+        steps=[
+            _step(
+                "sector.get_symbol_alignment",
+                args,
+                "Compare a symbol with persisted sector context",
+                "READ_FEATURES",
+            )
+        ],
+        required_artifacts=[
+            "canonical_ohlcv",
+            "symbol_master",
+            "sector_strength_snapshot",
+        ],
+    )
+
+
 def _build_quality_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities) or None
     args: dict[str, Any] = {}
@@ -249,6 +360,11 @@ _PLAN_BUILDERS = {
     "filter_candidates": _build_filter_plan,
     "compare_symbols": _build_compare_plan,
     "explain_symbol": _build_explain_plan,
+    "deep_analyze_symbol": _build_deep_analysis_plan,
+    "generate_research_scenario": _build_research_scenario_plan,
+    "review_market_regime": _build_market_regime_plan,
+    "review_sector_strength": _build_sector_strength_plan,
+    "review_symbol_sector_alignment": _build_symbol_sector_alignment_plan,
     "review_quality": _build_quality_plan,
     "show_lineage": _build_lineage_plan,
     "summarize_watchlist": _build_summarize_plan,

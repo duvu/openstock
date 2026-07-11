@@ -4,6 +4,7 @@ vnalpha/build/
 vnalpha/src/*.egg-info/
 *.key
 .omo/
+.worktrees/
 .env
 .env.*
 !.env.example

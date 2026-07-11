@@ -39,10 +39,7 @@ class CommandPath:
             router._record_command_artifacts(result)
             if workspace_changed:
                 router._notify_workspace_change()
-            if result.warnings:
-                router._set_status_warning("; ".join(result.warnings[:2]))
-            else:
-                router._set_status_ready()
+            router._status_adapter.command_result(result)
         except Exception as exc:
             router._output.show_error(str(exc), source="command")
             router._set_status_error(str(exc))

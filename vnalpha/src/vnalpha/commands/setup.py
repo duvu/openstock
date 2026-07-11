@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from vnalpha.commands.handlers.analyze import handle_analyze
 from vnalpha.commands.handlers.compare import handle_compare
 from vnalpha.commands.handlers.context import handle_context
 from vnalpha.commands.handlers.explain import handle_explain
@@ -9,9 +10,12 @@ from vnalpha.commands.handlers.filter import handle_filter
 from vnalpha.commands.handlers.help import handle_help
 from vnalpha.commands.handlers.history import handle_history
 from vnalpha.commands.handlers.lineage import handle_lineage
+from vnalpha.commands.handlers.market_regime import handle_market_regime
 from vnalpha.commands.handlers.note import handle_note
 from vnalpha.commands.handlers.quality import handle_quality
+from vnalpha.commands.handlers.research_plan import handle_research_plan
 from vnalpha.commands.handlers.scan import handle_scan
+from vnalpha.commands.handlers.sector_strength import handle_sector_strength
 from vnalpha.commands.handlers.todo import handle_todo
 from vnalpha.commands.registry import CommandMeta, CommandRegistry
 from vnalpha.policy.command_policy import permission_names
@@ -21,6 +25,53 @@ def build_default_registry() -> CommandRegistry:
     """Return a registry populated with capability-approved research commands."""
     reg = CommandRegistry()
 
+    reg.register(
+        CommandMeta(
+            name="market-regime",
+            description="Build research-only market regime context from persisted artifacts.",
+            usage="/market-regime [--date DATE]",
+            examples=["/market-regime", "/market-regime --date 2025-01-31"],
+            permissions=permission_names("market-regime"),
+            handler=handle_market_regime,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="sector-strength",
+            description="Rank sector research context from persisted artifacts.",
+            usage="/sector-strength [SYMBOL] [--date DATE] [--top N]",
+            examples=[
+                "/sector-strength",
+                "/sector-strength --top 5",
+                "/sector-strength FPT",
+            ],
+            permissions=permission_names("sector-strength"),
+            handler=handle_sector_strength,
+        )
+    )
+
+    reg.register(
+        CommandMeta(
+            name="analyze",
+            description="Build detailed research context from persisted warehouse artifacts.",
+            usage="/analyze SYMBOL [--date DATE] [--with-sector] [--with-regime]",
+            examples=["/analyze FPT", "/analyze FPT --date 2026-07-06"],
+            permissions=permission_names("analyze"),
+            handler=handle_analyze,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="research-plan",
+            description="Build a conditional research-only scenario plan.",
+            usage=(
+                "/research-plan SYMBOL [--date DATE] [--with-evidence] [--with-regime]"
+            ),
+            examples=["/research-plan FPT", "/research-plan FPT --date 2025-01-31"],
+            permissions=permission_names("research-plan"),
+            handler=handle_research_plan,
+        )
+    )
     reg.register(
         CommandMeta(
             name="scan",

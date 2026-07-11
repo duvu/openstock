@@ -4,7 +4,7 @@
 
 Add an OpenSpec for the market regime and sector context engine required by OpenStock research intelligence.
 
-This is an OpenSpec-only change.
+This change defines and implements the market regime and sector context engine in vnalpha.
 
 ## Motivation
 

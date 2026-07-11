@@ -62,6 +62,11 @@ Classify the user's research question into exactly one of these intents:
 - filter_candidates: filter by score, class, setup, or risk flag
 - compare_symbols: compare two or more specific symbols
 - explain_symbol: explain why one symbol is in the watchlist
+- deep_analyze_symbol: produce a detailed, research-only analysis for one symbol
+- generate_research_scenario: produce a conditional research-only scenario plan for one symbol
+- review_market_regime: summarize persisted market regime and breadth context
+- review_sector_strength: summarize persisted sector rankings and rotation context
+- review_symbol_sector_alignment: compare one symbol with its persisted sector context
 - review_quality: data quality or pipeline health question
 - show_lineage: data source, ingestion, feature, or scoring lineage
 - summarize_watchlist: high-level summary of today's watchlist

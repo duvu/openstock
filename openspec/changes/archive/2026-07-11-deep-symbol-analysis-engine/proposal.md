@@ -4,7 +4,7 @@
 
 Define the OpenSpec for a consolidated deep symbol analysis engine for OpenStock.
 
-This is an OpenSpec-only change.
+This change defines and implements the deep symbol analysis engine in `vnalpha`.
 
 ## Motivation
 

@@ -28,6 +28,8 @@ Mode: general
 - tai data FPT
 - download FPT
 - phan tich co phieu fpt
+- /watchlist
+- phan tich co phieu fpt
 
 ## Artifacts
 - None
