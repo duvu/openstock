@@ -8,6 +8,10 @@ import structlog
 
 from vnalpha.assistant.errors import IntentClassificationError
 from vnalpha.assistant.models import IntentResult
+from vnalpha.assistant.research_intelligence_intents import (
+    classifier_examples,
+    classifier_prompt_lines,
+)
 from vnalpha.assistant.response_parser import parse_intent_response
 from vnalpha.model_routing.models import ModelProfile, ModelTaskType
 
@@ -51,41 +55,53 @@ def _deterministic_precheck(prompt: str) -> str | None:
     return None
 
 
-# ----- Classifier prompt -----
+_CONTEXT_LINES = (
+    "- review_market_regime: persisted market regime research context",
+    "- review_sector_strength: persisted ranked sector strength research context",
+    "- review_symbol_sector_alignment: a symbol's persisted sector research context",
+)
+_RESEARCH_LINES = classifier_prompt_lines()
+_RESEARCH_EXAMPLES = classifier_examples()
 
-CONTEXT_INTENT_EXAMPLES: dict[str, str] = {
-    "review_market_regime": "What was the market regime on 2026-07-01?",
-    "review_sector_strength": "Show the strongest sectors today.",
-    "review_symbol_sector_alignment": "How does FPT align with its sector context?",
-}
-
-CLASSIFIER_SYSTEM_PROMPT = """You are an intent classifier for a Vietnamese stock market research assistant.
-
-Classify the user's research question into exactly one of these intents:
-- scan_candidates: list or browse watchlist candidates
-- filter_candidates: filter by score, class, setup, or risk flag
-- compare_symbols: compare two or more specific symbols
-- explain_symbol: explain why one symbol is in the watchlist
-- review_quality: data quality or pipeline health question
-- review_market_regime: persisted market regime research context
-- review_sector_strength: persisted ranked sector strength research context
-- review_symbol_sector_alignment: a symbol's persisted sector research context
-- show_lineage: data source, ingestion, feature, or scoring lineage
-- summarize_watchlist: high-level summary of today's watchlist
-- create_research_note: save a note about a symbol or session
-- show_history: research session history
-- fetch_data: download, sync, or update OHLCV data for one or more symbols from the data service
-- unsupported_or_unsafe: trading execution, web search, code execution, broker, account/allocation management, or unsupported request
-
-Rules:
-- Any buy/sell/order/trade/broker/account/allocation request MUST be classified as unsupported_or_unsafe.
-- Any web search, Python execution, or MCP tool request MUST be classified as unsupported_or_unsafe.
-- Requests to download/sync/fetch/update data for a symbol MUST be classified as fetch_data.
-- "What was the market regime on 2026-07-01?" -> review_market_regime
-- "Show the strongest sectors today." -> review_sector_strength
-- "How does FPT align with its sector context?" -> review_symbol_sector_alignment
-- Respond ONLY with valid JSON matching: {"intent": "<name>", "confidence": 0.0-1.0, "entities": {}, "needs_clarification": false, "clarification_question": null, "safety_flags": []}
-"""
+CLASSIFIER_SYSTEM_PROMPT = "\n".join(
+    [
+        "You are an intent classifier for a Vietnamese stock market research assistant.",
+        "",
+        "Classify the user's research question into exactly one of these intents:",
+        "- scan_candidates: list or browse watchlist candidates",
+        "- filter_candidates: filter by score, class, setup, or risk flag",
+        "- compare_symbols: compare two or more specific symbols",
+        "- explain_symbol: explain one persisted candidate score",
+        "- review_quality: data quality or pipeline health question",
+        *_CONTEXT_LINES,
+        "- show_lineage: data source, ingestion, feature, or scoring lineage",
+        "- summarize_watchlist: short high-level watchlist summary",
+        *_RESEARCH_LINES,
+        "- create_research_note: save a note about a symbol or session",
+        "- show_history: research session history",
+        "- fetch_data: explicit request to download or refresh OHLCV data",
+        "- unsupported_or_unsafe: unsupported, execution-oriented, or unsafe request",
+        "",
+        "Research-intelligence distinctions:",
+        "- Use deep_analyze_symbol for a comprehensive multi-block symbol review; use explain_symbol for a simple score explanation.",
+        "- Use summarize_watchlist_deep when the user asks for clusters, setup distribution, risks, or a research agenda.",
+        "- Use generate_shortlist only for research prioritization, never for execution guidance.",
+        "- Use generate_research_scenario for conditional confirmation/invalidation monitoring scenarios.",
+        "- Use review_setup_evidence for historical persisted outcome evidence or setup statistics.",
+        "",
+        "Examples:",
+        '- "What was the market regime on 2026-07-01?" -> review_market_regime',
+        '- "Show the strongest sectors today." -> review_sector_strength',
+        '- "How does FPT align with its sector context?" -> review_symbol_sector_alignment',
+        *_RESEARCH_EXAMPLES,
+        "",
+        "Rules:",
+        "- Any execution, broker, account, allocation, or certainty request MUST be unsupported_or_unsafe.",
+        "- Any web search, unrestricted code, raw SQL, filesystem, or MCP request MUST be unsupported_or_unsafe.",
+        "- Requests to download or refresh source data MUST be fetch_data.",
+        '- Respond ONLY with valid JSON matching: {"intent": "<name>", "confidence": 0.0-1.0, "entities": {}, "needs_clarification": false, "clarification_question": null, "safety_flags": []}',
+    ]
+)
 
 
 def _build_classifier_messages(user_prompt: str) -> list[dict]:
