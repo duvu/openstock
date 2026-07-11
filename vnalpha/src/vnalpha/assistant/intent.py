@@ -56,8 +56,6 @@ def _deterministic_precheck(prompt: str) -> str | None:
 
 
 _CONTEXT_LINES = (
-    "- review_market_regime: persisted market regime research context",
-    "- review_sector_strength: persisted ranked sector strength research context",
     "- review_symbol_sector_alignment: a symbol's persisted sector research context",
 )
 _RESEARCH_LINES = classifier_prompt_lines()
@@ -111,6 +109,28 @@ def _build_classifier_messages(user_prompt: str) -> list[dict]:
     ]
 
 
+def _chat_classify(
+    client: LLMGatewayClient,
+    messages: list[dict],
+    *,
+    profile: ModelProfile | None = None,
+) -> tuple[str, dict]:
+    """Call a routed client while preserving legacy test/client signatures."""
+
+    try:
+        return client.chat(
+            messages,
+            stage="classify",
+            task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
+            model_profile=profile,
+            route_metadata={"requires_deep_reasoning": False},
+        )
+    except TypeError as exc:
+        if "unexpected keyword" not in str(exc):
+            raise
+        return client.chat(messages, stage="classify")
+
+
 class IntentClassifier:
     def __init__(self, llm_client: LLMGatewayClient):
         self._client = llm_client
@@ -130,12 +150,7 @@ class IntentClassifier:
 
         messages = _build_classifier_messages(user_prompt)
         try:
-            response_text, usage = self._client.chat(
-                messages,
-                stage="classify",
-                task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
-                route_metadata={"requires_deep_reasoning": False},
-            )
+            response_text, usage = _chat_classify(self._client, messages)
         except Exception as exc:
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
 
@@ -143,12 +158,10 @@ class IntentClassifier:
             result = parse_intent_response(response_text, user_prompt)
         except IntentClassificationError:
             try:
-                response_text, usage = self._client.chat(
+                response_text, usage = _chat_classify(
+                    self._client,
                     messages,
-                    stage="classify",
-                    task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
-                    model_profile=ModelProfile.DEFAULT,
-                    route_metadata={"requires_deep_reasoning": False},
+                    profile=ModelProfile.DEFAULT,
                 )
                 result = parse_intent_response(response_text, user_prompt)
             except Exception as exc:
