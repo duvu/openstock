@@ -66,7 +66,9 @@ def validate_tool_grounding(
         if tool_name not in by_tool:
             issues.append(f"Required tool output is missing: {tool_name}.")
 
-    primary_output = by_tool.get(template.required_tools[0]) if template.required_tools else None
+    primary_output = (
+        by_tool.get(template.required_tools[0]) if template.required_tools else None
+    )
     primary_data = _data_payload(primary_output)
     if template.required_data_keys and not isinstance(primary_data, dict):
         issues.append("Primary research tool did not return a structured data payload.")
@@ -98,7 +100,7 @@ def validate_research_answer(
     tool_outputs: dict[str, Any],
     answer: AssistantAnswer,
 ) -> GroundednessResult:
-    """Validate a synthesized answer against the deterministic tool payloads."""
+    """Validate a synthesized answer against deterministic tool payloads."""
 
     precheck = validate_tool_grounding(plan, tool_outputs)
     template = get_research_template(plan.intent)
@@ -125,18 +127,23 @@ def validate_research_answer(
     if not answer.risks_caveats.strip():
         issues.append("Research answer must include risks and caveats.")
 
-    limited = _has_limited_or_missing_data(tool_outputs)
-    if limited and not answer.missing_data:
-        issues.append("Tool payload reports limited or missing data but answer does not disclose it.")
+    if _has_limited_or_missing_data(tool_outputs) and not answer.missing_data:
+        issues.append(
+            "Tool payload reports limited or missing data but answer does not disclose it."
+        )
 
     payload_keys = _collect_keys(tool_outputs)
     lowered_answer = answer_text.lower()
     for label, accepted_keys in _METRIC_KEYS.items():
-        if label in lowered_answer and not any(key in payload_keys for key in accepted_keys):
-            issues.append(f"Answer references '{label}' without a grounded payload field.")
+        if label in lowered_answer and not any(
+            key in payload_keys for key in accepted_keys
+        ):
+            issues.append(
+                f"Answer references '{label}' without a grounded payload field."
+            )
 
     if precheck.status == "WARN" and not issues:
-        warnings.append("Answer is grounded but upstream tool warnings remain.")
+        warnings.append("Answer is grounded but upstream tool caveats remain.")
 
     status = "FAIL" if issues else "WARN" if warnings else "PASS"
     return GroundednessResult(
@@ -172,6 +179,8 @@ def _data_payload(output: Any) -> Any:
 
 
 def _has_limited_or_missing_data(value: Any) -> bool:
+    """Return true for actual missing/partial payloads, not caveats alone."""
+
     if isinstance(value, dict):
         if value.get("data", object()) is None:
             return True
@@ -180,9 +189,6 @@ def _has_limited_or_missing_data(value: Any) -> bool:
             return True
         missing = value.get("missing_data")
         if isinstance(missing, list) and bool(missing):
-            return True
-        warnings = value.get("warnings")
-        if isinstance(warnings, list) and bool(warnings):
             return True
         return any(_has_limited_or_missing_data(item) for item in value.values())
     if isinstance(value, (list, tuple)):
