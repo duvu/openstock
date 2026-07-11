@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, assert_never
+
+from vnalpha.commands.models import CommandStatus
 
 if TYPE_CHECKING:
     from vnalpha.tui.widgets.status_bar import StatusBar
@@ -16,7 +18,7 @@ class TraceEvent(Protocol):
 
 
 class StatusAdapter:
-    """Map router activity onto the existing StatusBar API."""
+    """Map router activity and command outcomes onto the StatusBar API."""
 
     def __init__(self, status_bar: StatusBar | None) -> None:
         self._status_bar = status_bar
@@ -38,6 +40,29 @@ class StatusAdapter:
 
     def warning(self, detail: str) -> None:
         self.update("WARNING", detail=detail[:80])
+
+    def command_result(
+        self,
+        status: CommandStatus,
+        summary: str | None,
+        warnings: list[str],
+    ) -> None:
+        """Project command result semantics onto an operator-visible state."""
+
+        detail = "; ".join(warnings[:2]) or (summary or "")
+        match status:
+            case CommandStatus.SUCCESS:
+                self.warning(detail) if warnings else self.ready()
+            case CommandStatus.EMPTY_RESULT:
+                self.warning(detail or "No matching result")
+            case CommandStatus.PARTIAL:
+                self.warning(detail or "Partial result")
+            case CommandStatus.FAILED:
+                self.error(detail or "Command failed")
+            case CommandStatus.VALIDATION_ERROR:
+                self.warning(detail or "Invalid command")
+            case unreachable:
+                assert_never(unreachable)
 
     def trace(self, event: TraceEvent) -> None:
         if event.status == "RUNNING":
