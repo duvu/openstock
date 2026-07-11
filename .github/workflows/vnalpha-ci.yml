@@ -44,14 +44,27 @@ jobs:
           python -m pip install --quiet --disable-pip-version-check -e "./vnalpha[dev]"
 
       - name: Focused assistant research-intelligence tests
+        id: focused-tests
+        shell: bash
         run: |
+          set -o pipefail
           cd vnalpha
           pytest -q --tb=short \
             tests/test_assistant_research_intelligence_completion.py \
             tests/test_research_answer_audit_completion.py \
             tests/test_research_intent_classification_matrix.py \
             tests/test_research_policy_rewrite_completion.py \
-            tests/test_research_tool_execution_completion.py
+            tests/test_research_tool_execution_completion.py \
+            2>&1 | tee ../focused-tests.log
+
+      - name: Upload focused-test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: focused-tests-log
+          path: focused-tests.log
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Lint and format check
         run: make lint-vnalpha
