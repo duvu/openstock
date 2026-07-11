@@ -5,10 +5,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Status enums
-# ---------------------------------------------------------------------------
-
 
 class AssistantSessionStatus(str, Enum):
     RUNNING = "RUNNING"
@@ -30,33 +26,29 @@ class LLMStage(str, Enum):
     SYNTHESIZE = "synthesize"
 
 
-# ---------------------------------------------------------------------------
-# Supported intent names
-# ---------------------------------------------------------------------------
-
 SUPPORTED_INTENTS: frozenset[str] = frozenset(
     {
         "scan_candidates",
         "filter_candidates",
         "compare_symbols",
         "explain_symbol",
+        "deep_analyze_symbol",
         "review_quality",
         "review_market_regime",
         "review_sector_strength",
         "review_symbol_sector_alignment",
         "show_lineage",
         "summarize_watchlist",
+        "summarize_watchlist_deep",
+        "generate_shortlist",
+        "generate_research_scenario",
+        "review_setup_evidence",
         "create_research_note",
         "show_history",
         "fetch_data",
         "unsupported_or_unsafe",
     }
 )
-
-
-# ---------------------------------------------------------------------------
-# Core domain dataclasses
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -115,11 +107,6 @@ class RefusalMessage:
     # TRADING_EXECUTION | UNAVAILABLE_TOOL | SAFETY_BYPASS | DATA_FABRICATION
     policy_category: str
     suggestion: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# DB record dataclasses (type-safe repo layer)
-# ---------------------------------------------------------------------------
 
 
 @dataclass
