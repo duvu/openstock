@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from vnalpha.assistant.errors import SynthesisError
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
+from vnalpha.assistant.policy import TRADING_EXECUTION_PHRASES
 from vnalpha.assistant.response_parser import parse_synthesis_response
 from vnalpha.model_routing.models import ModelTaskType
 
@@ -29,17 +30,40 @@ MISSING_DATA_TEMPLATES = {
     "generic": "Required data is not available. {detail}",
 }
 
+CONTEXT_INTENT_DISCLOSURES = {
+    "review_market_regime": (
+        "Describe the persisted market-regime snapshot, its methodology version, "
+        "benchmark freshness, quality, lineage, and caveats."
+    ),
+    "review_sector_strength": (
+        "Describe persisted sector ranking order, methodology version, freshness, "
+        "quality or coverage, lineage, and caveats."
+    ),
+    "review_symbol_sector_alignment": (
+        "Describe only persisted symbol metadata and matching sector snapshot; state "
+        "missing metadata or snapshot context without inference."
+    ),
+}
+
+CONTEXT_INTENTS = frozenset(CONTEXT_INTENT_DISCLOSURES)
+UNSAFE_CONTEXT_TERMS = TRADING_EXECUTION_PHRASES | frozenset(
+    {"rebalance", "position", "invest", "purchase", "allocate", "allocation", "margin"}
+)
+
 SYNTHESIZER_SYSTEM_PROMPT = """You are a research assistant for a Vietnamese stock market screening tool.
 
-Your role is to explain deterministic pipeline outputs to the user.
+Your role is to explain deterministic pipeline outputs to the user as persisted research context.
 
 STRICT RULES:
 1. You MUST use only the provided tool outputs as your data source.
 2. You MUST NOT override the score, candidate_class, setup_type, or quality_status from tool outputs.
-3. You MUST NOT give buy/sell/order recommendations.
+3. You MUST NOT give action guidance or recommendations.
 4. You MUST NOT claim certainty or make guaranteed predictions.
 5. If data is missing or None in tool outputs, state it clearly; do not invent values.
-6. Always include: basis (what tool returned), risks/caveats (from risk_flags and quality), and missing data.
+6. Always include methodology, freshness, lineage, quality or coverage, caveats, basis, and missing data.
+7. When caveats, missing data, stale data, partial coverage, or insufficient quality exist,
+   the summary MUST state those limitations before descriptive conclusions.
+8. Market and sector context is descriptive persisted research context, not a forecast.
 
 Use research language only:
 - "Based on the latest persisted score..."
@@ -64,6 +88,8 @@ def _build_synthesis_messages(
     context = {
         "user_question": user_prompt,
         "intent": plan.intent,
+        "required_artifacts": plan.required_artifacts,
+        "context_intent_disclosure": CONTEXT_INTENT_DISCLOSURES.get(plan.intent),
         "tool_outputs": tool_outputs,
     }
     return [
@@ -135,4 +161,37 @@ class AnswerSynthesizer:
         except Exception as exc:
             raise SynthesisError(f"LLM synthesis call failed: {exc}") from exc
         self.last_usage = usage
-        return parse_synthesis_response(response_text)
+        answer = parse_synthesis_response(response_text)
+        _validate_context_answer(plan, tool_outputs, answer)
+        return answer
+
+
+def _validate_context_answer(
+    plan: AssistantPlan, tool_outputs: dict[str, Any], answer: AssistantAnswer
+) -> None:
+    if plan.intent not in CONTEXT_INTENTS:
+        return
+    answer_text = " ".join((answer.summary, answer.basis, answer.risks_caveats)).lower()
+    if any(term in answer_text for term in UNSAFE_CONTEXT_TERMS):
+        raise SynthesisError("Context synthesis must remain research-only.")
+    if _requires_caveat_first(tool_outputs) and not answer.summary.lower().startswith(
+        "caveat"
+    ):
+        raise SynthesisError("Context synthesis must be caveat-first for limited data.")
+
+
+def _requires_caveat_first(tool_outputs: dict[str, Any]) -> bool:
+    for output in tool_outputs.values():
+        if not isinstance(output, dict):
+            continue
+        data = output.get("data", output)
+        if not isinstance(data, dict):
+            continue
+        quality = data.get("quality")
+        if ("snapshot" in data and data["snapshot"] is None) or data.get("caveats"):
+            return True
+        if "snapshots" in data and not data["snapshots"]:
+            return True
+        if quality in {"INSUFFICIENT_DATA", "INCOMPLETE", "PARTIAL"}:
+            return True
+    return False

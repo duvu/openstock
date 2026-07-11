@@ -12,6 +12,10 @@ from vnalpha.commands.handlers.lineage import handle_lineage
 from vnalpha.commands.handlers.model import handle_model
 from vnalpha.commands.handlers.note import handle_note
 from vnalpha.commands.handlers.quality import handle_quality
+from vnalpha.commands.handlers.research_context import (
+    handle_market_regime,
+    handle_sector_strength,
+)
 from vnalpha.commands.handlers.scan import handle_scan
 from vnalpha.commands.handlers.todo import handle_todo
 from vnalpha.commands.registry import CommandMeta, CommandRegistry
@@ -22,6 +26,33 @@ def build_default_registry() -> CommandRegistry:
     """Return a registry populated with capability-approved research commands."""
     reg = CommandRegistry()
 
+    reg.register(
+        CommandMeta(
+            name="market-regime",
+            description="Show persisted market regime research context.",
+            usage="/market-regime [--date YYYY-MM-DD]",
+            examples=["/market-regime", "/market-regime --date 2026-07-06"],
+            permissions=permission_names("market-regime"),
+            handler=handle_market_regime,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="sector-strength",
+            description="Show persisted sector rankings or symbol alignment research context.",
+            usage=(
+                "/sector-strength [--date YYYY-MM-DD] [--top N] | "
+                "/sector-strength SYMBOL [--date YYYY-MM-DD]"
+            ),
+            examples=[
+                "/sector-strength",
+                "/sector-strength --top 10",
+                "/sector-strength FPT --date 2026-07-06",
+            ],
+            permissions=permission_names("sector-strength"),
+            handler=handle_sector_strength,
+        )
+    )
     reg.register(
         CommandMeta(
             name="scan",

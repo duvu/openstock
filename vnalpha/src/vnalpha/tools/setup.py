@@ -16,6 +16,11 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
     from vnalpha.tools.lineage import get_symbol_lineage
     from vnalpha.tools.notes import create_note, list_sessions
     from vnalpha.tools.quality import get_many_quality_status, get_quality_status
+    from vnalpha.tools.research_context import (
+        get_market_regime,
+        get_sector_strength,
+        get_symbol_alignment,
+    )
     from vnalpha.tools.scoring import compare_candidates, explain_candidate
     from vnalpha.tools.watchlist import filter_watchlist, scan_watchlist
 
@@ -87,6 +92,32 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
     )
     registry.register(
         ToolSpec(
+            name="market.get_regime",
+            description="Read a persisted market regime research snapshot",
+            permission=ToolPermission.READ_FEATURES,
+        ),
+        lambda **kwargs: get_market_regime(conn, date=kwargs.get("date")),
+    )
+    registry.register(
+        ToolSpec(
+            name="sector.get_strength",
+            description="Read persisted ranked sector strength research snapshots",
+            permission=ToolPermission.READ_FEATURES,
+        ),
+        lambda **kwargs: get_sector_strength(
+            conn, date=kwargs.get("date"), top=kwargs.get("top")
+        ),
+    )
+    registry.register(
+        ToolSpec(
+            name="sector.get_symbol_alignment",
+            description="Read a symbol's persisted sector research alignment",
+            permission=ToolPermission.READ_FEATURES,
+        ),
+        lambda **kwargs: _alignment(get_symbol_alignment, conn, **kwargs),
+    )
+    registry.register(
+        ToolSpec(
             name="note.create",
             description="Create a research note linked to a symbol",
             permission=ToolPermission.WRITE_NOTE,
@@ -150,6 +181,13 @@ def _lineage(impl, conn, **kwargs):
             "lineage.get_symbol_lineage requires 'symbol' and 'date'."
         )
     return impl(conn, symbol=symbol, date=date)
+
+
+def _alignment(impl, conn, **kwargs):
+    symbol = kwargs.get("symbol")
+    if symbol is None:
+        raise ToolExecutionError("sector.get_symbol_alignment requires 'symbol'.")
+    return impl(conn, symbol=symbol, date=kwargs.get("date"))
 
 
 def _create_note(impl, conn, **kwargs):

@@ -145,6 +145,96 @@ class TestAnswerSynthesizer:
         """SYNTHESIZER_SYSTEM_PROMPT must contain the override prohibition."""
         assert "MUST NOT override" in SYNTHESIZER_SYSTEM_PROMPT
 
+    def test_context_synthesis_prompt_requires_caveat_first_persisted_disclosure(self):
+        rules = SYNTHESIZER_SYSTEM_PROMPT.lower()
+
+        assert "persisted research context" in rules
+        assert "methodology" in rules
+        assert "freshness" in rules
+        assert "quality" in rules
+        assert "caveat" in rules
+        assert "missing" in rules
+        assert "action guidance" in rules
+
+    def test_context_synthesis_message_includes_required_artifacts(self):
+        plan = AssistantPlan(
+            intent="review_market_regime",
+            steps=[],
+            required_artifacts=["market_regime_snapshot"],
+        )
+
+        messages = _build_synthesis_messages("Review regime", plan, {})
+
+        payload = json.loads(messages[1]["content"])
+        assert payload["required_artifacts"] == ["market_regime_snapshot"]
+
+    @pytest.mark.parametrize(
+        "summary",
+        ["Buy FPT now.", "Rebalance the position.", "Open a long position."],
+    )
+    def test_context_synthesis_rejects_action_language(self, summary: str):
+        response = json.dumps(
+            {
+                "summary": summary,
+                "basis": "Persisted context.",
+                "risks_caveats": "Caveat: incomplete data.",
+                "tool_trace_summary": "market.get_regime executed.",
+                "missing_data": [],
+            }
+        )
+        plan = AssistantPlan(intent="review_market_regime", steps=[])
+
+        with pytest.raises(SynthesisError, match="research-only"):
+            AnswerSynthesizer(FakeLLMClient(responses=[(response, {})])).synthesize(
+                "Review regime", plan, {"step_1": {"snapshot": None}}
+            )
+
+    def test_complete_sector_collection_accepts_descriptive_summary(self):
+        response = json.dumps(
+            {
+                "summary": "Technology leads context.",
+                "basis": "Persisted.",
+                "risks_caveats": "None.",
+                "tool_trace_summary": "sector.get_strength",
+                "missing_data": [],
+            }
+        )
+        answer = AnswerSynthesizer(
+            FakeLLMClient(responses=[(response, {})])
+        ).synthesize(
+            "Review sectors",
+            AssistantPlan(intent="review_sector_strength", steps=[]),
+            {
+                "step_1": {
+                    "data": {
+                        "snapshots": [{"sector": "Technology"}],
+                        "quality": "COMPLETE",
+                        "caveats": [],
+                    }
+                }
+            },
+        )
+        assert answer.summary.startswith("Technology")
+
+    def test_context_synthesis_rejects_missing_snapshot_without_caveat_first_summary(
+        self,
+    ):
+        response = json.dumps(
+            {
+                "summary": "The market regime is mixed.",
+                "basis": "Persisted context.",
+                "risks_caveats": "No snapshot is available.",
+                "tool_trace_summary": "market.get_regime executed.",
+                "missing_data": [],
+            }
+        )
+        plan = AssistantPlan(intent="review_market_regime", steps=[])
+
+        with pytest.raises(SynthesisError, match="caveat-first"):
+            AnswerSynthesizer(FakeLLMClient(responses=[(response, {})])).synthesize(
+                "Review regime", plan, {"step_1": {"snapshot": None}}
+            )
+
     def test_missing_data_templates_exist(self):
         """MISSING_DATA_TEMPLATES must contain the required keys."""
         required_keys = {

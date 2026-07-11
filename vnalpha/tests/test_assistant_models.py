@@ -73,17 +73,16 @@ def test_llm_stage_values():
 
 
 # ---------------------------------------------------------------------------
-# 4. SUPPORTED_INTENTS contains all 11 intent names
-# ---------------------------------------------------------------------------
-
-
-def test_supported_intents_all_ten():
+def test_supported_intents_include_persisted_context_reviews():
     expected = {
         "scan_candidates",
         "filter_candidates",
         "compare_symbols",
         "explain_symbol",
         "review_quality",
+        "review_market_regime",
+        "review_sector_strength",
+        "review_symbol_sector_alignment",
         "show_lineage",
         "summarize_watchlist",
         "create_research_note",
@@ -92,7 +91,7 @@ def test_supported_intents_all_ten():
         "unsupported_or_unsafe",
     }
     assert SUPPORTED_INTENTS == expected
-    assert len(SUPPORTED_INTENTS) == 11
+    assert len(SUPPORTED_INTENTS) == 14
 
 
 # ---------------------------------------------------------------------------

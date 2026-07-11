@@ -47,6 +47,12 @@ risk_off
 insufficient_data
 ```
 
+The regime state requires at least 60 benchmark bars, while output-only return
+windows preserve unavailable values as null rather than fabricated zeroes. Breadth
+percentages use only active non-benchmark symbols with exact-date usable feature
+rows; outputs separately report the active universe, eligible denominator,
+excluded count, and coverage.
+
 ## Sector strength logic
 
 Sector strength should rank sectors using available symbol metadata and persisted market data.

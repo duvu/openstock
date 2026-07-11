@@ -9,6 +9,8 @@ from vnalpha.policy.permissions import ToolPermission
 
 COMMAND_PERMISSIONS: Final[Mapping[str, tuple[ToolPermission, ...]]] = MappingProxyType(
     {
+        "market-regime": (ToolPermission.READ_FEATURES,),
+        "sector-strength": (ToolPermission.READ_FEATURES,),
         "scan": (ToolPermission.READ_WATCHLIST,),
         "filter": (ToolPermission.READ_SCORE,),
         "compare": (ToolPermission.READ_SCORE,),

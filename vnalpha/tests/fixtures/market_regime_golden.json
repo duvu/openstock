@@ -1,0 +1,24 @@
+{
+  "healthy_regime": {
+    "description": "Exact-date benchmark and breadth evidence yields a complete risk-on market regime research snapshot.",
+    "expected": {
+      "market_regime_state": "RISK_ON",
+      "quality_status": "COMPLETE",
+      "breadth_feature_count": 5,
+      "caveats": [],
+      "methodology_version": "market-regime-v1",
+      "benchmark_freshness": "EXACT_DATE"
+    }
+  },
+  "incomplete_breadth": {
+    "description": "Insufficient exact-date breadth remains explicit in the persisted market regime research snapshot.",
+    "expected": {
+      "market_regime_state": "INSUFFICIENT_DATA",
+      "quality_status": "INCOMPLETE",
+      "breadth_feature_count": 4,
+      "caveat": "Breadth eligible rows: 4; 5 required.",
+      "methodology_version": "market-regime-v1",
+      "benchmark_freshness": "EXACT_DATE"
+    }
+  }
+}

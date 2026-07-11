@@ -122,6 +122,54 @@ def log_feature_build_failure(
         )
 
 
+def log_market_regime_built(
+    as_of_date: str,
+    market_regime_state: str,
+    quality_status: str,
+    breadth_feature_count: int,
+    caveat_count: int,
+    methodology_version: str,
+) -> None:
+    """Record a persisted market-regime research snapshot."""
+    log_audit(
+        "MARKET_REGIME_BUILT",
+        f"Market regime built for {as_of_date}: {market_regime_state}",
+        status="OK",
+        extra={
+            "as_of_date": as_of_date,
+            "market_regime_state": market_regime_state,
+            "quality_status": quality_status,
+            "breadth_feature_count": breadth_feature_count,
+            "caveat_count": caveat_count,
+            "methodology_version": methodology_version,
+        },
+    )
+
+
+def log_sector_strength_built(
+    as_of_date: str,
+    ranked_sector_count: int,
+    metadata_coverage_pct: float,
+    unclassified_count: int,
+    quality_status: str,
+    methodology_version: str,
+) -> None:
+    """Record a persisted sector-strength research build."""
+    log_audit(
+        "SECTOR_STRENGTH_BUILT",
+        f"Sector strength built for {as_of_date}: {ranked_sector_count} ranked",
+        status="OK",
+        extra={
+            "as_of_date": as_of_date,
+            "ranked_sector_count": ranked_sector_count,
+            "metadata_coverage_pct": metadata_coverage_pct,
+            "unclassified_count": unclassified_count,
+            "quality_status": quality_status,
+            "methodology_version": methodology_version,
+        },
+    )
+
+
 def log_scoring_start(date: str, *, run_ctx=None) -> None:
     log_audit(
         "SCORING_STARTED",

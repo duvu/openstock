@@ -653,6 +653,8 @@ class ChatController:
             "  /help             — Show this help",
             "",
             "Research slash commands (routed to CommandExecutor):",
+            "  /market-regime    — Show persisted market regime research context",
+            "  /sector-strength  — Show persisted sector strength research context",
             "  /scan             — Scan daily watchlist for candidates",
             "  /filter           — Filter candidate scores by conditions",
             "  /compare          — Compare symbols by score/setup/risk",

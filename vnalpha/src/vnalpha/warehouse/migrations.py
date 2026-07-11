@@ -11,6 +11,7 @@ from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.schema import (
     ALL_DDL,
+    ALL_DDL_MARKET_CONTEXT,
     ALL_DDL_PHASE6,
     ALL_DDL_PHASE58,
     ALL_DDL_PHASE59,
@@ -50,6 +51,9 @@ def run_migrations(
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE510:
         conn.execute(ddl)
+    for ddl in ALL_DDL_MARKET_CONTEXT:
+        conn.execute(ddl)
+    _migrate_market_context_columns(conn)
     _migrate_feature_snapshot_columns(conn)
     _migrate_rejected_symbol_columns(conn)
     _migrate_candidate_outcome_columns(conn)
@@ -155,3 +159,90 @@ def _migrate_chat_message_visibility_columns(conn: duckdb.DuckDBPyConnection) ->
     conn.execute(
         "ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ"
     )
+
+
+def _migrate_market_context_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    market_columns = {
+        row[0]
+        for row in conn.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'market_regime_snapshot'
+            """
+        ).fetchall()
+    }
+    if "ma20_slope" in market_columns and "ma50_slope" not in market_columns:
+        conn.execute(
+            "ALTER TABLE market_regime_snapshot RENAME COLUMN ma20_slope TO ma50_slope"
+        )
+    if (
+        "breadth_feature_count" in market_columns
+        and "breadth_active_count" not in market_columns
+    ):
+        conn.execute(
+            "ALTER TABLE market_regime_snapshot RENAME COLUMN breadth_eligible_count TO breadth_active_count"
+        )
+        conn.execute(
+            "ALTER TABLE market_regime_snapshot ADD COLUMN breadth_eligible_count INTEGER"
+        )
+        conn.execute(
+            "ALTER TABLE market_regime_snapshot ADD COLUMN breadth_excluded_count INTEGER"
+        )
+        conn.execute(
+            "ALTER TABLE market_regime_snapshot ADD COLUMN breadth_coverage DOUBLE"
+        )
+        conn.execute(
+            """
+            UPDATE market_regime_snapshot
+            SET breadth_eligible_count = breadth_feature_count,
+                breadth_excluded_count = breadth_active_count - breadth_feature_count,
+                breadth_coverage = breadth_feature_count::DOUBLE / breadth_active_count
+            WHERE breadth_active_count > 0
+            """
+        )
+    for column, column_type in (
+        ("breadth_active_count", "INTEGER"),
+        ("breadth_eligible_count", "INTEGER"),
+        ("breadth_excluded_count", "INTEGER"),
+        ("breadth_coverage", "DOUBLE"),
+    ):
+        conn.execute(
+            f"ALTER TABLE market_regime_snapshot ADD COLUMN IF NOT EXISTS {column} {column_type}"
+        )
+    for column in ("return20", "return60"):
+        if column not in market_columns:
+            conn.execute(
+                f"ALTER TABLE market_regime_snapshot ADD COLUMN {column} DOUBLE"
+            )
+        else:
+            conn.execute(
+                f"ALTER TABLE market_regime_snapshot ALTER COLUMN {column} DROP NOT NULL"
+            )
+    sector_columns = {
+        row[0]: row[1]
+        for row in conn.execute(
+            """
+            SELECT column_name, data_type
+            FROM information_schema.columns
+            WHERE table_name = 'sector_strength_snapshot'
+            """
+        ).fetchall()
+    }
+    leadership_count_type = sector_columns.get("leadership_count")
+    if leadership_count_type is None:
+        conn.execute(
+            "ALTER TABLE sector_strength_snapshot ADD COLUMN leadership_count INTEGER"
+        )
+    elif leadership_count_type.upper() != "INTEGER":
+        conn.execute(
+            """
+            ALTER TABLE sector_strength_snapshot
+            ALTER COLUMN leadership_count SET DATA TYPE INTEGER
+            USING CASE
+                WHEN TRY_CAST(leadership_count AS DOUBLE) = FLOOR(TRY_CAST(leadership_count AS DOUBLE))
+                THEN TRY_CAST(leadership_count AS INTEGER)
+                ELSE NULL
+            END
+            """
+        )

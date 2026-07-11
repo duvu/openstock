@@ -429,6 +429,73 @@ CREATE TABLE IF NOT EXISTS chat_message (
 
 ALL_DDL_PHASE510 = [CHAT_SESSION_DDL, CHAT_MESSAGE_DDL]
 
+MARKET_REGIME_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS market_regime_snapshot (
+    as_of_date                  DATE PRIMARY KEY,
+    benchmark_symbol            VARCHAR NOT NULL,
+    benchmark_bar_date          DATE NOT NULL,
+    close                       DOUBLE NOT NULL,
+    ma20                        DOUBLE NOT NULL,
+    ma50                        DOUBLE NOT NULL,
+    ma50_slope                  DOUBLE NOT NULL,
+    return20                    DOUBLE,
+    return60                    DOUBLE,
+    volatility20                DOUBLE NOT NULL,
+    breadth_active_count        INTEGER NOT NULL,
+    breadth_eligible_count      INTEGER NOT NULL,
+    breadth_excluded_count      INTEGER NOT NULL,
+    breadth_coverage            DOUBLE,
+    pct_above_ma20              DOUBLE,
+    pct_above_ma50              DOUBLE,
+    pct_positive_return20       DOUBLE,
+    regime                      VARCHAR NOT NULL,
+    trend                       VARCHAR NOT NULL,
+    volatility                  VARCHAR NOT NULL,
+    quality                     VARCHAR NOT NULL,
+    caveats_json                VARCHAR NOT NULL,
+    lineage_json                VARCHAR NOT NULL,
+    methodology_version         VARCHAR NOT NULL,
+    generated_at                TIMESTAMPTZ NOT NULL
+)
+"""
+
+SECTOR_STRENGTH_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS sector_strength_snapshot (
+    as_of_date                  DATE NOT NULL,
+    sector                      VARCHAR NOT NULL,
+    rank                        INTEGER NOT NULL,
+    member_count                INTEGER NOT NULL,
+    eligible_count              INTEGER NOT NULL,
+    median_return20             DOUBLE NOT NULL,
+    median_return60             DOUBLE NOT NULL,
+    median_rs20_vs_vnindex      DOUBLE NOT NULL,
+    median_rs60_vs_vnindex      DOUBLE NOT NULL,
+    pct_above_ma20              DOUBLE NOT NULL,
+    pct_above_ma50              DOUBLE NOT NULL,
+    leadership_count            INTEGER NOT NULL,
+    score                       DOUBLE NOT NULL,
+    rotation                    VARCHAR NOT NULL,
+    metadata_coverage           DOUBLE NOT NULL,
+    unclassified_count          INTEGER NOT NULL,
+    quality                     VARCHAR NOT NULL,
+    caveats_json                VARCHAR NOT NULL,
+    lineage_json                VARCHAR NOT NULL,
+    methodology_version         VARCHAR NOT NULL,
+    generated_at                TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (as_of_date, sector)
+)
+"""
+
+ALL_DDL_MARKET_CONTEXT = [
+    MARKET_REGIME_SNAPSHOT_DDL,
+    SECTOR_STRENGTH_SNAPSHOT_DDL,
+]
+
 ALL_DDL_COMBINED = (
-    ALL_DDL + ALL_DDL_PHASE58 + ALL_DDL_PHASE59 + ALL_DDL_PHASE6 + ALL_DDL_PHASE510
+    ALL_DDL
+    + ALL_DDL_PHASE58
+    + ALL_DDL_PHASE59
+    + ALL_DDL_PHASE6
+    + ALL_DDL_PHASE510
+    + ALL_DDL_MARKET_CONTEXT
 )
