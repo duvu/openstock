@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import structlog
@@ -50,7 +51,8 @@ UNSAFE_KEYWORDS: frozenset[str] = frozenset(
 def _deterministic_precheck(prompt: str) -> str | None:
     lower = prompt.lower()
     for keyword in UNSAFE_KEYWORDS:
-        if keyword in lower:
+        pattern = rf"(?<!\w){re.escape(keyword)}(?!\w)"
+        if re.search(pattern, lower):
             return "TRADING_EXECUTION"
     return None
 
