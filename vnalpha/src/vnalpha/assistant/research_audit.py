@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -46,7 +46,7 @@ def persist_research_answer_audit(
         [
             audit_id,
             assistant_session_id,
-            datetime.now(UTC),
+            datetime.now(timezone.utc),
             plan.intent,
             _dump(tools),
             _dump(artifact_refs),
@@ -71,7 +71,11 @@ def persist_research_answer_audit(
     return audit_id
 
 
-def list_research_answer_audits(conn, *, limit: int = 20) -> list[dict[str, Any]]:
+def list_research_answer_audits(
+    conn,
+    *,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
         SELECT research_answer_audit_id, assistant_session_id, created_at, intent,
