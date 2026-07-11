@@ -11,8 +11,18 @@ from vnalpha.assistant.errors import (
     PlanValidationError,
 )
 from vnalpha.assistant.gateway import FakeLLMClient
-from vnalpha.assistant.intent import IntentClassifier, _deterministic_precheck
-from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
+from vnalpha.assistant.intent import (
+    CLASSIFIER_SYSTEM_PROMPT,
+    CONTEXT_INTENT_EXAMPLES,
+    IntentClassifier,
+    _deterministic_precheck,
+)
+from vnalpha.assistant.models import (
+    SUPPORTED_INTENTS,
+    AssistantPlan,
+    IntentResult,
+    ToolPlanStep,
+)
 from vnalpha.assistant.planner import PlanBuilder, _validate_plan
 from vnalpha.assistant.tool_policy import SAFE_TOOLS
 
@@ -147,6 +157,37 @@ class TestIntentClassifier:
         result = classifier.classify("Explain VNM on 2025-01-15")
         assert result.entities["symbol"] == "VNM"
         assert result.entities["date"] == "2025-01-15"
+
+    @pytest.mark.parametrize(
+        ("intent", "prompt"),
+        [
+            ("review_market_regime", "What was the market regime on 2026-07-01?"),
+            ("review_sector_strength", "Show the strongest sectors today."),
+            (
+                "review_symbol_sector_alignment",
+                "How does FPT align with its sector context?",
+            ),
+        ],
+    )
+    def test_context_intents_are_supported_and_classified(
+        self, intent: str, prompt: str
+    ) -> None:
+        classifier = _make_classifier(
+            [_fake_response(intent, entities={"date": "2026-07-01"})]
+        )
+
+        result = classifier.classify(prompt)
+
+        assert intent in SUPPORTED_INTENTS
+        assert intent in CLASSIFIER_SYSTEM_PROMPT
+        assert result.intent == intent
+
+    def test_context_intent_examples_cover_each_persisted_context_route(self) -> None:
+        assert set(CONTEXT_INTENT_EXAMPLES) == {
+            "review_market_regime",
+            "review_sector_strength",
+            "review_symbol_sector_alignment",
+        }
 
 
 # ===========================================================================
@@ -288,6 +329,46 @@ class TestPlanBuilder:
         assert len(plan.steps) == 1
         assert plan.steps[0].tool_name == "watchlist.scan"
 
+    @pytest.mark.parametrize(
+        ("intent", "entities", "tool_name", "arguments", "permission"),
+        [
+            (
+                "review_market_regime",
+                {"date": "2026-07-01"},
+                "market.get_regime",
+                {"date": "2026-07-01"},
+                "READ_FEATURES",
+            ),
+            (
+                "review_sector_strength",
+                {"date": "2026-07-01", "top": 3},
+                "sector.get_strength",
+                {"date": "2026-07-01", "top": 3},
+                "READ_FEATURES",
+            ),
+            (
+                "review_symbol_sector_alignment",
+                {"symbol": "FPT", "date": "2026-07-01"},
+                "sector.get_symbol_alignment",
+                {"symbol": "FPT", "date": "2026-07-01"},
+                "READ_FEATURES",
+            ),
+        ],
+    )
+    def test_context_intent_plan_uses_one_matching_read_only_tool(
+        self,
+        intent: str,
+        entities: dict,
+        tool_name: str,
+        arguments: dict,
+        permission: str,
+    ) -> None:
+        plan = self.builder.build(_make_intent(intent, entities))
+
+        assert [step.tool_name for step in plan.steps] == [tool_name]
+        assert plan.steps[0].arguments == arguments
+        assert plan.steps[0].required_permission == permission
+
     def test_plan_all_steps_in_canonical_policy(self):
         for intent_name in [
             "scan_candidates",
@@ -299,6 +380,9 @@ class TestPlanBuilder:
             "summarize_watchlist",
             "create_research_note",
             "show_history",
+            "review_market_regime",
+            "review_sector_strength",
+            "review_symbol_sector_alignment",
         ]:
             intent = _make_intent(intent_name)
             plan = self.builder.build(intent)

@@ -55,6 +55,12 @@ def _deterministic_precheck(prompt: str) -> str | None:
 
 # ----- Classifier prompt -----
 
+CONTEXT_INTENT_EXAMPLES: dict[str, str] = {
+    "review_market_regime": "What was the market regime on 2026-07-01?",
+    "review_sector_strength": "Show the strongest sectors today.",
+    "review_symbol_sector_alignment": "How does FPT align with its sector context?",
+}
+
 CLASSIFIER_SYSTEM_PROMPT = """You are an intent classifier for a Vietnamese stock market research assistant.
 
 Classify the user's research question into exactly one of these intents:
@@ -63,6 +69,9 @@ Classify the user's research question into exactly one of these intents:
 - compare_symbols: compare two or more specific symbols
 - explain_symbol: explain why one symbol is in the watchlist
 - review_quality: data quality or pipeline health question
+- review_market_regime: persisted market regime research context
+- review_sector_strength: persisted ranked sector strength research context
+- review_symbol_sector_alignment: a symbol's persisted sector research context
 - show_lineage: data source, ingestion, feature, or scoring lineage
 - summarize_watchlist: high-level summary of today's watchlist
 - create_research_note: save a note about a symbol or session
@@ -74,6 +83,9 @@ Rules:
 - Any buy/sell/order/trade/broker/account/allocation request MUST be classified as unsupported_or_unsafe.
 - Any web search, Python execution, or MCP tool request MUST be classified as unsupported_or_unsafe.
 - Requests to download/sync/fetch/update data for a symbol MUST be classified as fetch_data.
+- "What was the market regime on 2026-07-01?" -> review_market_regime
+- "Show the strongest sectors today." -> review_sector_strength
+- "How does FPT align with its sector context?" -> review_symbol_sector_alignment
 - Respond ONLY with valid JSON matching: {"intent": "<name>", "confidence": 0.0-1.0, "entities": {}, "needs_clarification": false, "clarification_question": null, "safety_flags": []}
 """
 

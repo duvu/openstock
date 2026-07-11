@@ -158,6 +158,63 @@ def _build_quality_plan(entities: dict) -> AssistantPlan:
     )
 
 
+def _build_market_regime_plan(entities: dict) -> AssistantPlan:
+    args: dict[str, Any] = {}
+    if entities.get("date"):
+        args["date"] = entities["date"]
+    return AssistantPlan(
+        intent="review_market_regime",
+        steps=[
+            _step(
+                "market.get_regime",
+                args,
+                "Review persisted market regime research context",
+                "READ_FEATURES",
+            )
+        ],
+        required_artifacts=["market_regime_snapshot"],
+    )
+
+
+def _build_sector_strength_plan(entities: dict) -> AssistantPlan:
+    args: dict[str, Any] = {}
+    if entities.get("date"):
+        args["date"] = entities["date"]
+    if entities.get("top") is not None:
+        args["top"] = entities["top"]
+    return AssistantPlan(
+        intent="review_sector_strength",
+        steps=[
+            _step(
+                "sector.get_strength",
+                args,
+                "Review persisted sector strength research context",
+                "READ_FEATURES",
+            )
+        ],
+        required_artifacts=["sector_strength_snapshot"],
+    )
+
+
+def _build_symbol_sector_alignment_plan(entities: dict) -> AssistantPlan:
+    symbol = _resolve_symbol(entities)
+    args: dict[str, Any] = {"symbol": symbol}
+    if entities.get("date"):
+        args["date"] = entities["date"]
+    return AssistantPlan(
+        intent="review_symbol_sector_alignment",
+        steps=[
+            _step(
+                "sector.get_symbol_alignment",
+                args,
+                "Review a symbol's persisted sector research alignment",
+                "READ_FEATURES",
+            )
+        ],
+        required_artifacts=["symbol_master", "sector_strength_snapshot"],
+    )
+
+
 def _build_lineage_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities)
     args: dict[str, Any] = {"symbol": symbol}
@@ -250,6 +307,9 @@ _PLAN_BUILDERS = {
     "compare_symbols": _build_compare_plan,
     "explain_symbol": _build_explain_plan,
     "review_quality": _build_quality_plan,
+    "review_market_regime": _build_market_regime_plan,
+    "review_sector_strength": _build_sector_strength_plan,
+    "review_symbol_sector_alignment": _build_symbol_sector_alignment_plan,
     "show_lineage": _build_lineage_plan,
     "summarize_watchlist": _build_summarize_plan,
     "create_research_note": _build_note_plan,
