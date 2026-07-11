@@ -1,17 +1,4 @@
-"""
-AssistantApp: top-level orchestrator for Phase 5.9.
-
-Flow:
-1. Create assistant_session
-2. check_policy (deterministic pre-rules)
-3. Classify intent (IntentClassifier)
-4. check_intent_policy
-5. Build plan (PlanBuilder)
-6. Execute tools (AssistantExecutor)
-7. Synthesize answer (AnswerSynthesizer)
-8. Persist answer, finish session
-9. Return AssistantAnswer or RefusalMessage
-"""
+"""Top-level orchestration for the warehouse-grounded research assistant."""
 
 from __future__ import annotations
 
@@ -22,16 +9,14 @@ if TYPE_CHECKING:
     from vnalpha.tools.executor import TraceEvent
 
 from vnalpha.assistant.context import prefix_assistant_prompt
-from vnalpha.assistant.errors import AssistantError, RefusalError
+from vnalpha.assistant.errors import AssistantError, RefusalError, SynthesisError
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.intent import IntentClassifier
-from vnalpha.assistant.models import (
-    AssistantAnswer,
-    AssistantPlan,
-    RefusalMessage,
-)
+from vnalpha.assistant.models import AssistantAnswer, AssistantPlan, RefusalMessage
 from vnalpha.assistant.planner import PlanBuilder
 from vnalpha.assistant.policy import check_intent_policy, check_policy
+from vnalpha.assistant.research_audit import persist_research_answer_audit
+from vnalpha.assistant.research_templates import is_research_intelligence_intent
 from vnalpha.assistant.synthesizer import AnswerSynthesizer
 from vnalpha.warehouse.assistant_repo import (
     create_assistant_session,
@@ -42,7 +27,7 @@ from vnalpha.warehouse.assistant_repo import (
 
 
 class AssistantApp:
-    """Orchestrates the full Phase 5.9 research assistant flow."""
+    """Orchestrate classify, deterministic planning/tools, synthesis, and audit."""
 
     def __init__(
         self,
@@ -69,16 +54,15 @@ class AssistantApp:
         workspace_context: str | None = None,
     ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
         """Process a natural-language research question."""
+
         user_prompt = prefix_assistant_prompt(
             user_prompt, workspace_context, chat_context
         )
-
         session_id = create_assistant_session(
             self._conn,
             surface=self._surface,
             user_prompt=user_prompt,
         )
-
         try:
             from vnalpha.observability.trace import log_trace
 
@@ -99,7 +83,7 @@ class AssistantApp:
                 no_execute=no_execute,
                 on_trace_event=on_trace_event,
             )
-            answer, plan = result
+            answer, _plan = result
             try:
                 from vnalpha.observability.audit import log_audit
                 from vnalpha.observability.trace import log_trace
@@ -111,7 +95,10 @@ class AssistantApp:
                     "ask",
                     status="SUCCESS",
                     module="vnalpha.assistant",
-                    extra={"answer_type": answer_type, "summary_chars": summary_chars},
+                    extra={
+                        "answer_type": answer_type,
+                        "summary_chars": summary_chars,
+                    },
                 )
                 log_audit(
                     "ASSISTANT_ANSWER_LOGGED",
@@ -140,12 +127,16 @@ class AssistantApp:
                 pass
             return RefusalMessage(
                 reason=exc.args[0] if exc.args else str(exc),
-                policy_category=exc.policy_category
-                if hasattr(exc, "policy_category")
-                else "UNKNOWN",
+                policy_category=(
+                    exc.policy_category
+                    if hasattr(exc, "policy_category")
+                    else "UNKNOWN"
+                ),
                 suggestion=exc.suggestion if hasattr(exc, "suggestion") else None,
             ), AssistantPlan(
-                intent="unsupported_or_unsafe", steps=[], refusal_reason=str(exc)
+                intent="unsupported_or_unsafe",
+                steps=[],
+                refusal_reason=str(exc),
             )
         except AssistantError as exc:
             finish_assistant_session(
@@ -185,11 +176,9 @@ class AssistantApp:
         no_execute: bool = False,
         on_trace_event: "Callable[[TraceEvent], None] | None" = None,
     ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
-        # 1. Deterministic safety check
         check_policy(user_prompt)
 
-        # 2. Classify intent
-        llm_trace_id = create_llm_trace(
+        classify_trace_id = create_llm_trace(
             self._conn,
             assistant_session_id=session_id,
             stage="classify",
@@ -200,25 +189,24 @@ class AssistantApp:
             intent_result = self._classifier.classify(user_prompt)
             finish_llm_trace(
                 self._conn,
-                llm_trace_id,
+                classify_trace_id,
                 status="SUCCESS",
                 output_summary={"intent": intent_result.intent},
                 usage=self._classifier.last_usage,
+                model=_actual_model(self._classifier.last_usage),
             )
         except Exception as exc:
             finish_llm_trace(
-                self._conn, llm_trace_id, status="FAILED", error={"message": str(exc)}
+                self._conn,
+                classify_trace_id,
+                status="FAILED",
+                error={"message": str(exc)},
             )
             raise
 
-        # Inject date entity if provided
         if date and "date" not in intent_result.entities:
             intent_result.entities["date"] = date
-
-        # 3. Post-classification policy check
         check_intent_policy(intent_result)
-
-        # 4. Build plan
         plan = self._planner.build(intent_result)
 
         if no_execute:
@@ -229,16 +217,13 @@ class AssistantApp:
                 intent=intent_result.intent,
                 plan=plan.to_dict(),
             )
-            # Return plan preview as answer
-            preview_answer = AssistantAnswer(
+            return AssistantAnswer(
                 summary=f"[Plan preview — not executed]\n{self._planner.preview(plan)}",
                 basis="Plan preview only.",
-                risks_caveats="",
+                risks_caveats="No deterministic research tools were executed.",
                 tool_trace_summary="No tools executed (--no-execute mode).",
-            )
-            return preview_answer, plan
+            ), plan
 
-        # 5. Execute tools
         from vnalpha.assistant.executor import AssistantExecutor
 
         executor = AssistantExecutor(
@@ -248,8 +233,7 @@ class AssistantApp:
         )
         tool_outputs = executor.execute(plan)
 
-        # 6. Synthesize answer
-        llm_trace_id2 = create_llm_trace(
+        synthesize_trace_id = create_llm_trace(
             self._conn,
             assistant_session_id=session_id,
             stage="synthesize",
@@ -258,20 +242,42 @@ class AssistantApp:
         )
         try:
             answer = self._synthesizer.synthesize(user_prompt, plan, tool_outputs)
+            groundedness = self._synthesizer.last_groundedness
+            if is_research_intelligence_intent(plan.intent):
+                if groundedness is None:
+                    raise SynthesisError(
+                        "Research-intelligence synthesis completed without groundedness metadata."
+                    )
+                persist_research_answer_audit(
+                    self._conn,
+                    assistant_session_id=session_id,
+                    plan=plan,
+                    tool_outputs=tool_outputs,
+                    answer=answer,
+                    groundedness=groundedness,
+                )
             finish_llm_trace(
                 self._conn,
-                llm_trace_id2,
+                synthesize_trace_id,
                 status="SUCCESS",
-                output_summary={"summary_length": len(answer.summary)},
+                output_summary={
+                    "summary_length": len(answer.summary),
+                    "groundedness_status": groundedness.status
+                    if groundedness is not None
+                    else None,
+                },
                 usage=self._synthesizer.last_usage,
+                model=_actual_model(self._synthesizer.last_usage),
             )
         except Exception as exc:
             finish_llm_trace(
-                self._conn, llm_trace_id2, status="FAILED", error={"message": str(exc)}
+                self._conn,
+                synthesize_trace_id,
+                status="FAILED",
+                error={"message": str(exc)},
             )
             raise
 
-        # 7. Persist and finish
         finish_assistant_session(
             self._conn,
             session_id,
@@ -286,3 +292,10 @@ class AssistantApp:
         config = getattr(self._llm, "config", None)
         model = getattr(config, "model", None)
         return str(model or type(self._llm).__name__)
+
+
+def _actual_model(usage: dict | None) -> str | None:
+    if not isinstance(usage, dict):
+        return None
+    route = usage.get("_model_routing") or usage.get("model_route")
+    return str(route.get("model_id")) if isinstance(route, dict) and route.get("model_id") else None
