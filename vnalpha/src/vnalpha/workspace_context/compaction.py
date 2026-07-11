@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from vnalpha.model_routing.models import ModelTaskType
 from vnalpha.workspace_context.models import CompactionResult, WorkspaceState
 from vnalpha.workspace_context.observability import emit_workspace_audit_event
 from vnalpha.workspace_context.storage import (
@@ -13,6 +15,9 @@ from vnalpha.workspace_context.storage import (
     resolve_workspace_root,
     save_workspace_state,
 )
+
+if TYPE_CHECKING:
+    from vnalpha.assistant.gateway import LLMGatewayClient
 
 
 def _now_iso() -> str:
@@ -88,7 +93,7 @@ def _render_compact_markdown(state: WorkspaceState, generated_at: str) -> str:
         *([f"- {error}" for error in state.errors[:20]] or ["- None"]),
         "",
         "## Recent Inputs",
-        *([f"- {item.summary}" for item in state.recent_inputs[:20]] or ["- None"]),
+        *([f"- {item.summary}" for item in state.recent_inputs[-20:]] or ["- None"]),
         "",
         "## Source References",
         *([f"- {ref}" for ref in sources] or ["- None"]),
@@ -97,15 +102,65 @@ def _render_compact_markdown(state: WorkspaceState, generated_at: str) -> str:
     return "\n".join(lines)
 
 
+def _llm_compact(
+    llm_client: LLMGatewayClient,
+    deterministic_summary: str,
+    state: WorkspaceState,
+) -> tuple[str, dict]:
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Compact the supplied workspace summary without inventing facts. "
+                "Preserve objective, symbols, findings, assumptions, open tasks, warnings, "
+                "errors, and source references. Return Markdown only."
+            ),
+        },
+        {"role": "user", "content": deterministic_summary},
+    ]
+    text, usage = llm_client.chat(
+        messages,
+        stage="compact",
+        task_type=ModelTaskType.WORKSPACE_COMPACTION.value,
+        route_metadata={
+            "workspace_id": state.workspace_id,
+            "artifact_count": len(state.active_artifacts),
+            "context_bytes": len(deterministic_summary.encode("utf-8")),
+        },
+    )
+    compact_text = text.strip()
+    if not compact_text:
+        raise ValueError("LLM returned an empty workspace summary.")
+    if not compact_text.startswith("#"):
+        compact_text = "# Compact Workspace Summary\n\n" + compact_text
+    return compact_text, usage
+
+
 def compact_workspace(
-    workspace_id: str, *, root: Path | None = None
+    workspace_id: str,
+    *,
+    root: Path | None = None,
+    llm_client: LLMGatewayClient | None = None,
 ) -> CompactionResult:
     resolved_root = resolve_workspace_root(root)
     paths = ensure_workspace_layout(root=resolved_root, workspace_id=workspace_id)
     state = load_workspace_state(root=resolved_root, workspace_id=workspace_id)
     before_size = dict(state.context_size)
     generated_at = _now_iso()
-    compact_text = _render_compact_markdown(state, generated_at)
+    deterministic_summary = _render_compact_markdown(state, generated_at)
+    compact_text = deterministic_summary
+    warnings: list[str] = []
+    model_route: dict | None = None
+    if llm_client is not None:
+        try:
+            compact_text, usage = _llm_compact(llm_client, deterministic_summary, state)
+            route = usage.get("model_route") if isinstance(usage, dict) else None
+            model_route = dict(route) if isinstance(route, dict) else None
+        except Exception as exc:
+            warnings.append(
+                f"LLM compaction failed; deterministic summary used instead: {exc}"
+            )
+
     _atomic_write_text(paths.compact_path, compact_text)
     updated_state = WorkspaceState.from_dict(
         {
@@ -115,6 +170,9 @@ def compact_workspace(
         }
     )
     save_workspace_state(root=resolved_root, state=updated_state)
+    event_metadata: dict = {"summary_lines": len(compact_text.splitlines())}
+    if model_route is not None:
+        event_metadata["model_route"] = model_route
     append_workspace_event(
         root=resolved_root,
         workspace_id=workspace_id,
@@ -123,14 +181,14 @@ def compact_workspace(
             "event_type": "WORKSPACE_COMPACTED",
             "workspace_id": workspace_id,
             "created_at": generated_at,
-            "metadata": {"summary_lines": len(compact_text.splitlines())},
+            "metadata": event_metadata,
         },
     )
     emit_workspace_audit_event(
         event_type="WORKSPACE_COMPACTED",
         workspace_id=workspace_id,
         summary="Workspace compacted",
-        metadata={"summary_lines": len(compact_text.splitlines())},
+        metadata=event_metadata,
     )
 
     return CompactionResult(
@@ -140,6 +198,6 @@ def compact_workspace(
         after_size={"summary_lines": len(compact_text.splitlines())},
         preserved_items=["active_symbols", "open_tasks", "warnings", "recent_inputs"],
         archived_items=[],
-        warnings=[],
+        warnings=warnings,
         generated_at=generated_at,
     )

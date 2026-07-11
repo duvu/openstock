@@ -9,6 +9,7 @@ from vnalpha.commands.handlers.filter import handle_filter
 from vnalpha.commands.handlers.help import handle_help
 from vnalpha.commands.handlers.history import handle_history
 from vnalpha.commands.handlers.lineage import handle_lineage
+from vnalpha.commands.handlers.model import handle_model
 from vnalpha.commands.handlers.note import handle_note
 from vnalpha.commands.handlers.quality import handle_quality
 from vnalpha.commands.handlers.research_context import (
@@ -173,6 +174,25 @@ def build_default_registry() -> CommandRegistry:
             ],
             permissions=permission_names("todo"),
             handler=handle_todo,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="model",
+            description="Inspect or override model-routing profiles.",
+            usage=(
+                "/model <status|profiles|use|reset|explain-route> "
+                "[PROFILE|STAGE|TASK] [--scope session|workspace|all]"
+            ),
+            examples=[
+                "/model status",
+                "/model profiles",
+                "/model use reasoning",
+                "/model reset",
+                "/model explain-route deep_symbol_analysis",
+            ],
+            permissions=permission_names("model"),
+            handler=handle_model,
         )
     )
     reg.register(
