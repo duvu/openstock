@@ -1,4 +1,4 @@
-"""Intent classifier for the Phase 5.9 natural-language research assistant."""
+"""Intent classifier for the natural-language research assistant."""
 
 from __future__ import annotations
 
@@ -9,13 +9,12 @@ import structlog
 from vnalpha.assistant.errors import IntentClassificationError
 from vnalpha.assistant.models import IntentResult
 from vnalpha.assistant.response_parser import parse_intent_response
+from vnalpha.model_routing.models import ModelProfile, ModelTaskType
 
 _log = structlog.get_logger("assistant.intent")
 
 if TYPE_CHECKING:
     from vnalpha.assistant.gateway import LLMGatewayClient
-
-# ----- Deterministic pre-rules (checked BEFORE calling LLM) -----
 
 UNSAFE_KEYWORDS: frozenset[str] = frozenset(
     {
@@ -45,15 +44,12 @@ UNSAFE_KEYWORDS: frozenset[str] = frozenset(
 
 
 def _deterministic_precheck(prompt: str) -> str | None:
-    """Return refusal category string if prompt matches unsafe keyword pattern, else None."""
     lower = prompt.lower()
-    for kw in UNSAFE_KEYWORDS:
-        if kw in lower:
+    for keyword in UNSAFE_KEYWORDS:
+        if keyword in lower:
             return "TRADING_EXECUTION"
     return None
 
-
-# ----- Classifier prompt -----
 
 CLASSIFIER_SYSTEM_PROMPT = """You are an intent classifier for a Vietnamese stock market research assistant.
 
@@ -86,13 +82,12 @@ def _build_classifier_messages(user_prompt: str) -> list[dict]:
 
 
 class IntentClassifier:
-    def __init__(self, llm_client: "LLMGatewayClient"):
+    def __init__(self, llm_client: LLMGatewayClient):
         self._client = llm_client
         self.last_usage: dict | None = None
 
     def classify(self, user_prompt: str) -> IntentResult:
-        """Classify user intent. Applies deterministic pre-rules first."""
-        # Pre-check
+        """Classify intent with small-profile routing and one stronger JSON retry."""
         unsafe_category = _deterministic_precheck(user_prompt)
         if unsafe_category:
             self.last_usage = None
@@ -102,14 +97,38 @@ class IntentClassifier:
                 entities={},
                 safety_flags=[unsafe_category],
             )
-        # LLM classification
+
         messages = _build_classifier_messages(user_prompt)
         try:
-            response_text, usage = self._client.chat(messages, stage="classify")
+            response_text, usage = self._client.chat(
+                messages,
+                stage="classify",
+                task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
+                route_metadata={"requires_deep_reasoning": False},
+            )
         except Exception as exc:
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
+
+        try:
+            result = parse_intent_response(response_text, user_prompt)
+        except IntentClassificationError:
+            try:
+                response_text, usage = self._client.chat(
+                    messages,
+                    stage="classify",
+                    task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
+                    model_profile=ModelProfile.DEFAULT,
+                    route_metadata={"requires_deep_reasoning": False},
+                )
+                result = parse_intent_response(response_text, user_prompt)
+            except Exception as exc:
+                if isinstance(exc, IntentClassificationError):
+                    raise
+                raise IntentClassificationError(
+                    f"LLM classifier retry failed: {exc}"
+                ) from exc
+
         self.last_usage = usage
-        result = parse_intent_response(response_text, user_prompt)
         _log.info(
             "intent_classified",
             intent=result.intent,

@@ -23,6 +23,7 @@ COMMAND_PERMISSIONS: Final[Mapping[str, tuple[ToolPermission, ...]]] = MappingPr
         "history": (ToolPermission.READ_HISTORY,),
         "context": (),
         "todo": (),
+        "model": (),
         "help": (),
     }
 )
