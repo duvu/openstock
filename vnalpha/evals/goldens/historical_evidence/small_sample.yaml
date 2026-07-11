@@ -1,0 +1,36 @@
+case_id: historical-small-sample
+family: historical_evidence
+input: Summarize the historical evidence for this setup.
+expected_intent: historical_evidence
+required_tools: []
+required_claims:
+  - claim_id: sample_result
+    fact_ids:
+      - observed_sample
+facts:
+  - fact_id: observed_sample
+    artifact_id: fixture://history/setup_outcomes
+    value: The observed sample contains 4 outcomes.
+forbidden_phrases:
+  - guaranteed
+required_caveats:
+  - Sample size is below the minimum threshold; treat this evidence as preliminary.
+artifact_manifest:
+  - fixture://history/setup_outcomes
+observation:
+  answer_text: The observed sample contains 4 outcomes. Sample size is below the minimum threshold; treat this evidence as preliminary.
+  caveats: []
+  missing_data: []
+  observed_claims:
+    - claim_id: sample_result
+      fact_ids:
+        - observed_sample
+  artifact_references:
+    - fixture://history/setup_outcomes
+  refused: false
+  reframed: false
+missing_data_expectation: not_applicable
+policy_expectation: research_only
+sample_size: 4
+minimum_sample_size: 20
+caveat: Sample size is below the minimum threshold; treat this evidence as preliminary.

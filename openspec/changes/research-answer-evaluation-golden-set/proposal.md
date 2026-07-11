@@ -2,9 +2,12 @@
 
 ## Summary
 
-Define the OpenSpec for evaluating OpenStock research answers, scenario plans, and policy behavior with golden sets.
+Define and implement the initial vnalpha evaluation-fixture boundary for assessing
+OpenStock research answers, scenario plans, and policy behavior with golden sets.
 
-This is an OpenSpec-only change.
+This change establishes typed local golden-case schemas and YAML loading only. It
+does not yet implement evaluation checks, a runner, reporting, CLI commands, CI
+integration, documentation, or seed cases.
 
 ## Motivation
 
@@ -12,17 +15,15 @@ As OpenStock adds deeper assistant and research-intelligence workflows, quality 
 
 ## Scope
 
-Define requirements for:
+Define executable requirements for:
 
 ```text
-golden research answer cases
-golden scenario plan cases
-golden policy refusal cases
-groundedness checks
-artifact reference checks
-small-sample caveat checks
-no personalized recommendation checks
-CI command
+typed golden research answer cases
+typed golden scenario plan cases
+typed golden policy refusal cases
+typed historical evidence cases
+typed shortlist cases
+strict YAML fixture loading with local artifact-reference fields
 ```
 
 ## Non-goals

@@ -40,6 +40,7 @@ The documentation is organized around the main engineering concerns:
 - [Workspace service design](09-workspace-service-design.md)
 - [Phased roadmap](10-roadmap-phases.md)
 - [Deployment architecture](11-deployment-architecture.md)
+- [Research answer evaluation fixtures](research-answer-evaluation.md)
 
 ## Design stance
 

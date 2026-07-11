@@ -1,0 +1,34 @@
+case_id: shortlist-research-watchlist
+family: shortlist
+input: Provide a research-only shortlist.
+expected_intent: research_shortlist
+required_tools: []
+required_claims:
+  - claim_id: shortlist_member
+    fact_ids:
+      - fpt_candidate
+facts:
+  - fact_id: fpt_candidate
+    artifact_id: fixture://shortlist/candidates
+    value: FPT appears on the research shortlist.
+forbidden_phrases:
+  - guaranteed
+required_caveats: []
+artifact_manifest:
+  - fixture://shortlist/candidates
+observation:
+  answer_text: FPT appears on the research shortlist for further review.
+  caveats: []
+  missing_data: []
+  observed_claims:
+    - claim_id: shortlist_member
+      fact_ids:
+        - fpt_candidate
+  artifact_references:
+    - fixture://shortlist/candidates
+  refused: false
+  reframed: false
+missing_data_expectation: not_applicable
+policy_expectation: research_only
+research_only_constraints:
+  - Research shortlist only; no execution instructions.
