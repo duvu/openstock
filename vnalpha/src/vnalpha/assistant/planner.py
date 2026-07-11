@@ -1,23 +1,20 @@
-"""Plan builder: maps intents to plans using assistant-approved tool capabilities."""
+"""Deterministic plan builder for policy-approved assistant tools."""
 
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from vnalpha.assistant.errors import PlanBuildError, PlanValidationError
 from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
 from vnalpha.assistant.tool_policy import assert_safe_tool
 
-if TYPE_CHECKING:
-    pass
-
 
 def _resolve_symbol(entities: dict) -> str:
-    symbols_list = entities.get("symbols", [])
-    if symbols_list:
-        return str(symbols_list[0])
-    return str(entities.get("symbol", ""))
+    symbols = entities.get("symbols", [])
+    if symbols:
+        return str(symbols[0]).strip().upper()
+    return str(entities.get("symbol", "")).strip().upper()
 
 
 def _step(tool: str, args: dict, purpose: str, permission: str) -> ToolPlanStep:
@@ -30,144 +27,118 @@ def _step(tool: str, args: dict, purpose: str, permission: str) -> ToolPlanStep:
     )
 
 
-# Deterministic plan builders by intent (no LLM needed for most)
+def _date_args(entities: dict, **base: Any) -> dict[str, Any]:
+    args = dict(base)
+    if entities.get("date"):
+        args["date"] = entities["date"]
+    return args
+
+
+def _missing_entity_plan(intent: str, entity: str) -> AssistantPlan:
+    return AssistantPlan(
+        intent=intent,
+        steps=[],
+        refusal_reason=f"The {intent} workflow requires a {entity}.",
+    )
+
+
 def _build_scan_plan(entities: dict) -> AssistantPlan:
-    date = entities.get("date")
-    universe = entities.get("universe")
-    args: dict[str, Any] = {}
-    if date:
-        args["date"] = date
-    if universe:
-        args["universe"] = universe
+    args = _date_args(entities)
+    if entities.get("universe"):
+        args["universe"] = entities["universe"]
     return AssistantPlan(
         intent="scan_candidates",
-        steps=[
-            _step(
-                "watchlist.scan",
-                args,
-                "Retrieve ranked research candidates",
-                "READ_WATCHLIST",
-            )
-        ],
+        steps=[_step("watchlist.scan", args, "Retrieve ranked research candidates", "READ_WATCHLIST")],
         required_artifacts=["daily_watchlist", "candidate_score"],
     )
 
 
 def _build_filter_plan(entities: dict) -> AssistantPlan:
-    filters = entities.get("filters", {})
-    date = entities.get("date")
-    args: dict[str, Any] = {"filters": filters}
-    if date:
-        args["date"] = date
+    args = _date_args(entities, filters=entities.get("filters", {}))
     return AssistantPlan(
         intent="filter_candidates",
-        steps=[
-            _step(
-                "watchlist.filter",
-                args,
-                "Filter candidates by criteria",
-                "READ_WATCHLIST",
-            )
-        ],
+        steps=[_step("watchlist.filter", args, "Filter candidates by criteria", "READ_WATCHLIST")],
         required_artifacts=["candidate_score"],
     )
 
 
 def _build_compare_plan(entities: dict) -> AssistantPlan:
-    symbols = entities.get("symbols", [])
-    date = entities.get("date")
-    args: dict[str, Any] = {"symbols": symbols}
-    if date:
-        args["date"] = date
-    # Use multi-symbol quality tool when comparing 2+ symbols
-    quality_tool = (
-        "quality.get_many_status" if len(symbols) > 1 else "quality.get_status"
-    )
-    quality_args: dict[str, Any] = {
-        "symbols": symbols,
-        **({"date": date} if date else {}),
-    }
+    symbols = [str(item).strip().upper() for item in entities.get("symbols", []) if item]
+    args = _date_args(entities, symbols=symbols)
+    quality_tool = "quality.get_many_status" if len(symbols) > 1 else "quality.get_status"
+    quality_args = _date_args(entities, symbols=symbols)
     if quality_tool == "quality.get_status" and symbols:
-        quality_args = {"symbol": symbols[0], **({"date": date} if date else {})}
-    steps = [
-        _step(
-            "candidate.compare",
-            args,
-            "Compare candidate scores and evidence",
-            "READ_SCORE",
-        ),
-        _step(
-            quality_tool,
-            quality_args,
-            "Check data quality for each symbol",
-            "READ_QUALITY",
-        ),
-    ]
+        quality_args = _date_args(entities, symbol=symbols[0])
     return AssistantPlan(
         intent="compare_symbols",
-        steps=steps,
+        steps=[
+            _step("candidate.compare", args, "Compare candidate scores and evidence", "READ_SCORE"),
+            _step(quality_tool, quality_args, "Check data quality for each symbol", "READ_QUALITY"),
+        ],
         required_artifacts=["candidate_score", "canonical_ohlcv"],
     )
 
 
 def _build_explain_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities)
-    date = entities.get("date")
-    args: dict[str, Any] = {"symbol": symbol}
-    if date:
-        args["date"] = date
-    steps = [
-        _step(
-            "candidate.explain",
-            args,
-            "Explain candidate score and evidence",
-            "READ_SCORE",
-        ),
-        _step(
-            "lineage.get_symbol_lineage", args, "Retrieve data lineage", "READ_LINEAGE"
-        ),
-        _step(
-            "quality.get_status",
-            {"symbol": symbol, **({"date": date} if date else {})},
-            "Check data quality status",
-            "READ_QUALITY",
-        ),
-    ]
+    if not symbol:
+        return _missing_entity_plan("explain_symbol", "symbol")
+    args = _date_args(entities, symbol=symbol)
     return AssistantPlan(
         intent="explain_symbol",
-        steps=steps,
+        steps=[
+            _step("candidate.explain", args, "Explain candidate score and evidence", "READ_SCORE"),
+            _step("lineage.get_symbol_lineage", args, "Retrieve data lineage", "READ_LINEAGE"),
+            _step("quality.get_status", args, "Check data quality status", "READ_QUALITY"),
+        ],
         required_artifacts=["candidate_score", "ingestion_run"],
+    )
+
+
+def _build_deep_analysis_plan(entities: dict) -> AssistantPlan:
+    symbol = _resolve_symbol(entities)
+    if not symbol:
+        return _missing_entity_plan("deep_analyze_symbol", "symbol")
+    return AssistantPlan(
+        intent="deep_analyze_symbol",
+        steps=[
+            _step(
+                "analysis.deep_symbol",
+                _date_args(entities, symbol=symbol),
+                "Compose score, feature, level, market, sector, freshness, and lineage context",
+                "READ_SCORE",
+            )
+        ],
+        assumptions=["Only persisted warehouse artifacts are authoritative."],
+        required_artifacts=[
+            "candidate_score",
+            "feature_snapshot",
+            "canonical_ohlcv",
+            "market_regime_snapshot",
+            "sector_strength_snapshot",
+        ],
     )
 
 
 def _build_quality_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities) or None
-    args: dict[str, Any] = {}
+    args = _date_args(entities)
     if symbol:
         args["symbol"] = symbol
-    if entities.get("date"):
-        args["date"] = entities["date"]
     return AssistantPlan(
         intent="review_quality",
-        steps=[
-            _step(
-                "quality.get_status", args, "Review data quality status", "READ_QUALITY"
-            )
-        ],
+        steps=[_step("quality.get_status", args, "Review data quality status", "READ_QUALITY")],
         required_artifacts=["canonical_ohlcv"],
     )
 
 
 def _build_market_regime_plan(entities: dict) -> AssistantPlan:
-    args: dict[str, Any] = {}
-    if entities.get("date"):
-        args["date"] = entities["date"]
     return AssistantPlan(
         intent="review_market_regime",
         steps=[
             _step(
                 "market.get_regime",
-                args,
+                _date_args(entities),
                 "Review persisted market regime research context",
                 "READ_FEATURES",
             )
@@ -177,9 +148,7 @@ def _build_market_regime_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_sector_strength_plan(entities: dict) -> AssistantPlan:
-    args: dict[str, Any] = {}
-    if entities.get("date"):
-        args["date"] = entities["date"]
+    args = _date_args(entities)
     if entities.get("top") is not None:
         args["top"] = entities["top"]
     return AssistantPlan(
@@ -198,16 +167,15 @@ def _build_sector_strength_plan(entities: dict) -> AssistantPlan:
 
 def _build_symbol_sector_alignment_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities)
-    args: dict[str, Any] = {"symbol": symbol}
-    if entities.get("date"):
-        args["date"] = entities["date"]
+    if not symbol:
+        return _missing_entity_plan("review_symbol_sector_alignment", "symbol")
     return AssistantPlan(
         intent="review_symbol_sector_alignment",
         steps=[
             _step(
                 "sector.get_symbol_alignment",
-                args,
-                "Review a symbol's persisted sector research alignment",
+                _date_args(entities, symbol=symbol),
+                "Review a symbol's persisted sector alignment",
                 "READ_FEATURES",
             )
         ],
@@ -215,16 +183,117 @@ def _build_symbol_sector_alignment_plan(entities: dict) -> AssistantPlan:
     )
 
 
+def _build_watchlist_deep_plan(entities: dict) -> AssistantPlan:
+    args = _date_args(entities)
+    if entities.get("top") is not None:
+        args["top"] = entities["top"]
+    return AssistantPlan(
+        intent="summarize_watchlist_deep",
+        steps=[
+            _step(
+                "watchlist.summarize_deep",
+                args,
+                "Summarize candidate classes, setups, sectors, quality, and risks",
+                "READ_WATCHLIST",
+            )
+        ],
+        required_artifacts=[
+            "daily_watchlist",
+            "candidate_score",
+            "market_regime_snapshot",
+        ],
+    )
+
+
+def _build_shortlist_plan(entities: dict) -> AssistantPlan:
+    args = _date_args(entities)
+    for key in ("top", "min_score"):
+        if entities.get(key) is not None:
+            args[key] = entities[key]
+    return AssistantPlan(
+        intent="generate_shortlist",
+        steps=[
+            _step(
+                "shortlist.generate",
+                args,
+                "Rank a bounded research shortlist from persisted evidence",
+                "READ_WATCHLIST",
+            ),
+            _step(
+                "market.get_regime",
+                _date_args(entities),
+                "Attach persisted market context to the shortlist review",
+                "READ_FEATURES",
+            ),
+        ],
+        assumptions=[
+            "The shortlist is research prioritization only, not an execution or allocation list."
+        ],
+        required_artifacts=[
+            "daily_watchlist",
+            "candidate_score",
+            "sector_strength_snapshot",
+            "market_regime_snapshot",
+        ],
+    )
+
+
+def _build_scenario_plan(entities: dict) -> AssistantPlan:
+    symbol = _resolve_symbol(entities)
+    if not symbol:
+        return _missing_entity_plan("generate_research_scenario", "symbol")
+    return AssistantPlan(
+        intent="generate_research_scenario",
+        steps=[
+            _step(
+                "scenario.generate_research_plan",
+                _date_args(entities, symbol=symbol),
+                "Build conditional confirmation, neutral, and invalidation research scenarios",
+                "READ_SCORE",
+            )
+        ],
+        assumptions=[
+            "Scenario conditions are descriptive research context and never execution instructions."
+        ],
+        required_artifacts=["candidate_score", "feature_snapshot", "canonical_ohlcv"],
+    )
+
+
+def _build_setup_evidence_plan(entities: dict) -> AssistantPlan:
+    setup_type = str(entities.get("setup_type", "")).strip().upper()
+    if not setup_type:
+        return _missing_entity_plan("review_setup_evidence", "setup_type")
+    args = _date_args(entities, setup_type=setup_type)
+    if entities.get("horizon_sessions") is not None:
+        args["horizon_sessions"] = entities["horizon_sessions"]
+    elif entities.get("horizon") is not None:
+        args["horizon_sessions"] = entities["horizon"]
+    return AssistantPlan(
+        intent="review_setup_evidence",
+        steps=[
+            _step(
+                "evidence.get_setup_history",
+                args,
+                "Review persisted historical outcome evidence for the setup",
+                "READ_HISTORY",
+            )
+        ],
+        required_artifacts=["setup_type_performance", "candidate_outcome"],
+    )
+
+
 def _build_lineage_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities)
-    args: dict[str, Any] = {"symbol": symbol}
-    if entities.get("date"):
-        args["date"] = entities["date"]
+    if not symbol:
+        return _missing_entity_plan("show_lineage", "symbol")
     return AssistantPlan(
         intent="show_lineage",
         steps=[
             _step(
-                "lineage.get_symbol_lineage", args, "Show data lineage", "READ_LINEAGE"
+                "lineage.get_symbol_lineage",
+                _date_args(entities, symbol=symbol),
+                "Show data lineage",
+                "READ_LINEAGE",
             )
         ],
         required_artifacts=["candidate_score", "ingestion_run"],
@@ -232,16 +301,13 @@ def _build_lineage_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_summarize_plan(entities: dict) -> AssistantPlan:
-    args: dict[str, Any] = {}
-    if entities.get("date"):
-        args["date"] = entities["date"]
     return AssistantPlan(
         intent="summarize_watchlist",
         steps=[
             _step(
                 "watchlist.scan",
-                args,
-                "Retrieve all candidates for summary",
+                _date_args(entities),
+                "Retrieve candidates for a short summary",
                 "READ_WATCHLIST",
             )
         ],
@@ -251,35 +317,33 @@ def _build_summarize_plan(entities: dict) -> AssistantPlan:
 
 def _build_note_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities)
-    text = entities.get("note_text", "")
-    tags = entities.get("tags", [])
-    args: dict[str, Any] = {"symbol": symbol, "note_text": text}
-    if tags:
-        args["tags"] = tags
+    args: dict[str, Any] = {
+        "symbol": symbol,
+        "note_text": entities.get("note_text", ""),
+    }
+    if entities.get("tags"):
+        args["tags"] = entities["tags"]
     return AssistantPlan(
         intent="create_research_note",
         steps=[_step("note.create", args, "Persist research note", "WRITE_NOTE")],
-        required_artifacts=[],
     )
 
 
 def _build_history_plan(entities: dict) -> AssistantPlan:
-    limit = entities.get("limit", 20)
     return AssistantPlan(
         intent="show_history",
         steps=[
             _step(
                 "history.list_sessions",
-                {"limit": limit},
+                {"limit": entities.get("limit", 20)},
                 "List recent research sessions",
                 "READ_HISTORY",
             )
         ],
-        required_artifacts=[],
     )
 
 
-def _build_fetch_plan(entities: dict) -> AssistantPlan:
+def _build_fetch_plan(_entities: dict) -> AssistantPlan:
     return AssistantPlan(
         intent="fetch_data",
         steps=[],
@@ -291,13 +355,12 @@ def _build_fetch_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_refusal_plan(entities: dict) -> AssistantPlan:
-    reason = entities.get(
-        "reason", "This request is not supported in the research assistant."
-    )
     return AssistantPlan(
         intent="unsupported_or_unsafe",
         steps=[],
-        refusal_reason=reason,
+        refusal_reason=entities.get(
+            "reason", "This request is not supported in the research assistant."
+        ),
     )
 
 
@@ -306,12 +369,17 @@ _PLAN_BUILDERS = {
     "filter_candidates": _build_filter_plan,
     "compare_symbols": _build_compare_plan,
     "explain_symbol": _build_explain_plan,
+    "deep_analyze_symbol": _build_deep_analysis_plan,
     "review_quality": _build_quality_plan,
     "review_market_regime": _build_market_regime_plan,
     "review_sector_strength": _build_sector_strength_plan,
     "review_symbol_sector_alignment": _build_symbol_sector_alignment_plan,
-    "show_lineage": _build_lineage_plan,
     "summarize_watchlist": _build_summarize_plan,
+    "summarize_watchlist_deep": _build_watchlist_deep_plan,
+    "generate_shortlist": _build_shortlist_plan,
+    "generate_research_scenario": _build_scenario_plan,
+    "review_setup_evidence": _build_setup_evidence_plan,
+    "show_lineage": _build_lineage_plan,
     "create_research_note": _build_note_plan,
     "show_history": _build_history_plan,
     "fetch_data": _build_fetch_plan,
@@ -320,7 +388,6 @@ _PLAN_BUILDERS = {
 
 
 def _validate_plan(plan: AssistantPlan) -> None:
-    """Raise PlanValidationError if a plan step uses an unsafe tool."""
     if plan.is_refusal():
         return
     for step in plan.steps:
@@ -328,27 +395,27 @@ def _validate_plan(plan: AssistantPlan) -> None:
 
 
 class PlanBuilder:
-    """Builds AssistantPlan from IntentResult using deterministic templates."""
+    """Build AssistantPlan instances from classified intents without LLM planning."""
 
     def build(self, intent_result: IntentResult) -> AssistantPlan:
-        intent = intent_result.intent
-        builder = _PLAN_BUILDERS.get(intent, _build_refusal_plan)
+        builder = _PLAN_BUILDERS.get(intent_result.intent, _build_refusal_plan)
         try:
             plan = builder(intent_result.entities)
         except Exception as exc:
             raise PlanBuildError(
-                f"Failed to build plan for intent '{intent}': {exc}"
+                f"Failed to build plan for intent '{intent_result.intent}': {exc}"
             ) from exc
         _validate_plan(plan)
         return plan
 
     def preview(self, plan: AssistantPlan) -> str:
-        """Return a human-readable plan preview string."""
         if plan.is_refusal():
             return f"[REFUSED] {plan.refusal_reason}"
         lines = [f"Plan for intent: {plan.intent}", "Steps:"]
-        for i, step in enumerate(plan.steps, 1):
-            lines.append(f"  {i}. {step.tool_name}({step.arguments}) — {step.purpose}")
+        for index, step in enumerate(plan.steps, 1):
+            lines.append(
+                f"  {index}. {step.tool_name}({step.arguments}) — {step.purpose}"
+            )
         if plan.assumptions:
             lines.append(f"Assumptions: {', '.join(plan.assumptions)}")
         return "\n".join(lines)
