@@ -9,6 +9,7 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
+from vnalpha.warehouse.research_answer_schema import ALL_DDL_RESEARCH_ANSWER_AUDIT
 from vnalpha.warehouse.schema import (
     ALL_DDL,
     ALL_DDL_MARKET_CONTEXT,
@@ -25,12 +26,7 @@ def run_migrations(
     conn: Optional[duckdb.DuckDBPyConnection] = None,
     path: Optional[Path] = None,
 ) -> None:
-    """Create all tables if they don't exist.
-
-    Args:
-        conn: Use this connection directly (for testing with in-memory).
-        path: Create/open a DuckDB file at this path.
-    """
+    """Create all tables if they don't exist."""
     if conn is None:
         conn = get_connection(path=path)
     logger.info("Running warehouse migrations...")
@@ -46,6 +42,8 @@ def run_migrations(
         conn.execute(ddl)
     _migrate_tool_trace_parent_columns(conn)
     for ddl in ALL_DDL_PHASE59:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_RESEARCH_ANSWER_AUDIT:
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE6:
         conn.execute(ddl)
@@ -147,12 +145,16 @@ def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
             )
 
 
-def _migrate_outcome_evaluation_run_columns(conn: duckdb.DuckDBPyConnection) -> None:
+def _migrate_outcome_evaluation_run_columns(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
     """No-op: outcome_evaluation_run was created fresh in Phase 6 DDL."""
 
 
-def _migrate_chat_message_visibility_columns(conn: duckdb.DuckDBPyConnection) -> None:
-    """Add is_visible and hidden_at columns to chat_message for /clear audit-preserve behavior."""
+def _migrate_chat_message_visibility_columns(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    """Add visibility columns for audit-preserving /clear behavior."""
     conn.execute(
         "ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS is_visible BOOLEAN DEFAULT TRUE"
     )
