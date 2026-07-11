@@ -1,0 +1,28 @@
+{
+  "classified_sector_ranking": {
+    "description": "Exact-date classified sector research ranks complete sector evidence deterministically.",
+    "expected": {
+      "ranked_sector_count": 2,
+      "sectors": ["Alpha", "Beta"],
+      "metadata_coverage_pct": 1.0,
+      "unclassified_count": 0,
+      "quality_status": "OK",
+      "feature_data_freshness": "EXACT_DATE",
+      "feature_bar_date_basis": "as_of_bar_date == as_of_date",
+      "methodology_version": "sector-strength-v1"
+    }
+  },
+  "incomplete_sector_metadata": {
+    "description": "Missing sector metadata remains visible as a partial-metadata caveat in sector research output.",
+    "expected": {
+      "ranked_sector_count": 1,
+      "metadata_coverage_pct": 0.75,
+      "unclassified_count": 1,
+      "quality_status": "PARTIAL_METADATA",
+      "caveat": "1 eligible symbols lack nonblank sector metadata.",
+      "feature_data_freshness": "EXACT_DATE",
+      "feature_bar_date_basis": "as_of_bar_date == as_of_date",
+      "methodology_version": "sector-strength-v1"
+    }
+  }
+}
