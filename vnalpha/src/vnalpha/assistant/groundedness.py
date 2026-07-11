@@ -238,22 +238,25 @@ def _data_payload(output: Any) -> Any:
 def _numeric_payload_values(tool_outputs: dict[str, Any]) -> set[float]:
     values: set[float] = set()
 
+    def add_number(numeric: float) -> None:
+        for digits in range(0, 7):
+            values.add(round(numeric, digits))
+        if -1.0 <= numeric <= 1.0:
+            for digits in range(0, 5):
+                values.add(round(numeric * 100.0, digits))
+
     def visit(value: Any) -> None:
         if isinstance(value, bool) or value is None:
             return
         if isinstance(value, (int, float)):
-            numeric = float(value)
-            for digits in range(0, 7):
-                values.add(round(numeric, digits))
-            if -1.0 <= numeric <= 1.0:
-                for digits in range(0, 5):
-                    values.add(round(numeric * 100.0, digits))
+            add_number(float(value))
             return
         if isinstance(value, dict):
             for item in value.values():
                 visit(item)
             return
         if isinstance(value, (list, tuple, set)):
+            add_number(float(len(value)))
             for item in value:
                 visit(item)
 
