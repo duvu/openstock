@@ -34,6 +34,15 @@ TOOL_CAPABILITIES: Final[tuple[ToolCapability, ...]] = (
     ToolCapability(
         "lineage.get_symbol_lineage", ToolPermission.READ_LINEAGE, True, True, True
     ),
+    # Persisted market/sector context is an existing feature snapshot read; no
+    # narrower permission exists, so READ_FEATURES is the narrowest policy fit.
+    ToolCapability("market.get_regime", ToolPermission.READ_FEATURES, True, True, True),
+    ToolCapability(
+        "sector.get_strength", ToolPermission.READ_FEATURES, True, True, True
+    ),
+    ToolCapability(
+        "sector.get_symbol_alignment", ToolPermission.READ_FEATURES, True, True, True
+    ),
     ToolCapability("note.create", ToolPermission.WRITE_NOTE, True, True, True),
     ToolCapability(
         "history.list_sessions", ToolPermission.READ_HISTORY, True, True, True

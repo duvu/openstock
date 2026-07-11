@@ -24,6 +24,9 @@ SAFE_TOOL_NAMES = frozenset(
         "lineage.get_symbol_lineage",
         "history.list_sessions",
         "note.create",
+        "market.get_regime",
+        "sector.get_strength",
+        "sector.get_symbol_alignment",
     }
 )
 
