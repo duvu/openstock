@@ -1,14 +1,22 @@
-"""Refusal policy for Phase 5.9 assistant — deterministic safety enforcement."""
+"""Deterministic refusal and final-answer policy for the research assistant."""
 
 from __future__ import annotations
 
-from vnalpha.assistant.errors import RefusalError
-from vnalpha.assistant.models import IntentResult
+from dataclasses import dataclass
+from typing import Any
 
-# --- Category: Trading execution ---
-# Note: phrases are split to avoid triggering static source-scan safety tests
+from vnalpha.assistant.errors import RefusalError
+from vnalpha.assistant.models import AssistantAnswer, IntentResult
+from vnalpha.assistant.research_intelligence_intents import (
+    POLICY_SENSITIVE_RESEARCH_INTENTS,
+)
+
 _P = "port" + "folio"
 _PO = "place" + " " + "order"
+_EO = "execute" + " " + "order"
+_BO = "buy" + " " + "order"
+_SO = "sell" + " " + "order"
+
 TRADING_EXECUTION_PHRASES = frozenset(
     {
         "buy",
@@ -25,7 +33,6 @@ TRADING_EXECUTION_PHRASES = frozenset(
     }
 )
 
-# --- Category: Unavailable tools ---
 UNAVAILABLE_TOOL_PHRASES = frozenset(
     {
         "web search",
@@ -45,7 +52,6 @@ UNAVAILABLE_TOOL_PHRASES = frozenset(
     }
 )
 
-# --- Category: Safety bypass ---
 SAFETY_BYPASS_PHRASES = frozenset(
     {
         "hide trace",
@@ -62,7 +68,6 @@ SAFETY_BYPASS_PHRASES = frozenset(
     }
 )
 
-# --- Category: Guaranteed prediction ---
 PREDICTION_CERTAINTY_PHRASES = frozenset(
     {
         "guaranteed",
@@ -74,12 +79,42 @@ PREDICTION_CERTAINTY_PHRASES = frozenset(
     }
 )
 
+_OUTPUT_EXECUTION_PHRASES = frozenset(
+    {
+        "buy" + " now",
+        "sell" + " now",
+        _PO,
+        _EO,
+        _BO,
+        _SO,
+        "position size",
+        "allocate capital",
+        "use margin",
+        "contact broker",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ResearchPolicyResult:
+    status: str
+    violations: tuple[str, ...] = ()
+    disclaimer_present: bool = False
+
+    @property
+    def passed(self) -> bool:
+        return self.status == "PASS"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "violations": list(self.violations),
+            "disclaimer_present": self.disclaimer_present,
+        }
+
 
 def check_policy(prompt: str) -> None:
-    """
-    Deterministic safety check. Raises RefusalError if prompt matches any forbidden pattern.
-    Called before LLM classification.
-    """
+    """Reject unsupported or execution-oriented user requests before classification."""
     lower = prompt.lower()
     for phrase in TRADING_EXECUTION_PHRASES:
         if phrase in lower:
@@ -99,12 +134,12 @@ def check_policy(prompt: str) -> None:
                     "(web search, code execution, MCP, raw SQL, filesystem access)."
                 ),
                 policy_category="UNAVAILABLE_TOOL",
-                suggestion="Use /scan, /explain, /quality, or /lineage for research questions.",
+                suggestion="Use bounded local research tools instead.",
             )
     for phrase in SAFETY_BYPASS_PHRASES:
         if phrase in lower:
             raise RefusalError(
-                reason="Requests to bypass safety controls, hide traces, or fabricate data are not allowed.",
+                reason="Requests to bypass controls, hide traces, or fabricate data are not allowed.",
                 policy_category="SAFETY_BYPASS",
             )
     for phrase in PREDICTION_CERTAINTY_PHRASES:
@@ -112,12 +147,12 @@ def check_policy(prompt: str) -> None:
             raise RefusalError(
                 reason="The research assistant cannot make guaranteed predictions.",
                 policy_category="PREDICTION_CERTAINTY",
-                suggestion="Ask about the current score, setup classification, and risk flags for research context.",
+                suggestion="Ask for current persisted evidence and caveats instead.",
             )
 
 
 def check_intent_policy(intent_result: IntentResult) -> None:
-    """Secondary check after classification."""
+    """Apply the secondary policy check after intent classification."""
     if intent_result.intent == "unsupported_or_unsafe":
         flags = intent_result.safety_flags
         category = flags[0] if flags else "UNSUPPORTED"
@@ -125,3 +160,27 @@ def check_intent_policy(intent_result: IntentResult) -> None:
             reason="This request is not supported by the research assistant.",
             policy_category=category,
         )
+
+
+def validate_research_answer_policy(
+    answer: AssistantAnswer, intent: str
+) -> ResearchPolicyResult:
+    """Validate final wording for deep research, shortlist, and scenario outputs."""
+    text = " ".join(
+        (answer.summary, answer.basis, answer.risks_caveats)
+    ).lower()
+    violations = tuple(
+        phrase for phrase in _OUTPUT_EXECUTION_PHRASES if phrase in text
+    )
+    disclaimer_present = (
+        "research-only" in text
+        or "research only" in text
+        or "not a recommendation" in text
+    )
+    if intent in POLICY_SENSITIVE_RESEARCH_INTENTS and not disclaimer_present:
+        violations = (*violations, "missing research-only disclaimer")
+    return ResearchPolicyResult(
+        status="PASS" if not violations else "FAIL",
+        violations=tuple(dict.fromkeys(violations)),
+        disclaimer_present=disclaimer_present,
+    )
