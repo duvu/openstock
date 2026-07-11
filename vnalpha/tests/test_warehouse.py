@@ -39,6 +39,7 @@ def test_all_tables_created(conn):
         "research_note",
         "assistant_session",
         "llm_trace",
+        "research_answer_audit",
         "outcome_evaluation_run",
         "candidate_outcome",
         "watchlist_outcome",
@@ -114,7 +115,7 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 23
+    assert len(tables) == 24
 
 
 def test_get_watchlist_empty(conn):
@@ -158,6 +159,7 @@ def test_build_canonical_rejected_carries_provider(conn):
     from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
 
     run_id = create_ingestion_run(conn, "test-service", "/test")
+    # Insert a raw row where high < low to trigger rejection
     conn.execute(
         """
         INSERT INTO market_ohlcv_raw
@@ -166,7 +168,6 @@ def test_build_canonical_rejected_carries_provider(conn):
     """,
         [run_id],
     )
-    # high < low → invalid
     build_canonical_ohlcv(conn, interval="1D", symbol="PROVTEST")
 
     row = conn.execute(
