@@ -9,6 +9,7 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
+from vnalpha.warehouse.research_answer_schema import ALL_DDL_RESEARCH_ANSWER_AUDIT
 from vnalpha.warehouse.schema import (
     ALL_DDL,
     ALL_DDL_MARKET_CONTEXT,
@@ -46,6 +47,8 @@ def run_migrations(
         conn.execute(ddl)
     _migrate_tool_trace_parent_columns(conn)
     for ddl in ALL_DDL_PHASE59:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_RESEARCH_ANSWER_AUDIT:
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE6:
         conn.execute(ddl)
