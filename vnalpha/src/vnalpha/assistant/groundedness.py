@@ -58,6 +58,14 @@ def validate_tool_grounding(
     template = get_research_template(plan.intent)
     if template is None:
         return GroundednessResult(status="PASS")
+    if not plan.steps:
+        return GroundednessResult(
+            status="WARN",
+            warnings=(
+                "Direct synthesis call has no executable plan steps; "
+                "tool-name validation was skipped.",
+            ),
+        )
 
     by_tool = _outputs_by_tool(plan, tool_outputs)
     issues: list[str] = []
