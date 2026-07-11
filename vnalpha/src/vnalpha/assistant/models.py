@@ -5,9 +5,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Status enums
-# ---------------------------------------------------------------------------
+from vnalpha.assistant.research_intelligence_intents import (
+    RESEARCH_INTELLIGENCE_INTENTS,
+)
 
 
 class AssistantSessionStatus(str, Enum):
@@ -30,19 +30,13 @@ class LLMStage(str, Enum):
     SYNTHESIZE = "synthesize"
 
 
-# ---------------------------------------------------------------------------
-# Supported intent names
-# ---------------------------------------------------------------------------
-
-SUPPORTED_INTENTS: frozenset[str] = frozenset(
+_BASE_SUPPORTED_INTENTS = frozenset(
     {
         "scan_candidates",
         "filter_candidates",
         "compare_symbols",
         "explain_symbol",
         "review_quality",
-        "review_market_regime",
-        "review_sector_strength",
         "review_symbol_sector_alignment",
         "show_lineage",
         "summarize_watchlist",
@@ -53,10 +47,9 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset(
     }
 )
 
-
-# ---------------------------------------------------------------------------
-# Core domain dataclasses
-# ---------------------------------------------------------------------------
+SUPPORTED_INTENTS: frozenset[str] = (
+    _BASE_SUPPORTED_INTENTS | RESEARCH_INTELLIGENCE_INTENTS
+)
 
 
 @dataclass
@@ -104,6 +97,8 @@ class AssistantAnswer:
     tool_trace_summary: str
     missing_data: list[str] = field(default_factory=list)
     raw_tool_outputs: dict[str, Any] = field(default_factory=dict)
+    grounded_source_refs: list[str] = field(default_factory=list)
+    research_metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -115,11 +110,6 @@ class RefusalMessage:
     # TRADING_EXECUTION | UNAVAILABLE_TOOL | SAFETY_BYPASS | DATA_FABRICATION
     policy_category: str
     suggestion: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# DB record dataclasses (type-safe repo layer)
-# ---------------------------------------------------------------------------
 
 
 @dataclass

@@ -21,6 +21,13 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
         get_sector_strength,
         get_symbol_alignment,
     )
+    from vnalpha.tools.research_intelligence import (
+        deep_symbol_analysis,
+        generate_research_scenario,
+        generate_shortlist,
+        get_setup_history,
+        summarize_watchlist_deep,
+    )
     from vnalpha.tools.scoring import compare_candidates, explain_candidate
     from vnalpha.tools.watchlist import filter_watchlist, scan_watchlist
 
@@ -44,6 +51,29 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
     )
     registry.register(
         ToolSpec(
+            name="watchlist.summarize_deep",
+            description="Summarize persisted watchlist structure and context",
+            permission=ToolPermission.READ_WATCHLIST,
+        ),
+        lambda **kwargs: summarize_watchlist_deep(
+            conn, date=kwargs.get("date"), top=kwargs.get("top")
+        ),
+    )
+    registry.register(
+        ToolSpec(
+            name="shortlist.generate",
+            description="Generate a deterministic research shortlist from persisted artifacts",
+            permission=ToolPermission.READ_WATCHLIST,
+        ),
+        lambda **kwargs: generate_shortlist(
+            conn,
+            date=kwargs.get("date"),
+            top=kwargs.get("top"),
+            min_score=kwargs.get("min_score"),
+        ),
+    )
+    registry.register(
+        ToolSpec(
             name="candidate.explain",
             description="Explain a candidate's score for a date",
             permission=ToolPermission.READ_SCORE,
@@ -57,6 +87,22 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
             permission=ToolPermission.READ_SCORE,
         ),
         lambda **kwargs: _compare(compare_candidates, conn, **kwargs),
+    )
+    registry.register(
+        ToolSpec(
+            name="analysis.deep_symbol",
+            description="Compose a deep warehouse-grounded symbol research payload",
+            permission=ToolPermission.READ_SCORE,
+        ),
+        lambda **kwargs: _deep_analysis(deep_symbol_analysis, conn, **kwargs),
+    )
+    registry.register(
+        ToolSpec(
+            name="scenario.generate_research_plan",
+            description="Generate a conditional research-only scenario from persisted data",
+            permission=ToolPermission.READ_SCORE,
+        ),
+        lambda **kwargs: _scenario(generate_research_scenario, conn, **kwargs),
     )
     registry.register(
         ToolSpec(
@@ -118,6 +164,14 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
     )
     registry.register(
         ToolSpec(
+            name="evidence.get_setup_history",
+            description="Read persisted outcome evidence for a setup type",
+            permission=ToolPermission.READ_HISTORY,
+        ),
+        lambda **kwargs: _setup_history(get_setup_history, conn, **kwargs),
+    )
+    registry.register(
+        ToolSpec(
             name="note.create",
             description="Create a research note linked to a symbol",
             permission=ToolPermission.WRITE_NOTE,
@@ -173,6 +227,20 @@ def _compare(impl, conn, **kwargs):
     return impl(conn, symbols=symbols, date=date)
 
 
+def _deep_analysis(impl, conn, **kwargs):
+    symbol = kwargs.get("symbol")
+    if symbol is None:
+        raise ToolExecutionError("analysis.deep_symbol requires 'symbol'.")
+    return impl(conn, symbol=symbol, date=kwargs.get("date"))
+
+
+def _scenario(impl, conn, **kwargs):
+    symbol = kwargs.get("symbol")
+    if symbol is None:
+        raise ToolExecutionError("scenario.generate_research_plan requires 'symbol'.")
+    return impl(conn, symbol=symbol, date=kwargs.get("date"))
+
+
 def _lineage(impl, conn, **kwargs):
     symbol = kwargs.get("symbol")
     date = kwargs.get("date")
@@ -188,6 +256,18 @@ def _alignment(impl, conn, **kwargs):
     if symbol is None:
         raise ToolExecutionError("sector.get_symbol_alignment requires 'symbol'.")
     return impl(conn, symbol=symbol, date=kwargs.get("date"))
+
+
+def _setup_history(impl, conn, **kwargs):
+    setup_type = kwargs.get("setup_type")
+    if setup_type is None:
+        raise ToolExecutionError("evidence.get_setup_history requires 'setup_type'.")
+    return impl(
+        conn,
+        setup_type=setup_type,
+        horizon_sessions=kwargs.get("horizon_sessions"),
+        date=kwargs.get("date"),
+    )
 
 
 def _create_note(impl, conn, **kwargs):
