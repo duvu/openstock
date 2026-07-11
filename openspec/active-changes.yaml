@@ -1,0 +1,85 @@
+# Authoritative registry for non-archived OpenSpec changes.
+reviewed_at: 2026-07-11
+policy:
+  active_directory: openspec/changes
+  archive_directory: openspec/changes/archive
+  p0_change: openstock-four-phase-hardening
+  research_only_boundary: true
+changes:
+  openstock-four-phase-hardening:
+    status: in_progress
+    priority: P0
+    blocked_by: []
+    summary: "Repository, workspace, assistant lifecycle, runtime, CI, evaluation, and packaging hardening."
+    evidence: "Draft implementation PR #48."
+  prod-b-sandbox-mvp:
+    status: partial
+    priority: P1
+    blocked_by:
+      - openstock-four-phase-hardening
+    summary: "Approval-gated, no-network generated research compute; models/repository skeleton exists, runner and isolation do not."
+    evidence: "Sandbox model/storage modules and initial tests exist on main."
+  prod-c-research-automation:
+    status: planned
+    priority: P2
+    blocked_by:
+      - openstock-four-phase-hardening
+      - prod-b-sandbox-mvp
+    summary: "Domain-shaped experiments, features, pattern scans, hypotheses, and offline event studies."
+    evidence: "Specification only; no production automation engine yet."
+  prod-d-closed-loop-repair:
+    status: planned
+    priority: P3
+    blocked_by:
+      - openstock-four-phase-hardening
+      - prod-b-sandbox-mvp
+      - prod-c-research-automation
+    summary: "Bounded repair, validation, promotion, rejection, and rollback for sandbox/research artifacts only."
+    evidence: "Specification only; existing observability/repair commands are reusable prerequisites, not completion evidence."
+  research-intelligence-data-model-foundation:
+    status: partial
+    priority: P2
+    blocked_by:
+      - openstock-four-phase-hardening
+    summary: "Durable data contracts for reusable research-intelligence artifacts."
+    evidence: "Market/sector snapshots and research answer audit exist; the remaining proposed persisted models do not."
+  deep-symbol-analysis-engine:
+    status: partial
+    priority: P2
+    blocked_by:
+      - openstock-four-phase-hardening
+    summary: "Consolidated warehouse-grounded deep symbol analysis."
+    evidence: "`analysis.deep_symbol`, assistant intent/template, grounding, and tests exist; command/persistence/full contract remain."
+  watchlist-synthesis-and-shortlist:
+    status: partial
+    priority: P2
+    blocked_by:
+      - openstock-four-phase-hardening
+    summary: "Watchlist synthesis and narrower research shortlist artifacts."
+    evidence: "Deep watchlist summary and shortlist tools/intents exist; command, persistence, and richer grouping contracts remain."
+  research-scenario-plan-engine:
+    status: partial
+    priority: P2
+    blocked_by:
+      - openstock-four-phase-hardening
+      - deep-symbol-analysis-engine
+    summary: "Conditional, caveated research scenario plans without trading instructions."
+    evidence: "Scenario generation tool/intent/template exist; command, persistence, and dedicated validators remain."
+  setup-historical-evidence-engine:
+    status: partial
+    priority: P2
+    blocked_by:
+      - openstock-four-phase-hardening
+    summary: "Setup-cohort historical evidence with sample-size and regime caveats."
+    evidence: "Setup-history tool/intent/template exist; richer distributions, FAE/AAE, regime split, command, and persistence remain."
+  tui-research-workflow-polish:
+    status: planned
+    priority: P3
+    blocked_by:
+      - openstock-four-phase-hardening
+      - deep-symbol-analysis-engine
+      - watchlist-synthesis-and-shortlist
+      - research-scenario-plan-engine
+      - setup-historical-evidence-engine
+    summary: "Composer-first rendering and drill-down for completed research-intelligence contracts."
+    evidence: "Generic output stream exists; dedicated workflow polish is intentionally deferred."

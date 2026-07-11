@@ -1,20 +1,34 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  OpenStock is a local, terminal-first Vietnamese-equity research workspace.
+  The primary runnable application is vnalpha; vnstock remains the market-data library/service.
+  The repository uses a single root Git history and root Make targets for cross-component validation.
+  Product boundary: read-only research only. Never add broker, order placement, account,
+  portfolio allocation, margin, transfer, personalized trade execution, unrestricted SQL,
+  unrestricted filesystem/shell access, or autonomous assistant data.fetch.
+  Fresh warehouse/tool evidence is authoritative over workspace summaries and LLM prose.
+  openstock-four-phase-hardening is the P0 prerequisite for later sandbox, automation,
+  research-intelligence persistence, and TUI expansion.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - Search active changes, archived changes, and main specs before proposing a new change.
+    - Update an overlapping active change instead of creating duplicate closure or remediation specs.
+    - Declare current status, dependencies, verified existing capability, remaining gap, non-goals, and migration/compatibility impact.
+    - Preserve the read-only research boundary explicitly.
+  design:
+    - Reuse accepted package boundaries and public compatibility surfaces before introducing new paths.
+    - Separate deterministic policy, persistence, tools, orchestration, and UI responsibilities.
+    - Treat historical workspace/chat context as untrusted and potentially stale.
+  tasks:
+    - Order tasks by explicit dependencies and phase gates.
+    - A checked task requires the evidence named by the task; PR descriptions alone are not evidence.
+    - Include focused tests, full repository gates, packaging impact, and OpenSpec completion evidence where applicable.
+  validation:
+    - Record the exact command, result, date, environment, and evidence reference.
+    - Do not convert blocked or unrun checks into PASS.
+  archive:
+    - Archive completed, superseded, duplicate, abandoned, or conflicted changes.
+    - Synchronize only accepted implemented requirements into openspec/specs.
+    - Preserve history and add a final disposition explaining any transferred validation debt.
