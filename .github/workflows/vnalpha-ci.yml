@@ -1,0 +1,91 @@
+name: vnalpha-ci
+
+on:
+  pull_request:
+    paths:
+      - "vnalpha/**"
+      - "openspec/**"
+      - "packaging/**"
+      - "Makefile"
+      - ".github/workflows/vnalpha-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "vnalpha/**"
+      - "openspec/**"
+      - "packaging/**"
+      - "Makefile"
+      - ".github/workflows/vnalpha-ci.yml"
+
+concurrency:
+  group: vnalpha-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: vnalpha/pyproject.toml
+
+      - name: Install vnalpha and development dependencies
+        run: |
+          python -m pip install --quiet --disable-pip-version-check --upgrade pip
+          python -m pip install --quiet --disable-pip-version-check -e "./vnalpha[dev]"
+
+      - name: Focused assistant research-intelligence tests
+        id: focused-tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cd vnalpha
+          pytest -q --tb=short \
+            tests/test_assistant_research_intelligence_completion.py \
+            tests/test_research_answer_audit_completion.py \
+            tests/test_research_intent_classification_matrix.py \
+            tests/test_research_policy_rewrite_completion.py \
+            tests/test_research_tool_execution_completion.py \
+            2>&1 | tee ../focused-tests.log
+
+      - name: Upload focused-test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: focused-tests-log
+          path: focused-tests.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Lint and format check
+        shell: bash
+        run: |
+          set -o pipefail
+          make lint-vnalpha 2>&1 | tee lint.log
+
+      - name: Upload lint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-log
+          path: lint.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Full vnalpha test suite
+        run: make test-vnalpha
+
+      - name: R4 acceptance tests
+        run: make verify-r4
+
+      - name: OpenStock verification
+        run: packaging/scripts/openstock-verify --ci

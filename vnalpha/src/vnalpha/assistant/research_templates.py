@@ -15,6 +15,9 @@ _RESEARCH_ONLY_CAVEAT = (
     "Research-only context based on persisted artifacts; not a recommendation or "
     "an instruction to place an order."
 )
+_CAVEAT_FIRST_INTENTS: Final[frozenset[str]] = frozenset(
+    {"review_market_regime", "review_sector_strength"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,19 +41,25 @@ RESEARCH_TEMPLATES: Final[dict[str, ResearchTemplate]] = {
         ),
         allowed_wording=("persisted context", "screening evidence", "research review"),
         required_caveats=("missing artifacts", "data freshness", "research-only"),
-        missing_data_rule="List every unavailable score, feature, price, market, or sector artifact.",
+        missing_data_rule=(
+            "List every unavailable score, feature, price, market, or sector artifact."
+        ),
     ),
     "review_market_regime": ResearchTemplate(
         required_fields=("snapshot", "freshness", "lineage", "quality"),
         allowed_wording=("persisted regime", "descriptive context"),
         required_caveats=("coverage", "freshness", "not a forecast"),
-        missing_data_rule="State when no persisted market-regime snapshot is available.",
+        missing_data_rule=(
+            "State when no persisted market-regime snapshot is available."
+        ),
     ),
     "review_sector_strength": ResearchTemplate(
         required_fields=("snapshots", "freshness", "lineage", "quality"),
         allowed_wording=("persisted ranking", "sector context"),
         required_caveats=("metadata coverage", "freshness", "research-only"),
-        missing_data_rule="State when sector metadata or snapshots are unavailable.",
+        missing_data_rule=(
+            "State when sector metadata or snapshots are unavailable."
+        ),
     ),
     "summarize_watchlist_deep": ResearchTemplate(
         required_fields=(
@@ -62,11 +71,17 @@ RESEARCH_TEMPLATES: Final[dict[str, ResearchTemplate]] = {
         ),
         allowed_wording=("watchlist structure", "research focus"),
         required_caveats=("data quality", "missing candidates", "research-only"),
-        missing_data_rule="State when the persisted watchlist is empty or unavailable.",
+        missing_data_rule=(
+            "State when the persisted watchlist is empty or unavailable."
+        ),
     ),
     "generate_shortlist": ResearchTemplate(
         required_fields=("shortlist", "methodology", "freshness", "caveats"),
-        allowed_wording=("research shortlist", "prioritization", "requires confirmation"),
+        allowed_wording=(
+            "research shortlist",
+            "prioritization",
+            "requires confirmation",
+        ),
         required_caveats=("not an execution list", "risk flags", "research-only"),
         missing_data_rule="State when no eligible persisted candidates exist.",
     ),
@@ -74,19 +89,24 @@ RESEARCH_TEMPLATES: Final[dict[str, ResearchTemplate]] = {
         required_fields=("current_setup", "key_levels", "scenarios", "checklist"),
         allowed_wording=("confirmation", "neutral", "invalidation", "conditional"),
         required_caveats=("not a recommendation", "data freshness", "research-only"),
-        missing_data_rule="State when levels or prerequisite artifacts are unavailable.",
+        missing_data_rule=(
+            "State when levels or prerequisite artifacts are unavailable."
+        ),
     ),
     "review_setup_evidence": ResearchTemplate(
         required_fields=("setup_type", "horizon_sessions", "evidence", "lineage"),
         allowed_wording=("historical persisted evidence", "sample size"),
         required_caveats=("sample size", "historical outcomes", "not predictive"),
-        missing_data_rule="State when no setup-outcome evidence exists.",
+        missing_data_rule=(
+            "State when no setup-outcome evidence exists."
+        ),
     ),
 }
 
 
 def research_prompt_fragment(intent: str) -> str | None:
     """Return intent-specific constraints for the synthesizer system prompt."""
+
     template = RESEARCH_TEMPLATES.get(intent)
     if template is None:
         return None
@@ -103,7 +123,7 @@ def research_prompt_fragment(intent: str) -> str | None:
             "Required caveats: " + ", ".join(template.required_caveats),
             "Missing-data rule: " + template.missing_data_rule,
             sensitive
-            + "Name the deterministic tool sources in grounded_source_refs and basis.",
+            + "Name deterministic tool sources in grounded_source_refs and basis.",
         ]
     )
 
@@ -115,17 +135,24 @@ def build_deterministic_research_answer(
     reasons: list[str] | None = None,
 ) -> AssistantAnswer:
     """Build a fail-closed answer directly from structured tool payloads."""
+
     payloads = _payloads(plan, tool_outputs)
     missing = _collect_list(payloads, "missing_data")
     caveats = _collect_list(payloads, "caveats")
     source_refs = _source_refs(plan, payloads)
     summary = _summary_for_intent(plan.intent, payloads)
     if missing:
-        summary = "Caveat: missing persisted artifacts: " + ", ".join(missing) + ". " + summary
+        summary = (
+            "Caveat: missing persisted artifacts: "
+            + ", ".join(missing)
+            + ". "
+            + summary
+        )
+    elif plan.intent in _CAVEAT_FIRST_INTENTS and caveats:
+        summary = "Caveat: persisted context includes limitations. " + summary
     tool_names = [step.tool_name for step in plan.steps]
     basis = "Deterministic tools: " + ", ".join(tool_names or ["none"])
-    policy_caveat = _RESEARCH_ONLY_CAVEAT
-    risk_parts = [*caveats, *(reasons or []), policy_caveat]
+    risk_parts = [*caveats, *(reasons or []), _RESEARCH_ONLY_CAVEAT]
     risks = " ".join(dict.fromkeys(item for item in risk_parts if item))
     return AssistantAnswer(
         summary=summary,
@@ -149,7 +176,10 @@ def is_research_intent(intent: str) -> bool:
     return intent in RESEARCH_INTELLIGENCE_INTENTS
 
 
-def _payloads(plan: AssistantPlan, tool_outputs: dict[str, Any]) -> list[dict[str, Any]]:
+def _payloads(
+    plan: AssistantPlan,
+    tool_outputs: dict[str, Any],
+) -> list[dict[str, Any]]:
     payloads: list[dict[str, Any]] = []
     for step in plan.steps:
         output = tool_outputs.get(step.step_id)
@@ -170,7 +200,10 @@ def _collect_list(payloads: list[dict[str, Any]], field: str) -> list[str]:
     return list(dict.fromkeys(values))
 
 
-def _source_refs(plan: AssistantPlan, payloads: list[dict[str, Any]]) -> list[str]:
+def _source_refs(
+    plan: AssistantPlan,
+    payloads: list[dict[str, Any]],
+) -> list[str]:
     refs = [f"tool:{step.tool_name}:{step.step_id}" for step in plan.steps]
     refs.extend(_collect_list(payloads, "artifact_refs"))
     return list(dict.fromkeys(refs))
@@ -181,14 +214,17 @@ def _summary_for_intent(intent: str, payloads: list[dict[str, Any]]) -> str:
     if intent == "deep_analyze_symbol":
         candidate = primary.get("candidate") or {}
         return (
-            f"{primary.get('symbol', 'Symbol')} as of {primary.get('as_of_date') or 'unknown'}: "
-            f"score={candidate.get('score')}, class={candidate.get('candidate_class')}, "
+            f"{primary.get('symbol', 'Symbol')} as of "
+            f"{primary.get('as_of_date') or 'unknown'}: "
+            f"score={candidate.get('score')}, "
+            f"class={candidate.get('candidate_class')}, "
             f"setup={candidate.get('setup_type')}."
         )
     if intent == "summarize_watchlist_deep":
         return (
-            f"Persisted watchlist as of {primary.get('as_of_date') or 'unknown'} contains "
-            f"{primary.get('watchlist_size', 0)} candidate(s) across the reported setups and sectors."
+            f"Persisted watchlist as of {primary.get('as_of_date') or 'unknown'} "
+            f"contains {primary.get('watchlist_size', 0)} candidate(s) across the "
+            "reported setups and sectors."
         )
     if intent == "generate_shortlist":
         symbols = [
@@ -196,16 +232,20 @@ def _summary_for_intent(intent: str, payloads: list[dict[str, Any]]) -> str:
             for item in primary.get("shortlist", [])
             if isinstance(item, dict) and item.get("symbol")
         ]
-        return "Research shortlist: " + (", ".join(symbols) if symbols else "no eligible symbols") + "."
+        return "Research shortlist: " + (
+            ", ".join(symbols) if symbols else "no eligible symbols"
+        ) + "."
     if intent == "generate_research_scenario":
         return (
             f"Conditional research scenario for {primary.get('symbol', 'the symbol')} "
-            f"as of {primary.get('as_of_date') or 'unknown'} includes confirmation, neutral, and invalidation states."
+            f"as of {primary.get('as_of_date') or 'unknown'} includes confirmation, "
+            "neutral, and invalidation states."
         )
     if intent == "review_setup_evidence":
         evidence = primary.get("evidence") or {}
         return (
-            f"Historical persisted evidence for {primary.get('setup_type', 'the setup')} at "
+            f"Historical persisted evidence for "
+            f"{primary.get('setup_type', 'the setup')} at "
             f"{primary.get('horizon_sessions')} sessions uses a sample of "
             f"{evidence.get('candidate_count', 0)} outcome(s)."
         )
@@ -214,5 +254,8 @@ def _summary_for_intent(intent: str, payloads: list[dict[str, Any]]) -> str:
         return f"Persisted market regime: {snapshot.get('regime', 'unavailable')}."
     if intent == "review_sector_strength":
         snapshots = primary.get("snapshots", [])
-        return f"Persisted sector context contains {len(snapshots)} ranked sector snapshot(s)."
+        return (
+            "Persisted sector context contains "
+            f"{len(snapshots)} ranked sector snapshot(s)."
+        )
     return "Persisted research context was assembled from deterministic tools."
