@@ -78,7 +78,8 @@ def list_research_answer_audits(
 ) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
-        SELECT research_answer_audit_id, assistant_session_id, created_at, intent,
+        SELECT research_answer_audit_id, assistant_session_id,
+               CAST(created_at AS VARCHAR) AS created_at, intent,
                tools_json, artifact_refs_json, dataset_freshness_json,
                groundedness_status, groundedness_json, policy_status,
                policy_json, caveats_json, correlation_id
@@ -115,8 +116,6 @@ def list_research_answer_audits(
             "caveats",
         ):
             item[key] = json.loads(item[key]) if item[key] else None
-        if item["created_at"] is not None:
-            item["created_at"] = str(item["created_at"])
         decoded.append(item)
     return decoded
 
