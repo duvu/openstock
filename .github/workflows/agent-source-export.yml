@@ -1,0 +1,26 @@
+name: Agent source export
+
+on:
+  push:
+    branches:
+      - agent/openstock-four-phase-hardening
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Archive repository source
+        run: git archive --format=zip --output=openstock-source.zip HEAD
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: openstock-source-${{ github.sha }}
+          path: openstock-source.zip
+          if-no-files-found: error
+          retention-days: 1
