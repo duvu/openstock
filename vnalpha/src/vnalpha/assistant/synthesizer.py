@@ -2,7 +2,7 @@
 AnswerSynthesizer: grounds final assistant responses in deterministic tool outputs.
 
 Research-intelligence answers pass a structured pre-synthesis payload check and a
-post-synthesis claim/policy check.  Tool outputs remain the source of truth.
+post-synthesis claim/policy check. Tool outputs remain the source of truth.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ Your role is to explain deterministic tool outputs as persisted research context
 
 STRICT RULES:
 1. Use only the provided tool outputs as factual data.
-2. Never override persisted scores, classes, setup types, quality, lineage, or methodology.
+2. You MUST NOT override persisted scores, classes, setup types, quality, lineage, or methodology.
 3. Do not give action guidance, personalized advice, or execution instructions.
 4. Do not claim certainty or guaranteed future outcomes.
 5. State missing, partial, stale, or unavailable evidence explicitly.
