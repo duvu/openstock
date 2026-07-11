@@ -1,11 +1,8 @@
 """
-AnswerSynthesizer: grounds the final assistant response in tool outputs.
+AnswerSynthesizer: grounds final assistant responses in deterministic tool outputs.
 
-Rules:
-- Tool outputs are the authoritative source of truth.
-- The LLM must not override persisted score, candidate_class, setup_type, or quality_status.
-- If a required artifact is missing from tool outputs, state it explicitly; do not fabricate.
-- Every answer must include basis/evidence and risks/caveats.
+Research-intelligence answers pass a structured pre-synthesis payload check and a
+post-synthesis claim/policy check.  Tool outputs remain the source of truth.
 """
 
 from __future__ import annotations
@@ -14,8 +11,15 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from vnalpha.assistant.errors import SynthesisError
+from vnalpha.assistant.groundedness import (
+    GroundednessResult,
+    assert_grounded,
+    validate_research_answer,
+    validate_tool_grounding,
+)
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
 from vnalpha.assistant.policy import TRADING_EXECUTION_PHRASES
+from vnalpha.assistant.research_templates import research_template_prompt
 from vnalpha.assistant.response_parser import parse_synthesis_response
 from vnalpha.model_routing.models import ModelTaskType
 
@@ -32,16 +36,16 @@ MISSING_DATA_TEMPLATES = {
 
 CONTEXT_INTENT_DISCLOSURES = {
     "review_market_regime": (
-        "Describe the persisted market-regime snapshot, its methodology version, "
-        "benchmark freshness, quality, lineage, and caveats."
+        "Describe the persisted market-regime snapshot, methodology, freshness, "
+        "quality, lineage, and caveats."
     ),
     "review_sector_strength": (
-        "Describe persisted sector ranking order, methodology version, freshness, "
-        "quality or coverage, lineage, and caveats."
+        "Describe persisted sector ranking, methodology, freshness, coverage, "
+        "lineage, and caveats."
     ),
     "review_symbol_sector_alignment": (
-        "Describe only persisted symbol metadata and matching sector snapshot; state "
-        "missing metadata or snapshot context without inference."
+        "Describe only persisted symbol metadata and matching sector context; "
+        "state missing metadata without inference."
     ),
 }
 
@@ -52,26 +56,19 @@ UNSAFE_CONTEXT_TERMS = TRADING_EXECUTION_PHRASES | frozenset(
 
 SYNTHESIZER_SYSTEM_PROMPT = """You are a research assistant for a Vietnamese stock market screening tool.
 
-Your role is to explain deterministic pipeline outputs to the user as persisted research context.
+Your role is to explain deterministic tool outputs as persisted research context.
 
 STRICT RULES:
-1. You MUST use only the provided tool outputs as your data source.
-2. You MUST NOT override the score, candidate_class, setup_type, or quality_status from tool outputs.
-3. You MUST NOT give action guidance or recommendations.
-4. You MUST NOT claim certainty or make guaranteed predictions.
-5. If data is missing or None in tool outputs, state it clearly; do not invent values.
-6. Always include methodology, freshness, lineage, quality or coverage, caveats, basis, and missing data.
-7. When caveats, missing data, stale data, partial coverage, or insufficient quality exist,
-   the summary MUST state those limitations before descriptive conclusions.
-8. Market and sector context is descriptive persisted research context, not a forecast.
+1. Use only the provided tool outputs as factual data.
+2. Never override persisted scores, classes, setup types, quality, lineage, or methodology.
+3. Do not give action guidance, personalized advice, or execution instructions.
+4. Do not claim certainty or guaranteed future outcomes.
+5. State missing, partial, stale, or unavailable evidence explicitly.
+6. Include basis, freshness, methodology, quality, lineage, risks, caveats, and missing data when available.
+7. When a research template is supplied, follow its required sections and caveats.
+8. Shortlist and scenario outputs are research-prioritization artifacts requiring human review.
 
-Use research language only:
-- "Based on the latest persisted score..."
-- "The screening engine classifies this as..."
-- "Main risk flags are..."
-- "Data quality status is..."
-
-Respond in JSON:
+Respond only as JSON:
 {
   "summary": "...",
   "basis": "...",
@@ -90,6 +87,7 @@ def _build_synthesis_messages(
         "intent": plan.intent,
         "required_artifacts": plan.required_artifacts,
         "context_intent_disclosure": CONTEXT_INTENT_DISCLOSURES.get(plan.intent),
+        "research_template": research_template_prompt(plan.intent),
         "tool_outputs": tool_outputs,
     }
     return [
@@ -116,10 +114,12 @@ def _symbol_count(plan: AssistantPlan) -> int:
 def task_type_for_plan(plan: AssistantPlan) -> str:
     mapping = {
         "summarize_watchlist": ModelTaskType.WATCHLIST_SUMMARY.value,
+        "summarize_watchlist_deep": ModelTaskType.WATCHLIST_SUMMARY.value,
         "compare_symbols": ModelTaskType.MULTI_SYMBOL_COMPARISON.value,
         "deep_analyze_symbol": ModelTaskType.DEEP_SYMBOL_ANALYSIS.value,
         "generate_shortlist": ModelTaskType.SHORTLIST_GENERATION.value,
         "generate_research_scenario": ModelTaskType.RESEARCH_SCENARIO.value,
+        "review_setup_evidence": ModelTaskType.DEEP_SYMBOL_ANALYSIS.value,
     }
     return mapping.get(plan.intent, ModelTaskType.NORMAL_ANSWER.value)
 
@@ -128,6 +128,7 @@ class AnswerSynthesizer:
     def __init__(self, llm_client: LLMGatewayClient):
         self._client = llm_client
         self.last_usage: dict | None = None
+        self.last_groundedness: GroundednessResult | None = None
 
     def synthesize(
         self,
@@ -136,6 +137,9 @@ class AnswerSynthesizer:
         tool_outputs: dict[str, Any],
     ) -> AssistantAnswer:
         """Synthesize a grounded answer using task-aware model routing."""
+
+        precheck = validate_tool_grounding(plan, tool_outputs)
+        assert_grounded(precheck)
         messages = _build_synthesis_messages(user_prompt, plan, tool_outputs)
         task_type = task_type_for_plan(plan)
         symbol_count = _symbol_count(plan)
@@ -160,9 +164,13 @@ class AnswerSynthesizer:
             )
         except Exception as exc:
             raise SynthesisError(f"LLM synthesis call failed: {exc}") from exc
+
         self.last_usage = usage
         answer = parse_synthesis_response(response_text)
         _validate_context_answer(plan, tool_outputs, answer)
+        groundedness = validate_research_answer(plan, tool_outputs, answer)
+        self.last_groundedness = groundedness
+        assert_grounded(groundedness)
         return answer
 
 
@@ -171,7 +179,9 @@ def _validate_context_answer(
 ) -> None:
     if plan.intent not in CONTEXT_INTENTS:
         return
-    answer_text = " ".join((answer.summary, answer.basis, answer.risks_caveats)).lower()
+    answer_text = " ".join(
+        (answer.summary, answer.basis, answer.risks_caveats)
+    ).lower()
     if any(term in answer_text for term in UNSAFE_CONTEXT_TERMS):
         raise SynthesisError("Context synthesis must remain research-only.")
     if _requires_caveat_first(tool_outputs) and not answer.summary.lower().startswith(
