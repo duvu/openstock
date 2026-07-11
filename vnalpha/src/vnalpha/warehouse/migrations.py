@@ -10,6 +10,10 @@ import duckdb
 from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.research_answer_schema import ALL_DDL_RESEARCH_ANSWER_AUDIT
+from vnalpha.warehouse.sandbox_migrations import (
+    SANDBOX_DDL,
+    migrate_sandbox_contract_columns,
+)
 from vnalpha.warehouse.schema import (
     ALL_DDL,
     ALL_DDL_MARKET_CONTEXT,
@@ -43,6 +47,9 @@ def run_migrations(
         pass
     for ddl in ALL_DDL:
         conn.execute(ddl)
+    for ddl in SANDBOX_DDL:
+        conn.execute(ddl)
+    migrate_sandbox_contract_columns(conn)
     for ddl in ALL_DDL_PHASE58:
         conn.execute(ddl)
     _migrate_tool_trace_parent_columns(conn)

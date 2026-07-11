@@ -11,18 +11,36 @@ Generated research computation SHALL be represented as a first-class sandbox job
 - **WHEN** the assistant or user requests generated research computation
 - **THEN** the system creates a sandbox job with a job ID, purpose, input dataset references, generated code, resource limits, filesystem policy, network policy, output schema, expected artifacts, and correlation ID
 
-### Requirement: Sandbox execution shall be constrained
+### Requirement: Sandbox execution shall use a fail-closed Linux Docker boundary
 
-Sandbox jobs SHALL execute under bounded CPU, memory, runtime, network, and filesystem policies.
+Sandbox jobs SHALL execute only through Docker Engine on a supported Linux host. Docker Engine availability and Linux-host compatibility SHALL pass preflight before execution. If Docker Engine is unavailable, the host is unsupported, or preflight fails, the system SHALL reject the job, persist rejection evidence, and SHALL NOT execute generated code through a local interpreter or another fallback runtime.
 
-#### Scenario: Safe research code is executed
+#### Scenario: Safe research code is executed in a hardened container
 
 - **WHEN** a policy-approved sandbox job runs
-- **THEN** the job has no network access
+- **THEN** it runs in Docker OS isolation from an immutable, prebuilt image referenced by digest
+- **AND** the runtime does not build, pull, or select a mutable image tag at job execution
+- **AND** the container has no network access through `--network none`
+- **AND** the container root filesystem is read-only
+- **AND** approved research input paths are mounted read-only
+- **AND** the canonical job output directory is the sole writable mount
+- **AND** the process runs as a non-root user
+- **AND** Linux capabilities are dropped unless a documented minimum exception is required
+- **AND** PID count is bounded
 - **AND** has bounded runtime
 - **AND** has bounded memory
-- **AND** can read only approved research data paths
-- **AND** can write only to its job output directory
+- **AND** has bounded CPU
+
+#### Scenario: Docker preflight cannot establish the execution boundary
+
+- **WHEN** Docker Engine is unavailable, the host is not supported Linux, or Docker preflight fails
+- **THEN** the system rejects the sandbox job before generated code execution
+- **AND** does not fall back to local-process execution or another runtime
+- **AND** persists the failed preflight and rejection evidence with the correlation ID
+
+### Requirement: Sandbox controls shall be defense in depth
+
+Docker OS isolation SHALL be the primary generated-code execution boundary. Policy checks, static guards, output validation, and artifact validation SHALL be defense-in-depth controls and SHALL NOT be treated as substitutes for Docker isolation.
 
 ### Requirement: Sandbox code shall pass static guard before execution
 
@@ -49,7 +67,7 @@ Generated code SHALL be rejected before execution if it contains dangerous impor
 
 ### Requirement: Sandbox outputs shall be validated and persisted
 
-Successful sandbox jobs SHALL produce validated, persisted research artifacts.
+Successful sandbox jobs SHALL produce validated, persisted research artifacts in the canonical job layout `logs/runs/<run-id>/sandbox/<job-id>/`.
 
 #### Scenario: Job succeeds with required outputs
 
@@ -59,6 +77,8 @@ Successful sandbox jobs SHALL produce validated, persisted research artifacts.
 - **AND** persists `summary.md`
 - **AND** persists an artifact manifest
 - **AND** records generated code and input dataset references
+- **AND** persists the job request metadata, generated code, input dataset references or snapshots, stdout, stderr, guard result, execution result, validation result, artifact manifest, and lifecycle-event evidence
+- **AND** records the image digest, Docker preflight result, effective resource limits, mount policy, network policy, container security controls, generated-code hash, and correlation ID
 
 #### Scenario: Required output is missing
 
@@ -89,7 +109,7 @@ The default composer path SHALL expose sandbox operations.
 
 ### Requirement: Assistant sandbox execution shall require approval
 
-Natural-language requests that require generated code execution SHALL be approval-gated unless proven safe by deterministic policy.
+Every generated-code execution requested through natural language or sandbox commands SHALL require explicit user approval. Deterministic, bounded, read-only, or policy-safe characteristics SHALL NOT bypass approval.
 
 #### Scenario: Assistant proposes generated code execution
 
@@ -97,6 +117,12 @@ Natural-language requests that require generated code execution SHALL be approva
 - **THEN** the assistant previews the plan
 - **AND** shows the sandbox job purpose, input dataset references, and generated code summary
 - **AND** waits for explicit approval before execution
+
+#### Scenario: Generated-code execution has not received approval
+
+- **WHEN** a generated-code sandbox job lacks explicit user approval
+- **THEN** the system does not execute the job
+- **AND** records the approval-gate rejection or pending state with the correlation ID
 
 ### Requirement: Sandbox observability shall be closed-loop
 

@@ -5,30 +5,30 @@
 - [ ] 0.1 Keep all sandbox behavior inside the read-only research boundary.
 - [ ] 0.2 Deny broker/order/account/portfolio/margin/transfer/allocation/trading execution capabilities.
 - [ ] 0.3 Do not expose unrestricted shell access.
-- [ ] 0.4 Do not allow network access in sandbox MVP.
-- [ ] 0.5 Preserve redaction-by-default logging.
-- [ ] 0.6 Persist enough evidence to reproduce every sandbox result.
+- [ ] 0.4 Do not allow network access in sandbox MVP, enforced through Docker `--network none`.
+- [ ] 0.5 Preserve redaction-by-default logging and record explicit approval for every generated-code execution.
+- [ ] 0.6 Persist enough canonical evidence to reproduce and audit every sandbox result, including Docker preflight, image digest, effective limits, mount and security policy, generated-code hash, inputs, guard, execution, validation, and lifecycle results.
 
 ## 1. Sandbox domain model
 
-- [ ] 1.1 Add `SandboxJob` model.
-- [ ] 1.2 Add job status enum: `QUEUED`, `VALIDATING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `REJECTED`, `CANCELLED`.
-- [ ] 1.3 Add resource limits model: runtime seconds, memory MB, CPU count.
+- [x] 1.1 Add `SandboxJob` model.
+- [x] 1.2 Add job status enum: `QUEUED`, `VALIDATING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `REJECTED`, `CANCELLED`.
+- [x] 1.3 Add resource limits model: runtime seconds, memory MB, CPU count.
 - [ ] 1.4 Add filesystem policy model: approved read paths and job output write path.
-- [ ] 1.5 Add network policy field with MVP default `disabled`.
+- [x] 1.5 Add network policy field with MVP default `disabled`.
 - [ ] 1.6 Add output schema / expected artifacts model.
-- [ ] 1.7 Add correlation ID to every job.
+- [x] 1.7 Add correlation ID to every job.
 
 ## 2. Persistence and artifact layout
 
-- [ ] 2.1 Add warehouse migration for sandbox jobs if persistence is database-backed.
-- [ ] 2.2 Add filesystem artifact layout under `logs/runs/<run-id>/sandbox/<job-id>/` or equivalent.
+- [x] 2.1 Add warehouse migration for sandbox jobs if persistence is database-backed.
+- [ ] 2.2 Add canonical filesystem artifact layout under `logs/runs/<run-id>/sandbox/<job-id>/` containing request metadata, generated code, input references or snapshots, sole writable job output, stdout/stderr, guard, execution, validation, manifest, and lifecycle evidence.
 - [ ] 2.3 Persist generated code as an artifact.
-- [ ] 2.4 Persist input dataset references or snapshots.
+- [x] 2.4 Persist input dataset references or snapshots.
 - [ ] 2.5 Persist `result.json`.
 - [ ] 2.6 Persist `summary.md`.
 - [ ] 2.7 Persist artifact manifest.
-- [ ] 2.8 Persist failure reason and guard rejection reason.
+- [x] 2.8 Persist failure reason and guard rejection reason.
 
 ## 3. Static guard
 
@@ -44,16 +44,16 @@
 
 ## 4. Sandbox runner
 
-- [ ] 4.1 Add sandbox runner service/module.
-- [ ] 4.2 Execute generated Python with network disabled.
+- [ ] 4.1 Add a Linux-only Docker Engine sandbox runner service/module that preflights Docker and host support, rejects failures, and has no local or alternate runtime fallback.
+- [ ] 4.2 Execute generated Python in Docker OS isolation from an immutable prebuilt image selected by digest, with `--network none`, a non-root user, and dropped Linux capabilities except documented minimum exceptions.
 - [ ] 4.3 Enforce max runtime.
 - [ ] 4.4 Enforce max memory.
-- [ ] 4.5 Enforce CPU limit.
-- [ ] 4.6 Mount approved data paths read-only.
-- [ ] 4.7 Mount job output path writeable.
+- [ ] 4.5 Enforce CPU and PID limits.
+- [ ] 4.6 Mount approved data paths and the container root filesystem read-only.
+- [ ] 4.7 Mount only the canonical job output path writeable, as the sole writable mount.
 - [ ] 4.8 Capture stdout/stderr into artifacts.
 - [ ] 4.9 Return structured execution result.
-- [ ] 4.10 Capture exceptions into observability.
+- [ ] 4.10 Capture exceptions into observability, including Docker preflight and unsupported-runtime rejections.
 
 ## 5. Output validation
 
@@ -77,10 +77,10 @@
 ## 7. Assistant integration
 
 - [ ] 7.1 Extend intent/planning to identify sandbox-required calculations.
-- [ ] 7.2 Add `sandbox.run_research_code` or equivalent tool to planner allowlist only if approval-gated.
-- [ ] 7.3 Require plan preview before generated code execution.
+- [ ] 7.2 Add `sandbox.run_research_code` or equivalent tool to planner allowlist only if every execution is explicit-approval-gated, with no deterministic or policy-safe exception.
+- [ ] 7.3 Require plan preview and explicit approval before every generated-code execution.
 - [ ] 7.4 Show generated code summary and input dataset list before approval.
-- [ ] 7.5 Execute only approved, policy-safe SandboxJob instances.
+- [ ] 7.5 Execute only explicitly approved, policy-safe SandboxJob instances after Docker/Linux preflight succeeds.
 - [ ] 7.6 Synthesize final answer from validated sandbox outputs only.
 
 ## 8. Observability
@@ -95,21 +95,21 @@
 
 ## 9. Tests
 
-- [ ] 9.1 Test safe generated calculation succeeds.
+- [ ] 9.1 Test safe generated calculation succeeds only after explicit approval in the hardened Docker runtime.
 - [ ] 9.2 Test network import is rejected.
 - [ ] 9.3 Test shell/subprocess pattern is rejected.
 - [ ] 9.4 Test write outside output directory is rejected.
 - [ ] 9.5 Test broker/order/account/trading references are rejected.
-- [ ] 9.6 Test missing output artifact fails validation.
+- [ ] 9.6 Test missing output artifact fails validation and canonical evidence is persisted.
 - [ ] 9.7 Test `/sandbox run` lifecycle events.
 - [ ] 9.8 Test `/sandbox status` rendering.
-- [ ] 9.9 Test artifact manifest persistence.
+- [ ] 9.9 Test artifact manifest and canonical container-security evidence persistence.
 
 ## 10. Documentation and validation
 
 - [ ] 10.1 Add sandbox architecture docs.
-- [ ] 10.2 Document safe/unsafe imports and patterns.
-- [ ] 10.3 Document read-only research boundary for sandbox.
+- [ ] 10.2 Document safe/unsafe imports and patterns as defense-in-depth controls.
+- [ ] 10.3 Document the read-only research boundary, Linux-only Docker contract, approval gate, and no-fallback behavior for sandbox.
 - [ ] 10.4 Run `make test-vnalpha`.
 - [ ] 10.5 Run `make lint-vnalpha`.
 - [ ] 10.6 Run `make verify-r4`.

@@ -1,83 +1,143 @@
 # Tasks: Production control plane for opencode-like auto research
 
-## 0. Governance
+## 0. Governance and scope
 
-- [ ] 0.1 Keep the system inside the read-only research boundary.
-- [ ] 0.2 Do not introduce broker, order, account, portfolio, margin, transfer, allocation, or trading execution tools.
-- [ ] 0.3 Preserve redaction-by-default logging.
-- [ ] 0.4 Preserve closed-loop logging artifacts.
-- [ ] 0.5 Do not reintroduce `ContentSwitcher` or persistent secondary `ChatPanel` into the default TUI path.
-- [ ] 0.6 Do not mark implementation complete without validation evidence.
+- [x] 0.1 Implement only in `vnalpha/` from an isolated OpenStock worktree.
+- [x] 0.2 Preserve the read-only research boundary; do not add broker, order,
+  account, portfolio, margin, transfer, allocation, trading execution,
+  arbitrary shell, source-edit, Git, GitHub, or remote-deployment capability.
+- [x] 0.3 Keep Phase A as TUI bridge/control-plane glue; do not reimplement
+  Phase D repair, validation, promotion, or rollback state machines.
+- [x] 0.4 Preserve redaction-by-default for all persisted evidence.
+- [x] 0.5 Preserve the one-output/one-composer DOM and no default
+  `ContentSwitcher` or persistent `ChatPanel`.
+- [ ] 0.6 Do not mark this change complete without recorded validation evidence.
 
-## 1. Router executor setup
+## 1. Characterize the current router with failing tests
 
-- [ ] 1.1 Update `TuiInputRouter._setup_executor()` to open a DuckDB connection with `get_connection()`.
-- [ ] 1.2 Run `run_migrations(conn=conn)` before constructing the command executor.
-- [ ] 1.3 Instantiate `CommandExecutor(conn, surface="tui", default_date=self._target_date)`.
-- [ ] 1.4 Store the connection on the router instance, e.g. `self._command_conn`.
-- [ ] 1.5 Add a router/app shutdown hook that closes the owned connection.
-- [ ] 1.6 Render setup failure inline with an actionable error, not only `CommandExecutor unavailable.`.
-- [ ] 1.7 Capture setup exceptions via `capture_exception()`.
+- [x] 1.1 Add a failing test proving a real in-memory DuckDB connection is
+  migrated and retained by `TuiInputRouter` before `/help` executes.
+- [x] 1.2 Add a failing test proving setup failure closes a partially opened
+  connection, records `TUI_COMMAND_SETUP_FAILED`, and renders an actionable
+  redacted command-degraded message while chat remains available.
+- [x] 1.3 Add a failing test proving a returned `FAILED` result produces
+  `COMMAND_FAILED` rather than `COMMAND_SUCCEEDED`.
+- [x] 1.4 Add a failing test proving a returned `VALIDATION_ERROR` produces
+  `COMMAND_FAILED` rather than `COMMAND_SUCCEEDED`.
+- [x] 1.5 Add a failing test proving a raised research-command exception emits
+  `COMMAND_FAILED`, captures an error record, and redacts a fixture secret.
+- [ ] 1.6 Run the focused tests and confirm each fails for the intended missing
+  behavior before changing production code.
 
-## 2. Operational command bridge
+## 2. Router-owned executor and shutdown lifecycle
 
-- [ ] 2.1 Add explicit routing before generic slash command for `/logs`.
-- [ ] 2.2 Support `/logs errors --latest`.
-- [ ] 2.3 Support `/logs summarize --latest`.
-- [ ] 2.4 Add explicit routing before generic slash command for `/repair`.
-- [ ] 2.5 Support `/repair prepare --latest`.
-- [ ] 2.6 Support `/repair status <repair-id>`.
-- [ ] 2.7 Add explicit routing before generic slash command for `/deploy`.
-- [ ] 2.8 Support `/deploy verify <candidate>`.
-- [ ] 2.9 Support `/deploy promote <candidate> --deployment-id <id>` as research artifact promotion only.
-- [ ] 2.10 Support `/deploy rollback <deployment-id>` as research artifact rollback only.
-- [ ] 2.11 Render clear unsupported messages for unsupported subcommands.
-- [ ] 2.12 Add docs that `/deploy` is not broker/trading deployment.
+- [x] 2.1 Extend the executor setup result so it carries a safe setup failure
+  reason without retaining an unusable connection.
+- [x] 2.2 Make `LifecycleHooks.setup_executor()` open the connection, run
+  migrations, construct `CommandExecutor(conn, surface="tui",
+  default_date=target_date)`, and retain the exact connection on success.
+- [x] 2.3 On setup failure, call `capture_exception()`, emit the redacted setup
+  event, close the partial connection, and expose a safe router error state.
+- [x] 2.4 Make the generic command path display the safe actionable setup
+  error instead of the generic unavailable message.
+- [x] 2.5 Add explicit router state for accepting, active, close-requested, and
+  closed lifetimes.
+- [x] 2.6 Make `close()` reject future work, defer close while a route is
+  active, and close the owned connection exactly once after the route exits.
+- [x] 2.7 Wire app unmount to the router shutdown contract and prove no active
+  route can observe a closed DuckDB connection.
+- [x] 2.8 Run the executor/setup/shutdown focused tests and confirm they pass.
 
-## 3. Command lifecycle observability
+## 3. Single-flight admission and submission identity
 
-- [ ] 3.1 Generate a non-empty correlation ID for every non-empty TUI submission.
-- [ ] 3.2 Emit `TUI_INPUT_SUBMITTED` for every non-empty TUI submission.
-- [ ] 3.3 Emit `TUI_COMMAND_ROUTED` for slash commands.
-- [ ] 3.4 Emit `COMMAND_STARTED` before command/operational command execution.
-- [ ] 3.5 Emit `COMMAND_SUCCEEDED` after successful command/operational command execution.
-- [ ] 3.6 Emit `COMMAND_FAILED` after failed command/operational command execution.
-- [ ] 3.7 Capture exceptions via `capture_exception()`.
-- [ ] 3.8 Ensure command logs preserve redaction-by-default.
+- [x] 3.1 Add a failing async test with a blocking executor proving a second
+  command is rejected while the first still owns the connection.
+- [x] 3.2 Add a failing test proving busy `/approve`, `/cancel`, and `/clear`
+  do not mutate `ChatController` or widgets concurrently.
+- [x] 3.3 Add a failing test proving shutdown rejects a new submission and does
+  not restart an executor or operational action.
+- [x] 3.4 Generate a fresh correlation ID at the router entry point for every
+  non-empty submission before rendering, audit, or worker dispatch.
+- [x] 3.5 Emit redacted `TUI_INPUT_SUBMITTED` metadata with input kind and
+  length, then route/rejection events with that same ID.
+- [x] 3.6 Implement deterministic busy/closing rejection with an inline warning
+  and `TUI_INPUT_REJECTED`, without invoking executor, chat, or bridge code.
+- [x] 3.7 Route accepted control commands through `TUI_CONTROL_ROUTED`; do not
+  emit command-start events for controls or rejections.
+- [x] 3.8 Run the admission/correlation focused tests and confirm they pass.
 
-## 4. Thread-safe rendering
+## 4. Truthful command lifecycle evidence
 
-- [ ] 4.1 Audit ChatController callbacks used by TUI router.
-- [ ] 4.2 Replace direct worker-thread widget writes with Textual-safe marshaling.
-- [ ] 4.3 Ensure assistant messages render through the safe UI path.
-- [ ] 4.4 Ensure tool trace events render through the safe UI path.
-- [ ] 4.5 Ensure errors/warnings render through the safe UI path.
-- [ ] 4.6 Add a headless smoke test proving chat callback rendering does not raise cross-thread UI errors.
+- [x] 4.1 Add a result-aware command lifecycle helper or equivalent explicit
+  writer that maps `SUCCESS`, `EMPTY_RESULT`, and `PARTIAL` to completion and
+  maps `FAILED` and `VALIDATION_ERROR` to failure.
+- [x] 4.2 Update generic slash-command routing to emit the ordered command
+  lifecycle and render all returned results inline.
+- [x] 4.3 Update operational routing to use the same lifecycle and capture
+  raised domain failures.
+- [x] 4.4 Persist `TUI_RENDER_ERROR` before/with captured rendering exceptions,
+  keeping the current submission correlation ID.
+- [x] 4.5 Verify audit, command, and error records share the new submission ID
+  and contain no raw fixture secret.
+- [x] 4.6 Run the lifecycle/redaction focused tests and confirm they pass.
 
-## 5. Tests
+## 5. Strict operational bridge
 
-- [ ] 5.1 Add test: real `_setup_executor()` works with mocked or in-memory DuckDB connection.
-- [ ] 5.2 Add test: `/help` via TUI router renders command result into OutputStream.
-- [ ] 5.3 Add test: `/logs errors --latest` routes through operational bridge.
-- [ ] 5.4 Add test: `/repair prepare --latest` routes through operational bridge.
-- [ ] 5.5 Add test: `/deploy verify <candidate>` routes through operational bridge.
-- [ ] 5.6 Add test: TUI slash command emits lifecycle observability event.
-- [ ] 5.7 Remove or tighten weak smoke-flag assertions that pass without real `--smoke` support.
-- [ ] 5.8 Add regression test: default TUI path has exactly one `Input`.
-- [ ] 5.9 Add regression test: no `ContentSwitcher` in default TUI path.
-- [ ] 5.10 Add regression test: no persistent secondary `ChatPanel` in default TUI path.
+- [x] 5.1 Add failing bridge tests for all seven documented forms and prove
+  each bypasses the research `CommandExecutor`.
+- [x] 5.2 Add failing bridge tests rejecting extra options, reordered options,
+  empty values, path separators, traversal values, and shell-like identifier
+  values without calling a domain action.
+- [x] 5.3 Add a strict opaque identifier validator for repair IDs, candidates,
+  and deployment IDs.
+- [x] 5.4 Resolve `--latest` once at execution start and pass the resolved run
+  identity through the relevant action rather than accepting a path from input.
+- [x] 5.5 Keep the bridge as a delegate: call existing observability/Phase D
+  domain functions and do not duplicate promotion, rollback, or validation
+  gate semantics.
+- [x] 5.6 Render invalid grammar, unsupported forms, and domain-gate blocks as
+  redacted inline errors with `COMMAND_FAILED` evidence.
+- [x] 5.7 Document in code and tests that `/deploy` is research-artifact-only
+  and cannot execute a broker or trading action.
+- [x] 5.8 Run the operational bridge focused tests and confirm they pass.
 
-## 6. Documentation
+## 6. Textual-safe worker callbacks
 
-- [ ] 6.1 Update `vnalpha/docs/tui-workspace.md` to match implemented command bridge behavior.
-- [ ] 6.2 Document command lifecycle events.
-- [ ] 6.3 Document router connection lifecycle.
-- [ ] 6.4 Document read-only research boundary for TUI operational commands.
+- [x] 6.1 Add failing tests for assistant-message, trace, warning, and error
+  callbacks invoked from a worker-context simulation.
+- [x] 6.2 Require a live UI dispatcher for worker-originated callbacks; remove
+  any direct-widget fallback from that path.
+- [x] 6.3 Make `VnAlphaApp` provide a dispatcher that routes callback work onto
+  the Textual app loop while the app is mounted.
+- [x] 6.4 Deactivate the dispatcher at unmount and safely record/drop late
+  callbacks without use-after-unmount or cross-thread widget mutation.
+- [x] 6.5 Add a headless app test proving worker callbacks render after an app
+  loop tick and a late callback does not raise.
+- [x] 6.6 Run the thread-safety focused tests and confirm they pass.
 
-## 7. Validation
+## 7. Default DOM and documentation
 
-- [ ] 7.1 Run `make test-vnalpha`.
-- [ ] 7.2 Run `make lint-vnalpha`.
-- [ ] 7.3 Run `make verify-r4`.
-- [ ] 7.4 Run `openstock-verify --ci`.
-- [ ] 7.5 Attach validation evidence to the PR before merge.
+- [x] 7.1 Preserve or add regression tests for one `OutputStream`, one
+  `ComposerInput`, one Textual `Input`, no default `ContentSwitcher`, and no
+  persistent default `ChatPanel`.
+- [x] 7.2 Update `vnalpha/docs/tui-workspace.md` with the strict seven-form
+  grammar, busy policy, router connection lifetime, lifecycle table,
+  correlation behavior, and Phase A/Phase D boundary.
+- [x] 7.3 Document that local logs/bundles/artifact metadata are permitted
+  evidence writes but source/Git/remote/trading mutations are not.
+- [x] 7.4 Remove stale validation claims and state root workdir plus isolated
+  warehouse/log environment for every validation command.
+
+## 8. Validation and evidence
+
+- [x] 8.1 Run the targeted router, operational bridge, lifecycle, and TUI
+  callback tests with isolated `VNALPHA_WAREHOUSE_PATH` and `VNALPHA_LOG_ROOT`.
+- [ ] 8.2 Run `make test-vnalpha` from the OpenStock worktree root with isolated
+  warehouse/log paths.
+- [ ] 8.3 Run `make lint-vnalpha` from the OpenStock worktree root.
+- [x] 8.4 Run `make verify-r4` from the OpenStock worktree root and document any
+  pre-existing unrelated failure before proceeding.
+- [x] 8.5 Run `packaging/scripts/openstock-verify --ci` from the OpenStock
+  worktree root.
+- [x] 8.6 Add `validation.md` with exact commands, environment isolation, exit
+  status, test totals, and any known non-blocking warnings.

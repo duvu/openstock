@@ -5,8 +5,8 @@
   "assumptions": [],
   "context_size": {
     "artifacts": 0,
-    "events": 17,
-    "inputs": 16
+    "events": 19,
+    "inputs": 18
   },
   "created_at": "2026-07-10T03:26:40.879719+00:00",
   "data_freshness": {},
@@ -206,11 +206,35 @@
       "redaction_status": "redacted",
       "source": "tui",
       "summary": "phan tich co phieu fpt"
+    },
+    {
+      "content": "phan tich co phieu fpt",
+      "created_at": "2026-07-11T06:43:49.315167+00:00",
+      "input_id": "input-dd636068",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 22
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "phan tich co phieu fpt"
+    },
+    {
+      "content": "/todo add",
+      "created_at": "2026-07-11T06:44:14.560455+00:00",
+      "input_id": "input-b1615136",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 9
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/todo add"
     }
   ],
   "status": "active",
   "title": "Workspace ws-20260710T032640-065c37",
-  "updated_at": "2026-07-10T16:25:59.759814+00:00",
+  "updated_at": "2026-07-11T06:44:14.560455+00:00",
   "warnings": [],
   "workspace_id": "ws-20260710T032640-065c37"
 }
