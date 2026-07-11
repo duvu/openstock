@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from vnalpha.assistant.errors import PlanBuildError, PlanValidationError
 from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
+from vnalpha.assistant.research_intelligence_intents import (
+    build_research_intelligence_plan,
+)
 from vnalpha.assistant.tool_policy import assert_safe_tool
-
-if TYPE_CHECKING:
-    pass
 
 
 def _resolve_symbol(entities: dict) -> str:
@@ -30,7 +30,6 @@ def _step(tool: str, args: dict, purpose: str, permission: str) -> ToolPlanStep:
     )
 
 
-# Deterministic plan builders by intent (no LLM needed for most)
 def _build_scan_plan(entities: dict) -> AssistantPlan:
     date = entities.get("date")
     universe = entities.get("universe")
@@ -79,7 +78,6 @@ def _build_compare_plan(entities: dict) -> AssistantPlan:
     args: dict[str, Any] = {"symbols": symbols}
     if date:
         args["date"] = date
-    # Use multi-symbol quality tool when comparing 2+ symbols
     quality_tool = (
         "quality.get_many_status" if len(symbols) > 1 else "quality.get_status"
     )
@@ -89,23 +87,22 @@ def _build_compare_plan(entities: dict) -> AssistantPlan:
     }
     if quality_tool == "quality.get_status" and symbols:
         quality_args = {"symbol": symbols[0], **({"date": date} if date else {})}
-    steps = [
-        _step(
-            "candidate.compare",
-            args,
-            "Compare candidate scores and evidence",
-            "READ_SCORE",
-        ),
-        _step(
-            quality_tool,
-            quality_args,
-            "Check data quality for each symbol",
-            "READ_QUALITY",
-        ),
-    ]
     return AssistantPlan(
         intent="compare_symbols",
-        steps=steps,
+        steps=[
+            _step(
+                "candidate.compare",
+                args,
+                "Compare candidate scores and evidence",
+                "READ_SCORE",
+            ),
+            _step(
+                quality_tool,
+                quality_args,
+                "Check data quality for each symbol",
+                "READ_QUALITY",
+            ),
+        ],
         required_artifacts=["candidate_score", "canonical_ohlcv"],
     )
 
@@ -116,26 +113,28 @@ def _build_explain_plan(entities: dict) -> AssistantPlan:
     args: dict[str, Any] = {"symbol": symbol}
     if date:
         args["date"] = date
-    steps = [
-        _step(
-            "candidate.explain",
-            args,
-            "Explain candidate score and evidence",
-            "READ_SCORE",
-        ),
-        _step(
-            "lineage.get_symbol_lineage", args, "Retrieve data lineage", "READ_LINEAGE"
-        ),
-        _step(
-            "quality.get_status",
-            {"symbol": symbol, **({"date": date} if date else {})},
-            "Check data quality status",
-            "READ_QUALITY",
-        ),
-    ]
     return AssistantPlan(
         intent="explain_symbol",
-        steps=steps,
+        steps=[
+            _step(
+                "candidate.explain",
+                args,
+                "Explain candidate score and evidence",
+                "READ_SCORE",
+            ),
+            _step(
+                "lineage.get_symbol_lineage",
+                args,
+                "Retrieve data lineage",
+                "READ_LINEAGE",
+            ),
+            _step(
+                "quality.get_status",
+                {"symbol": symbol, **({"date": date} if date else {})},
+                "Check data quality status",
+                "READ_QUALITY",
+            ),
+        ],
         required_artifacts=["candidate_score", "ingestion_run"],
     )
 
@@ -151,7 +150,10 @@ def _build_quality_plan(entities: dict) -> AssistantPlan:
         intent="review_quality",
         steps=[
             _step(
-                "quality.get_status", args, "Review data quality status", "READ_QUALITY"
+                "quality.get_status",
+                args,
+                "Review data quality status",
+                "READ_QUALITY",
             )
         ],
         required_artifacts=["canonical_ohlcv"],
@@ -224,7 +226,10 @@ def _build_lineage_plan(entities: dict) -> AssistantPlan:
         intent="show_lineage",
         steps=[
             _step(
-                "lineage.get_symbol_lineage", args, "Show data lineage", "READ_LINEAGE"
+                "lineage.get_symbol_lineage",
+                args,
+                "Show data lineage",
+                "READ_LINEAGE",
             )
         ],
         required_artifacts=["candidate_score", "ingestion_run"],
@@ -264,13 +269,12 @@ def _build_note_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_history_plan(entities: dict) -> AssistantPlan:
-    limit = entities.get("limit", 20)
     return AssistantPlan(
         intent="show_history",
         steps=[
             _step(
                 "history.list_sessions",
-                {"limit": limit},
+                {"limit": entities.get("limit", 20)},
                 "List recent research sessions",
                 "READ_HISTORY",
             )
@@ -279,7 +283,7 @@ def _build_history_plan(entities: dict) -> AssistantPlan:
     )
 
 
-def _build_fetch_plan(entities: dict) -> AssistantPlan:
+def _build_fetch_plan(_entities: dict) -> AssistantPlan:
     return AssistantPlan(
         intent="fetch_data",
         steps=[],
@@ -320,7 +324,6 @@ _PLAN_BUILDERS = {
 
 
 def _validate_plan(plan: AssistantPlan) -> None:
-    """Raise PlanValidationError if a plan step uses an unsafe tool."""
     if plan.is_refusal():
         return
     for step in plan.steps:
@@ -328,13 +331,15 @@ def _validate_plan(plan: AssistantPlan) -> None:
 
 
 class PlanBuilder:
-    """Builds AssistantPlan from IntentResult using deterministic templates."""
+    """Build AssistantPlan objects from deterministic templates only."""
 
     def build(self, intent_result: IntentResult) -> AssistantPlan:
         intent = intent_result.intent
-        builder = _PLAN_BUILDERS.get(intent, _build_refusal_plan)
         try:
-            plan = builder(intent_result.entities)
+            plan = build_research_intelligence_plan(intent_result)
+            if plan is None:
+                builder = _PLAN_BUILDERS.get(intent, _build_refusal_plan)
+                plan = builder(intent_result.entities)
         except Exception as exc:
             raise PlanBuildError(
                 f"Failed to build plan for intent '{intent}': {exc}"
@@ -343,12 +348,13 @@ class PlanBuilder:
         return plan
 
     def preview(self, plan: AssistantPlan) -> str:
-        """Return a human-readable plan preview string."""
         if plan.is_refusal():
             return f"[REFUSED] {plan.refusal_reason}"
         lines = [f"Plan for intent: {plan.intent}", "Steps:"]
-        for i, step in enumerate(plan.steps, 1):
-            lines.append(f"  {i}. {step.tool_name}({step.arguments}) — {step.purpose}")
+        for index, step in enumerate(plan.steps, 1):
+            lines.append(
+                f"  {index}. {step.tool_name}({step.arguments}) — {step.purpose}"
+            )
         if plan.assumptions:
             lines.append(f"Assumptions: {', '.join(plan.assumptions)}")
         return "\n".join(lines)
