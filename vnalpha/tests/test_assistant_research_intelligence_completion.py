@@ -120,9 +120,9 @@ def test_shortlist_without_research_disclaimer_is_rewritten():
             entities={"date": "2026-07-10", "top": 3},
         )
     )
-    step = plan.steps[0]
+    shortlist_step, market_step = plan.steps
     tool_outputs = {
-        step.step_id: {
+        shortlist_step.step_id: {
             "data": {
                 "shortlist": [{"symbol": "FPT", "shortlist_score": 0.8}],
                 "methodology": {"version": "shortlist-v1"},
@@ -132,7 +132,19 @@ def test_shortlist_without_research_disclaimer_is_rewritten():
                 "missing_data": [],
             },
             "warnings": [],
-        }
+        },
+        market_step.step_id: {
+            "data": {
+                "snapshot": {"regime": "NEUTRAL"},
+                "freshness": {"as_of_date": "2026-07-10"},
+                "lineage": {"source": "market_regime_snapshot"},
+                "quality": "COMPLETE",
+                "artifact_refs": ["market_regime_snapshot:2026-07-10"],
+                "missing_data": [],
+                "caveats": [],
+            },
+            "warnings": [],
+        },
     }
     response = _response(
         summary="FPT is the top prioritized symbol.",
