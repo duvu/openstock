@@ -40,13 +40,13 @@ jobs:
 
       - name: Install vnalpha and development dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e "./vnalpha[dev]"
+          python -m pip install --quiet --disable-pip-version-check --upgrade pip
+          python -m pip install --quiet --disable-pip-version-check -e "./vnalpha[dev]"
 
       - name: Focused assistant research-intelligence tests
         run: |
           cd vnalpha
-          pytest -q \
+          pytest -q --tb=short \
             tests/test_assistant_research_intelligence_completion.py \
             tests/test_research_answer_audit_completion.py \
             tests/test_research_intent_classification_matrix.py \
