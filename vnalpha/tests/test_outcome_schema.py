@@ -66,12 +66,12 @@ class TestMigrations:
 
     def test_total_table_count(self, conn):
         tables = conn.execute("SHOW TABLES").fetchall()
-        assert len(tables) == 21
+        assert len(tables) == 23
 
     def test_migrations_idempotent(self, conn):
         run_migrations(conn=conn)
         tables = conn.execute("SHOW TABLES").fetchall()
-        assert len(tables) == 21
+        assert len(tables) == 23
 
 
 class TestOutcomeModels:
