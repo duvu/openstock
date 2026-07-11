@@ -216,7 +216,9 @@ class AnswerSynthesizer:
                 plan,
                 tool_outputs,
                 validator,
-                reasons=[f"Model synthesis was unavailable: {type(exc).__name__}."],
+                reasons=[
+                    f"Model synthesis was unavailable: {type(exc).__name__}."
+                ],
             )
 
         if research_intent and not answer.grounded_source_refs:
@@ -232,7 +234,9 @@ class AnswerSynthesizer:
                 plan,
                 tool_outputs,
                 validator,
-                reasons=["The model answer violated the research-language contract."],
+                reasons=[
+                    "The model answer violated the research-language contract."
+                ],
             )
 
         if not research_intent:
@@ -248,7 +252,11 @@ class AnswerSynthesizer:
                 fallback_used=False,
             )
 
-        reasons = [*groundedness.messages, *policy.violations]
+        reasons = list(groundedness.messages)
+        if policy.violations:
+            reasons.append(
+                "The model answer failed research-language policy validation."
+            )
         return self._deterministic_fallback(
             plan,
             tool_outputs,
