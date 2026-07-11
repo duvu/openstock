@@ -25,7 +25,14 @@ from vnalpha.tools.setup import TOOL_PERMISSIONS, build_local_tool_registry
 
 logger = get_logger("assistant.executor")
 
-_ANALYSIS_TOOLS: frozenset[str] = frozenset({"candidate.explain", "candidate.compare"})
+_ANALYSIS_TOOLS: frozenset[str] = frozenset(
+    {
+        "candidate.explain",
+        "candidate.compare",
+        "analysis.deep_symbol",
+        "scenario.generate_research_plan",
+    }
+)
 
 _TOOL_PERMISSIONS = TOOL_PERMISSIONS
 
@@ -35,6 +42,8 @@ def _build_tool_registry(conn):
 
 
 def _ensure_data_for_step(conn, step: ToolPlanStep) -> None:
+    """Provision analysis inputs deterministically before read-only research tools."""
+
     if step.tool_name not in _ANALYSIS_TOOLS:
         return
     try:
@@ -50,15 +59,17 @@ def _ensure_data_for_step(conn, step: ToolPlanStep) -> None:
         raw = args["symbols"]
         symbols = list(raw) if isinstance(raw, (list, tuple)) else [raw]
     date = normalize_date(args.get("date"))
-    for sym in symbols:
+    for symbol in symbols:
         try:
-            ensure_symbol_analysis_ready(conn, sym, date)
+            ensure_symbol_analysis_ready(conn, symbol, date)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Pre-execution data ensure failed for %s: %s", sym, exc)
+            logger.warning(
+                "Pre-execution data ensure failed for %s: %s", symbol, exc
+            )
 
 
 class AssistantExecutor:
-    """Executes an AssistantPlan against the local tool registry."""
+    """Execute an AssistantPlan against the local deterministic tool registry."""
 
     def __init__(
         self,
@@ -72,14 +83,13 @@ class AssistantExecutor:
         self._tool_executor = TracedLocalToolExecutor(
             conn,
             self._registry,
-            session_id=None,  # assistant traces have no command session parent
+            session_id=None,
             assistant_session_id=assistant_session_id,
             trace_parent_type="assistant",
             trace_event_callback=on_trace_event,
         )
 
     def execute(self, plan: AssistantPlan) -> dict[str, Any]:
-        """Execute all steps in the plan. Returns dict of step_id -> tool output dict."""
         if plan.is_refusal():
             raise RefusalError(
                 reason=plan.refusal_reason or "Unsupported request",
@@ -89,8 +99,7 @@ class AssistantExecutor:
         for step in plan.steps:
             assert_safe_tool(step.tool_name)
             _ensure_data_for_step(self._conn, step)
-            output = self._execute_step(step)
-            results[step.step_id] = output
+            results[step.step_id] = self._execute_step(step)
         return results
 
     def _execute_step(self, step: ToolPlanStep) -> Any:
@@ -99,7 +108,6 @@ class AssistantExecutor:
             output = self._tool_executor.call(
                 step.tool_name, {permission}, **step.arguments
             )
-            # Return as dict for synthesizer
             if dataclasses.is_dataclass(output):
                 return dataclasses.asdict(output)
             return output
