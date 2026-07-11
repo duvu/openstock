@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, assert_never
 
+from vnalpha.commands.models import CommandStatus
 from vnalpha.workspace_context.lifecycle import (
     get_or_create_latest_workspace,
     record_artifact,
@@ -11,7 +12,7 @@ from vnalpha.workspace_context.models import WorkspaceArtifactRef, WorkspaceStat
 from vnalpha.workspace_context.persistence import now_iso
 
 if TYPE_CHECKING:
-    from vnalpha.commands.models import CommandResult, CommandStatus
+    from vnalpha.commands.models import CommandResult
 
 
 def load_active_workspace() -> WorkspaceState:
@@ -24,8 +25,10 @@ def record_workspace_input(workspace: WorkspaceState, raw: str) -> None:
 
 
 def record_command_artifacts(workspace: WorkspaceState, result: CommandResult) -> None:
+    """Persist artifacts for complete or partial command results only."""
+
     match result.status:
-        case "SUCCESS":
+        case CommandStatus.SUCCESS | CommandStatus.PARTIAL:
             for artifact in result.artifacts:
                 created_at = now_iso()
                 record_artifact(
@@ -40,7 +43,11 @@ def record_command_artifacts(workspace: WorkspaceState, result: CommandResult) -
                         metadata={"name": artifact.name},
                     ),
                 )
-        case "FAILED" | "VALIDATION_ERROR":
+        case (
+            CommandStatus.EMPTY_RESULT
+            | CommandStatus.FAILED
+            | CommandStatus.VALIDATION_ERROR
+        ):
             return
         case unreachable:
             assert_never(unreachable)
@@ -50,19 +57,24 @@ def refreshed_workspace_for_context_command(
     raw: str,
     status: CommandStatus,
 ) -> WorkspaceState | None:
-    match status:
-        case "SUCCESS":
-            match raw.split(maxsplit=2):
-                case ["/context", _, *_]:
-                    return load_active_workspace()
-                case ["/todo", "add" | "done" | "block" | "clear-done", *_]:
-                    return load_active_workspace()
-                case _:
-                    return None
-        case "EMPTY_RESULT" | "PARTIAL" | "FAILED" | "VALIDATION_ERROR":
+    """Reload workspace state after successful context-affecting commands."""
+
+    if status is not CommandStatus.SUCCESS:
+        return None
+    tokens = raw.split(maxsplit=2)
+    match tokens:
+        case ["/context", _, *_]:
+            return load_active_workspace()
+        case ["/todo", "add" | "done" | "block" | "clear-done", *_]:
+            return load_active_workspace()
+        case [
+            "/model",
+            "use" | "reset" | "small" | "default" | "reasoning" | "long_context",
+            *_,
+        ]:
+            return load_active_workspace()
+        case _:
             return None
-        case unreachable:
-            assert_never(unreachable)
 
 
 def notify_workspace_change(
