@@ -31,6 +31,7 @@ class TestCliModuleCompatibility:
             "sync",
             "build",
             "outcome",
+            "eval",
             "logs",
             "repair",
             "deploy",

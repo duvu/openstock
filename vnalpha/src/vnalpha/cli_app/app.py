@@ -1,6 +1,6 @@
 import typer
 
-from vnalpha.cli_app import ask, cmd, init, log, score, tui, watchlist
+from vnalpha.cli_app import ask, cmd, eval, init, log, score, tui, watchlist
 from vnalpha.cli_app.build import app as build_app
 from vnalpha.cli_app.common import configure_app
 from vnalpha.cli_app.outcome import app as outcome_app
@@ -18,6 +18,7 @@ score.register(app)
 watchlist.register(app)
 tui.register(app)
 app.add_typer(outcome_app, name="outcome")
+app.add_typer(eval.app, name="eval")
 cmd.register(app)
 ask.register(app)
 log.register(app)
