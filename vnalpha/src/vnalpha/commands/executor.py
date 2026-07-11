@@ -67,7 +67,11 @@ class CommandExecutor:
 
         if date_override:
             parsed.options["date"] = date_override
-        elif self._default_date and "date" not in parsed.options:
+        elif (
+            self._default_date
+            and "date" not in parsed.options
+            and parsed.command_name not in {"market-regime", "sector-strength"}
+        ):
             parsed.options["date"] = self._default_date
 
         update_research_session_parse(
