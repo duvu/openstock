@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+
+from vnalpha.core.logging import get_logger
 from vnalpha.tui.input_history import InputHistory
 
 try:
@@ -17,6 +20,13 @@ except ImportError:
 
 
 if _TEXTUAL_AVAILABLE:
+
+    _TUI_SUGGEST_DEBUG = os.getenv("VNALPHA_TUI_SUGGEST_DEBUG", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
     class ComposerInput(Widget):
         """
@@ -75,11 +85,39 @@ if _TEXTUAL_AVAILABLE:
             Binding("ctrl+n", "history_next", "Next history", show=False),
         ]
 
+        _FALLBACK_COMMAND_NAMES: list[str] = [
+            "chat",
+            "compare",
+            "context",
+            "explain",
+            "filter",
+            "help",
+            "history",
+            "lineage",
+            "market-regime",
+            "model",
+            "note",
+            "quality",
+            "scan",
+            "sector-strength",
+            "sandbox",
+            "todo",
+        ]
+
         def __init__(self, history: InputHistory | None = None, **kwargs) -> None:
             super().__init__(**kwargs)
             self._history = history if history is not None else InputHistory()
             self._max_suggestions = 10
             self._command_names = self._load_command_names()
+            self._logger = get_logger("vnalpha.tui.widgets.composer_input")
+
+        def _debug_suggestion_event(self, event: str, **fields: object) -> None:
+            if not _TUI_SUGGEST_DEBUG:
+                return
+            try:
+                self._logger.debug(event, **fields)
+            except Exception:  # noqa: BLE001
+                pass
 
         @property
         def history(self) -> InputHistory:
@@ -94,6 +132,7 @@ if _TEXTUAL_AVAILABLE:
             yield Static("", id="composer-suggestions")
 
         def on_input_changed(self, event: Input.Changed) -> None:
+            self._debug_suggestion_event("composer input changed", value=event.value)
             self._render_suggestions(event.value)
 
         def _load_command_names(self) -> list[str]:
@@ -101,20 +140,24 @@ if _TEXTUAL_AVAILABLE:
                 from vnalpha.commands.setup import build_default_registry
 
                 return build_default_registry().names()
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 # A failed registry build (e.g. a missing optional dependency for
                 # one handler) must not silently break slash-command discovery.
+                self._debug_suggestion_event(
+                    "command registry unavailable",
+                    error=repr(exc),
+                )
                 try:
                     from vnalpha.observability.audit import log_audit
 
                     log_audit(
                         "TUI_COMMAND_NAMES_UNAVAILABLE",
-                        "slash suggestions disabled: command registry failed to build",
+                        "slash suggestions using fallback command list",
                         module="vnalpha.tui.widgets.composer_input",
                     )
                 except Exception:  # noqa: BLE001
                     pass
-                return []
+                return self._FALLBACK_COMMAND_NAMES.copy()
 
         def _command_suggestions(self, raw_text: str) -> list[str]:
             if not raw_text.startswith("/"):
@@ -139,8 +182,14 @@ if _TEXTUAL_AVAILABLE:
 
         def _render_suggestions(self, raw_text: str) -> None:
             suggestions = self._command_suggestions(raw_text)
+            self._debug_suggestion_event(
+                "render suggestions",
+                raw_text=raw_text,
+                suggestion_count=len(suggestions),
+            )
 
             if not raw_text.startswith("/"):
+                self._debug_suggestion_event("slash prefix missing")
                 return self._hide_suggestions()
 
             try:
@@ -149,14 +198,25 @@ if _TEXTUAL_AVAILABLE:
                 return
 
             if not suggestions:
+                self._debug_suggestion_event(
+                    "hide suggestions",
+                    raw_text=raw_text,
+                    reason="no matches",
+                )
                 panel.display = False
                 return
 
             panel.update("\n".join(f"/{name}" for name in suggestions))
+            self._debug_suggestion_event(
+                "show suggestions",
+                raw_text=raw_text,
+                suggestion_count=len(suggestions),
+            )
             panel.display = True
 
         def _hide_suggestions(self) -> None:
             try:
+                self._debug_suggestion_event("hide suggestions", reason="raw text reset")
                 self.query_one("#composer-suggestions", Static).display = False
             except Exception:
                 pass
