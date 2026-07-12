@@ -20,7 +20,6 @@ except ImportError:
 
 
 if _TEXTUAL_AVAILABLE:
-
     _TUI_SUGGEST_DEBUG = os.getenv("VNALPHA_TUI_SUGGEST_DEBUG", "").lower() in {
         "1",
         "true",
@@ -216,7 +215,9 @@ if _TEXTUAL_AVAILABLE:
 
         def _hide_suggestions(self) -> None:
             try:
-                self._debug_suggestion_event("hide suggestions", reason="raw text reset")
+                self._debug_suggestion_event(
+                    "hide suggestions", reason="raw text reset"
+                )
                 self.query_one("#composer-suggestions", Static).display = False
             except Exception:
                 pass

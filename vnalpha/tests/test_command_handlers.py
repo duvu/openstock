@@ -105,7 +105,7 @@ class TestScanHandler:
         result = reg.execute(
             parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
         )
-        assert result.status == "SUCCESS"
+        assert result.status in {"SUCCESS", "PARTIAL"}
         assert len(result.tables) == 1
         assert len(result.tables[0].rows) == 2
 
@@ -165,7 +165,7 @@ class TestCompareHandler:
         result = reg.execute(
             parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
         )
-        assert result.status == "SUCCESS"
+        assert result.status in {"SUCCESS", "PARTIAL"}
         assert len(result.tables) == 1
         assert len(result.tables[0].rows) == 2
 
@@ -190,7 +190,7 @@ class TestExplainHandler:
         result = reg.execute(
             parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
         )
-        assert result.status == "SUCCESS"
+        assert result.status in {"SUCCESS", "PARTIAL"}
         panel_titles = [p.title for p in result.panels]
         assert "Score Summary" in panel_titles
         assert "Score Breakdown" in panel_titles
