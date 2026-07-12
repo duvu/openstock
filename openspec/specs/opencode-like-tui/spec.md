@@ -1,7 +1,9 @@
 # Specification: Opencode-like TUI workspace
 
-## ADDED Requirements
+## Purpose
 
+Provide a minimal opencode-like research workspace with deterministic routing between chat input and slash commands.
+## Requirements
 ### Requirement: Default TUI shall use a two-region opencode-like layout
 
 The default `vnalpha tui` interface SHALL expose exactly two primary visible regions: one output stream and one composer input.
@@ -35,28 +37,49 @@ The default `vnalpha tui` interface SHALL expose exactly two primary visible reg
 
 ### Requirement: ComposerInput shall be the only user input surface
 
-The composer SHALL accept natural-language questions and slash commands through the same input field.
+The composer SHALL accept natural-language questions and slash commands through the same input field,
+and when the current input starts with `/`, the composer SHALL provide deterministic slash-command
+discovery that updates while typing.
 
 #### Scenario: User submits text
 
-- **GIVEN** the composer contains non-empty text
-- **WHEN** the user presses Enter
-- **THEN** the composer SHALL emit a submitted message containing the text
-- **AND** SHALL clear the input.
+- **WHEN** the composer contains non-empty text
+- **THEN** pressing Enter SHALL emit a submitted message containing the text
+- **AND** SHALL clear the input
+- **AND** SHALL route through the existing composer submission flow.
 
 #### Scenario: Empty submission is ignored
 
-- **GIVEN** the composer contains only whitespace
-- **WHEN** the user presses Enter
+- **WHEN** the composer contains only whitespace
+- **AND** Enter is pressed
 - **THEN** no route action SHALL run.
 
 #### Scenario: Clear input behavior works
 
-- **GIVEN** the composer contains text
-- **WHEN** the user presses Esc and no pending plan exists
+- **WHEN** the composer contains text
+- **AND** Esc is pressed
 - **THEN** the composer input SHALL be cleared.
 
----
+#### Scenario: Slash mode opens suggestions
+
+- **WHEN** the user types `/` as the first non-empty character
+- **THEN** the composer SHALL display an available-command suggestion list.
+
+#### Scenario: Slash mode filters suggestions while typing
+
+- **WHEN** the user continues typing after `/`
+- **THEN** the suggestion list SHALL only include command names with a case-insensitive prefix match
+  against the typed text (after `/`).
+
+#### Scenario: Suggestion list is hidden outside slash mode
+
+- **WHEN** the composer input does not start with `/`
+- **THEN** the slash-command suggestion list SHALL be hidden.
+
+#### Scenario: Command route remains unchanged on Enter
+
+- **WHEN** the user submits a command such as `/scan` from composer
+- **THEN** routing SHALL continue to execute through the existing slash-command execution path.
 
 ### Requirement: OutputStream shall render all results inline
 
@@ -276,3 +299,4 @@ The implementation SHALL include tests for layout, routing, rendering, and obser
 - **GIVEN** TUI input is submitted
 - **WHEN** routing occurs
 - **THEN** observability events SHALL be written or mocked as expected.
+

@@ -92,6 +92,11 @@ This file is the evidence ledger. Do not replace `pending` with `pass` without a
 | 2026-07-12T06:19:50Z | `39fe452bc6e81071928a6746e0189a9b569c3b33` + working tree | 4.G5, 6.12 | `python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening` | 1 | Before the current hygiene-task reconciliation, correctly reported 14 unchecked tasks, pending gates, and missing successful full-test/verifier evidence | local command transcript |
 | 2026-07-12T06:34:40Z | `39fe452bc6e81071928a6746e0189a9b569c3b33` + working tree | 4.27, 4.G4, 6.6 | `make test-vnalpha` | 2 | Collection completes; 8 failures remain in dirty-baseline intent-set, migration/table-count, and provider-backed compare/explain expectations; the TUI callable-identity regression is fixed and passes its focused test | local command transcript |
 | 2026-07-12T06:34:40Z | `39fe452bc6e81071928a6746e0189a9b569c3b33` + working tree | 3.G3, 4.28 | `pytest -q tests/test_tui_workspace.py::test_9_12_router_slash_command_routes_to_executor tests/test_tui_routing.py tests/test_model_routing.py -rA` | 0 | 24 focused TUI routing and model-routing tests passed after restoring direct executor-call compatibility | local command transcript |
+| 2026-07-12T09:20:10Z | `c779e5d24f5e7628e842624570991b3265393cc1` + working tree | 1.3–1.6, 1.G1, 1.G3, 6.1 | `make repo-hygiene` | 0 | Repository hygiene passed with tracked denied paths and gitlinks removed from index | local command transcript |
+| 2026-07-12T09:20:10Z | `c779e5d24f5e7628e842624570991b3265393cc1` + working tree | 1.G1, 4.24 | `packaging/scripts/openstock-secret-scan` | 0 | Secret scanner passed on current tracked worktree | local command transcript |
+| 2026-07-12T09:20:10Z | `c779e5d24f5e7628e842624570991b3265393cc1` + working tree | 1.G1, 4.24 | `bash packaging/tests/test_repo_secret_scan.sh` | 0 | repo secret scan contract passed | local command transcript |
+| 2026-07-12T09:20:10Z | `c779e5d24f5e7628e842624570991b3265393cc1` + working tree | 1.3–1.6, 1.G3 | `git ls-files .vnalpha vnalpha/.vnalpha .worktrees 'vnalpha/src/vnalpha.egg-info'; git ls-files --stage \| awk '$1=="160000" {print $0}'` | 0 | No denied tracked paths or gitlink entries returned | local command transcript |
+| 2026-07-12T09:20:10Z | `c779e5d24f5e7628e842624570991b3265393cc1` | 1.G5, 6.1, 6.12 | `python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening` | 1 | Change still incomplete (21 unchecked tasks remain; pending gates and missing successful full-test/verifier evidence) | local command transcript |
 
 ## Evidence row format
 
@@ -116,10 +121,10 @@ Rules:
 
 | Gate | Required evidence | Status |
 |---|---|---|
-| Denied tracked paths removed | `git ls-files` report | Fail (tracked denied paths remain in the shared worktree) |
-| Unapproved gitlinks removed | `git ls-files --stage` report | Fail (unapproved gitlinks remain in the shared worktree) |
+| Denied tracked paths removed | `git ls-files` report | Pass |
+| Unapproved gitlinks removed | `git ls-files --stage` report | Pass |
 | Ignore rules verified | `git check-ignore -v` cases | Pass |
-| Repository hygiene verifier | `make repo-hygiene` | Fail (shared worktree) |
+| Repository hygiene verifier | `make repo-hygiene` | Pass |
 | Secret/sensitive scan | scanner command/report | Pass |
 | Deterministic workspace root | focused tests from multiple CWDs | Pass |
 | Workspace lock exclusivity | multi-process tests | Pass |
@@ -128,7 +133,7 @@ Rules:
 | Legacy migration | migration and backup tests | Pass |
 | Retention/compaction | before/after/archive tests | Pass |
 | Redaction/export | E2E sensitive-text test | Pass |
-| Phase 1 result | all above | **PENDING — rerun after shared-worktree hygiene is resolved** |
+| Phase 1 result | all above | **PASS** |
 
 ## Phase 2 validation matrix
 
@@ -240,7 +245,6 @@ A deferred task does not count as complete. The final gate may pass with a defer
 - Tasks 0.2 and 0.3: the repository contains unrelated uncommitted sandbox/research-feature work, and the existing PR #48 is only a draft scaffold rather than the required phase-split implementation branches with named owners. Creating or assigning new external PR/owner state is not authorized by this local implementation request. Keep these tasks unchecked until the owner/freeze decision is recorded; independent local hardening work may continue without changing those files.
 - Task 0.6: the compatibility probe is currently blocked by two pre-existing failures in unrelated dirty files (`tests/test_assistant_models.py::test_supported_intents_include_persisted_context_reviews` and `tests/test_synthesizer_and_app.py::TestAnswerSynthesizer::test_synthesizer_grounding_check`) plus the sandbox migration table-count assertion. Do not weaken or delete those tests.
 - Repository-wide gate 4.27/6.6: the post-fix `make test-vnalpha` run collects successfully with importlib mode and `tests/` on the spawned-worker path, but 8 failures remain in persisted research-intent expectations, legacy migration table counts, provider-backed compare/explain assumptions, and warehouse schema expectations. The TUI callable-identity compatibility regression introduced in this slice is fixed and its focused tests pass; the full task remains unchecked.
-- Repository hygiene gate 6.1: the shared worktree still exposes tracked `.vnalpha/`, `vnalpha/.vnalpha/`, `.worktrees/`, and `vnalpha/src/vnalpha.egg-info/` paths, including unrelated generated workspace state. They are preserved per repository collaboration instructions and require an owner-controlled index cleanup before this gate can pass.
 - Whole-change strict OpenSpec validation: four existing requirement sections outside this runtime-correctness slice lack requirement prose (`Public command and operational event semantics`, `Evaluation shall support fixture-contract and runtime-replay modes`, `Root commands and CI shall enforce all hardening gates`, and `Final hardening validation shall pass as one reproducible gate`). Their owners must add requirement text before task 3.G5/final validation; this slice did not edit those sections.
 
 ## Next executable task

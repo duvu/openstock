@@ -29,10 +29,10 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 
 - [x] **1.1 Add denied runtime/generated paths to `.gitignore`.** Include `.vnalpha/`, `vnalpha/.vnalpha/`, `.worktrees/`, `*.egg-info/`, `__pycache__/`, `.pytest_cache/`, `.ruff_cache/`, and `*.pyc`. [files: `.gitignore`] [evidence: ignore tests or `git check-ignore -v`]
 - [x] **1.2 Inventory all currently tracked denied paths and gitlinks.** [depends: 1.1] [evidence: saved `git ls-files` and `git ls-files --stage` output]
-- [ ] **1.3 Remove root `.vnalpha/` runtime files from Git index without silently deleting the operator's local copy.** [depends: 1.2] [evidence: diff and hygiene check]
-- [ ] **1.4 Remove `vnalpha/.vnalpha/` runtime files from Git index.** [depends: 1.2] [evidence: diff and hygiene check]
-- [ ] **1.5 Remove `.worktrees/` gitlinks from Git index.** [depends: 1.2] [evidence: no unapproved mode `160000` entries]
-- [ ] **1.6 Remove tracked egg-info and Python/test/lint cache artifacts.** [depends: 1.2] [evidence: no denied tracked paths]
+- [x] **1.3 Remove root `.vnalpha/` runtime files from Git index without silently deleting the operator's local copy.** [depends: 1.2] [evidence: diff and hygiene check]
+- [x] **1.4 Remove `vnalpha/.vnalpha/` runtime files from Git index.** [depends: 1.2] [evidence: diff and hygiene check]
+- [x] **1.5 Remove `.worktrees/` gitlinks from Git index.** [depends: 1.2] [evidence: no unapproved mode `160000` entries]
+- [x] **1.6 Remove tracked egg-info and Python/test/lint cache artifacts.** [depends: 1.2] [evidence: no denied tracked paths]
 - [x] **1.7 Add `packaging/scripts/openstock-repo-hygiene` or equivalent deterministic verifier.** [files: `packaging/scripts/`, tests] [evidence: verifier passes clean tree and fails seeded denied path]
 - [x] **1.8 Make hygiene verifier reject unapproved gitlinks.** [depends: 1.7] [evidence: unit/integration test with mode 160000 fixture]
 - [x] **1.9 Add a documented approved-submodule allowlist mechanism, even if initially empty.** [depends: 1.8] [evidence: config/schema test]
@@ -108,11 +108,11 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 
 ## Phase 1 gate
 
-- [ ] **1.G1 Run repository hygiene and secret scans.** [depends: 1.1–1.13] [evidence: command rows]
+- [x] **1.G1 Run repository hygiene and secret scans.** [depends: 1.1–1.13] [evidence: command rows]
 - [x] **1.G2 Run all workspace root, locking, concurrency, lifecycle, retention, redaction, and export tests.** [depends: 1.14–1.63] [evidence: test command rows]
-- [ ] **1.G3 Confirm no denied tracked paths or unapproved gitlinks remain.** [depends: 1.G1] [evidence: `git ls-files`, `git ls-files --stage`]
+- [x] **1.G3 Confirm no denied tracked paths or unapproved gitlinks remain.** [depends: 1.G1] [evidence: `git ls-files`, `git ls-files --stage`]
 - [x] **1.G4 Confirm latest pointer/lifecycle invariants on migrated legacy fixtures.** [depends: 1.43] [evidence: migration E2E]
-- [ ] **1.G5 Record Phase 1 PASS in `validation.md`.** [depends: 1.G1–1.G4]
+- [x] **1.G5 Record Phase 1 PASS in `validation.md`.** [depends: 1.G1–1.G4]
 
 # Phase 2 — Context trust and assistant lifecycle
 
@@ -312,7 +312,7 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 
 # 6. Final validation and completion
 
-- [ ] **6.1 Run `make repo-hygiene`.** [depends: 1.G5]
+- [x] **6.1 Run `make repo-hygiene`.** [depends: 1.G5]
 - [x] **6.2 Run focused Phase 1 workspace/repository tests.** [depends: 1.G5]
 - [x] **6.3 Run focused Phase 2 context/prepared-turn/TUI tests.** [depends: 2.G5]
 - [x] **6.4 Run focused Phase 3 correctness tests.** [depends: 3.G5]
