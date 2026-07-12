@@ -23,6 +23,8 @@ class OperationalActions(Protocol):
 
     def repair_status(self, repair_id: str) -> str: ...
 
+    def repair_apply(self, repair_id: str, attempt: str) -> str: ...
+
     def deploy_verify(self, candidate: str) -> str: ...
 
     def deploy_promote(self, candidate: str, deployment_id: str) -> str: ...
@@ -49,6 +51,10 @@ class OperationalCommandBridge:
             case ["/repair", "prepare", "--latest"]:
                 return True
             case ["/repair", "status", repair_id] if repair_id:
+                return True
+            case ["/repair", "apply", repair_id, "--attempt", attempt] if (
+                repair_id and attempt.isdigit()
+            ):
                 return True
             case ["/deploy", "verify", candidate] if candidate:
                 return True
@@ -82,6 +88,10 @@ class OperationalCommandBridge:
                 return self._actions.repair_prepare()
             case ["/repair", "status", repair_id] if repair_id:
                 return self._actions.repair_status(repair_id)
+            case ["/repair", "apply", repair_id, "--attempt", attempt] if (
+                repair_id and attempt.isdigit()
+            ):
+                return self._actions.repair_apply(repair_id, attempt)
             case ["/deploy", "verify", candidate] if candidate:
                 return self._actions.deploy_verify(candidate)
             case [
@@ -99,6 +109,7 @@ class OperationalCommandBridge:
                     "Unsupported operational command. Supported: "
                     "/logs errors --latest, /logs summarize --latest, "
                     "/repair prepare --latest, /repair status <repair-id>, "
+                    "/repair apply <repair-id> --attempt <n>, "
                     "/deploy verify <candidate>, "
                     "/deploy promote <candidate> --deployment-id <id>, "
                     "/deploy rollback <deployment-id>."
@@ -131,43 +142,76 @@ class ObservabilityActions:
         return generate_summary(self._latest_run_dir())
 
     def repair_prepare(self) -> str:
-        from vnalpha.observability.repair import create_repair_bundle, log_repair_event
+        from vnalpha.closed_loop.bundle import latest_failed_run
+        from vnalpha.closed_loop.service import ClosedLoopService
+        from vnalpha.closed_loop.store import ClosedLoopStore
+        from vnalpha.observability.context import resolve_log_root
 
-        run_dir = self._latest_run_dir()
-        bundle_dir = create_repair_bundle(run_dir)
-        log_repair_event(
-            "REPAIR_PREPARED",
-            f"Repair bundle created: {bundle_dir.name}",
-            repair_id=bundle_dir.name,
-            extra={"bundle_dir": str(bundle_dir), "source_run_id": run_dir.name},
-        )
-        return f"Repair bundle created: {bundle_dir}"
+        root = resolve_log_root()
+        run_dir = latest_failed_run(root)
+        if run_dir is None:
+            raise UnsupportedOperationalCommand("No failed research run is available.")
+        bundle = ClosedLoopService(ClosedLoopStore(root)).prepare_failed_run(run_dir)
+        return f"Repair bundle created: {root / 'bundles' / bundle.repair_id}"
 
     def repair_status(self, repair_id: str) -> str:
-        from vnalpha.observability.repair import load_repair_state, resolve_bundles_root
+        from vnalpha.closed_loop.service import ClosedLoopService
+        from vnalpha.closed_loop.store import ClosedLoopStore
+        from vnalpha.observability.context import resolve_log_root
 
-        bundle_dir = resolve_bundles_root() / repair_id
-        if not bundle_dir.exists():
-            raise UnsupportedOperationalCommand(f"Repair bundle not found: {repair_id}")
-        return json.dumps(load_repair_state(bundle_dir), indent=2, default=str)
+        service = ClosedLoopService(ClosedLoopStore(resolve_log_root()))
+        try:
+            bundle = service.store.load_bundle(repair_id)
+            lifecycle = service.store.current_lifecycle(repair_id)
+        except RuntimeError as exc:
+            raise UnsupportedOperationalCommand(str(exc)) from exc
+        return json.dumps(
+            {
+                "repair_id": bundle.repair_id,
+                "correlation_id": bundle.correlation_id,
+                "state": lifecycle.state.value,
+                "attempts": len(service.store.list_attempts(repair_id)),
+            },
+            indent=2,
+        )
+
+    def repair_apply(self, repair_id: str, attempt: str) -> str:
+        raise UnsupportedOperationalCommand(
+            f"Repair {repair_id} attempt {attempt} requires an approved sandbox runner; "
+            "no local execution started."
+        )
 
     def deploy_verify(self, candidate: str) -> str:
-        from vnalpha.observability.deploy import verify_deploy_candidate
+        from vnalpha.closed_loop.service import ClosedLoopService
+        from vnalpha.closed_loop.store import ClosedLoopStore
+        from vnalpha.closed_loop.validation import resolve_artifact_root
+        from vnalpha.observability.context import resolve_log_root
 
-        result = verify_deploy_candidate(candidate)
-        return self._format_deployment_result(result)
+        root = resolve_log_root()
+        result = ClosedLoopService(ClosedLoopStore(root)).verify(
+            candidate, artifact_root=resolve_artifact_root(root, candidate)
+        )
+        return self._format_deployment_result(result.model_dump(mode="json"))
 
     def deploy_promote(self, candidate: str, deployment_id: str) -> str:
-        from vnalpha.observability.deploy import promote_candidate
+        from vnalpha.closed_loop.service import ClosedLoopService
+        from vnalpha.closed_loop.store import ClosedLoopStore
+        from vnalpha.observability.context import resolve_log_root
 
-        result = promote_candidate(candidate, deployment_id=deployment_id)
-        return self._format_deployment_result(result)
+        result = ClosedLoopService(ClosedLoopStore(resolve_log_root())).promote(
+            candidate, deployment_id=deployment_id
+        )
+        return self._format_deployment_result(result.model_dump(mode="json"))
 
     def deploy_rollback(self, deployment_id: str) -> str:
-        from vnalpha.observability.deploy import rollback_deployment
+        from vnalpha.closed_loop.service import ClosedLoopService
+        from vnalpha.closed_loop.store import ClosedLoopStore
+        from vnalpha.observability.context import resolve_log_root
 
-        result = rollback_deployment(deployment_id)
-        return self._format_deployment_result(result)
+        result = ClosedLoopService(ClosedLoopStore(resolve_log_root())).rollback(
+            deployment_id
+        )
+        return self._format_deployment_result(result.model_dump(mode="json"))
 
     def _latest_run_dir(self) -> Path:
         from vnalpha.observability.context import resolve_log_root

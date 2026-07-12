@@ -150,6 +150,32 @@ def test_unsafe_tool_is_refused_without_approval():
     assert exec_calls == [0]
 
 
+def test_legacy_approval_required_tool_is_refused_without_pending():
+    conn = _make_conn()
+    ctrl = _make_ctrl(conn, mode=ExecutionMode.PLAN_THEN_APPROVE)
+
+    from vnalpha.assistant.models import AssistantAnswer
+
+    plan = _make_plan(["sandbox.run_research_code"])
+    preview = AssistantAnswer(
+        summary="Plan preview", basis="preview", risks_caveats="", tool_trace_summary=""
+    )
+    execution_attempts = [0]
+
+    def fake_run_ask(question, *, no_execute=False):
+        if not no_execute:
+            execution_attempts[0] += 1
+        return preview, plan
+
+    ctrl._run_ask = fake_run_ask
+    ctrl.handle_natural_language("run an approved research sandbox analysis")
+
+    assert ctrl._pending_plan is None
+    ctrl.approve_pending_plan()
+    assert execution_attempts == [0]
+    assert any("Refused" in text for _, text in ctrl._messages)
+
+
 # ---------------------------------------------------------------------------
 # 5.4.4: DENY tools produce refusal
 # ---------------------------------------------------------------------------

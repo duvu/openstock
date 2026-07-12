@@ -44,6 +44,7 @@ The documentation is organized around the main engineering concerns:
 - [Research answer evaluation fixtures](research-answer-evaluation.md)
 - [Four-phase hardening guide](four-phase-hardening.md)
 - [Hardening branch protection](branch-protection.md)
+- [Closed-loop repair and validation](closed-loop-repair.md)
 
 ## Design stance
 

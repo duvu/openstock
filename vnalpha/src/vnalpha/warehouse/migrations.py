@@ -17,6 +17,7 @@ from vnalpha.warehouse.sandbox_migrations import (
 from vnalpha.warehouse.schema import (
     ALL_DDL,
     ALL_DDL_MARKET_CONTEXT,
+    ALL_DDL_RESEARCH_AUTOMATION,
     ALL_DDL_PHASE6,
     ALL_DDL_PHASE58,
     ALL_DDL_PHASE59,
@@ -57,7 +58,10 @@ def run_migrations(
         conn.execute(ddl)
     for ddl in ALL_DDL_RESEARCH_ANSWER_AUDIT:
         conn.execute(ddl)
+    _migrate_research_artifact_columns(conn)
     for ddl in ALL_DDL_PHASE6:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_RESEARCH_AUTOMATION:
         conn.execute(ddl)
     for ddl in ALL_DDL_PHASE510:
         conn.execute(ddl)
@@ -108,6 +112,57 @@ def _migrate_assistant_prompt_columns(conn: duckdb.DuckDBPyConnection) -> None:
         conn.execute(
             f"ALTER TABLE assistant_session ADD COLUMN IF NOT EXISTS {column} {column_type}"
         )
+
+
+def _migrate_research_artifact_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    if not _table_exists(conn, "research_artifact"):
+        return
+    conn.execute(
+        "ALTER TABLE research_artifact ADD COLUMN IF NOT EXISTS lifecycle_state VARCHAR"
+    )
+    if "status" in _table_columns(conn, "research_artifact"):
+        conn.execute(
+            "UPDATE research_artifact "
+            "SET lifecycle_state = CASE status "
+            "WHEN 'created' THEN 'RUN' "
+            "WHEN 'running' THEN 'OBSERVE' "
+            "WHEN 'succeeded' THEN 'PROMOTE_READY' "
+            "WHEN 'validated' THEN 'VALIDATE' "
+            "WHEN 'promoted' THEN 'PROMOTED' "
+            "WHEN 'rejected' THEN 'REJECTED' "
+            "WHEN 'failed' THEN 'FAILED' "
+            "ELSE 'RUN' "
+            "END "
+            "WHERE lifecycle_state IS NULL"
+        )
+    else:
+        conn.execute(
+            "UPDATE research_artifact "
+            "SET lifecycle_state = 'RUN' "
+            "WHERE lifecycle_state IS NULL"
+        )
+
+
+def _table_exists(conn: duckdb.DuckDBPyConnection, table: str) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_name = ? AND table_schema = 'main'",
+            [table],
+        ).fetchone()
+        is not None
+    )
+
+
+def _table_columns(conn: duckdb.DuckDBPyConnection, table: str) -> set[str]:
+    return {
+        row[0]
+        for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'main' AND table_name = ?",
+            [table],
+        ).fetchall()
+    }
 
 
 def _migrate_feature_snapshot_columns(conn: duckdb.DuckDBPyConnection) -> None:

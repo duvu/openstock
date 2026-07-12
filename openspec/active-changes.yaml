@@ -28,14 +28,14 @@ changes:
     summary: "Domain-shaped experiments, features, pattern scans, hypotheses, and offline event studies."
     evidence: "Specification only; no production automation engine yet."
   prod-d-closed-loop-repair:
-    status: planned
+    status: partial
     priority: P3
     blocked_by:
       - openstock-four-phase-hardening
       - prod-b-sandbox-mvp
       - prod-c-research-automation
     summary: "Bounded repair, validation, promotion, rejection, and rollback for sandbox/research artifacts only."
-    evidence: "Specification only; existing observability/repair commands are reusable prerequisites, not completion evidence."
+    evidence: "Closed-loop service, CLI/TUI bridges, focused security suite, and validation.md are implemented; repository-wide lint/test residuals remain in pre-existing prod-c research-automation work and PR evidence is not attached."
   research-intelligence-data-model-foundation:
     status: partial
     priority: P2

@@ -8,6 +8,7 @@ Content modes (read from VNALPHA_LOG_CONTENT_MODE env):
 
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -101,13 +102,21 @@ def redact_dict(d: dict, mode: str | None = None) -> dict:
     for k, v in d.items():
         if _is_sensitive_key(k):
             result[k] = _REDACTED_PLACEHOLDER
-        elif isinstance(v, dict):
-            result[k] = redact_dict(v, mode)
-        elif isinstance(v, str):
-            result[k] = redact_str(v, mode)
         else:
-            result[k] = v
+            result[k] = _redact_value(v, mode)
     return result
+
+
+def _redact_value(value: object, mode: str) -> object:
+    if isinstance(value, dict):
+        return redact_dict(value, mode)
+    if isinstance(value, list):
+        return [_redact_value(item, mode) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_value(item, mode) for item in value)
+    if isinstance(value, str):
+        return redact_str(value, mode)
+    return value
 
 
 def redact_str(s: str, mode: str | None = None) -> str:
@@ -120,6 +129,12 @@ def redact_str(s: str, mode: str | None = None) -> str:
         mode = get_content_mode()
     if mode == "full":
         return s
+    try:
+        parsed = json.loads(s)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, (dict, list)):
+        return json.dumps(_redact_value(parsed, mode), sort_keys=True)
     return _SECRET_VALUE_RE.sub(
         lambda m: m.group(0).split("=")[0].split(":")[0] + "=[REDACTED]",
         s,

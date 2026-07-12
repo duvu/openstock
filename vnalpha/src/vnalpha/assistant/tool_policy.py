@@ -60,6 +60,14 @@ def unsafe_tools_in_plan(plan: AssistantPlan) -> tuple[str, ...]:
     )
 
 
+def is_approval_required_plan(plan: AssistantPlan) -> bool:
+    """Return whether a plan is exactly one non-forbidden approval-gated step."""
+    return len(plan.steps) == 1 and (
+        plan.steps[0].tool_name in APPROVAL_REQUIRED_TOOLS
+        and not is_forbidden_tool(plan.steps[0].tool_name)
+    )
+
+
 def is_safe_plan(plan: AssistantPlan) -> bool:
     """Return whether every plan step uses a canonical safe tool."""
     return bool(plan.steps) and not unsafe_tools_in_plan(plan)

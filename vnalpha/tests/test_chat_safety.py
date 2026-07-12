@@ -7,6 +7,7 @@ from vnalpha.chat.modes import ExecutionMode
 from vnalpha.chat.safety import (
     filter_safe_tools,
     is_tool_allowed_in_chat,
+    is_tool_approval_pending_eligible,
     validate_tool_call,
 )
 
@@ -64,7 +65,7 @@ class TestValidateToolCall:
         )
         assert allowed is False
         assert reason is not None
-        assert "not available" in reason
+        assert "permanently forbidden" in reason
 
     def test_place_order_plan_then_approve_also_blocked(self):
         allowed, reason = validate_tool_call(
@@ -104,6 +105,54 @@ class TestValidateToolCall:
             "web_fetch", ExecutionMode.AUTO_EXECUTE_SAFE_READ_ONLY
         )
         assert "web_fetch" in reason
+
+    def test_approval_required_tool_is_allowed_for_plan_then_approve(self):
+        allowed, reason = validate_tool_call(
+            "sandbox.run_research_code", ExecutionMode.PLAN_THEN_APPROVE
+        )
+
+        assert allowed is True
+        assert reason is None
+
+    def test_approval_required_tool_is_blocked_outside_approval_mode(self):
+        allowed, reason = validate_tool_call(
+            "sandbox.run_research_code", ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS
+        )
+
+        assert allowed is False
+        assert reason is not None
+        assert "explicit approval" in reason
+
+    def test_hard_deny_tool_reports_permanent_refusal(self):
+        allowed, reason = validate_tool_call(
+            "broker.place_order", ExecutionMode.PLAN_THEN_APPROVE
+        )
+
+        assert allowed is False
+        assert reason is not None
+        assert "permanently forbidden" in reason
+
+
+class TestApprovalPendingEligibility:
+    def test_ask_tool_can_wait_for_approval_only_in_approval_capable_modes(self):
+        assert is_tool_approval_pending_eligible(
+            "sandbox.run_research_code", ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS
+        )
+        assert is_tool_approval_pending_eligible(
+            "sandbox.run_research_code", ExecutionMode.PLAN_THEN_APPROVE
+        )
+        assert not is_tool_approval_pending_eligible(
+            "sandbox.run_research_code", ExecutionMode.PLAN_ONLY
+        )
+        assert not is_tool_approval_pending_eligible(
+            "watchlist.scan", ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS
+        )
+        assert not is_tool_approval_pending_eligible(
+            "write_file", ExecutionMode.PLAN_THEN_APPROVE
+        )
+        assert not is_tool_approval_pending_eligible(
+            "broker.place_order", ExecutionMode.PLAN_THEN_APPROVE
+        )
 
 
 class TestFilterSafeTools:

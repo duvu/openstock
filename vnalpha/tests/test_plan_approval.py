@@ -10,6 +10,9 @@ import pytest
 from vnalpha.assistant.models import (
     AssistantAnswer,
     AssistantPlan,
+    AssistantRequest,
+    IntentResult,
+    PreparedAssistantTurn,
     ToolPlanStep,
 )
 from vnalpha.assistant.tool_policy import SAFE_TOOLS, is_safe_plan
@@ -36,6 +39,23 @@ def _make_plan(tool_names: list[str]) -> AssistantPlan:
         for i, name in enumerate(tool_names)
     ]
     return AssistantPlan(intent="test_intent", steps=steps)
+
+
+def _make_prepared_turn(plan: AssistantPlan) -> PreparedAssistantTurn:
+    return PreparedAssistantTurn(
+        prepared_turn_id="prepared-sandbox-turn",
+        assistant_session_id="assistant-session",
+        request=AssistantRequest(current_user_prompt="run sandbox analysis"),
+        intent_result=IntentResult(
+            intent="sandbox_research_calculation",
+            confidence=1.0,
+            entities={},
+        ),
+        plan=plan,
+        plan_hash="sandbox-plan-hash",
+        policy_status="PASS",
+        created_at="2026-07-12T00:00:00+00:00",
+    )
 
 
 def _make_controller(
@@ -283,6 +303,102 @@ class TestChatControllerPlanThenApprove:
         get_connection.assert_called_once()
 
 
+class TestPreparedSandboxApproval:
+    @pytest.mark.parametrize(
+        ("mode", "should_be_pending"),
+        [
+            (ExecutionMode.PLAN_THEN_APPROVE, True),
+            (ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS, True),
+            (ExecutionMode.PLAN_ONLY, False),
+        ],
+    )
+    def test_sandbox_plan_previews_without_execution_in_every_mode(
+        self, mode: ExecutionMode, should_be_pending: bool
+    ) -> None:
+        # Given: a prepared turn containing the approval-required sandbox plan
+        ctrl, messages = _make_controller(mode)
+        plan = _make_plan(["sandbox.run_research_code"])
+        prepared = _make_prepared_turn(plan)
+        prepared_turns: list[PreparedAssistantTurn] = []
+        executed_turns: list[PreparedAssistantTurn] = []
+
+        def fake_prepare_turn(
+            question: str, workspace_context: str | None
+        ) -> PreparedAssistantTurn:
+            prepared_turns.append(prepared)
+            return prepared
+
+        def fake_execute_prepared_turn(
+            turn: PreparedAssistantTurn,
+        ) -> tuple[AssistantAnswer, AssistantPlan]:
+            executed_turns.append(turn)
+            return (
+                AssistantAnswer(
+                    summary="Sandbox result",
+                    basis="sandbox",
+                    risks_caveats="",
+                    tool_trace_summary="",
+                ),
+                plan,
+            )
+
+        ctrl._prepare_turn = fake_prepare_turn
+        ctrl._execute_prepared_turn = fake_execute_prepared_turn
+
+        # When: the controller handles the natural-language request
+        ctrl.handle_natural_language("run sandbox analysis")
+
+        # Then: every mode previews without executing; only approval-capable modes retain it
+        assert prepared_turns == [prepared]
+        assert executed_turns == []
+        assert any("Plan:" in text for _, text in messages)
+        if should_be_pending:
+            assert ctrl._pending_prepared_turn is prepared
+            assert ctrl._pending_plan is plan
+        else:
+            assert ctrl._pending_prepared_turn is None
+            assert ctrl._pending_plan is None
+
+    def test_approval_executes_the_retained_prepared_sandbox_turn(self) -> None:
+        # Given: a prepared sandbox turn in approval mode
+        ctrl, _messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS)
+        plan = _make_plan(["sandbox.run_research_code"])
+        prepared = _make_prepared_turn(plan)
+        prepared_turns: list[PreparedAssistantTurn] = []
+        executed_turns: list[PreparedAssistantTurn] = []
+
+        def fake_prepare_turn(
+            question: str, workspace_context: str | None
+        ) -> PreparedAssistantTurn:
+            prepared_turns.append(prepared)
+            return prepared
+
+        def fake_execute_prepared_turn(
+            turn: PreparedAssistantTurn,
+        ) -> tuple[AssistantAnswer, AssistantPlan]:
+            executed_turns.append(turn)
+            return (
+                AssistantAnswer(
+                    summary="Sandbox result",
+                    basis="sandbox",
+                    risks_caveats="",
+                    tool_trace_summary="",
+                ),
+                plan,
+            )
+
+        ctrl._prepare_turn = fake_prepare_turn
+        ctrl._execute_prepared_turn = fake_execute_prepared_turn
+
+        # When: the user approves the previewed plan
+        ctrl.handle_natural_language("run sandbox analysis")
+        ctrl.approve_pending_plan()
+
+        # Then: execution receives the identical retained turn without a second prepare
+        assert prepared_turns == [prepared]
+        assert executed_turns == [prepared]
+
+
 # ---------------------------------------------------------------------------
 # ChatController — cancel_pending_plan
 # ---------------------------------------------------------------------------
@@ -482,6 +598,32 @@ class TestAutoExecuteSafeReadOnly:
         all_text = " ".join(t for _, t in messages)
         assert "Watchlist loaded" in all_text
 
+    def test_legacy_sandbox_plan_auto_is_refused(self):
+        # Given: an approval-required sandbox plan in auto mode
+        ctrl, messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS)
+        sandbox_plan = _make_plan(["sandbox.run_research_code"])
+        call_log: list[bool] = []
+        preview_answer = AssistantAnswer(
+            summary="[Plan preview]",
+            basis="preview",
+            risks_caveats="",
+            tool_trace_summary="no exec",
+        )
+
+        def fake_run_ask(question, *, no_execute=False):
+            call_log.append(no_execute)
+            return preview_answer, sandbox_plan
+
+        ctrl._run_ask = fake_run_ask
+
+        # When: the controller handles the request
+        ctrl.handle_natural_language("run sandbox analysis")
+
+        # Then: it refuses rather than retaining mutable execution context
+        assert call_log == [True]
+        assert ctrl._pending_plan is None
+        assert any("Refused" in text for _, text in messages)
+
     @pytest.mark.parametrize(
         ("mode", "tool_name"),
         [
@@ -583,6 +725,32 @@ class TestPlanOnlyMode:
 
         # PLAN_ONLY emits preview but does NOT store pending (nothing to approve)
         assert ctrl._pending_plan is None
+
+    def test_legacy_sandbox_plan_only_is_refused(self):
+        # Given: an approval-required sandbox plan in plan-only mode
+        ctrl, messages = _make_controller(ExecutionMode.PLAN_ONLY)
+        sandbox_plan = _make_plan(["sandbox.run_research_code"])
+        call_log: list[bool] = []
+        preview_answer = AssistantAnswer(
+            summary="[Plan preview]",
+            basis="preview",
+            risks_caveats="",
+            tool_trace_summary="no exec",
+        )
+
+        def fake_run_ask(question, *, no_execute=False):
+            call_log.append(no_execute)
+            return preview_answer, sandbox_plan
+
+        ctrl._run_ask = fake_run_ask
+
+        # When: the controller handles the request
+        ctrl.handle_natural_language("run sandbox analysis")
+
+        # Then: it refuses rather than previewing mutable execution context
+        assert call_log == [True]
+        assert ctrl._pending_plan is None
+        assert any("Refused" in text for _, text in messages)
 
     def test_plan_only_emits_preview(self):
         ctrl, messages = _make_controller(ExecutionMode.PLAN_ONLY)
