@@ -67,6 +67,7 @@ src/vnalpha/commands/parser.py
 src/vnalpha/commands/registry.py
 src/vnalpha/commands/setup.py
 src/vnalpha/commands/handlers/__init__.py
+src/vnalpha/commands/handlers/chat.py
 src/vnalpha/commands/handlers/compare.py
 src/vnalpha/commands/handlers/context.py
 src/vnalpha/commands/handlers/explain.py
@@ -104,6 +105,7 @@ src/vnalpha/data_availability/models.py
 src/vnalpha/data_availability/observability.py
 src/vnalpha/data_availability/planner.py
 src/vnalpha/data_availability/policy.py
+src/vnalpha/data_availability/results.py
 src/vnalpha/data_availability/service.py
 src/vnalpha/evals/__init__.py
 src/vnalpha/evals/adapter.py
@@ -134,7 +136,10 @@ src/vnalpha/evals/goldens/research_answers/score_summary.yaml
 src/vnalpha/evals/goldens/scenario_plans/monitor_breakout.yaml
 src/vnalpha/evals/goldens/shortlist/research_watchlist.yaml
 src/vnalpha/evals/runtime_cases/deep_symbol_claim_mapping.json
+src/vnalpha/evals/runtime_cases/fabricated_number_rewrite.json
+src/vnalpha/evals/runtime_cases/invalid_explicit_date.json
 src/vnalpha/evals/runtime_cases/market_regime_context_injection.json
+src/vnalpha/evals/runtime_cases/missing_grounded_refs.json
 src/vnalpha/evals/runtime_cases/scenario_unsafe_wording_rewrite.json
 src/vnalpha/evals/runtime_cases/sector_strength_missing_artifact.json
 src/vnalpha/evals/runtime_cases/setup_evidence.json
@@ -361,6 +366,7 @@ tests/test_evals_runtime_loader.py
 tests/test_evals_runtime_report.py
 tests/test_evals_runtime_runner.py
 tests/test_executor_and_policy.py
+tests/test_executor_missing_symbol_logs.py
 tests/test_features.py
 tests/test_ingestion.py
 tests/test_input_history.py

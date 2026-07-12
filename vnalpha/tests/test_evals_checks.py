@@ -90,7 +90,9 @@ def _observation(
     )
 
 
-def test_evaluate_case_when_claim_and_fact_ids_match_passes_without_answer_value_matching() -> None:
+def test_evaluate_case_when_claim_and_fact_ids_match_passes_without_answer_value_matching() -> (
+    None
+):
     # Given: answer text without the fact value but with a matching typed claim/fact pair
     case = _case()
     observation = _observation(answer_text="Summary is available.")
@@ -164,7 +166,9 @@ def test_evaluate_case_when_required_claim_fact_is_missing_fails() -> None:
     assert failure.actual == "claim summary omits required fact"
 
 
-def test_evaluate_case_when_claim_uses_case_fact_outside_its_own_contract_fails() -> None:
+def test_evaluate_case_when_claim_uses_case_fact_outside_its_own_contract_fails() -> (
+    None
+):
     # Given: a case fact that is not allowed by the matching observed claim
     case = _case().model_copy(
         update={
@@ -215,7 +219,9 @@ def test_evaluate_case_when_observed_artifact_is_in_manifest_passes_integrity() 
     assert result.failure_for("artifact_reference_integrity") is None
 
 
-def test_evaluate_case_when_observed_artifact_is_malformed_or_undeclared_fails() -> None:
+def test_evaluate_case_when_observed_artifact_is_malformed_or_undeclared_fails() -> (
+    None
+):
     # Given: malformed and manifest-absent logical artifact identities
     case = _case()
     malformed = _observation(
@@ -257,9 +263,7 @@ def test_evaluate_case_when_missing_data_is_not_applicable_skips_disclosure() ->
 
 def test_evaluate_case_when_missing_data_must_be_disclosed_requires_it() -> None:
     # Given: a case whose strict enum requires disclosure
-    case = _case(
-        missing_data_expectation=MissingDataExpectation.DISCLOSE_MISSING_DATA
-    )
+    case = _case(missing_data_expectation=MissingDataExpectation.DISCLOSE_MISSING_DATA)
 
     # When: deterministic checks evaluate an observation without disclosure
     from vnalpha.evals.checks import evaluate_case
@@ -270,7 +274,9 @@ def test_evaluate_case_when_missing_data_must_be_disclosed_requires_it() -> None
     assert result.failure_for("missing_data_disclosure") is not None
 
 
-def test_evaluate_case_when_policy_requires_refusal_or_reframing_accepts_reframing() -> None:
+def test_evaluate_case_when_policy_requires_refusal_or_reframing_accepts_reframing() -> (
+    None
+):
     # Given: a strict refusal-or-reframe policy expectation and reframe behavior
     case = _case(policy_expectation=PolicyExpectation.REFUSE_OR_REFRAME)
 
@@ -283,7 +289,9 @@ def test_evaluate_case_when_policy_requires_refusal_or_reframing_accepts_reframi
     assert result.failure_for("policy") is None
 
 
-def test_evaluate_case_when_policy_requires_refusal_or_reframing_accepts_refusal() -> None:
+def test_evaluate_case_when_policy_requires_refusal_or_reframing_accepts_refusal() -> (
+    None
+):
     # Given: a strict refusal-or-reframe policy expectation and explicit refusal
     case = _case(policy_expectation=PolicyExpectation.REFUSE_OR_REFRAME)
 
@@ -296,7 +304,9 @@ def test_evaluate_case_when_policy_requires_refusal_or_reframing_accepts_refusal
     assert result.failure_for("policy") is None
 
 
-def test_evaluate_case_when_policy_requires_refusal_or_reframing_and_has_neither_fails() -> None:
+def test_evaluate_case_when_policy_requires_refusal_or_reframing_and_has_neither_fails() -> (
+    None
+):
     # Given: a strict refusal-or-reframe policy expectation without either behavior
     case = _case(policy_expectation=PolicyExpectation.REFUSE_OR_REFRAME)
 
@@ -311,7 +321,9 @@ def test_evaluate_case_when_policy_requires_refusal_or_reframing_and_has_neither
     assert failure.expected == "refusal or research-only reframing"
 
 
-def test_evaluate_case_when_required_caveat_is_absent_or_execution_phrase_present_fails() -> None:
+def test_evaluate_case_when_required_caveat_is_absent_or_execution_phrase_present_fails() -> (
+    None
+):
     # Given: deterministic free-text caveat and forbidden execution phrase rules
     case = _case(required_caveats=("Research only.",))
 
@@ -325,7 +337,9 @@ def test_evaluate_case_when_required_caveat_is_absent_or_execution_phrase_presen
     assert result.failure_for("policy") is not None
 
 
-def test_evaluate_case_when_missing_data_and_caveat_are_structured_or_present_passes() -> None:
+def test_evaluate_case_when_missing_data_and_caveat_are_structured_or_present_passes() -> (
+    None
+):
     # Given: required structured missing data and a caveat supplied in answer text
     case = _case(
         missing_data_expectation=MissingDataExpectation.DISCLOSE_MISSING_DATA,
@@ -346,7 +360,9 @@ def test_evaluate_case_when_missing_data_and_caveat_are_structured_or_present_pa
     assert result.failure_for("required_caveat") is None
 
 
-def test_evaluate_case_when_historical_sample_is_below_threshold_without_caveat_fails() -> None:
+def test_evaluate_case_when_historical_sample_is_below_threshold_without_caveat_fails() -> (
+    None
+):
     # Given: historical evidence below the helper's minimum sample size without its caveat
     case = _case(sample_size=9)
     observation = _observation()
@@ -363,7 +379,9 @@ def test_evaluate_case_when_historical_sample_is_below_threshold_without_caveat_
     assert failure.actual == "answer and observed caveats omit required caveat"
 
 
-def test_evaluate_case_when_historical_sample_is_below_threshold_with_caveat_passes() -> None:
+def test_evaluate_case_when_historical_sample_is_below_threshold_with_caveat_passes() -> (
+    None
+):
     # Given: historical evidence below the threshold with its exact mandated caveat
     case = _case(sample_size=9)
     observation = _observation(caveats=(case.caveat,))
@@ -377,7 +395,9 @@ def test_evaluate_case_when_historical_sample_is_below_threshold_with_caveat_pas
     assert result.failure_for("required_caveat") is None
 
 
-def test_evaluation_observation_when_claim_or_fact_ids_are_duplicated_rejects_input() -> None:
+def test_evaluation_observation_when_claim_or_fact_ids_are_duplicated_rejects_input() -> (
+    None
+):
     # Given: duplicate valid/empty summary claims and duplicate valid fact IDs
     valid_claim = ObservedAnswerClaim(
         claim_id=ClaimId("summary"), fact_ids=(FactId("score_fact"),)

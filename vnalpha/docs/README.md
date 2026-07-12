@@ -42,6 +42,8 @@ The documentation is organized around the main engineering concerns:
 - [Deployment architecture](11-deployment-architecture.md)
 - [Sandboxed compute](sandbox-compute.md)
 - [Research answer evaluation fixtures](research-answer-evaluation.md)
+- [Four-phase hardening guide](four-phase-hardening.md)
+- [Hardening branch protection](branch-protection.md)
 
 ## Design stance
 

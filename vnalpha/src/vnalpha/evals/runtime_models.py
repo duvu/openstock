@@ -12,7 +12,6 @@ from pydantic import (
     JsonValue,
     StrictBool,
     StrictFloat,
-    StrictInt,
     StrictStr,
     field_validator,
     model_validator,

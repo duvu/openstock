@@ -17,7 +17,6 @@ from vnalpha.assistant.intent import (
     IntentClassifier,
     _deterministic_precheck,
 )
-from vnalpha.assistant.response_parser import parse_intent_response
 from vnalpha.assistant.models import (
     SUPPORTED_INTENTS,
     AssistantPlan,
@@ -25,6 +24,7 @@ from vnalpha.assistant.models import (
     ToolPlanStep,
 )
 from vnalpha.assistant.planner import PlanBuilder, _validate_plan
+from vnalpha.assistant.response_parser import parse_intent_response
 from vnalpha.assistant.tool_policy import SAFE_TOOLS
 
 # ---------------------------------------------------------------------------

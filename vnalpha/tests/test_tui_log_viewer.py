@@ -22,7 +22,11 @@ def test_log_record_rendering_strips_terminal_control_sequences() -> None:
     from vnalpha.log_viewer import format_record_rich
 
     rendered = format_record_rich(
-        {"level": "info", "event": "\x1b[31mfailed\x1b[0m", "logger": "\x1b]0;title\x07app"}
+        {
+            "level": "info",
+            "event": "\x1b[31mfailed\x1b[0m",
+            "logger": "\x1b]0;title\x07app",
+        }
     )
 
     assert "\x1b" not in rendered

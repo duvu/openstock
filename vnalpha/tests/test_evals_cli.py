@@ -96,9 +96,7 @@ def test_eval_research_runtime_outputs_json_when_requested(
     )
     from vnalpha.cli import app
 
-    result = CliRunner().invoke(
-        app, ["eval", "research-runtime", "--json"]
-    )
+    result = CliRunner().invoke(app, ["eval", "research-runtime", "--json"])
 
     assert result.exit_code == 0
     assert result.output.startswith("{")

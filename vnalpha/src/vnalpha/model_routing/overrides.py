@@ -20,16 +20,19 @@ class ModelOverrideStore:
     """Bounded profile override store with optional workspace persistence."""
 
     def __init__(self, *, workspace_root: Path | None = None) -> None:
-        self._session_profile: ModelProfile | None = None
+        self._session_profiles: dict[str | None, ModelProfile] = {}
         self._workspace_root = workspace_root
         self._lock = RLock()
 
     def get_current_override(
-        self, workspace_id: str | None = None
+        self,
+        workspace_id: str | None = None,
+        *,
+        session_id: str | None = None,
     ) -> ModelRouteOverride:
         with self._lock:
             return ModelRouteOverride(
-                session_profile=self._session_profile,
+                session_profile=self._session_profiles.get(session_id),
                 workspace_profile=self._load_workspace_profile(workspace_id),
             )
 
@@ -39,12 +42,13 @@ class ModelOverrideStore:
         *,
         scope: str = "workspace",
         workspace_id: str | None = None,
+        session_id: str | None = None,
     ) -> ModelRouteOverride:
         parsed = ModelProfile.parse(profile)
         normalized_scope = scope.strip().lower()
         with self._lock:
             if normalized_scope == "session":
-                self._session_profile = parsed
+                self._session_profiles[session_id] = parsed
             elif normalized_scope == "workspace":
                 self._write_workspace_profile(parsed, workspace_id)
             else:
@@ -52,18 +56,22 @@ class ModelOverrideStore:
                     "Model override scope must be 'session' or 'workspace'."
                 )
         self._emit_override_event("MODEL_OVERRIDE_SET", parsed, normalized_scope)
-        return self.get_current_override(workspace_id)
+        return self.get_current_override(workspace_id, session_id=session_id)
 
     def clear_override(
         self,
         *,
         scope: str = "all",
         workspace_id: str | None = None,
+        session_id: str | None = None,
     ) -> ModelRouteOverride:
         normalized_scope = scope.strip().lower()
         with self._lock:
             if normalized_scope in {"all", "session"}:
-                self._session_profile = None
+                if normalized_scope == "all":
+                    self._session_profiles.clear()
+                else:
+                    self._session_profiles.pop(session_id, None)
             if normalized_scope in {"all", "workspace"}:
                 path = self._workspace_override_path(workspace_id, create=False)
                 if path is not None:
@@ -79,7 +87,7 @@ class ModelOverrideStore:
                     "Model override reset scope must be 'all', 'session', or 'workspace'."
                 )
         self._emit_override_event("MODEL_OVERRIDE_CLEARED", None, normalized_scope)
-        return self.get_current_override(workspace_id)
+        return self.get_current_override(workspace_id, session_id=session_id)
 
     def _load_workspace_profile(self, workspace_id: str | None) -> ModelProfile | None:
         path = self._workspace_override_path(workspace_id, create=False)

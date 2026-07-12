@@ -124,10 +124,19 @@ sed -i "s/^Installed-Size:.*/Installed-Size: ${PAYLOAD_KB}/" \
 # Pre-download wheels (bundled offline install)
 # ---------------------------------------------------------------------------
 
-if [[ "${SKIP_WHEELS}" == false ]]; then
-  WHEELS_DIR="${STAGE_DIR}/opt/vnalpha/wheels"
-  mkdir -p "${WHEELS_DIR}"
+WHEELS_DIR="${STAGE_DIR}/opt/vnalpha/wheels"
+mkdir -p "${WHEELS_DIR}"
 
+# Build the local project wheel independently because pip download of a local
+# project resolves dependencies but does not place the project wheel in the destination.
+python3 -m pip wheel \
+  --quiet \
+  --no-deps \
+  --no-build-isolation \
+  --wheel-dir "${WHEELS_DIR}" \
+  "${VNALPHA_SRC}"
+
+if [[ "${SKIP_WHEELS}" == false ]]; then
   echo "build-deb.sh: Downloading wheels for offline install ..."
   # Download the vnalpha package and all its runtime deps as wheels
   python3 -m pip download \

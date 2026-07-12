@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 from pathlib import Path
 
+import duckdb
 import pytest
 
 from tests.test_evals_runtime_loader import _runtime_case
@@ -13,9 +14,7 @@ def test_runtime_replay_when_case_is_seeded_exercises_prepared_turn_boundaries(
 ) -> None:
     # Given: one strict context-injection replay case with local tool and LLM seeds
     path = tmp_path / "market-regime.json"
-    path.write_text(
-        _runtime_case("fixture://runtime/market_regime"), encoding="utf-8"
-    )
+    path.write_text(_runtime_case("fixture://runtime/market_regime"), encoding="utf-8")
     from vnalpha.evals.runtime_loader import load_runtime_replay_case
 
     case = load_runtime_replay_case(path)
@@ -111,3 +110,32 @@ def test_default_runtime_corpus_when_packaged_covers_all_intents_and_negatives()
     }
     assert report.source_count == len(cases) >= 10
     assert report.passed
+
+
+def test_invalid_explicit_date_is_rejected_before_assistant_planning() -> None:
+    from vnalpha.assistant.app import AssistantApp
+    from vnalpha.assistant.errors import AssistantError
+    from vnalpha.assistant.gateway import FakeLLMClient
+    from vnalpha.assistant.models import AssistantRequest
+    from vnalpha.evals.runtime_loader import load_runtime_replay_case
+    from vnalpha.evals.runtime_models import RuntimeReplayCase
+    from vnalpha.warehouse.migrations import run_migrations
+
+    case_path = Path("src/vnalpha/evals/runtime_cases/invalid_explicit_date.json")
+    case: RuntimeReplayCase = load_runtime_replay_case(case_path)
+    assert case.classifier_response is not None
+    client = FakeLLMClient([(case.classifier_response.model_dump_json(), {})])
+
+    with duckdb.connect(":memory:") as conn:
+        run_migrations(conn)
+        app = AssistantApp(conn, surface="eval-runtime", llm_client=client)
+
+        with pytest.raises(AssistantError, match="(?i)invalid date"):
+            app.prepare(
+                AssistantRequest(
+                    current_user_prompt=case.request.current_user_prompt,
+                    date=case.request.date,
+                )
+            )
+
+    assert client.calls == []

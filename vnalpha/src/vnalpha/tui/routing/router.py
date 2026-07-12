@@ -145,6 +145,9 @@ class TuiInputRouter:
 
     def close(self) -> None:
         """Close the router-owned command connection exactly once."""
+        if self._chat_controller is not None:
+            self._chat_controller.close()
+            self._chat_controller = None
         connection = self._command_conn
         self._command_conn = None
         self._lifecycle_hooks.close_connection(connection)

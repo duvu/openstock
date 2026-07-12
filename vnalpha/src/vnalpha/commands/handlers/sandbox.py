@@ -32,7 +32,9 @@ def handle_sandbox(parsed: ParsedCommand, conn=None, **kwargs) -> CommandResult:
     if subcommand == "list":
         _validate_latest_query(parsed)
         records = repository.list()
-        return _status_result(records[-1] if records else None, title="/sandbox list --latest")
+        return _status_result(
+            records[-1] if records else None, title="/sandbox list --latest"
+        )
     raise CommandValidationError(
         "Unsupported /sandbox subcommand. Supported: run, status, artifact, list --latest."
     )
@@ -57,7 +59,9 @@ def _run_preview(parsed: ParsedCommand) -> CommandResult:
 
 def _job_id_argument(parsed: ParsedCommand, subcommand: str) -> SandboxJobId:
     if len(parsed.positional) != 2 or parsed.options or parsed.filters:
-        raise CommandValidationError(f"/sandbox {subcommand} requires exactly one job ID.")
+        raise CommandValidationError(
+            f"/sandbox {subcommand} requires exactly one job ID."
+        )
     return SandboxJobId(parsed.positional[1])
 
 
@@ -70,9 +74,13 @@ def _validate_latest_query(parsed: ParsedCommand) -> None:
         raise CommandValidationError("/sandbox list requires exactly --latest.")
 
 
-def _status_result(record: SandboxJobRecord | None, *, title: str = "/sandbox status") -> CommandResult:
+def _status_result(
+    record: SandboxJobRecord | None, *, title: str = "/sandbox status"
+) -> CommandResult:
     if record is None:
-        return CommandResult(status="EMPTY_RESULT", title=title, summary="Sandbox job not found.")
+        return CommandResult(
+            status="EMPTY_RESULT", title=title, summary="Sandbox job not found."
+        )
     return CommandResult(
         status="SUCCESS",
         title=title,
@@ -84,7 +92,9 @@ def _status_result(record: SandboxJobRecord | None, *, title: str = "/sandbox st
 def _artifact_result(record: SandboxJobRecord | None) -> CommandResult:
     if record is None:
         return CommandResult(
-            status="EMPTY_RESULT", title="/sandbox artifact", summary="Sandbox job not found."
+            status="EMPTY_RESULT",
+            title="/sandbox artifact",
+            summary="Sandbox job not found.",
         )
     root = f"logs/runs/{record.run_id}/sandbox/{record.job_id}"
     layout = SandboxArtifactLayout()

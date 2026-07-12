@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 
 def _runtime_case(artifact_ref: str, extra_field: str = "") -> str:
@@ -67,9 +68,7 @@ def test_runtime_loader_when_case_is_valid_returns_frozen_typed_contract(
 ) -> None:
     # Given: one complete runtime-replay JSON document
     path = tmp_path / "market-regime.json"
-    path.write_text(
-        _runtime_case("fixture://runtime/market_regime"), encoding="utf-8"
-    )
+    path.write_text(_runtime_case("fixture://runtime/market_regime"), encoding="utf-8")
 
     # When: the runtime boundary parses the document
     from vnalpha.evals.runtime_loader import load_runtime_replay_case
@@ -79,10 +78,8 @@ def test_runtime_loader_when_case_is_valid_returns_frozen_typed_contract(
     # Then: nested request, plan, and artifact identities are typed and immutable
     assert case.request.current_user_prompt.startswith("Review")
     assert case.expected.plan[0].tool_name == "market.get_regime"
-    assert case.tool_outputs[0].artifact_refs == (
-        "fixture://runtime/market_regime",
-    )
-    with pytest.raises(Exception):
+    assert case.tool_outputs[0].artifact_refs == ("fixture://runtime/market_regime",)
+    with pytest.raises(ValidationError):
         case.case_id = "changed"
 
 
@@ -90,9 +87,7 @@ def test_runtime_loader_when_case_is_valid_returns_frozen_typed_contract(
     ("document", "match"),
     [
         (
-            _runtime_case(
-                "fixture://runtime/market_regime", ',\n  "unexpected": true'
-            ),
+            _runtime_case("fixture://runtime/market_regime", ',\n  "unexpected": true'),
             "unexpected",
         ),
         (

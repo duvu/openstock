@@ -155,7 +155,9 @@ def test_run_golden_corpus_when_three_paths_share_case_id_emits_one_failure_each
 
     # Then: each involved path receives exactly one stable duplicate diagnostic
     duplicates = tuple(
-        failure for failure in report.failures if failure.check_name == "duplicate_case_id"
+        failure
+        for failure in report.failures
+        if failure.check_name == "duplicate_case_id"
     )
     assert len(duplicates) == 3
     assert tuple(failure.path.name for failure in duplicates) == (

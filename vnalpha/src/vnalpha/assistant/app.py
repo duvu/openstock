@@ -12,7 +12,12 @@ if TYPE_CHECKING:
     from vnalpha.chat.context import ChatContext
     from vnalpha.tools.executor import TraceEvent
 
-from vnalpha.assistant.errors import AssistantError, RefusalError, SynthesisError
+from vnalpha.assistant.errors import (
+    AssistantError,
+    AssistantInputValidationError,
+    RefusalError,
+    SynthesisError,
+)
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.intent import IntentClassifier
 from vnalpha.assistant.models import (
@@ -29,6 +34,10 @@ from vnalpha.assistant.planner import PlanBuilder
 from vnalpha.assistant.policy import check_intent_policy, check_policy
 from vnalpha.assistant.research_templates import is_research_intent
 from vnalpha.assistant.synthesizer import AnswerSynthesizer
+from vnalpha.data_availability.dates import (
+    InvalidEnsureDateError,
+    normalize_optional_date,
+)
 from vnalpha.warehouse.assistant_repo import (
     create_assistant_session,
     create_llm_trace,
@@ -150,6 +159,14 @@ class AssistantApp:
         except Exception:  # noqa: BLE001
             pass
         try:
+            if request.date is not None:
+                try:
+                    normalize_optional_date(request.date)
+                except InvalidEnsureDateError as exc:
+                    raise AssistantInputValidationError(
+                        f"Invalid date value {request.date!r}; "
+                        "expected 'today' or ISO format YYYY-MM-DD."
+                    ) from exc
             check_policy(prompt)
             classify_trace_id = create_llm_trace(
                 self._conn,
@@ -159,7 +176,7 @@ class AssistantApp:
                 input_summary={"prompt_chars": len(prompt)},
             )
             try:
-                intent_result = self._classifier.classify(prompt)
+                intent_result = self._classifier.classify(prompt, session_id=session_id)
                 finish_llm_trace(
                     self._conn,
                     classify_trace_id,
@@ -205,6 +222,14 @@ class AssistantApp:
                 refusal_reason=str(exc),
             )
             return _refusal_result(exc)
+        except AssistantInputValidationError as exc:
+            finish_assistant_session(
+                self._conn,
+                session_id,
+                status="VALIDATION_ERROR",
+                error={"error_type": type(exc).__name__, "message": str(exc)},
+            )
+            raise
         except AssistantError as exc:
             finish_assistant_session(
                 self._conn,
@@ -257,6 +282,7 @@ class AssistantApp:
                 prepared.plan,
                 tool_outputs,
                 request=prepared.request,
+                session_id=prepared.assistant_session_id,
             )
             finish_llm_trace(
                 self._conn,

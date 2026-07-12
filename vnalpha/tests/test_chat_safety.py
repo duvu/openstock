@@ -141,6 +141,7 @@ class TestPermissionState:
             )
             == PermissionState.ASK
         )
+
     def test_manual_data_fetch_returns_deny(self):
         from vnalpha.chat.safety import PermissionState, get_permission_state
 

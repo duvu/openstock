@@ -346,6 +346,29 @@ async def test_wide_mount_emits_todo_panel_visible_event(
 
 @skip_if_no_textual
 @pytest.mark.asyncio
+async def test_repeated_layout_without_visibility_change_emits_no_duplicate_event(
+    mock_get_connection, tmp_path, monkeypatch
+) -> None:
+    from vnalpha.tui.app import VnAlphaApp
+
+    _workspace_root(tmp_path, monkeypatch)
+    with patch("vnalpha.tui.app._emit_audit_event") as emit_audit_event:
+        app = VnAlphaApp(date="2024-01-10")
+        async with app.run_test(headless=True, size=(140, 40)) as pilot:
+            await pilot.pause()
+            pilot.app._apply_responsive_layout()
+            await pilot.pause()
+
+    visibility_events = [
+        call
+        for call in emit_audit_event.call_args_list
+        if call.args[0] == "TUI_TODO_PANEL_VISIBLE"
+    ]
+    assert len(visibility_events) == 1
+
+
+@skip_if_no_textual
+@pytest.mark.asyncio
 async def test_narrow_mount_emits_todo_panel_hidden_event(
     mock_get_connection, tmp_path, monkeypatch
 ) -> None:

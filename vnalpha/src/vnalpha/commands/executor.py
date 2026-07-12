@@ -47,7 +47,11 @@ class CommandExecutor:
         self._default_date = default_date
 
     def execute(
-        self, command_text: str, *, date_override: str | None = None
+        self,
+        command_text: str,
+        *,
+        date_override: str | None = None,
+        session_scope_id: str | None = None,
     ) -> CommandResult:
         """Run a command and persist a research_session regardless of parse outcome."""
         session_id = create_research_session(
@@ -94,7 +98,7 @@ class CommandExecutor:
                 parsed,
                 conn=self._conn,
                 registry=self._registry,
-                session_id=session_id,
+                session_id=session_scope_id or session_id,
                 tool_executor=tool_executor,
             )
         except UnknownCommandError as exc:

@@ -57,19 +57,22 @@ def _ensure_data_for_step(conn, step: ToolPlanStep) -> None:
 
     args = step.arguments
     symbols: list[str] = []
-    if "symbol" in args:
+    if isinstance(args.get("symbol"), str) and args["symbol"].strip():
         symbols = [args["symbol"]]
     elif "symbols" in args:
         raw = args["symbols"]
-        symbols = list(raw) if isinstance(raw, (list, tuple)) else [raw]
+        if isinstance(raw, (list, tuple)):
+            symbols = [item for item in raw if isinstance(item, str) and item.strip()]
+        elif isinstance(raw, str) and raw.strip():
+            symbols = [raw]
+    if not symbols:
+        return
     date = normalize_date(args.get("date"))
     for symbol in symbols:
         try:
             ensure_symbol_analysis_ready(conn, symbol, date)
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Pre-execution data ensure failed for %s: %s", symbol, exc
-            )
+            logger.warning("Pre-execution data ensure failed for %s: %s", symbol, exc)
 
 
 class AssistantExecutor:

@@ -100,9 +100,7 @@ def parse(text: str) -> ParsedCommand:
             )
             filter_value = filter_value.strip()
             if filter_value.startswith((">", "<", "=", "!")):
-                raise CommandParseError(
-                    f"Malformed filter expression: {token!r}"
-                )
+                raise CommandParseError(f"Malformed filter expression: {token!r}")
             filters.append(
                 CommandFilter(
                     key=filter_key,

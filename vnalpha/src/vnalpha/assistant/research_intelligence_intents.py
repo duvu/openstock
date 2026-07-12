@@ -65,6 +65,5 @@ INTENT_EXAMPLES: Final[dict[str, str]] = {
 def classifier_lines() -> list[str]:
     """Return stable prompt lines for the classifier's supported-intent section."""
     return [
-        f"- {name}: {description}"
-        for name, description in INTENT_DESCRIPTIONS.items()
+        f"- {name}: {description}" for name, description in INTENT_DESCRIPTIONS.items()
     ]

@@ -191,6 +191,12 @@ Mode: general
 - /clear
 - /score
 - /score
+- /context status
+- /watchlist
+- what is the trend for FPT?
+- /clear
+- /score
+- /score
 
 ## Artifacts
 - None

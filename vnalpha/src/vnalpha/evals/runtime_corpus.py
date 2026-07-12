@@ -61,9 +61,7 @@ def _run_runtime_replay_corpus(root: Path) -> RuntimeReplayReport:
     seen_case_ids: set[str] = set()
     for path in paths:
         if path.is_symlink():
-            results.append(
-                _operational_failure(path.stem, "discovery", "symlink case")
-            )
+            results.append(_operational_failure(path.stem, "discovery", "symlink case"))
             continue
         try:
             path.resolve(strict=True).relative_to(resolved_root)
@@ -79,7 +77,12 @@ def _run_runtime_replay_corpus(root: Path) -> RuntimeReplayReport:
                 continue
             seen_case_ids.add(case.case_id)
             results.append(run_runtime_replay_case(case))
-        except (RuntimeReplayLoadError, AssistantError, ValueError, duckdb.Error) as error:
+        except (
+            RuntimeReplayLoadError,
+            AssistantError,
+            ValueError,
+            duckdb.Error,
+        ) as error:
             results.append(_operational_failure(path.stem, "runtime", str(error)))
     return RuntimeReplayReport(source_count=len(paths), cases=tuple(results))
 

@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from vnalpha.commands.errors import CommandValidationError
-from vnalpha.commands.models import CommandResult, CommandStatus, ParsedCommand, ResultPanel
+from vnalpha.commands.models import (
+    CommandResult,
+    CommandStatus,
+    ParsedCommand,
+    ResultPanel,
+)
 from vnalpha.model_routing import (
     DEFAULT_OVERRIDE_STORE,
     ModelProfile,
@@ -18,7 +23,12 @@ _ROUTE_STAGES = frozenset(
 )
 
 
-def handle_model(parsed: ParsedCommand, **_kwargs: Any) -> CommandResult:
+def handle_model(
+    parsed: ParsedCommand,
+    *,
+    session_id: str | None = None,
+    **_kwargs: Any,
+) -> CommandResult:
     subcommand = parsed.positional[0].lower() if parsed.positional else "status"
     if subcommand in _PROFILE_NAMES:
         parsed = ParsedCommand(
@@ -31,13 +41,13 @@ def handle_model(parsed: ParsedCommand, **_kwargs: Any) -> CommandResult:
         subcommand = "use"
 
     if subcommand == "status":
-        return _status_result()
+        return _status_result(session_id=session_id)
     if subcommand == "profiles":
         return _profiles_result()
     if subcommand == "use":
-        return _use_result(parsed)
+        return _use_result(parsed, session_id=session_id)
     if subcommand == "reset":
-        return _reset_result(parsed)
+        return _reset_result(parsed, session_id=session_id)
     if subcommand == "explain-route":
         return _explain_route_result(parsed)
     raise CommandValidationError(
@@ -46,9 +56,9 @@ def handle_model(parsed: ParsedCommand, **_kwargs: Any) -> CommandResult:
     )
 
 
-def _status_result() -> CommandResult:
+def _status_result(*, session_id: str | None = None) -> CommandResult:
     config = _load_config()
-    override = DEFAULT_OVERRIDE_STORE.get_current_override()
+    override = DEFAULT_OVERRIDE_STORE.get_current_override(session_id=session_id)
     last_route = get_last_route_decision()
     active_profile = override.session_profile or override.workspace_profile
     return CommandResult(
@@ -66,6 +76,7 @@ def _status_result() -> CommandResult:
                     "active_override": (
                         active_profile.value if active_profile is not None else None
                     ),
+                    "session_id": session_id,
                     "override_source": (
                         "session"
                         if override.session_profile is not None
@@ -117,7 +128,9 @@ def _profiles_result() -> CommandResult:
     )
 
 
-def _use_result(parsed: ParsedCommand) -> CommandResult:
+def _use_result(
+    parsed: ParsedCommand, *, session_id: str | None = None
+) -> CommandResult:
     if len(parsed.positional) < 2:
         raise CommandValidationError(
             "Usage: /model use <profile> [--scope session|workspace]."
@@ -130,7 +143,9 @@ def _use_result(parsed: ParsedCommand) -> CommandResult:
         parsed.options.get("scope", "workspace"), allowed={"session", "workspace"}
     )
     try:
-        override = DEFAULT_OVERRIDE_STORE.set_override(profile, scope=scope)
+        override = DEFAULT_OVERRIDE_STORE.set_override(
+            profile, scope=scope, session_id=session_id
+        )
     except (RuntimeError, ValueError) as exc:
         raise CommandValidationError(str(exc)) from exc
     active_profile = override.session_profile or override.workspace_profile
@@ -153,13 +168,15 @@ def _use_result(parsed: ParsedCommand) -> CommandResult:
     )
 
 
-def _reset_result(parsed: ParsedCommand) -> CommandResult:
+def _reset_result(
+    parsed: ParsedCommand, *, session_id: str | None = None
+) -> CommandResult:
     scope = _validated_scope(
         parsed.options.get("scope", "all"),
         allowed={"all", "session", "workspace"},
     )
     try:
-        DEFAULT_OVERRIDE_STORE.clear_override(scope=scope)
+        DEFAULT_OVERRIDE_STORE.clear_override(scope=scope, session_id=session_id)
     except ValueError as exc:
         raise CommandValidationError(str(exc)) from exc
     return CommandResult(
@@ -175,7 +192,9 @@ def _reset_result(parsed: ParsedCommand) -> CommandResult:
     )
 
 
-def _explain_route_result(parsed: ParsedCommand) -> CommandResult:
+def _explain_route_result(
+    parsed: ParsedCommand, *, session_id: str | None = None
+) -> CommandResult:
     if len(parsed.positional) < 2:
         raise CommandValidationError(
             "Usage: /model explain-route <stage-or-task> [--stage STAGE]."
@@ -200,7 +219,7 @@ def _explain_route_result(parsed: ParsedCommand) -> CommandResult:
         _load_config(),
         stage=stage,
         task_type=task_type,
-        override=DEFAULT_OVERRIDE_STORE.get_current_override(),
+        override=DEFAULT_OVERRIDE_STORE.get_current_override(session_id=session_id),
     )
     return CommandResult(
         status=CommandStatus.SUCCESS,
@@ -227,7 +246,9 @@ def _load_config() -> ModelRoutingConfig:
     try:
         return ModelRoutingConfig.from_env()
     except ValueError as exc:
-        raise CommandValidationError(f"Invalid model routing configuration: {exc}") from exc
+        raise CommandValidationError(
+            f"Invalid model routing configuration: {exc}"
+        ) from exc
 
 
 def _profile_models(config: ModelRoutingConfig) -> dict[str, str]:

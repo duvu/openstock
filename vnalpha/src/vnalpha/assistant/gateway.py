@@ -123,6 +123,8 @@ class LLMGatewayClient:
         model_profile: ModelProfile | str | None = None,
         route_metadata: Mapping[str, Any] | None = None,
     ) -> ModelRouteDecision:
+        session_value = route_metadata.get("session_id") if route_metadata else None
+        session_id = session_value if isinstance(session_value, str) else None
         return resolve_gateway_route(
             self._routing_config,
             GatewayRouteRequest(
@@ -130,7 +132,9 @@ class LLMGatewayClient:
                 task_type=task_type,
                 model_profile=model_profile,
                 route_metadata=route_metadata,
-                override=self._override_store.get_current_override(),
+                override=self._override_store.get_current_override(
+                    session_id=session_id
+                ),
             ),
         )
 
@@ -263,7 +267,9 @@ class LLMGatewayClient:
                 error = LLMResponseError(
                     f"LLM HTTP {status_code}: {exc.response.text[:200]}"
                 )
-                fallbackable = status_code in {400, 404, 408, 409, 429} or status_code >= 500
+                fallbackable = (
+                    status_code in {400, 404, 408, 409, 429} or status_code >= 500
+                )
                 retryable = status_code in {408, 409, 429} or status_code >= 500
                 if retryable and attempt < self._config.max_retries:
                     continue

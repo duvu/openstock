@@ -28,7 +28,9 @@ TOOL_CAPABILITIES: Final[tuple[ToolCapability, ...]] = (
     ToolCapability(
         "watchlist.summarize_deep", ToolPermission.READ_WATCHLIST, True, True, True
     ),
-    ToolCapability("shortlist.generate", ToolPermission.READ_WATCHLIST, True, True, True),
+    ToolCapability(
+        "shortlist.generate", ToolPermission.READ_WATCHLIST, True, True, True
+    ),
     ToolCapability("candidate.explain", ToolPermission.READ_SCORE, True, True, True),
     ToolCapability("candidate.compare", ToolPermission.READ_SCORE, True, True, True),
     ToolCapability("analysis.deep_symbol", ToolPermission.READ_SCORE, True, True, True),

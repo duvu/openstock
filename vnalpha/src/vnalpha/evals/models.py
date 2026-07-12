@@ -105,10 +105,10 @@ class OfflineObservedAnswerClaim(BaseModel):
 
     @field_validator("fact_ids")
     @classmethod
-    def _validate_fact_ids(
-        cls, fact_ids: tuple[FactId, ...]
-    ) -> tuple[FactId, ...]:
-        parsed = tuple(FactId(parse_logical_identifier(fact_id)) for fact_id in fact_ids)
+    def _validate_fact_ids(cls, fact_ids: tuple[FactId, ...]) -> tuple[FactId, ...]:
+        parsed = tuple(
+            FactId(parse_logical_identifier(fact_id)) for fact_id in fact_ids
+        )
         _require_unique(parsed, "observed fact_id")
         return parsed
 

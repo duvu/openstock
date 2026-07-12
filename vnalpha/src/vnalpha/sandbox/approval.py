@@ -42,10 +42,19 @@ class SandboxApproval:
         """Create a validated, immutable approval record."""
         _validate_digest("plan_digest", plan_digest)
         _validate_digest("code_digest", code_digest)
-        if not job_id or not correlation_id or not approver.strip() or approved_at.tzinfo is None:
-            raise ValueError("sandbox approval requires job, correlation, approver, and timestamp")
+        if (
+            not job_id
+            or not correlation_id
+            or not approver.strip()
+            or approved_at.tzinfo is None
+        ):
+            raise ValueError(
+                "sandbox approval requires job, correlation, approver, and timestamp"
+            )
         if any(not value or "\x00" in value for value in input_references):
-            raise ValueError("sandbox approval input references must be non-empty strings")
+            raise ValueError(
+                "sandbox approval input references must be non-empty strings"
+            )
         references_json = _references_json(input_references)
         return cls(
             approval_id=uuid4().hex,
@@ -53,7 +62,9 @@ class SandboxApproval:
             plan_digest=plan_digest,
             code_digest=code_digest,
             input_references=input_references,
-            input_references_digest=hashlib.sha256(references_json.encode()).hexdigest(),
+            input_references_digest=hashlib.sha256(
+                references_json.encode()
+            ).hexdigest(),
             correlation_id=correlation_id,
             approver=approver.strip(),
             approved_at=approved_at,
@@ -120,7 +131,9 @@ class SandboxApprovalRepository:
 
 
 def _validate_digest(name: str, value: str) -> None:
-    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+    if len(value) != 64 or any(
+        character not in "0123456789abcdef" for character in value
+    ):
         raise ValueError(f"sandbox approval {name} must be a SHA-256 hex digest")
 
 

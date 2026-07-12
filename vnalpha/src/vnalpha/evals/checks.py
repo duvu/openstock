@@ -35,7 +35,9 @@ __all__ = [
 ]
 
 
-def evaluate_case(case: GoldenCase, observation: EvaluationObservation) -> EvaluationResult:
+def evaluate_case(
+    case: GoldenCase, observation: EvaluationObservation
+) -> EvaluationResult:
     """Evaluate a case solely against its typed local observation."""
 
     return EvaluationResult(
@@ -76,7 +78,9 @@ def _groundedness(case: GoldenCase, observation: EvaluationObservation) -> Check
                     observed_fact_id,
                 )
     for required_claim in case.required_claims:
-        observed_claim = _claim_by_id(observation.observed_claims, required_claim.claim_id)
+        observed_claim = _claim_by_id(
+            observation.observed_claims, required_claim.claim_id
+        )
         if observed_claim is None:
             actual = (
                 ", ".join(claim.claim_id for claim in observation.observed_claims)
@@ -114,7 +118,9 @@ def _claim_by_id(
     return None
 
 
-def _required_caveat(case: GoldenCase, observation: EvaluationObservation) -> CheckResult:
+def _required_caveat(
+    case: GoldenCase, observation: EvaluationObservation
+) -> CheckResult:
     texts = (observation.answer_text, *observation.caveats)
     for caveat in case.required_caveats:
         if not _contains_text(texts, caveat):
@@ -125,7 +131,9 @@ def _required_caveat(case: GoldenCase, observation: EvaluationObservation) -> Ch
                 "answer and observed caveats omit required caveat",
             )
     match case:
-        case HistoricalEvidenceGoldenCase() if case.sample_size < case.minimum_sample_size:
+        case HistoricalEvidenceGoldenCase() if (
+            case.sample_size < case.minimum_sample_size
+        ):
             if not _contains_text(texts, case.caveat):
                 return failed_check(
                     case.case_id,

@@ -316,7 +316,7 @@ if [[ -n "${DEB_FILE}" ]]; then
 
     # Check required files are in the .deb
     for entry in "./usr/bin/vnalpha" "./usr/bin/vnalpha-poc" "./etc/vnalpha/vnalpha.env"; do
-      if dpkg -c "${DEB_FILE}" | grep -q "${entry}"; then
+      if dpkg -c "${DEB_FILE}" | grep -F "${entry}" >/dev/null; then
         ok ".deb contains: ${entry}"
       else
         fail ".deb missing: ${entry}"
@@ -324,11 +324,42 @@ if [[ -n "${DEB_FILE}" ]]; then
     done
 
     # Warehouse must NOT be in the .deb
-    if dpkg -c "${DEB_FILE}" | grep -q "warehouse"; then
+    if dpkg -c "${DEB_FILE}" | grep -F "warehouse" >/dev/null; then
       fail ".deb contains warehouse path (it must not be packaged)"
     else
       ok ".deb does not package warehouse (correct)"
     fi
+
+    DEB_ROOT="$(mktemp -d /tmp/vnalpha-deb-test.XXXXXX)"
+    dpkg-deb --extract "${DEB_FILE}" "${DEB_ROOT}"
+    VNALPHA_WHEEL="$(find "${DEB_ROOT}/opt/vnalpha/wheels" -maxdepth 1 -name 'vnalpha-*.whl' -print -quit)"
+    if [[ -n "${VNALPHA_WHEEL}" ]]; then
+      ok ".deb bundles the vnalpha application wheel"
+      if unzip -Z1 "${VNALPHA_WHEEL}" | grep -F "vnalpha/evals/runtime_cases/invalid_explicit_date.json" >/dev/null; then
+        ok ".deb application wheel bundles runtime eval resources"
+      else
+        fail ".deb application wheel is missing runtime eval resources"
+      fi
+      DEB_EVAL_ROOT="$(mktemp -d /tmp/vnalpha-deb-eval.XXXXXX)"
+      if python3 -m pip install --quiet --no-deps --target "${DEB_EVAL_ROOT}" "${VNALPHA_WHEEL}"; then
+        if PYTHONPATH="${DEB_EVAL_ROOT}" python3 -c 'from vnalpha.cli import app; app()' eval research-answers --ci >/dev/null; then
+          ok ".deb application wheel runs fixture-contract eval"
+        else
+          fail ".deb application wheel fixture-contract eval failed"
+        fi
+        if PYTHONPATH="${DEB_EVAL_ROOT}" python3 -c 'from vnalpha.cli import app; app()' eval research-runtime --ci >/dev/null; then
+          ok ".deb application wheel runs runtime-replay eval"
+        else
+          fail ".deb application wheel runtime-replay eval failed"
+        fi
+      else
+        fail ".deb application wheel could not be installed into an isolated target"
+      fi
+      rm -rf "${DEB_EVAL_ROOT}"
+    else
+      fail ".deb is missing the vnalpha application wheel"
+    fi
+    rm -rf "${DEB_ROOT}"
   else
     echo "[SKIP] dpkg-deb not available"
   fi

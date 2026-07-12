@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -95,3 +96,36 @@ async def test_workspace_input_failure_does_not_block_command(
 
     router._command_executor.execute.assert_called_once_with("/scan")
     output.show_command_result.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_router_scopes_session_aware_commands_to_chat_session(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from vnalpha.commands.models import CommandResult
+    from vnalpha.tui.input_router import TuiInputRouter
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    class SessionAwareExecutor:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str | None]] = []
+
+        def execute(self, raw: str, *, session_scope_id: str | None = None):
+            self.calls.append((raw, session_scope_id))
+            return CommandResult(status="SUCCESS", title="scan", summary="ok")
+
+    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
+    output = MagicMock(spec=OutputStream)
+    with patch.object(TuiInputRouter, "_setup_controller"):
+        with patch.object(TuiInputRouter, "_setup_executor"):
+            router = TuiInputRouter(
+                output_stream=output,
+                workspace=create_workspace(root=tmp_path),
+            )
+    executor = SessionAwareExecutor()
+    router._command_executor = executor
+    router._chat_controller = SimpleNamespace(_chat_session_id="chat-session-a")
+
+    await router.route("/scan")
+
+    assert executor.calls == [("/scan", "chat-session-a")]
