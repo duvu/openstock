@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import TypedDict, final, override
@@ -17,7 +18,12 @@ from vnalpha.sandbox.layout import SandboxArtifactLayout
 from vnalpha.sandbox.models import SandboxJob
 from vnalpha.sandbox.output_validation import SandboxOutputValidationResult
 from vnalpha.sandbox.static_guard import SandboxGuardResult
-from vnalpha.sandbox.storage import SandboxArtifactStorage
+from vnalpha.sandbox.storage import (
+    SandboxArtifactNotFoundError,
+    SandboxArtifactStorage,
+)
+
+_MAX_LIFECYCLE_BYTES = 65_536
 
 
 class _ResourceLimitsPayload(TypedDict):
@@ -126,7 +132,9 @@ class SandboxArtifactWriter:
             self._layout.request.as_posix(), request_bytes
         )
         _ = self._storage.write_atomic_bytes(
-            self._layout.generated_code.as_posix(), code_bytes
+            self._layout.generated_code.as_posix(),
+            code_bytes,
+            mode=0o644,
         )
         _ = self._storage.write_atomic_bytes(
             self._layout.input_references.as_posix(), references_bytes
@@ -186,6 +194,31 @@ class SandboxArtifactWriter:
                 _entry(stderr_path, evidence.stderr, "text/plain"),
                 _entry(execution_path, execution_bytes, "application/json"),
             ),
+        )
+
+    def persist_lifecycle_event(self, payload: dict[str, object]) -> None:
+        host_entries = self._host_entries
+        if host_entries is None:
+            raise SandboxArtifactWriterStateError()
+        lifecycle_path = self._layout.lifecycle.as_posix()
+        try:
+            existing = self._storage.read_bounded_regular_file(
+                lifecycle_path, max_bytes=_MAX_LIFECYCLE_BYTES
+            )
+        except SandboxArtifactNotFoundError:
+            existing = b""
+        line = (
+            json.dumps(
+                payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+            )
+            + "\n"
+        ).encode("utf-8")
+        content = existing + line
+        self._storage.invalidate_file(self._layout.manifest.as_posix())
+        _ = self._storage.write_atomic_bytes(lifecycle_path, content)
+        self._host_entries = _replace_entries(
+            host_entries,
+            (_entry(lifecycle_path, content, "application/x-ndjson"),),
         )
 
     def persist_validation_and_manifest(

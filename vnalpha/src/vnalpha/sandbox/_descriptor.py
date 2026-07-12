@@ -83,19 +83,27 @@ def open_directory(path: Path, raw_path: str) -> int:
         raise SandboxArtifactPathError(raw_path) from exc
 
 
-def open_or_create_directory(parent_fd: int, component: str, raw_path: str) -> int:
+def open_or_create_directory(
+    parent_fd: int,
+    component: str,
+    raw_path: str,
+    *,
+    mode: int = 0o700,
+) -> int:
     """Open or create one descriptor-relative directory component."""
 
     try:
-        os.mkdir(component, mode=0o700, dir_fd=parent_fd)
+        os.mkdir(component, mode=mode, dir_fd=parent_fd)
     except FileExistsError:
         _ = os.lstat(component, dir_fd=parent_fd)
     try:
-        return os.open(
+        directory_fd = os.open(
             component,
             os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
             dir_fd=parent_fd,
         )
+        os.fchmod(directory_fd, mode)
+        return directory_fd
     except OSError as exc:
         raise SandboxArtifactPathError(raw_path) from exc
 

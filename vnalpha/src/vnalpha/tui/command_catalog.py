@@ -36,6 +36,59 @@ def _static_catalog() -> list[UiCommand]:
             examples=("/scan", "/scan VN30", "/scan --date 2026-07-06"),
         ),
         UiCommand(
+            name="analyze",
+            description="Return deep persisted research analysis for one symbol.",
+            usage="/analyze SYMBOL [--date YYYY-MM-DD]",
+            category="Research",
+            examples=("/analyze FPT", "/analyze FPT --date 2026-07-06"),
+        ),
+        UiCommand(
+            name="watchlist-summary",
+            description="Summarize persisted watchlist structure by class, setup, sector, and risk.",
+            usage="/watchlist-summary [--date YYYY-MM-DD] [--top N]",
+            category="Research",
+            examples=(
+                "/watchlist-summary",
+                "/watchlist-summary --date 2026-07-06",
+                "/watchlist-summary --top 20",
+            ),
+        ),
+        UiCommand(
+            name="shortlist",
+            description="Build a deterministic research shortlist from persisted watchlist evidence.",
+            usage=(
+                "/shortlist [--date YYYY-MM-DD] [--limit N] "
+                "[--setup SETUP] [--sector SECTOR] [--min-score SCORE]"
+            ),
+            category="Research",
+            examples=(
+                "/shortlist",
+                "/shortlist --date 2026-07-06",
+                "/shortlist --setup MOMENTUM_CONTINUATION",
+                "/shortlist --sector TECHNOLOGY",
+            ),
+        ),
+        UiCommand(
+            name="research-plan",
+            description="Build a conditional research-only scenario plan for one symbol.",
+            usage="/research-plan SYMBOL [--date YYYY-MM-DD]",
+            category="Research",
+            examples=(
+                "/research-plan FPT",
+                "/research-plan FPT --date 2026-07-06",
+            ),
+        ),
+        UiCommand(
+            name="setup-evidence",
+            description="Return persisted historical evidence for a setup type or symbol.",
+            usage="/setup-evidence SETUP_TYPE|SYMBOL [--horizon N] [--date YYYY-MM-DD]",
+            category="Research",
+            examples=(
+                "/setup-evidence ACCUMULATION_BASE",
+                "/setup-evidence FPT --date 2026-07-06",
+            ),
+        ),
+        UiCommand(
             name="filter",
             description="Filter candidate scores by deterministic conditions.",
             usage="/filter FILTER_EXPR [--date YYYY-MM-DD]",

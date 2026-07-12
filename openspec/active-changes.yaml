@@ -73,7 +73,7 @@ changes:
     summary: "Setup-cohort historical evidence with sample-size and regime caveats."
     evidence: "Setup-history tool/intent/template exist; richer distributions, FAE/AAE, regime split, command, and persistence remain."
   tui-research-workflow-polish:
-    status: planned
+    status: partial
     priority: P3
     blocked_by:
       - openstock-four-phase-hardening
@@ -82,7 +82,7 @@ changes:
       - research-scenario-plan-engine
       - setup-historical-evidence-engine
     summary: "Composer-first rendering and drill-down for completed research-intelligence contracts."
-    evidence: "Generic output stream exists; dedicated workflow polish is intentionally deferred."
+    evidence: "Composer-first TUI now renders `/analyze`, `/watchlist-summary`, `/shortlist`, `/research-plan`, and `/setup-evidence` with artifact-aware status/warnings plus detail/back/id/note/assistant helpers; focused pytest coverage and headless manual QA confirm transcript restoration and read-only workflow navigation while upstream research engines remain partial."
   tui-slash-command-on-typing-search:
     status: in_progress
     priority: P3

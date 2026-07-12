@@ -88,7 +88,7 @@ class SandboxArtifactStorage:
 
         return self.write_atomic_bytes(raw_path, content)
 
-    def ensure_directory(self, raw_path: str) -> Path:
+    def ensure_directory(self, raw_path: str, *, mode: int = 0o700) -> Path:
         """Create and return a directory contained below this job descriptor."""
 
         parts = _descriptor.parse_artifact_parts(raw_path)
@@ -96,7 +96,10 @@ class SandboxArtifactStorage:
         try:
             for component in parts:
                 next_fd = _descriptor.open_or_create_directory(
-                    current_fd, component, raw_path
+                    current_fd,
+                    component,
+                    raw_path,
+                    mode=mode,
                 )
                 os.close(current_fd)
                 current_fd = next_fd
@@ -104,7 +107,13 @@ class SandboxArtifactStorage:
             os.close(current_fd)
         return self.job_dir.joinpath(*parts)
 
-    def write_atomic_bytes(self, raw_path: str, content: bytes) -> Path:
+    def write_atomic_bytes(
+        self,
+        raw_path: str,
+        content: bytes,
+        *,
+        mode: int = 0o600,
+    ) -> Path:
         """Atomically replace bytes through Linux descriptors without following symlinks."""
 
         parts = _descriptor.parse_artifact_parts(raw_path)
@@ -118,7 +127,7 @@ class SandboxArtifactStorage:
                 os.close(current_fd)
                 current_fd = next_fd
             try:
-                write_atomic_file(current_fd, parts[-1], content)
+                write_atomic_file(current_fd, parts[-1], content, mode=mode)
             except OSError as exc:
                 raise SandboxArtifactPathError(raw_path) from exc
         finally:

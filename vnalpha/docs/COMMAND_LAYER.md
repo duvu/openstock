@@ -37,6 +37,11 @@ Symbols are normalised to uppercase. Candidate classes and setup types are norma
 | Command | Description | Example |
 |---------|-------------|---------|
 | `/scan` | Return ranked research candidates from watchlist | `/scan VN30 --date today` |
+| `/analyze` | Deep persisted research analysis for one symbol | `/analyze FPT --date today` |
+| `/watchlist-summary` | Structural watchlist synthesis with groups and caveats | `/watchlist-summary --top 20` |
+| `/shortlist` | Deterministic research shortlist from persisted watchlist evidence | `/shortlist --limit 8` |
+| `/research-plan` | Conditional research-only scenario planning | `/research-plan FPT` |
+| `/setup-evidence` | Historical evidence for a setup type or symbol | `/setup-evidence ACCUMULATION_BASE --horizon 20` |
 | `/filter` | Filter candidates by deterministic conditions | `/filter score>=0.70 setup=ACCUMULATION_BASE` |
 | `/compare` | Side-by-side comparison of symbols | `/compare FPT VNM MWG` |
 | `/explain` | Full evidence breakdown for one symbol | `/explain FPT --date 2026-07-01` |
@@ -73,6 +78,51 @@ Compares two or more symbols. Shows score breakdown, setup type, risk flags, and
 ```bash
 vnalpha cmd "/compare FPT VNM"
 vnalpha cmd "/compare FPT VNM MWG --date 2026-07-01"
+```
+
+### `/analyze`
+
+Deep persisted research analysis for one symbol. Output favors semantic blocks over raw rows: quality and freshness, trend and momentum, relative strength and volume, volatility and levels, setup quality, and scenario summary.
+
+```bash
+vnalpha cmd "/analyze FPT"
+vnalpha cmd "/analyze FPT --date 2026-07-01"
+```
+
+### `/watchlist-summary`
+
+Aggregates the persisted watchlist into candidate-class, setup, sector, quality, and risk distributions plus top candidates.
+
+```bash
+vnalpha cmd "/watchlist-summary"
+vnalpha cmd "/watchlist-summary --top 20"
+```
+
+### `/shortlist`
+
+Builds a deterministic research shortlist with caveated risk flags and methodological disclosure.
+
+```bash
+vnalpha cmd "/shortlist"
+vnalpha cmd "/shortlist --setup MOMENTUM_CONTINUATION --limit 8"
+```
+
+### `/research-plan`
+
+Builds a conditional, research-only scenario plan for one symbol using persisted deep-analysis context.
+
+```bash
+vnalpha cmd "/research-plan FPT"
+vnalpha cmd "/research-plan FPT --date 2026-07-01"
+```
+
+### `/setup-evidence`
+
+Returns persisted historical setup evidence by setup type. When given a symbol, the command resolves the latest persisted setup type first.
+
+```bash
+vnalpha cmd "/setup-evidence ACCUMULATION_BASE --horizon 20"
+vnalpha cmd "/setup-evidence FPT --date 2026-07-01"
 ```
 
 ### `/explain`

@@ -17,7 +17,9 @@ from vnalpha.tui.models.conversation import (
 
 if TYPE_CHECKING:
     from vnalpha.commands.executor import TraceEvent
+    from vnalpha.commands.models import CommandResult
     from vnalpha.tui.models.conversation import ConversationMessage
+    from vnalpha.tui.research_navigation import ArtifactDetailState
 
 try:
     from rich.console import RenderableType
@@ -49,6 +51,10 @@ if _TEXTUAL_AVAILABLE:
             super().__init__(**kwargs)
             self._max_messages = max(50, max_messages)
             self._messages: list[ConversationMessage] = []
+            self._latest_artifact_states: tuple[ArtifactDetailState, ...] = ()
+            self._artifact_stack: list[ArtifactDetailState] = []
+            self._artifact_snapshot_stack: list[tuple[str, ...]] = []
+            self._detail_mode = False
 
         def compose(self) -> ComposeResult:
             yield RichLog(id="output-log", markup=False, wrap=True, highlight=False)
@@ -63,6 +69,10 @@ if _TEXTUAL_AVAILABLE:
             self._messages.append(message)
             if len(self._messages) > self._max_messages:
                 self._messages = self._messages[-self._max_messages :]
+            if self._detail_mode:
+                self._detail_mode = False
+                self.clear_visible()
+                self._rerender_messages()
             self._render_typed_message(message)
 
         def show_user_input(self, text: str, *, prompt_type: str = "natural") -> None:
@@ -161,6 +171,62 @@ if _TEXTUAL_AVAILABLE:
                 self.query_one("#output-log", RichLog).clear()
             except Exception:
                 pass
+
+        def register_command_result(
+            self,
+            command: str,
+            result: "CommandResult",
+        ) -> None:
+            try:
+                from vnalpha.tui.research_navigation import build_artifact_states
+
+                self._latest_artifact_states = build_artifact_states(command, result)
+            except Exception as exc:  # noqa: BLE001
+                self._capture_render_error(exc)
+
+        def open_latest_artifact_detail(self) -> bool:
+            if not self._latest_artifact_states:
+                return False
+            return self.open_artifact_detail(self._latest_artifact_states[-1].artifact_id)
+
+        def open_artifact_detail(self, artifact_id: str) -> bool:
+            state = self._artifact_state(artifact_id)
+            if state is None:
+                return False
+            self._artifact_snapshot_stack.append(self._capture_visible_lines())
+            self._artifact_stack.append(state)
+            self._detail_mode = True
+            self.clear_visible()
+            self._write(self._artifact_renderable(state))
+            return True
+
+        def navigate_back(self) -> bool:
+            if not self._artifact_stack:
+                return False
+            self._artifact_stack.pop()
+            snapshot = (
+                self._artifact_snapshot_stack.pop()
+                if self._artifact_snapshot_stack
+                else ()
+            )
+            self._detail_mode = bool(self._artifact_stack)
+            self._restore_visible_lines(snapshot)
+            return True
+
+        def current_artifact_id(self) -> str | None:
+            if not self._artifact_stack:
+                return None
+            return self._artifact_stack[-1].artifact_id
+
+        def note_command_for_current_artifact(self) -> str | None:
+            if not self._artifact_stack:
+                return None
+            return self._artifact_stack[-1].note_command
+
+        def assistant_prompt_for_current_artifact(self) -> str | None:
+            if not self._artifact_stack:
+                return None
+            return self._artifact_stack[-1].assistant_prompt
 
         def append_activity(
             self,
@@ -326,6 +392,41 @@ if _TEXTUAL_AVAILABLE:
             except Exception:
                 pass
 
+        def _artifact_state(self, artifact_id: str) -> "ArtifactDetailState" | None:
+            for state in self._latest_artifact_states:
+                if state.artifact_id == artifact_id:
+                    return state
+            return None
+
+        def _artifact_renderable(self, state: "ArtifactDetailState") -> "RenderableType":
+            from vnalpha.tui.research_navigation import artifact_detail_renderable
+
+            return artifact_detail_renderable(state)
+
+        def _capture_visible_lines(self) -> tuple[str, ...]:
+            try:
+                log = self.query_one("#output-log", RichLog)
+            except Exception:
+                return ()
+
+            snapshot: list[str] = []
+            for line in log.lines:
+                snapshot.append(
+                    getattr(line, "plain", getattr(line, "text", str(line)))
+                )
+            return tuple(snapshot)
+
+        def _restore_visible_lines(self, snapshot: tuple[str, ...]) -> None:
+            self.clear_visible()
+            if not snapshot:
+                return
+            for line in snapshot:
+                self._write(self._safe_text(line))
+
+        def _rerender_messages(self) -> None:
+            for message in self._messages:
+                self._render_typed_message(message)
+
 else:
 
     class OutputStream:  # type: ignore[no-redef]
@@ -335,6 +436,9 @@ else:
             del kwargs
             self._max_messages = max(50, max_messages)
             self._messages: list[object] = []
+            self._latest_artifact_states: tuple[object, ...] = ()
+            self._artifact_stack: list[object] = []
+            self._artifact_snapshot_stack: list[tuple[str, ...]] = []
 
         def append_message(self, message: "ConversationMessage") -> None:
             self._messages.append(message)
@@ -390,6 +494,28 @@ else:
 
         def append_assistant_answer(self, answer: "AssistantAnswerMessage") -> None:
             del answer
+
+        def register_command_result(self, command: str, result: "CommandResult") -> None:
+            del command, result
+
+        def open_latest_artifact_detail(self) -> bool:
+            return False
+
+        def open_artifact_detail(self, artifact_id: str) -> bool:
+            del artifact_id
+            return False
+
+        def navigate_back(self) -> bool:
+            return False
+
+        def current_artifact_id(self) -> str | None:
+            return None
+
+        def note_command_for_current_artifact(self) -> str | None:
+            return None
+
+        def assistant_prompt_for_current_artifact(self) -> str | None:
+            return None
 
         def render_messages(self) -> tuple["ConversationMessage", ...]:
             return tuple(self._messages)

@@ -85,6 +85,7 @@ if _TEXTUAL_AVAILABLE:
         ]
 
         _FALLBACK_COMMAND_NAMES: list[str] = [
+            "analyze",
             "chat",
             "compare",
             "context",
@@ -93,7 +94,11 @@ if _TEXTUAL_AVAILABLE:
             "help",
             "history",
             "lineage",
+            "shortlist",
             "market-regime",
+            "research-plan",
+            "setup-evidence",
+            "watchlist-summary",
             "model",
             "note",
             "quality",
@@ -282,6 +287,15 @@ if _TEXTUAL_AVAILABLE:
             except Exception:
                 pass
 
+        def set_text(self, value: str) -> None:
+            try:
+                inp = self.query_one("#composer-input-field", Input)
+                inp.value = value
+                inp.cursor_position = len(value)
+                self._render_suggestions(value)
+            except Exception:
+                pass
+
         def focus_input(self) -> None:
             """Focus the underlying Input widget."""
             try:
@@ -361,6 +375,9 @@ else:
 
         def clear_input(self) -> None:
             pass
+
+        def set_text(self, value: str) -> None:
+            del value
 
         def focus_input(self) -> None:
             pass

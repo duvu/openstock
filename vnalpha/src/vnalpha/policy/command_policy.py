@@ -12,6 +12,11 @@ COMMAND_PERMISSIONS: Final[Mapping[str, tuple[ToolPermission, ...]]] = MappingPr
         "market-regime": (ToolPermission.READ_FEATURES,),
         "sector-strength": (ToolPermission.READ_FEATURES,),
         "scan": (ToolPermission.READ_WATCHLIST,),
+        "analyze": (ToolPermission.READ_SCORE,),
+        "watchlist-summary": (ToolPermission.READ_WATCHLIST,),
+        "shortlist": (ToolPermission.READ_WATCHLIST,),
+        "research-plan": (ToolPermission.READ_SCORE,),
+        "setup-evidence": (ToolPermission.READ_HISTORY,),
         "filter": (ToolPermission.READ_SCORE,),
         "compare": (ToolPermission.READ_SCORE,),
         "explain": (

@@ -34,6 +34,7 @@ from vnalpha.assistant.planner import PlanBuilder
 from vnalpha.assistant.policy import check_intent_policy, check_policy
 from vnalpha.assistant.research_templates import is_research_intent
 from vnalpha.assistant.synthesizer import AnswerSynthesizer
+from vnalpha.assistant.tool_policy import is_approval_required_plan
 from vnalpha.data_availability.dates import (
     InvalidEnsureDateError,
     normalize_optional_date,
@@ -135,6 +136,8 @@ class AssistantApp:
         prepared = self.prepare(request)
         if isinstance(prepared, tuple):
             return prepared
+        if is_approval_required_plan(prepared.plan):
+            return self._preview_prepared(prepared)
         if no_execute:
             return self._preview_prepared(prepared)
         return self.execute_prepared(prepared, on_trace_event=on_trace_event)
@@ -196,6 +199,13 @@ class AssistantApp:
                 intent_result.entities["date"] = request.date
             check_intent_policy(intent_result)
             plan = self._planner.build(intent_result)
+            if is_approval_required_plan(plan):
+                from vnalpha.sandbox.execution_service import SandboxExecutionService
+
+                plan = SandboxExecutionService(
+                    self._conn,
+                    surface=self._surface,
+                ).materialize_assistant_plan(plan)
             turn = PreparedAssistantTurn(
                 prepared_turn_id=f"turn-{uuid4().hex}",
                 assistant_session_id=session_id,
@@ -261,6 +271,29 @@ class AssistantApp:
                 },
             )
             raise ValueError("Prepared plan hash mismatch; execution refused.")
+        if is_approval_required_plan(prepared.plan):
+            from vnalpha.sandbox.execution_service import SandboxExecutionService
+
+            answer = SandboxExecutionService(
+                self._conn,
+                surface=self._surface,
+            ).execute_prepared_turn(prepared)
+            finish_assistant_session(
+                self._conn,
+                prepared.assistant_session_id,
+                status="SUCCESS",
+                intent=prepared.intent_result.intent,
+                plan=prepared.plan.to_dict(),
+                answer=answer.to_dict(),
+            )
+            finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="EXECUTED")
+            try:
+                from vnalpha.observability.trace import log_trace
+
+                log_trace("ASSISTANT_EXECUTED", "execute_prepared", status="SUCCESS")
+            except Exception:  # noqa: BLE001
+                pass
+            return answer, prepared.plan
         from vnalpha.assistant.executor import AssistantExecutor
 
         executor = AssistantExecutor(

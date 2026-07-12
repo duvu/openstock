@@ -46,10 +46,11 @@ class StatusAdapter:
         status: CommandStatus,
         summary: str | None,
         warnings: list[str],
+        metadata: dict[str, object] | None = None,
     ) -> None:
         """Project command result semantics onto an operator-visible state."""
 
-        detail = "; ".join(warnings[:2]) or (summary or "")
+        detail = _command_detail(summary=summary, warnings=warnings, metadata=metadata)
         match status:
             case CommandStatus.SUCCESS:
                 self.warning(detail) if warnings else self.ready()
@@ -80,3 +81,16 @@ class StatusAdapter:
             )
         except Exception:
             pass
+
+
+def _command_detail(
+    *,
+    summary: str | None,
+    warnings: list[str],
+    metadata: dict[str, object] | None,
+) -> str:
+    if isinstance(metadata, dict):
+        artifact_id = metadata.get("artifact_id")
+        if isinstance(artifact_id, str) and artifact_id:
+            return artifact_id
+    return "; ".join(warnings[:2]) or (summary or "")

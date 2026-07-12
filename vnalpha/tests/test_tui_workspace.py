@@ -124,6 +124,22 @@ async def test_9_4_exactly_one_input_widget(mock_get_connection):
         assert len(inputs) == 1
 
 
+@skip_if_no_textual
+@pytest.mark.asyncio
+async def test_9_4b_narrow_terminal_hides_optional_panel(
+    mock_get_connection, monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    from vnalpha.tui.app import VnAlphaApp
+    from vnalpha.tui.widgets.output_stream import OutputStream
+    from vnalpha.tui.widgets.todo_panel import TodoPanel
+
+    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
+    app = VnAlphaApp(date="2024-01-10")
+    async with app.run_test(headless=True, size=(90, 30)) as pilot:
+        assert pilot.app.query_one("#output-stream", OutputStream) is not None
+        assert pilot.app.query_one("#todo-panel", TodoPanel).display is False
+
+
 # ---------------------------------------------------------------------------
 # 9.5  ContentSwitcher does NOT exist in default DOM
 # ---------------------------------------------------------------------------
@@ -227,6 +243,18 @@ def test_9_10_composer_input_message_type():
 
     msg = ComposerInput.ComposerSubmitted(text="hello")
     assert msg.text == "hello"
+
+
+def test_9_10b_no_execution_controls_in_bindings() -> None:
+    from vnalpha.tui.app import VnAlphaApp
+
+    action_names = {binding.action for binding in VnAlphaApp.BINDINGS}
+    forbidden_terms = {"trade", "order", "broker", "account", "portfolio"}
+
+    assert {"open_artifact_detail", "artifact_back", "save_artifact_note"} <= action_names
+    for action_name in action_names:
+        for term in forbidden_terms:
+            assert term not in action_name
 
 
 # ---------------------------------------------------------------------------

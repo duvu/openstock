@@ -23,6 +23,12 @@ class CommandPath:
     async def route(self, router: TuiInputRouter, raw: str) -> None:
         router._emit_routed("command", raw)
         router._set_status_command(raw)
+        if _is_research_workflow(raw):
+            router._output.append_activity(
+                raw,
+                detail="research workflow running",
+                kind="running",
+            )
         try:
             if router._command_executor is None:
                 router._output.show_error(
@@ -41,6 +47,7 @@ class CommandPath:
                     execute = partial(execute, session_scope_id=session_id)
                 result = await anyio.to_thread.run_sync(execute, raw)
             router._output.show_command_result(raw, self.result_to_markup(result))
+            router._output.register_command_result(raw, result)
             workspace_changed = router._refresh_workspace_after_context_command(
                 raw, result.status
             )
@@ -51,7 +58,14 @@ class CommandPath:
                 result.status,
                 result.summary,
                 result.warnings,
+                result.metadata,
             )
+            if _is_research_workflow(raw):
+                router._output.append_activity(
+                    raw,
+                    detail=_workflow_detail(result),
+                    kind="done",
+                )
         except Exception as exc:
             router._output.show_error(str(exc), source="command")
             router._set_status_error(str(exc))
@@ -85,3 +99,24 @@ class CommandPath:
             return result_to_markup(result)
         except Exception:
             return str(result) if result is not None else ""
+
+
+def _is_research_workflow(raw: str) -> bool:
+    command_name = raw.split(maxsplit=1)[0].lstrip("/")
+    return command_name in {
+        "analyze",
+        "market-regime",
+        "sector-strength",
+        "watchlist-summary",
+        "shortlist",
+        "research-plan",
+        "setup-evidence",
+    }
+
+
+def _workflow_detail(result: CommandResult) -> str:
+    metadata = result.metadata if isinstance(result.metadata, dict) else {}
+    artifact_id = metadata.get("artifact_id")
+    if isinstance(artifact_id, str) and artifact_id:
+        return artifact_id
+    return result.summary or result.title

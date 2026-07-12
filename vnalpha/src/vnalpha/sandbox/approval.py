@@ -129,6 +129,34 @@ class SandboxApprovalRepository:
             approved_at=row[8],
         )
 
+    def list_for_job(self, job_id: SandboxJobId) -> tuple[SandboxApproval, ...]:
+        """Return approval records for one job, newest first."""
+        rows = self._conn.execute(
+            """
+            SELECT approval_id, job_id, plan_digest, code_digest,
+                   input_references_json, input_references_digest,
+                   correlation_id, approver, approved_at
+            FROM sandbox_approval
+            WHERE job_id = ?
+            ORDER BY approved_at DESC, approval_id DESC
+            """,
+            [job_id],
+        ).fetchall()
+        return tuple(
+            SandboxApproval(
+                approval_id=row[0],
+                job_id=SandboxJobId(row[1]),
+                plan_digest=row[2],
+                code_digest=row[3],
+                input_references=tuple(json.loads(row[4])),
+                input_references_digest=row[5],
+                correlation_id=SandboxCorrelationId(row[6]),
+                approver=row[7],
+                approved_at=row[8],
+            )
+            for row in rows
+        )
+
 
 def _validate_digest(name: str, value: str) -> None:
     if len(value) != 64 or any(
