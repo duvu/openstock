@@ -81,7 +81,8 @@ class TuiInputRouter:
         raw = text.strip()
         if not raw:
             return
-        self._output.show_user_input(raw)
+        if not raw.startswith("/"):
+            self._output.show_user_input(raw)
         if raw == "/clear":
             self._output.clear_visible()
             return
