@@ -14,33 +14,33 @@
 
 ## 1. Research automation models
 
-- [ ] 1.1 Add `ResearchArtifact` model.
-- [ ] 1.2 Add `ResearchExperiment` model or equivalent.
-- [ ] 1.3 Add `ResearchFeature` model or equivalent.
-- [ ] 1.4 Add `ResearchHypothesis` model or equivalent.
-- [ ] 1.5 Add `PatternScan` model or equivalent.
-- [ ] 1.6 Add `OfflineEventStudy` model or equivalent.
-- [ ] 1.7 Add `DatasetRef` model.
-- [ ] 1.8 Add `ArtifactOutputs` model.
-- [ ] 1.9 Add lineage, quality status, dataset references, and correlation ID fields.
-- [ ] 1.10 Add artifact statuses: `created`, `running`, `succeeded`, `failed`, `rejected`, `validated`, `promoted`.
+- [x] 1.1 Add `ResearchArtifact` model.
+- [x] 1.2 Add `ResearchExperiment` model or equivalent.
+- [x] 1.3 Add `ResearchFeature` model or equivalent.
+- [x] 1.4 Add `ResearchHypothesis` model or equivalent.
+- [x] 1.5 Add `PatternScan` model or equivalent.
+- [x] 1.6 Add `OfflineEventStudy` model or equivalent.
+- [x] 1.7 Add `DatasetRef` model.
+- [x] 1.8 Add `ArtifactOutputs` model.
+- [x] 1.9 Add lineage, quality status, dataset references, and correlation ID fields.
+- [x] 1.10 Add artifact statuses: `created`, `running`, `succeeded`, `failed`, `rejected`, `validated`, `promoted`.
 
 ## 2. Persistence and artifact layout
 
-- [ ] 2.1 Add warehouse migrations for research automation metadata if database-backed.
-- [ ] 2.2 Persist experiment definitions.
-- [ ] 2.3 Persist feature definitions.
-- [ ] 2.4 Persist hypothesis definitions.
-- [ ] 2.5 Persist pattern scan definitions.
-- [ ] 2.6 Persist event-study definitions.
-- [ ] 2.7 Persist result artifacts under `logs/runs/<run-id>/research/<artifact-id>/` or equivalent.
-- [ ] 2.8 Persist `manifest.json`.
-- [ ] 2.9 Persist `result.json`.
-- [ ] 2.10 Persist `summary.md`.
-- [ ] 2.11 Persist `lineage.json`.
-- [ ] 2.12 Persist `validation.json`.
-- [ ] 2.13 Persist generated code path when sandbox code is generated.
-- [ ] 2.14 Persist reproducibility manifest.
+- [x] 2.1 Add warehouse migrations for research automation metadata if database-backed.
+- [x] 2.2 Persist experiment definitions.
+- [x] 2.3 Persist feature definitions.
+- [x] 2.4 Persist hypothesis definitions.
+- [x] 2.5 Persist pattern scan definitions.
+- [x] 2.6 Persist event-study definitions.
+- [x] 2.7 Persist result artifacts under `logs/runs/<run-id>/research/<artifact-id>/` or equivalent.
+- [x] 2.8 Persist `manifest.json`.
+- [x] 2.9 Persist `result.json`.
+- [x] 2.10 Persist `summary.md`.
+- [x] 2.11 Persist `lineage.json`.
+- [x] 2.12 Persist `validation.json`.
+- [x] 2.13 Persist generated code path when sandbox code is generated.
+- [x] 2.14 Persist reproducibility manifest.
 
 ## 3. Command surface
 
@@ -82,16 +82,16 @@
 
 ## 6. Output validation and caveats
 
-- [ ] 6.1 Add research artifact validator.
-- [ ] 6.2 Validate required `manifest.json`.
-- [ ] 6.3 Validate required `result.json`.
-- [ ] 6.4 Validate required `summary.md`.
-- [ ] 6.5 Validate lineage exists.
-- [ ] 6.6 Validate quality status exists.
-- [ ] 6.7 Validate caveats exist.
-- [ ] 6.8 Validate sample size and period coverage are present for experiments and hypothesis tests.
-- [ ] 6.9 Validate no personalized buy/sell recommendation appears in the final artifact.
-- [ ] 6.10 Add reusable caveat generator for sample size, data quality, lookahead bias, survivorship bias, transaction cost exclusion, and research-only status.
+- [x] 6.1 Add research artifact validator.
+- [x] 6.2 Validate required `manifest.json`.
+- [x] 6.3 Validate required `result.json`.
+- [x] 6.4 Validate required `summary.md`.
+- [x] 6.5 Validate lineage exists.
+- [x] 6.6 Validate quality status exists.
+- [x] 6.7 Validate caveats exist.
+- [x] 6.8 Validate sample size and period coverage are present for experiments and hypothesis tests.
+- [x] 6.9 Validate no personalized buy/sell recommendation appears in the final artifact.
+- [x] 6.10 Add reusable caveat generator for sample size, data quality, lookahead bias, survivorship bias, transaction cost exclusion, and research-only status.
 
 ## 7. Indicator experiments
 
@@ -176,7 +176,7 @@
 
 ## 14. Implementation slices
 
-- [ ] 14.1 Slice 1: models + artifact layout + validators.
+- [x] 14.1 Slice 1: models + artifact layout + validators.
 - [ ] 14.2 Slice 2: `/feature create` + `/feature validate`.
 - [ ] 14.3 Slice 3: `/experiment indicator`.
 - [ ] 14.4 Slice 4: `/pattern scan`.

@@ -29,6 +29,9 @@ COMMAND_PERMISSIONS: Final[Mapping[str, tuple[ToolPermission, ...]]] = MappingPr
         "model": (),
         "chat": (),
         "help": (),
+        "repair": (),
+        "validate": (),
+        "deploy": (),
     }
 )
 

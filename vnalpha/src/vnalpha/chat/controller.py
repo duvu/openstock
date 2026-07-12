@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Callable, Literal
 
-from vnalpha.assistant.tool_policy import is_safe_plan
+from vnalpha.assistant.tool_policy import is_approval_required_plan, is_safe_plan
 from vnalpha.chat.errors import (
     ChatErrorKind,
     error_to_message_type,
@@ -20,6 +20,7 @@ from vnalpha.chat.events import (
     stage_to_style,
 )
 from vnalpha.chat.modes import ExecutionMode, format_plan_preview
+from vnalpha.chat.safety import is_tool_approval_pending_eligible
 from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
 from vnalpha.warehouse.migrations import run_migrations
@@ -287,7 +288,15 @@ class ChatController:
                 )
                 return None
 
-            if self.execution_mode == ExecutionMode.PLAN_THEN_APPROVE:
+            if (
+                self.execution_mode == ExecutionMode.PLAN_THEN_APPROVE
+                and is_safe_plan(plan)
+            ) or (
+                is_approval_required_plan(plan)
+                and is_tool_approval_pending_eligible(
+                    plan.steps[0].tool_name, self.execution_mode
+                )
+            ):
                 self._pending_plan = plan
                 self._pending_plan_turn_context = {
                     "question": question,
@@ -810,7 +819,7 @@ class ChatController:
                 self._render_prepared_answer(answer)
                 return getattr(answer, "reason", None)
             plan = prepared.plan
-            if not is_safe_plan(plan):
+            if not is_safe_plan(plan) and not is_approval_required_plan(plan):
                 refusal = self._evaluate_plan_permissions(plan) or (
                     "Refused: the plan is not safe for execution."
                 )
@@ -825,7 +834,15 @@ class ChatController:
                     "assistant", format_plan_preview(plan), "plan_preview"
                 )
                 return None
-            if self.execution_mode == ExecutionMode.PLAN_THEN_APPROVE:
+            if (
+                self.execution_mode == ExecutionMode.PLAN_THEN_APPROVE
+                and is_safe_plan(plan)
+            ) or (
+                is_approval_required_plan(plan)
+                and is_tool_approval_pending_eligible(
+                    plan.steps[0].tool_name, self.execution_mode
+                )
+            ):
                 self._pending_prepared_turn = prepared
                 self._pending_plan = plan
                 self._pending_plan_turn_context = {

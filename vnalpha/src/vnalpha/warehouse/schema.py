@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from vnalpha.warehouse.research_automation_schema import ALL_DDL_RESEARCH_AUTOMATION
+
 INGESTION_RUN_DDL = """
 CREATE TABLE IF NOT EXISTS ingestion_run (
     ingestion_run_id  VARCHAR PRIMARY KEY,
@@ -520,5 +522,6 @@ ALL_DDL_COMBINED = (
     + ALL_DDL_PHASE59
     + ALL_DDL_PHASE6
     + ALL_DDL_PHASE510
+    + ALL_DDL_RESEARCH_AUTOMATION
     + ALL_DDL_MARKET_CONTEXT
 )

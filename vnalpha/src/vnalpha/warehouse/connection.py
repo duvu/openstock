@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +15,25 @@ from vnalpha.core.logging import get_logger
 logger = get_logger("warehouse.connection")
 
 _conn: Optional[duckdb.DuckDBPyConnection] = None
+
+
+def _to_writable_path(path: Path, read_only: bool) -> Path:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        logger.debug("Opening warehouse connection at %s", path)
+        return duckdb.connect(str(path), read_only=read_only)
+    except (OSError, duckdb.IOException):
+        pass
+
+    fallback_base = Path(tempfile.gettempdir()) / "vnalpha-warehouse"
+    fallback_base.mkdir(parents=True, exist_ok=True)
+    fallback = fallback_base / path.name
+    if not fallback.exists() and path.exists():
+        try:
+            shutil.copy2(path, fallback)
+        except Exception:
+            pass
+    return duckdb.connect(str(fallback), read_only=read_only)
 
 
 def get_connection(
@@ -27,12 +48,11 @@ def get_connection(
     (useful for tests).
     """
     if path is not None:
+        path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         return duckdb.connect(str(path), read_only=read_only)
     db_path = get_config().warehouse.path
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    logger.debug("Opening warehouse connection at %s", db_path)
-    return duckdb.connect(str(db_path), read_only=read_only)
+    return _to_writable_path(Path(db_path), read_only)
 
 
 def close_connection() -> None:

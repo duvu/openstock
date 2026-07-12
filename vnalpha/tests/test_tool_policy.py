@@ -7,6 +7,7 @@ from vnalpha.assistant.models import AssistantPlan, ToolPlanStep
 from vnalpha.assistant.tool_policy import (
     SAFE_TOOLS,
     assert_safe_tool,
+    is_approval_required_plan,
     is_forbidden_tool,
     is_safe_plan,
     is_safe_tool,
@@ -180,3 +181,35 @@ def test_unsafe_plan_when_manual_only_data_tool() -> None:
     plan = AssistantPlan(intent="test", steps=[_step("data.fetch")])
     assert not is_safe_plan(plan)
     assert unsafe_tools_in_plan(plan) == ("data.fetch",)
+
+
+def test_approval_required_plan_when_only_sandbox_step() -> None:
+    # Given: a plan with the single generated-code sandbox step
+    plan = AssistantPlan(
+        intent="sandbox_research_calculation",
+        steps=[_step("sandbox.run_research_code")],
+    )
+
+    # When: approval-required plan classification is requested
+    # Then: the plan remains unsafe for autonomous execution but can await approval
+    assert not is_safe_plan(plan)
+    assert is_approval_required_plan(plan)
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [],
+        [_step("sandbox.run_research_code"), _step("watchlist.scan")],
+        [_step("sandbox.run_research_code"), _step("sandbox.run_research_code")],
+    ],
+)
+def test_not_approval_required_plan_when_sandbox_step_is_not_exact(
+    steps: list[ToolPlanStep],
+) -> None:
+    # Given: a plan that is empty or has more than one step
+    plan = AssistantPlan(intent="sandbox_research_calculation", steps=steps)
+
+    # When: approval-required plan classification is requested
+    # Then: it cannot enter the approval-only sandbox path
+    assert not is_approval_required_plan(plan)

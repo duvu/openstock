@@ -5,9 +5,9 @@ from vnalpha.cli_app.build import app as build_app
 from vnalpha.cli_app.common import configure_app
 from vnalpha.cli_app.outcome import app as outcome_app
 from vnalpha.cli_app.sync import app as sync_app
+from vnalpha.closed_loop.cli import repair_app, validate_app
 from vnalpha.observability.cli_deploy import deploy_app
 from vnalpha.observability.cli_logs import logs_app
-from vnalpha.observability.cli_repair import repair_app
 
 app = typer.Typer(name="vnalpha", help="Alpha discovery research CLI.")
 configure_app(app)
@@ -25,3 +25,4 @@ log.register(app)
 app.add_typer(logs_app, name="logs")
 app.add_typer(repair_app, name="repair")
 app.add_typer(deploy_app, name="deploy")
+app.add_typer(validate_app, name="validate")

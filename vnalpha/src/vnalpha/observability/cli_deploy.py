@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Optional
@@ -32,7 +31,7 @@ def _find_log_root() -> Path | None:
 
 @deploy_app.command("verify")
 def deploy_verify(
-    candidate: str = typer.Argument(..., help="Candidate version string to verify"),
+    candidate: str = typer.Argument(..., help="Research artifact candidate to verify"),
     deployment_id: Optional[str] = typer.Option(
         None, "--deployment-id", help="Deployment ID (auto-generated if omitted)"
     ),
@@ -44,94 +43,71 @@ def deploy_verify(
     ),
     output_json: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
-    """Run verification gates for a deploy candidate.
-
-    Runs test and lint commands. Records DEPLOY_VERIFY_STARTED and
-    DEPLOY_VERIFY_COMPLETED events in deploy.jsonl and audit.jsonl.
-    """
-    from vnalpha.observability.deploy import verify_deploy_candidate
+    from vnalpha.closed_loop.service import ClosedLoopService
+    from vnalpha.closed_loop.store import ClosedLoopStore
+    from vnalpha.closed_loop.validation import resolve_artifact_root
 
     log_root = _find_log_root()
-    verify_commands = list(command) if command else None
-
-    typer.echo(f"Verifying candidate: {candidate}")
-    if verify_commands:
-        typer.echo(f"Commands: {verify_commands}")
-
-    result = verify_deploy_candidate(
-        candidate,
-        verify_commands=verify_commands,
-        deployment_id=deployment_id,
-        log_root=log_root,
+    if command:
+        typer.echo(
+            "Custom deploy commands are not supported for research artifacts.", err=True
+        )
+        raise typer.Exit(code=1)
+    if log_root is None:
+        typer.echo("No log root found.", err=True)
+        raise typer.Exit(code=1)
+    root = (
+        Path(candidate)
+        if Path(candidate).is_dir()
+        else resolve_artifact_root(log_root, candidate)
+    )
+    result = ClosedLoopService(ClosedLoopStore(log_root)).verify(
+        candidate, artifact_root=root, deployment_id=deployment_id
     )
 
     if output_json:
-        # Omit full command output to keep JSON clean
-        out = {k: v for k, v in result.items() if k != "command_results"}
-        out["failed_commands"] = [
-            r["command"] for r in result.get("command_results", []) if not r["passed"]
-        ]
-        typer.echo(json.dumps(out, indent=2))
+        typer.echo(result.model_dump_json(indent=2))
     else:
-        for r in result.get("command_results", []):
-            icon = "✓" if r["passed"] else "✗"
-            typer.echo(f"  {icon} [{r['returncode']}] {r['command']}")
-            if not r["passed"] and r.get("stderr_tail"):
-                typer.echo(f"      stderr: {r['stderr_tail'][:200]}")
+        typer.echo(f"\nVerification: {'PASSED' if result.passed else 'FAILED'}")
+        typer.echo(f"Deployment ID: {result.deployment_id}")
 
-        status = result["verification_status"]
-        typer.echo(f"\nVerification: {status}")
-        typer.echo(f"Deployment ID: {result['deployment_id']}")
-
-    raise typer.Exit(code=0 if result["passed"] else 1)
+    raise typer.Exit(code=0 if result.passed else 1)
 
 
 @deploy_app.command("promote")
 def deploy_promote(
-    candidate: str = typer.Argument(..., help="Candidate version to promote"),
+    candidate: str = typer.Argument(..., help="Research artifact candidate to promote"),
     deployment_id: str = typer.Option(
         ..., "--deployment-id", help="Deployment ID from verify step"
     ),
     previous: str = typer.Option(
         "", "--previous", help="Previous version (for rollback reference)"
     ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        help="Promote even if verification did not pass (not recommended)",
-    ),
     output_json: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
-    """Promote a candidate version.
-
-    Blocked if verification has not passed (unless --force is used).
-    Records DEPLOY_PROMOTED or DEPLOY_PROMOTION_BLOCKED events.
-
-    Log rollback availability: the previous version is stored in deployment
-    state so rollback can reference it via `vnalpha deploy rollback`.
-    """
-    from vnalpha.observability.deploy import DeployGateError, promote_candidate
+    from vnalpha.closed_loop.errors import PromotionGateError
+    from vnalpha.closed_loop.service import ClosedLoopService
+    from vnalpha.closed_loop.store import ClosedLoopStore
 
     log_root = _find_log_root()
 
+    if log_root is None:
+        typer.echo("No log root found.", err=True)
+        raise typer.Exit(code=1)
     try:
-        state = promote_candidate(
-            candidate,
-            deployment_id=deployment_id,
-            previous_version=previous,
-            force=force,
-            log_root=log_root,
+        state = ClosedLoopService(ClosedLoopStore(log_root)).promote(
+            candidate, deployment_id=deployment_id, previous_candidate=previous or None
         )
-    except DeployGateError as exc:
+    except PromotionGateError as exc:
         typer.echo(f"Promotion blocked: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
     if output_json:
-        typer.echo(json.dumps(state, indent=2, default=str))
+        typer.echo(state.model_dump_json(indent=2))
     else:
-        typer.echo(f"Promoted: {candidate}")
-        typer.echo(f"Deployment ID: {deployment_id}")
-        prev = state.get("previous_version", "")
+        typer.echo(f"Promoted research artifact: {candidate}")
+        typer.echo(f"Deployment ID: {state.deployment_id}")
+        prev = state.previous_candidate or ""
         if prev:
             typer.echo(f"Previous version: {prev}")
             typer.echo(f"Rollback available: vnalpha deploy rollback {deployment_id}")
@@ -149,116 +125,27 @@ def deploy_rollback(
     reason: str = typer.Option("", "--reason", help="Reason for rollback"),
     output_json: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
-    """Roll back a deployment.
-
-    Records DEPLOY_ROLLBACK_STARTED and DEPLOY_ROLLED_BACK events.
-    """
-    from vnalpha.observability.deploy import rollback_deployment
+    from vnalpha.closed_loop.service import ClosedLoopService
+    from vnalpha.closed_loop.store import ClosedLoopStore
 
     log_root = _find_log_root()
 
-    state = rollback_deployment(deployment_id, reason=reason, log_root=log_root)
-
-    if output_json:
-        typer.echo(json.dumps(state, indent=2, default=str))
-    else:
-        typer.echo(f"Rolled back deployment: {deployment_id}")
-        prev = state.get("previous_version", "")
-        if prev:
-            typer.echo(f"Reverted to: {prev}")
-        typer.echo(f"Reason: {reason or '(none)'}")
-        typer.echo(f"Status: {state.get('rollback_status', 'ROLLED_BACK')}")
-
-    raise typer.Exit(code=0)
-
-
-@deploy_app.command("smoke")
-def deploy_smoke(
-    deployment_id: str = typer.Argument(
-        ..., help="Deployment ID to record smoke result for"
-    ),
-    passed: bool = typer.Option(
-        ..., "--passed/--failed", help="Whether the smoke test passed"
-    ),
-    details: str = typer.Option("", "--details", help="Additional smoke test details"),
-    output_json: bool = typer.Option(False, "--json", help="Output result as JSON"),
-) -> None:
-    """Record post-deploy smoke test result.
-
-    Records DEPLOY_SMOKE_COMPLETED event.
-    """
-    from vnalpha.observability.deploy import record_post_deploy_smoke
-
-    log_root = _find_log_root()
-
-    state = record_post_deploy_smoke(
-        deployment_id,
-        smoke_passed=passed,
-        details=details,
-        log_root=log_root,
-    )
-
-    if output_json:
-        typer.echo(json.dumps(state, indent=2, default=str))
-    else:
-        status = "PASSED" if passed else "FAILED"
-        typer.echo(f"Smoke: {status}")
-        typer.echo(f"Deployment ID: {deployment_id}")
-        if details:
-            typer.echo(f"Details: {details}")
-
-    raise typer.Exit(code=0 if passed else 1)
-
-
-@deploy_app.command("status")
-def deploy_status(
-    deployment_id: str = typer.Argument(..., help="Deployment ID"),
-    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
-) -> None:
-    """Show current state of a deployment."""
-    from vnalpha.observability.deploy import load_deploy_state
-
-    log_root = _find_log_root()
-    state = load_deploy_state(deployment_id, log_root)
-
-    if not state:
-        typer.echo(f"No state found for deployment: {deployment_id}", err=True)
+    if log_root is None:
+        typer.echo("No log root found.", err=True)
         raise typer.Exit(code=1)
+    try:
+        state = ClosedLoopService(ClosedLoopStore(log_root)).rollback(
+            deployment_id, reason=reason
+        )
+    except RuntimeError as exc:
+        typer.echo(f"Rollback blocked: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
     if output_json:
-        typer.echo(json.dumps(state, indent=2, default=str))
+        typer.echo(state.model_dump_json(indent=2))
     else:
-        typer.echo(f"Deployment: {deployment_id}")
-        typer.echo(f"  Candidate  : {state.get('candidate_version', '?')}")
-        typer.echo(f"  Previous   : {state.get('previous_version', '?')}")
-        typer.echo(f"  Verified   : {state.get('verification_status', '?')}")
-        typer.echo(f"  Deploy     : {state.get('deploy_status', '?')}")
-        typer.echo(f"  Rollback   : {state.get('rollback_status', '?')}")
-        typer.echo(f"  Smoke      : {state.get('smoke_status', 'NOT_RUN')}")
-        typer.echo(f"  Created    : {state.get('created_at', '?')}")
-        typer.echo(f"  Updated    : {state.get('updated_at', '?')}")
-
-    raise typer.Exit(code=0)
-
-
-@deploy_app.command("list")
-def deploy_list(
-    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
-) -> None:
-    """List known deployment IDs."""
-    from vnalpha.observability.deploy import list_deployments
-
-    log_root = _find_log_root()
-    deployments = list_deployments(log_root)
-
-    if output_json:
-        typer.echo(json.dumps(deployments))
-    else:
-        if not deployments:
-            typer.echo("No deployments found.")
-        else:
-            typer.echo(f"Deployments ({len(deployments)}):")
-            for d in deployments:
-                typer.echo(f"  {d}")
+        typer.echo(f"Rolled back research artifact: {state.candidate}")
+        typer.echo(f"Reason: {reason or '(none)'}")
+        typer.echo(f"Status: {state.status}")
 
     raise typer.Exit(code=0)

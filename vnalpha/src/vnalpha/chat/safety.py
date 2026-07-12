@@ -34,9 +34,35 @@ def validate_tool_call(
     tool_name: str,
     execution_mode: ExecutionMode,
 ) -> tuple[bool, str | None]:
-    if not is_safe_tool(tool_name):
-        return False, f"Tool '{tool_name}' is not available in research chat"
-    return True, None
+    state = get_permission_state(tool_name, execution_mode)
+    if state == PermissionState.ALLOW:
+        return True, None
+    if state == PermissionState.ASK:
+        if execution_mode == ExecutionMode.PLAN_THEN_APPROVE:
+            return True, None
+        return (
+            False,
+            f"Tool '{tool_name}' requires explicit approval in this execution mode.",
+        )
+    if state == PermissionState.HARD_DENY:
+        return (
+            False,
+            f"Tool '{tool_name}' is permanently forbidden by policy in this workspace.",
+        )
+    return False, f"Tool '{tool_name}' is not available in research chat in this mode."
+
+
+def is_tool_approval_pending_eligible(
+    tool_name: str, execution_mode: ExecutionMode
+) -> bool:
+    """Return whether an ASK tool may be retained pending explicit approval."""
+    return get_permission_state(tool_name, execution_mode) == PermissionState.ASK and (
+        execution_mode
+        in (
+            ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS,
+            ExecutionMode.PLAN_THEN_APPROVE,
+        )
+    )
 
 
 def filter_safe_tools(tool_names: list[str]) -> list[str]:

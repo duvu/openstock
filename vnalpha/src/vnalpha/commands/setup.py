@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from vnalpha.commands.handlers.chat import handle_chat
+from vnalpha.commands.handlers.closed_loop import (
+    handle_deploy,
+    handle_repair,
+    handle_validate,
+)
 from vnalpha.commands.handlers.compare import handle_compare
 from vnalpha.commands.handlers.context import handle_context
 from vnalpha.commands.handlers.explain import handle_explain
@@ -27,6 +32,46 @@ from vnalpha.policy.command_policy import permission_names
 def build_default_registry() -> CommandRegistry:
     """Return a registry populated with capability-approved research commands."""
     reg = CommandRegistry()
+
+    reg.register(
+        CommandMeta(
+            name="repair",
+            description="Package, inspect, propose, and apply bounded sandbox research repairs.",
+            usage="/repair <prepare|status|propose|apply> ...",
+            examples=[
+                "/repair prepare --latest",
+                "/repair status repair-id",
+                "/repair propose repair-id",
+                "/repair apply repair-id --attempt 1",
+            ],
+            permissions=permission_names("repair"),
+            handler=handle_repair,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="validate",
+            description="Run the research-artifact validation gate.",
+            usage="/validate run ARTIFACT_ID",
+            examples=["/validate run artifact-123"],
+            permissions=permission_names("validate"),
+            handler=handle_validate,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="deploy",
+            description="Verify, promote, or roll back research artifacts only.",
+            usage="/deploy <verify|promote|rollback> ...",
+            examples=[
+                "/deploy verify artifact-123",
+                "/deploy promote artifact-123 --deployment-id deployment-1",
+                "/deploy rollback deployment-1",
+            ],
+            permissions=permission_names("deploy"),
+            handler=handle_deploy,
+        )
+    )
 
     reg.register(
         CommandMeta(
