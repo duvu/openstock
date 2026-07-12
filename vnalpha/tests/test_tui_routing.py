@@ -68,6 +68,35 @@ async def test_busy_submission_is_rejected_before_workspace_persistence(
 
 
 @pytest.mark.asyncio
+async def test_router_shows_user_input_only_for_natural_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from vnalpha.tui.input_router import TuiInputRouter
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
+    output = MagicMock(spec=OutputStream)
+    with patch.object(TuiInputRouter, "_setup_controller"):
+        with patch.object(TuiInputRouter, "_setup_executor"):
+            router = TuiInputRouter(
+                output_stream=output,
+                workspace=create_workspace(root=tmp_path),
+            )
+
+    command_path = AsyncMock()
+    chat_path = AsyncMock()
+    router._command_path = command_path
+    router._chat_path = chat_path
+
+    await router.route("/scan")
+    await router.route("compare FPT")
+
+    command_path.route.assert_awaited_once_with(router, "/scan")
+    chat_path.route.assert_awaited_once_with(router, "compare FPT")
+    output.show_user_input.assert_called_once_with("compare FPT")
+
+
+@pytest.mark.asyncio
 async def test_workspace_input_failure_does_not_block_command(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -27,7 +27,6 @@ from vnalpha.warehouse.migrations import run_migrations
 if TYPE_CHECKING:
     from vnalpha.assistant.models import (
         AssistantPlan,
-        AssistantRequest,
         PreparedAssistantTurn,
         RefusalMessage,
     )
@@ -56,6 +55,7 @@ class ChatController:
         surface: str = "tui-chat",
         on_message: Callable[[str, str], None],
         on_trace: Callable[["TraceEvent"], None] | None = None,
+        on_assistant_answer: Callable[[object], None] | None = None,
         chat_session_id: str | None = None,
         execution_mode: ExecutionMode = ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS,
     ) -> None:
@@ -64,6 +64,7 @@ class ChatController:
         self._surface = surface
         self._on_message = on_message
         self._on_trace = self._wrap_trace_with_persistence(on_trace)
+        self._on_assistant_answer = on_assistant_answer
         self._chat_session_id = chat_session_id
         self.execution_mode: ExecutionMode = execution_mode
         self._pending_plan: "AssistantPlan | None" = None
@@ -144,7 +145,6 @@ class ChatController:
             return error_text
 
     def handle_slash_command(self, raw: str) -> str | None:
-        self._on_message("bold cyan", f"> {raw}")
         self._persist_message("user", raw, "slash_command")
         conn = self._connection_factory()
         try:
@@ -216,7 +216,6 @@ class ChatController:
     def handle_natural_language(
         self, question: str, *, workspace_context: str | None = None
     ) -> str | None:
-        self._on_message("bold cyan", f"You: {question}")
         self._persist_message("user", question, "prompt")
         if not self._legacy_run_ask_override():
             return self._handle_prepared_natural_language(
@@ -355,9 +354,7 @@ class ChatController:
 
                     self._emit_stage(AssistantStage.SYNTHESIZING)
                     if isinstance(answer, AssistantAnswer):
-                        self._emit_stage(AssistantStage.FINAL, text=answer.summary)
-                        self._on_message("bold green", f"Assistant: {answer.summary}")
-                        self._persist_message("assistant", answer.summary, "answer")
+                        self._emit_assistant_answer(answer)
                     elif isinstance(answer, RefusalMessage):
                         refusal_text = format_refusal(answer.reason)
                         self._on_message("yellow", refusal_text)
@@ -467,8 +464,7 @@ class ChatController:
             from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
 
             if isinstance(answer, AssistantAnswer):
-                self._on_message("bold green", f"Assistant: {answer.summary}")
-                self._persist_message("assistant", answer.summary, "answer")
+                self._emit_assistant_answer(answer)
             elif isinstance(answer, RefusalMessage):
                 refusal_text = format_refusal(answer.reason)
                 self._on_message("yellow", refusal_text)
@@ -853,9 +849,7 @@ class ChatController:
         from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
 
         if isinstance(answer, AssistantAnswer):
-            self._emit_stage(AssistantStage.FINAL, text=answer.summary)
-            self._on_message("bold green", f"Assistant: {answer.summary}")
-            self._persist_message("assistant", answer.summary, "answer")
+            self._emit_assistant_answer(answer)
         elif isinstance(answer, RefusalMessage):
             refusal_text = format_refusal(answer.reason)
             self._on_message("yellow", refusal_text)
@@ -881,6 +875,37 @@ class ChatController:
             stage=stage, text=text, tool_name=tool_name, elapsed_ms=elapsed_ms
         )
         self._on_message(stage_to_style(stage), format_stage_event(event))
+
+    def _emit_assistant_answer(self, answer: object) -> None:
+        from vnalpha.assistant.models import AssistantAnswer
+
+        if not isinstance(answer, AssistantAnswer):
+            return
+
+        self._persist_message("assistant", answer.summary, "answer")
+
+        if self._on_assistant_answer is not None:
+            self._emit_stage(AssistantStage.FINAL, text="complete")
+            self._on_assistant_answer(self._build_assistant_answer_message(answer))
+            return
+
+        self._emit_stage(AssistantStage.FINAL, text=answer.summary)
+        self._on_message("bold green", f"Assistant: {answer.summary}")
+
+    def _build_assistant_answer_message(self, answer: object) -> "object":
+        from vnalpha.tui.models.conversation import AssistantAnswerMessage
+
+        return AssistantAnswerMessage(
+            text=answer.summary,
+            summary=answer.summary,
+            basis=getattr(answer, "basis", ""),
+            risks_caveats=getattr(answer, "risks_caveats", ""),
+            missing_data=list(getattr(answer, "missing_data", [])),
+            grounded_source_refs=list(getattr(answer, "grounded_source_refs", [])),
+            claim_source_refs=dict(getattr(answer, "claim_source_refs", {})),
+            research_metadata=getattr(answer, "research_metadata", None),
+            tool_trace_summary=getattr(answer, "tool_trace_summary", ""),
+        )
 
     def _render_command_result(self, result) -> None:
         if result.status == "FAILED":

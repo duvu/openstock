@@ -70,14 +70,42 @@ class LifecycleHooks:
             def on_trace(event: TraceEvent) -> None:
                 self.dispatch_ui(lambda: self.render_trace(event))
 
+            def on_assistant_answer(answer: object) -> None:
+                self.dispatch_ui(
+                    lambda: self._output.append_assistant_answer(
+                        self._coerce_assistant_answer(answer)
+                    )
+                )
+
             return ChatController(
                 target_date=self._target_date,
                 on_message=on_message,
                 on_trace=on_trace,
+                on_assistant_answer=on_assistant_answer,
                 chat_session_id=session_id,
             )
         except Exception:
             return None
+
+    def _coerce_assistant_answer(self, answer: object) -> object:
+        from vnalpha.assistant.models import AssistantAnswer
+
+        if isinstance(answer, AssistantAnswer):
+            from vnalpha.tui.models.conversation import AssistantAnswerMessage
+
+            return AssistantAnswerMessage(
+                text=answer.summary,
+                summary=answer.summary,
+                basis=answer.basis,
+                risks_caveats=answer.risks_caveats,
+                missing_data=answer.missing_data,
+                grounded_source_refs=answer.grounded_source_refs,
+                claim_source_refs=answer.claim_source_refs,
+                research_metadata=answer.research_metadata,
+                tool_trace_summary=answer.tool_trace_summary,
+            )
+
+        return answer  # type: ignore[return-value]
 
     def setup_executor(self) -> ExecutorResources:
         connection: DuckDBPyConnection | None = None

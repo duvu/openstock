@@ -248,6 +248,81 @@ def test_handle_natural_language_calls_ask():
     assert "FPT is strong" in all_text
 
 
+def test_handle_natural_language_with_assistant_callback_emits_once():
+    """When an assistant callback exists, final answer is routed as one event."""
+    from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
+    from vnalpha.chat.controller import ChatController
+
+    messages = []
+    answers = []
+
+    ctrl = ChatController(
+        on_message=lambda s, t: messages.append((s, t)),
+        on_assistant_answer=lambda a: answers.append(a),
+        target_date="2026-07-07",
+    )
+
+    mock_answer = AssistantAnswer(
+        summary="FPT is strong.",
+        basis="Watchlist data.",
+        risks_caveats="",
+        tool_trace_summary="1 tool called.",
+    )
+    from vnalpha.assistant.models import ToolPlanStep
+
+    mock_plan = AssistantPlan(
+        intent="scan_candidates",
+        steps=[
+            ToolPlanStep(
+                step_id="s1",
+                tool_name="watchlist.scan",
+                arguments={},
+                purpose="scan",
+                required_permission="READ_DATA",
+            )
+        ],
+    )
+
+    with patch.object(ctrl, "_run_ask", return_value=(mock_answer, mock_plan)):
+        ctrl.handle_natural_language("What are the top VN30 picks today?")
+
+    assert len(answers) == 1
+    assert "FPT is strong" not in " ".join(t for _, t in messages)
+
+
+def test_handle_natural_language_refusal_emits_once():
+    """Refusal responses are not duplicated in on_message output."""
+    from vnalpha.assistant.models import AssistantPlan, RefusalMessage
+    from vnalpha.chat.controller import ChatController
+
+    messages = []
+
+    ctrl = ChatController(
+        on_message=lambda s, t: messages.append((s, t)),
+        on_assistant_answer=lambda a: pytest.fail(
+            "should not receive structured answer"
+        ),
+        target_date="2026-07-07",
+    )
+
+    mock_plan = AssistantPlan(
+        intent="scan_candidates",
+        steps=[],
+    )
+    mock_refusal = RefusalMessage(
+        reason="Insufficient context",
+        policy_category="UNAVAILABLE_TOOL",
+    )
+
+    with patch.object(ctrl, "_run_ask", return_value=(mock_refusal, mock_plan)):
+        ctrl.handle_natural_language("What is risk in this stock?")
+
+    refusal_cards = [
+        t for _, t in messages if t.startswith("[REFUSED]") or t.startswith("[refused]")
+    ]
+    assert len(refusal_cards) == 1
+
+
 def test_handle_natural_language_posts_error_on_exception():
     """handle_natural_language posts error message when ask() raises."""
     from vnalpha.chat.controller import ChatController
