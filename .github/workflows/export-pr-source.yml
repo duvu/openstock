@@ -1,6 +1,9 @@
 name: export-pr-source
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - fix/tui-slash-command-list
