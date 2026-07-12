@@ -56,6 +56,31 @@ def format_plan_preview(plan: "AssistantPlan") -> str:
     else:
         lines = ["Plan:"]
         for i, step in enumerate(plan.steps, start=1):
+            if step.tool_name == "sandbox.run_research_code" and "job_id" in step.arguments:
+                lines.append(
+                    "  "
+                    + f"{i}. sandbox.run_research_code(purpose={step.arguments.get('purpose')!r})"
+                )
+                lines.extend(
+                    [
+                        f"     job_id: {step.arguments.get('job_id')}",
+                        f"     code summary: {step.arguments.get('code_summary')}",
+                        f"     code digest: {step.arguments.get('code_digest')}",
+                        "     input datasets: "
+                        + (
+                            ", ".join(step.arguments.get("input_references", []))
+                            or "(none)"
+                        ),
+                        "     resource limits: "
+                        + (
+                            f"{step.arguments.get('resource_limits', {}).get('cpu_millis')} millicpu, "
+                            f"{step.arguments.get('resource_limits', {}).get('memory_mb')} MB, "
+                            f"{step.arguments.get('resource_limits', {}).get('timeout_seconds')}s"
+                        ),
+                        f"     image digest: {step.arguments.get('image_digest')}",
+                    ]
+                )
+                continue
             args_repr = ", ".join(f"{k}={v!r}" for k, v in step.arguments.items())
             lines.append(f"  {i}. {step.tool_name}({args_repr})")
     lines.append("")

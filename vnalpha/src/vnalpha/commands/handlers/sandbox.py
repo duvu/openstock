@@ -20,7 +20,7 @@ def handle_sandbox(parsed: ParsedCommand, conn=None, **kwargs) -> CommandResult:
 
     subcommand = parsed.positional[0].lower()
     if subcommand == "run":
-        return _run_preview(parsed)
+        return _run_preview(parsed, conn=conn, surface=kwargs.get("surface", "cli"))
 
     repository = SandboxJobRepository(conn)
     if subcommand == "status":
@@ -40,20 +40,43 @@ def handle_sandbox(parsed: ParsedCommand, conn=None, **kwargs) -> CommandResult:
     )
 
 
-def _run_preview(parsed: ParsedCommand) -> CommandResult:
+def _run_preview(parsed: ParsedCommand, *, conn, surface: str) -> CommandResult:
     if parsed.options or parsed.filters:
         raise CommandValidationError("/sandbox run accepts only a purpose.")
     purpose = " ".join(parsed.positional[1:]).strip()
     if not purpose:
         raise CommandValidationError("/sandbox run requires a purpose.")
+    from vnalpha.sandbox.execution_service import SandboxExecutionService
+
+    preview = SandboxExecutionService(conn, surface=surface).prepare_job(purpose)
     return CommandResult(
-        status="VALIDATION_ERROR",
+        status="SUCCESS",
         title="/sandbox run",
         summary=(
-            "Sandbox execution approval is required; no job was created and execution "
-            "was not started."
+            f"Sandbox job {preview.job.job_id} is queued and awaiting approval; "
+            "execution has not started."
         ),
-        panels=[ResultPanel(title="Sandbox Request", content={"purpose": purpose})],
+        panels=[
+            ResultPanel(
+                title="Sandbox Job",
+                content={
+                    "job_id": str(preview.job.job_id),
+                    "run_id": str(preview.job.run_id),
+                    "correlation_id": str(preview.job.correlation_id),
+                    "purpose": preview.job.purpose,
+                    "status": preview.job.status.value,
+                    "code_digest": preview.job.code_digest,
+                    "code_summary": preview.code_summary,
+                    "input_references": list(preview.job.filesystem_policy.approved_read_paths),
+                    "resource_limits": {
+                        "cpu_millis": preview.job.resource_limits.cpu_millis,
+                        "memory_mb": preview.job.resource_limits.memory_mb,
+                        "timeout_seconds": preview.job.resource_limits.timeout_seconds,
+                    },
+                    "image_digest": str(preview.image).split("@", 1)[1],
+                },
+            )
+        ],
     )
 
 

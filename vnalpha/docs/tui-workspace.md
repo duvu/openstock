@@ -62,6 +62,9 @@ and re-export the routing router class.
 ```
 /help                        # Show available commands
 /scan AAPL                   # Run stock scan
+/analyze FPT                 # Deep persisted research analysis
+/research-plan FPT           # Conditional research scenario plan
+/setup-evidence ACCUMULATION_BASE --horizon 20
 /explain SMA_CROSSOVER       # Explain a pattern
 /filter ...                  # Filter watchlist
 /history AAPL                # Show price history
@@ -146,6 +149,11 @@ Screen-switching bindings (`h/w/c/a/r/p/o/l`) are removed. These screens remain 
 | `Up` / `Ctrl+P` | Previous history item |
 | `Down` / `Ctrl+N` | Next history item (restore draft past newest) |
 | `Ctrl+T` | Toggle TODO side panel on wide terminals |
+| `Ctrl+O` | Open latest research artifact detail view |
+| `Ctrl+B` | Return from artifact detail to transcript |
+| `Ctrl+Y` | Surface current artifact ID inline |
+| `Ctrl+S` | Prefill a `/note ...` command from current artifact |
+| `Ctrl+R` | Prefill an assistant follow-up prompt from current artifact |
 | `q` | Quit |
 | `Ctrl+L` | Clear visible OutputStream |
 | `Escape` | Cancel pending plan |
@@ -253,6 +261,17 @@ Append-only RichLog-based widget. Methods:
 - `show_deploy_status(status, details=None)` — renders deploy status
 - `clear_visible()` — clears visible area only (does not affect JSONL logs)
 
+The stream also tracks the latest research artifact returned by `/analyze`,
+`/market-regime`, `/sector-strength`, `/watchlist-summary`, `/shortlist`,
+`/research-plan`, and `/setup-evidence`. Detail navigation is read-only:
+
+- `register_command_result(command, result)` — record artifact metadata for navigation
+- `open_latest_artifact_detail()` — switch to the latest artifact detail view
+- `navigate_back()` — restore the transcript after a detail view
+- `current_artifact_id()` — expose the active artifact identifier
+- `note_command_for_current_artifact()` — generate a note helper command
+- `assistant_prompt_for_current_artifact()` — generate an assistant follow-up prompt
+
 ### ComposerInput (`vnalpha.tui.widgets.composer_input`)
 
 Single Input widget with InputHistory. Emits `ComposerSubmitted(text)` on Enter. Clears on submit. `Up/Down` navigate history. `Ctrl+L` sends `/clear` to the router.
@@ -273,16 +292,61 @@ Dataclass + enum model for TUI runtime state. Tracks state, label, detail, timin
 
 Stateful router. Bootstraps `ChatController` and `CommandExecutor` lazily on first use. Renders user input and results into OutputStream. All errors are captured via `capture_exception`.
 
+Long research workflows append running/done activity lines before the final
+result render. The status bar detail favors the current artifact ID when the
+result exposes one.
+
 ---
 
-## Validation Evidence
+## Research Workflow Examples
 
-- Responsive TODO coverage: `pytest vnalpha/tests/test_tui_todo_panel.py vnalpha/tests/test_tui_pilot.py vnalpha/tests/test_tui_layout_and_history.py` → 40 passed
-- `make verify-r4`: 80 passed
-- `./packaging/scripts/openstock-verify --ci`: PASS (16 OK, 1 WARN, 0 FAIL)
-- `make test-vnalpha`: passes with an isolated `VNALPHA_WAREHOUSE_PATH`
-- `make lint-vnalpha`: passes
-- Layout tests: `test_tui_layout_and_history.py` (13 tests)
-- History tests: `test_input_history.py` (22 tests)
-- Status tests: `test_tui_runtime_status.py` (11 tests)
-- Governance: no ContentSwitcher, no secondary ChatPanel, no separate panes
+### Deep analysis
+
+```text
+/analyze FPT
+Workflow status
+  artifact_id: analysis.deep_symbol:FPT:2026-07-12
+  workflow_status: partial
+  missing_data: sector_strength_snapshot
+
+Trend and momentum
+Volatility and levels
+Setup quality
+Scenario summary
+```
+
+### Scenario plan
+
+```text
+/research-plan FPT
+Scenario branches
+  confirmation  ...
+  neutral       ...
+  invalidation  ...
+```
+
+### Setup evidence
+
+```text
+/setup-evidence ACCUMULATION_BASE --horizon 20
+Historical outcome metrics
+  hit_rate            62.0%
+  avg_forward_return  0.041
+```
+
+### Artifact follow-up flow
+
+1. Run a research command such as `/analyze FPT`.
+2. Press `Ctrl+O` to open the latest artifact detail.
+3. Press `Ctrl+Y` to surface the current artifact ID in the transcript.
+4. Press `Ctrl+S` to prefill a note command or `Ctrl+R` to prefill an assistant prompt.
+5. Press `Ctrl+B` to return to the main transcript.
+
+---
+
+## Validation Guide
+
+- Focused research-workflow coverage: `pytest -q vnalpha/tests/test_research_automation_migrations.py vnalpha/tests/test_command_handlers.py vnalpha/tests/test_output_stream.py vnalpha/tests/test_textual_renderer_research.py vnalpha/tests/test_tui_routing.py vnalpha/tests/test_tui_workspace.py`
+- Narrow-surface smoke slice: `pytest -q vnalpha/tests/test_command_handlers.py vnalpha/tests/test_output_stream.py vnalpha/tests/test_textual_renderer_research.py vnalpha/tests/test_tui_workspace.py -k 'analyze or research_plan or setup_evidence or artifact or narrow or no_execution_controls'`
+- Lint the touched workflow/TUI files with `ruff check ...` before claiming completion.
+- For manual validation, run `/analyze FPT`, open detail with `Ctrl+O`, return with `Ctrl+B`, then confirm `/research-plan FPT` appends to the restored transcript.

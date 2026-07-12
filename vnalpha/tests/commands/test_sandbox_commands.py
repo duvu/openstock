@@ -12,6 +12,7 @@ from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.models import CommandResult, CommandStatus
 from vnalpha.commands.parser import parse
 from vnalpha.commands.setup import build_default_registry
+from vnalpha.observability.context import init_run_context, reset_run_context
 from vnalpha.sandbox.artifact_writer import SandboxArtifactWriter
 from vnalpha.sandbox.docker_orchestration import SandboxDockerOrchestrator
 from vnalpha.sandbox.docker_runtime import DockerRunner
@@ -85,19 +86,34 @@ def test_sandbox_is_registered_when_command_surface_is_available() -> None:
 
 
 def test_sandbox_run_requires_explicit_approval_without_starting_execution(
-    sandbox_connection: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+    sandbox_connection: duckdb.DuckDBPyConnection,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    # Given: every sandbox execution boundary rejects invocation
-    _block_execution_boundaries(monkeypatch)
+    reset_run_context()
+    _ = init_run_context(surface="test", actor="pytest", log_root=tmp_path)
+    monkeypatch.setenv(
+        "VNALPHA_SANDBOX_IMAGE",
+        f"registry.example/openstock/vnalpha-sandbox@sha256:{'a' * 64}",
+    )
+    monkeypatch.setattr(DockerRunner, "run", _execution_must_not_start)
+    monkeypatch.setattr(SandboxDockerOrchestrator, "execute", _execution_must_not_start)
+    before = sandbox_connection.execute("SELECT count(*) FROM sandbox_job").fetchone()[
+        0
+    ]
 
-    # When: a nonempty purpose requests sandbox execution
     result = _execute("/sandbox run compare persisted datasets", sandbox_connection)
+    after = sandbox_connection.execute("SELECT count(*) FROM sandbox_job").fetchone()[0]
 
-    # Then: approval is required and execution never starts
-    assert result.status is CommandStatus.VALIDATION_ERROR
+    assert result.status is CommandStatus.SUCCESS
     assert result.summary is not None
-    assert "approval is required" in result.summary.lower()
-    assert "not started" in result.summary.lower()
+    assert "awaiting approval" in result.summary.lower()
+    assert "queued" in result.summary.lower()
+    assert after == before + 1
+    assert result.panels
+    rendered = str(result.panels[0].content)
+    assert "job_id" in rendered
+    assert "code_summary" in rendered
 
 
 def test_sandbox_run_rejects_missing_purpose(

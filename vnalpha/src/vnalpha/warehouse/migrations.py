@@ -17,11 +17,11 @@ from vnalpha.warehouse.sandbox_migrations import (
 from vnalpha.warehouse.schema import (
     ALL_DDL,
     ALL_DDL_MARKET_CONTEXT,
-    ALL_DDL_RESEARCH_AUTOMATION,
     ALL_DDL_PHASE6,
     ALL_DDL_PHASE58,
     ALL_DDL_PHASE59,
     ALL_DDL_PHASE510,
+    ALL_DDL_RESEARCH_AUTOMATION,
 )
 
 logger = get_logger("warehouse.migrations")
@@ -119,6 +119,14 @@ def _migrate_research_artifact_columns(conn: duckdb.DuckDBPyConnection) -> None:
         return
     conn.execute(
         "ALTER TABLE research_artifact ADD COLUMN IF NOT EXISTS lifecycle_state VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE research_artifact ADD COLUMN IF NOT EXISTS lineage_path VARCHAR"
+    )
+    conn.execute(
+        "UPDATE research_artifact "
+        "SET lineage_path = '' "
+        "WHERE lineage_path IS NULL"
     )
     if "status" in _table_columns(conn, "research_artifact"):
         conn.execute(

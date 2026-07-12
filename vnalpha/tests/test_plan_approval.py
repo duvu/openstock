@@ -176,6 +176,40 @@ class TestFormatPlanPreview:
         result = format_plan_preview(plan)
         assert "TCB" in result
 
+    def test_sandbox_preview_includes_materialized_job_metadata(self):
+        steps = [
+            ToolPlanStep(
+                step_id="sandbox-step",
+                tool_name="sandbox.run_research_code",
+                arguments={
+                    "purpose": "compare persisted datasets",
+                    "job_id": "job-001",
+                    "code_summary": "Writes validated result.json and summary.md.",
+                    "code_digest": "a" * 64,
+                    "input_references": ["inputs/reference.csv"],
+                    "resource_limits": {
+                        "cpu_millis": 500,
+                        "memory_mb": 256,
+                        "timeout_seconds": 30,
+                    },
+                    "image_digest": f"sha256:{'b' * 64}",
+                },
+                purpose="test",
+                required_permission="SANDBOX_APPROVAL",
+            )
+        ]
+        plan = AssistantPlan(intent="sandbox_research_calculation", steps=steps)
+
+        result = format_plan_preview(plan)
+
+        assert "job-001" in result
+        assert "code summary" in result.lower()
+        assert "inputs/reference.csv" in result
+        assert "500" in result
+        assert "256" in result
+        assert "30" in result
+        assert f"sha256:{'b' * 64}" in result
+
 
 # ---------------------------------------------------------------------------
 # ChatController — PLAN_THEN_APPROVE mode

@@ -111,6 +111,11 @@ if _TEXTUAL_AVAILABLE:
             Binding("q", "quit", "Quit"),
             Binding("ctrl+l", "clear_stream", "Clear output", show=False),
             Binding("ctrl+t", "toggle_todo_panel", "TODOs", show=False),
+            Binding("ctrl+o", "open_artifact_detail", "Artifact detail", show=False),
+            Binding("ctrl+b", "artifact_back", "Artifact back", show=False),
+            Binding("ctrl+y", "copy_artifact_id", "Artifact id", show=False),
+            Binding("ctrl+s", "save_artifact_note", "Artifact note", show=False),
+            Binding("ctrl+r", "route_artifact_to_assistant", "Artifact assistant", show=False),
             Binding("escape", "cancel_pending_plan", "Cancel plan", show=False),
             Binding("f12", "toggle_log_viewer", "Log Viewer", show=False),
         ]
@@ -195,6 +200,39 @@ if _TEXTUAL_AVAILABLE:
                 self.query_one("#output-stream", OutputStream).clear_visible()
             except Exception:
                 pass
+
+        def action_open_artifact_detail(self) -> None:
+            try:
+                output = self.query_one("#output-stream", OutputStream)
+                opened = output.open_latest_artifact_detail()
+                if not opened:
+                    output.show_warning(
+                        "No artifact detail is available for the latest command.",
+                        source="artifact",
+                    )
+            except Exception:
+                pass
+
+        def action_artifact_back(self) -> None:
+            try:
+                self.query_one("#output-stream", OutputStream).navigate_back()
+            except Exception:
+                pass
+
+        def action_copy_artifact_id(self) -> None:
+            try:
+                output = self.query_one("#output-stream", OutputStream)
+                artifact_id = output.current_artifact_id()
+                if artifact_id:
+                    output.show_assistant_message(f"Artifact ID: {artifact_id}", style="dim")
+            except Exception:
+                pass
+
+        def action_save_artifact_note(self) -> None:
+            self._prefill_from_artifact("note")
+
+        def action_route_artifact_to_assistant(self) -> None:
+            self._prefill_from_artifact("assistant")
 
         def action_toggle_todo_panel(self) -> None:
             """Toggle the TODO side rail on wide terminals only."""
@@ -333,6 +371,20 @@ if _TEXTUAL_AVAILABLE:
         def _focus_composer(self) -> None:
             try:
                 self.query_one("#composer-input", ComposerInput).focus_input()
+            except Exception:
+                pass
+
+        def _prefill_from_artifact(self, mode: str) -> None:
+            try:
+                output = self.query_one("#output-stream", OutputStream)
+                composer = self.query_one("#composer-input", ComposerInput)
+                if mode == "note":
+                    value = output.note_command_for_current_artifact()
+                else:
+                    value = output.assistant_prompt_for_current_artifact()
+                if value:
+                    composer.set_text(value)
+                    composer.focus_input()
             except Exception:
                 pass
 

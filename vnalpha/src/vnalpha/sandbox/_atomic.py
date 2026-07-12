@@ -9,7 +9,13 @@ from uuid import uuid4
 _TEMP_PREFIX: Final = ".sandbox-artifact-"
 
 
-def write_atomic_file(parent_fd: int, name: str, content: bytes) -> None:
+def write_atomic_file(
+    parent_fd: int,
+    name: str,
+    content: bytes,
+    *,
+    mode: int = 0o600,
+) -> None:
     """Atomically replace one file within an already-open directory descriptor."""
 
     temporary_name = f"{_TEMP_PREFIX}{uuid4().hex}"
@@ -18,12 +24,12 @@ def write_atomic_file(parent_fd: int, name: str, content: bytes) -> None:
         temporary_fd = os.open(
             temporary_name,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            mode=0o600,
+            mode=mode,
             dir_fd=parent_fd,
         )
         temporary_created = True
         try:
-            os.fchmod(temporary_fd, 0o600)
+            os.fchmod(temporary_fd, mode)
             _write_all(temporary_fd, content)
             os.fsync(temporary_fd)
         finally:

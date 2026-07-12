@@ -236,6 +236,94 @@ class TestQualityHandler:
         assert result.summary is not None
 
 
+class TestAnalyzeHandler:
+    def test_analyze_returns_semantic_panels(self, conn_with_data, reg):
+        conn, today = conn_with_data
+        parsed = parse(f"/analyze FPT --date {today}")
+        result = reg.execute(
+            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
+        )
+        assert result.status in {"SUCCESS", "PARTIAL"}
+        panel_titles = [panel.title for panel in result.panels]
+        assert "Trend and momentum" in panel_titles
+        assert "Volatility and levels" in panel_titles
+        assert result.metadata is not None
+        assert result.metadata["research_view"] == "deep_analysis"
+
+
+class TestWatchlistSummaryHandler:
+    def test_watchlist_summary_returns_groups(self, conn_with_data, reg):
+        conn, today = conn_with_data
+        parsed = parse(f"/watchlist-summary --date {today}")
+        result = reg.execute(
+            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
+        )
+        assert result.status in {"SUCCESS", "PARTIAL"}
+        assert len(result.tables) >= 4
+        table_names = [table.title for table in result.tables]
+        assert "Candidate class distribution" in table_names
+        assert "Top candidates" in table_names
+        assert result.summary is not None
+
+
+class TestShortlistHandler:
+    def test_shortlist_returns_shortlist(self, conn_with_data, reg):
+        conn, today = conn_with_data
+        parsed = parse(f"/shortlist --date {today} --limit 10")
+        result = reg.execute(
+            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
+        )
+        assert result.status in {"SUCCESS", "PARTIAL"}
+        assert len(result.tables) == 1
+        assert result.tables[0].title == "Research shortlist"
+        assert result.summary is not None
+
+    def test_shortlist_filtered_by_setup(self, conn_with_data, reg):
+        conn, today = conn_with_data
+        parsed = parse(f"/shortlist --date {today} --setup ACCUMULATION_BASE")
+        result = reg.execute(
+            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
+        )
+        assert result.status in {"SUCCESS", "PARTIAL"}
+        assert result.tables and all(
+            "ACCUMULATION_BASE" in row[3] for row in result.tables[0].rows
+        )
+
+    def test_shortlist_empty_when_filtered(self, conn_with_data, reg):
+        conn, today = conn_with_data
+        parsed = parse(f"/shortlist --date {today} --sector ENERGY")
+        result = reg.execute(
+            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
+        )
+        assert result.status == "EMPTY_RESULT"
+        assert result.summary is not None
+
+
+class TestResearchPlanHandler:
+    def test_research_plan_returns_scenario_table(self, conn_with_data, reg):
+        conn, today = conn_with_data
+        parsed = parse(f"/research-plan FPT --date {today}")
+        result = reg.execute(
+            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
+        )
+        assert result.status in {"SUCCESS", "PARTIAL"}
+        assert result.tables
+        assert result.tables[0].title == "Scenario branches"
+        assert result.metadata is not None
+        assert result.metadata["research_view"] == "scenario_plan"
+
+
+class TestSetupEvidenceHandler:
+    def test_setup_evidence_returns_empty_result_without_history(self, conn_with_data, reg):
+        conn, today = conn_with_data
+        parsed = parse(f"/setup-evidence ACCUMULATION_BASE --date {today}")
+        result = reg.execute(
+            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
+        )
+        assert result.status == "EMPTY_RESULT"
+        assert result.summary is not None
+
+
 # ---------------------------------------------------------------------------
 # /lineage
 # ---------------------------------------------------------------------------
@@ -326,7 +414,6 @@ class TestHelpHandler:
         )
         assert result.status == "SUCCESS"
         assert len(result.tables) == 1
-        # Should include all 9 commands
         all_names = [row[0] for row in result.tables[0].rows]
         for cmd in [
             "/scan",
@@ -338,5 +425,10 @@ class TestHelpHandler:
             "/note",
             "/history",
             "/help",
+            "/analyze",
+            "/watchlist-summary",
+            "/shortlist",
+            "/research-plan",
+            "/setup-evidence",
         ]:
             assert cmd in all_names, f"{cmd} not in help table"

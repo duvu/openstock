@@ -94,7 +94,8 @@ class SandboxDockerOrchestrator:
         except (SandboxArtifactGuardStateError, SandboxArtifactWriterStateError):
             return _rejected(SandboxDockerOrchestrationFailureCode.GUARD_NOT_PERSISTED)
         output_path = self._storage.ensure_directory(
-            self._layout.sandbox_writable_directory.as_posix()
+            self._layout.sandbox_writable_directory.as_posix(),
+            mode=0o777,
         )
         docker_request = DockerExecutionRequest(
             image=request.image,

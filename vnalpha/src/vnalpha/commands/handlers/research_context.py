@@ -16,6 +16,7 @@ from vnalpha.commands.models import (
     CommandResult,
     CommandStatus,
     ParsedCommand,
+    ResultArtifact,
     ResultPanel,
 )
 from vnalpha.commands.normalizers import normalize_date, normalize_symbol
@@ -98,6 +99,34 @@ def handle_market_regime(parsed: ParsedCommand, conn=None, **kwargs) -> CommandR
             ResultPanel(title="Lineage", content=dict(snapshot.lineage)),
             caveat_panel(snapshot.caveats),
         ],
+        artifacts=[
+            ResultArtifact(
+                name=f"market.get_regime:{snapshot.as_of_date.isoformat()}",
+                data={
+                    "tool": "market.get_regime",
+                    "available": True,
+                    "as_of_date": snapshot.as_of_date.isoformat(),
+                    "artifact_refs": [
+                        f"market_regime_snapshot:{snapshot.as_of_date.isoformat()}"
+                    ],
+                    "missing_data": [],
+                    "caveats": list(snapshot.caveats),
+                },
+            )
+        ],
+        metadata={
+            "research_view": "market_regime",
+            "artifact_id": f"market.get_regime:{snapshot.as_of_date.isoformat()}",
+            "subject": snapshot.benchmark_symbol,
+            "as_of_date": snapshot.as_of_date.isoformat(),
+            "workflow_status": "partial"
+            if snapshot.quality != "COMPLETE"
+            else "complete",
+            "missing_data": [],
+            "artifact_refs": [
+                f"market_regime_snapshot:{snapshot.as_of_date.isoformat()}"
+            ],
+        },
         warnings=list(snapshot.caveats),
     )
 
@@ -149,6 +178,34 @@ def _sector_strength_list(
         summary="Persisted research context; no live calculation was performed.",
         tables=[sector_table(visible)],
         panels=sector_disclosure_panels(visible),
+        artifacts=[
+            ResultArtifact(
+                name=f"sector.get_strength:{visible[0].as_of_date.isoformat()}",
+                data={
+                    "tool": "sector.get_strength",
+                    "available": True,
+                    "as_of_date": visible[0].as_of_date.isoformat(),
+                    "artifact_refs": [
+                        f"sector_strength_snapshot:{visible[0].as_of_date.isoformat()}"
+                    ],
+                    "missing_data": [],
+                    "caveats": snapshot_warnings(visible),
+                },
+            )
+        ],
+        metadata={
+            "research_view": "sector_strength",
+            "artifact_id": f"sector.get_strength:{visible[0].as_of_date.isoformat()}",
+            "subject": "SECTOR",
+            "as_of_date": visible[0].as_of_date.isoformat(),
+            "workflow_status": "partial"
+            if any(snapshot.quality != "COMPLETE" for snapshot in visible)
+            else "complete",
+            "missing_data": [],
+            "artifact_refs": [
+                f"sector_strength_snapshot:{visible[0].as_of_date.isoformat()}"
+            ],
+        },
         warnings=snapshot_warnings(visible),
     )
 

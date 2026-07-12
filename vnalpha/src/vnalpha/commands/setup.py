@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from vnalpha.commands.handlers.analyze import handle_analyze
 from vnalpha.commands.handlers.chat import handle_chat
 from vnalpha.commands.handlers.closed_loop import (
     handle_deploy,
@@ -22,9 +23,13 @@ from vnalpha.commands.handlers.research_context import (
     handle_market_regime,
     handle_sector_strength,
 )
+from vnalpha.commands.handlers.research_plan import handle_research_plan
 from vnalpha.commands.handlers.sandbox import handle_sandbox
 from vnalpha.commands.handlers.scan import handle_scan
+from vnalpha.commands.handlers.setup_evidence import handle_setup_evidence
+from vnalpha.commands.handlers.shortlist import handle_shortlist
 from vnalpha.commands.handlers.todo import handle_todo
+from vnalpha.commands.handlers.watchlist_summary import handle_watchlist_summary
 from vnalpha.commands.registry import CommandMeta, CommandRegistry
 from vnalpha.policy.command_policy import permission_names
 
@@ -126,6 +131,83 @@ def build_default_registry() -> CommandRegistry:
             examples=["/scan", "/scan VN30", "/scan --date 2026-07-06"],
             permissions=permission_names("scan"),
             handler=handle_scan,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="analyze",
+            description="Return deep persisted research analysis for one symbol.",
+            usage="/analyze SYMBOL [--date YYYY-MM-DD] [--with-sector] [--with-regime]",
+            examples=[
+                "/analyze FPT",
+                "/analyze FPT --date 2026-07-06",
+                "/analyze VNM --with-sector",
+            ],
+            permissions=permission_names("analyze"),
+            handler=handle_analyze,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="watchlist-summary",
+            description=(
+                "Summarize persisted watchlist structure by class, setup, "
+                "sector, and risk for research review."
+            ),
+            usage="/watchlist-summary [--date YYYY-MM-DD] [--top N]",
+            examples=[
+                "/watchlist-summary",
+                "/watchlist-summary --date 2026-07-06",
+                "/watchlist-summary --top 20",
+            ],
+            permissions=permission_names("watchlist-summary"),
+            handler=handle_watchlist_summary,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="shortlist",
+            description="Build a deterministic research shortlist from persisted watchlist evidence.",
+            usage=(
+                "/shortlist [--date YYYY-MM-DD] [--limit N] "
+                "[--setup SETUP] [--sector SECTOR] [--min-score SCORE]"
+            ),
+            examples=[
+                "/shortlist",
+                "/shortlist --date 2026-07-06",
+                "/shortlist --setup MOMENTUM_CONTINUATION --limit 8",
+                "/shortlist --sector TECHNOLOGY",
+            ],
+            permissions=permission_names("shortlist"),
+            handler=handle_shortlist,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="research-plan",
+            description="Build a conditional research-only scenario plan for one symbol.",
+            usage="/research-plan SYMBOL [--date YYYY-MM-DD] [--with-evidence] [--with-regime]",
+            examples=[
+                "/research-plan FPT",
+                "/research-plan FPT --date 2026-07-06",
+                "/research-plan VNM --with-evidence",
+            ],
+            permissions=permission_names("research-plan"),
+            handler=handle_research_plan,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="setup-evidence",
+            description="Return persisted historical setup evidence for a setup type or symbol.",
+            usage="/setup-evidence SETUP_TYPE|SYMBOL [--horizon N] [--date YYYY-MM-DD] [--regime NAME]",
+            examples=[
+                "/setup-evidence ACCUMULATION_BASE",
+                "/setup-evidence ACCUMULATION_BASE --horizon 10",
+                "/setup-evidence FPT --date 2026-07-06",
+            ],
+            permissions=permission_names("setup-evidence"),
+            handler=handle_setup_evidence,
         )
     )
     reg.register(

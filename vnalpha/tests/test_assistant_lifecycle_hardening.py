@@ -164,3 +164,77 @@ def test_cancel_prepared_marks_persisted_turn_cancelled() -> None:
     ).fetchone()[0]
     assert status == "CANCELLED"
     conn.close()
+
+
+def test_prepare_materializes_sandbox_plan_with_exact_preview_metadata(
+    tmp_path, monkeypatch
+) -> None:
+    from vnalpha.observability.context import reset_run_context
+
+    monkeypatch.setenv(
+        "VNALPHA_SANDBOX_IMAGE",
+        f"registry.example/openstock/vnalpha-sandbox@sha256:{'a' * 64}",
+    )
+    reset_run_context()
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn)
+    app = AssistantApp(
+        conn,
+        surface="test",
+        llm_client=FakeLLMClient(
+            responses=[
+                (
+                    '{"intent":"sandbox_research_calculation","confidence":1,'
+                    '"entities":{"purpose":"compare persisted datasets"}}',
+                    {},
+                )
+            ]
+        ),
+    )
+
+    prepared = app.prepare(AssistantRequest("compare persisted datasets"))
+
+    assert not isinstance(prepared, tuple)
+    step = prepared.plan.steps[0]
+    assert step.tool_name == "sandbox.run_research_code"
+    assert step.arguments["job_id"]
+    assert step.arguments["code_digest"]
+    assert step.arguments["code_summary"]
+    assert step.arguments["image_digest"] == f"sha256:{'a' * 64}"
+    assert step.arguments["resource_limits"] == {
+        "cpu_millis": 500,
+        "memory_mb": 256,
+        "timeout_seconds": 30,
+    }
+    conn.close()
+
+
+def test_ask_on_approval_required_plan_is_preview_even_when_auto_execute_requested() -> None:
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn)
+    app = AssistantApp(
+        conn,
+        surface="test",
+        llm_client=FakeLLMClient(
+            responses=[
+                (
+                    '{"intent":"sandbox_research_calculation","confidence":1,'
+                    '"entities":{"purpose":"compare persisted datasets"}}',
+                    {},
+                ),
+            ]
+        ),
+    )
+
+    answer, plan = app.ask("compare persisted datasets")
+
+    assert "[Plan preview" in answer.summary
+    assert plan.steps[0].tool_name == "sandbox.run_research_code"
+    assert "job_id" in plan.steps[0].arguments
+    status = conn.execute(
+        "SELECT status FROM prepared_assistant_turn ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+    assert status is not None
+    assert status[0] == "PREVIEWED"
+    assert len(app._llm.calls) == 1
+    conn.close()
