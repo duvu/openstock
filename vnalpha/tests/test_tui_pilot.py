@@ -80,6 +80,167 @@ async def test_output_stream_is_primary_output(mock_get_connection):
 
 @skip_if_no_textual
 @pytest.mark.asyncio
+async def test_output_stream_keeps_dynamic_error_and_result_text_visible():
+    from textual.app import App, ComposeResult
+    from textual.widgets import RichLog
+
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    class ProbeApp(App):
+        def compose(self) -> ComposeResult:
+            yield OutputStream(id="output-stream")
+
+    async with ProbeApp().run_test(headless=True) as pilot:
+        stream = pilot.app.query_one("#output-stream", OutputStream)
+        log = pilot.app.query_one("#output-log", RichLog)
+
+        stream.show_assistant_message(
+            "[/ERROR] Invalid JSON from classifier", style="red"
+        )
+        stream.show_assistant_message(
+            "classifier retry result: unavailable", style="green"
+        )
+        await pilot.pause()
+
+        lines = [
+            getattr(line, "text", getattr(line, "plain", "")) for line in log.lines
+        ]
+        assert lines == [
+            "[/ERROR] Invalid JSON from classifier",
+            "classifier retry result: unavailable",
+        ]
+
+
+@skip_if_no_textual
+@pytest.mark.asyncio
+async def test_output_stream_keeps_all_dynamic_text_visible():
+    from types import SimpleNamespace
+
+    from rich.text import Text
+    from textual.app import App, ComposeResult
+    from textual.widgets import RichLog
+
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    class ProbeApp(App):
+        def compose(self) -> ComposeResult:
+            yield OutputStream(id="output-stream")
+
+    async with ProbeApp().run_test(headless=True) as pilot:
+        stream = pilot.app.query_one("#output-stream", OutputStream)
+        log = pilot.app.query_one("#output-log", RichLog)
+        stream.show_user_input("[/USER]")
+        stream.show_command_result("[/COMMAND]", Text("[/RESULT]"))
+        stream.show_error("[/ERROR]", source="[/SOURCE]")
+        stream.show_warning("[/WARNING]", source="[/SOURCE]")
+        stream.show_trace_event(
+            SimpleNamespace(status="FAILED", tool_name="[/TOOL]", duration_ms=1)
+        )
+        stream.show_data_ensure_progress("[/STEP]", "done", "[/DETAIL]")
+        stream.show_repair_bundle("[/PATH]", repair_id="[/REPAIR]")
+        stream.show_deploy_status("[/STATUS]", details="[/DETAIL]")
+        await pilot.pause()
+
+        lines = [
+            getattr(line, "text", getattr(line, "plain", "")) for line in log.lines
+        ]
+        for expected in (
+            "[/USER]",
+            "[/COMMAND]",
+            "[/RESULT]",
+            "[/ERROR]",
+            "[/SOURCE]",
+            "[/WARNING]",
+            "[/TOOL]",
+            "[/STEP]",
+            "[/DETAIL]",
+            "[/PATH]",
+            "[/REPAIR]",
+            "[/STATUS]",
+        ):
+            assert any(expected in line for line in lines), (expected, lines)
+
+
+@skip_if_no_textual
+@pytest.mark.asyncio
+async def test_output_stream_records_render_failures():
+    from textual.app import App, ComposeResult
+    from textual.widgets import RichLog
+
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    class ProbeApp(App):
+        def compose(self) -> ComposeResult:
+            yield OutputStream(id="output-stream")
+
+    async with ProbeApp().run_test(headless=True) as pilot:
+        stream = pilot.app.query_one("#output-stream", OutputStream)
+        failure = RuntimeError("render failed")
+        with patch.object(RichLog, "write", side_effect=failure):
+            with patch(
+                "vnalpha.tui.routing.events.capture_render_error"
+            ) as capture_render_error:
+                stream._write("unrenderable")
+
+        capture_render_error.assert_called_once_with(failure)
+
+
+@skip_if_no_textual
+@pytest.mark.asyncio
+async def test_output_stream_persists_redacted_render_failure(tmp_path):
+    from json import loads
+
+    from textual.app import App, ComposeResult
+    from textual.widgets import RichLog
+
+    from vnalpha.observability.context import (
+        init_run_context,
+        reset_run_context,
+        set_correlation_id,
+    )
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    class ProbeApp(App):
+        def compose(self) -> ComposeResult:
+            yield OutputStream(id="output-stream")
+
+    reset_run_context()
+    context = init_run_context(surface="tui", actor="test", log_root=tmp_path)
+    correlation_id = set_correlation_id()
+    try:
+        async with ProbeApp().run_test(headless=True) as pilot:
+            stream = pilot.app.query_one("#output-stream", OutputStream)
+            failure = RuntimeError("render failed api_key=secret-token")
+            with patch.object(RichLog, "write", side_effect=failure):
+                stream._write("unrenderable")
+
+        audit_records = [
+            loads(line)
+            for line in context.audit_path.read_text().splitlines()
+            if line.strip()
+        ]
+        error_records = [
+            loads(line)
+            for line in context.errors_path.read_text().splitlines()
+            if line.strip()
+        ]
+        render_record = next(
+            record
+            for record in audit_records
+            if record["event_type"] == "TUI_RENDER_ERROR"
+        )
+        assert render_record["correlation_id"] == correlation_id
+        assert any(
+            record["event_type"] == "EXCEPTION_CAPTURED" for record in error_records
+        )
+        assert "secret-token" not in context.audit_path.read_text()
+        assert "secret-token" not in context.errors_path.read_text()
+    finally:
+        reset_run_context()
+
+
+@skip_if_no_textual
+@pytest.mark.asyncio
 async def test_composer_input_is_primary_input(mock_get_connection):
     """ComposerInput is the only primary input region (4.1.3)."""
     from vnalpha.tui.app import VnAlphaApp

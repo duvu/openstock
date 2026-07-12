@@ -261,3 +261,39 @@ def test_composer_input_submission_still_works_when_suggestions_enabled():
     assert isinstance(messages[0], ComposerInput.ComposerSubmitted)
     assert messages[0].text == "/scan now"
     assert panel.display is False
+
+
+@skip_if_no_textual
+def test_composer_input_falls_back_to_known_command_names_when_registry_fails(monkeypatch):
+    import sys
+    import types
+
+    from vnalpha.tui.widgets.composer_input import ComposerInput
+
+    class _FakePanel:
+        def __init__(self) -> None:
+            self.display = True
+            self.text = ""
+
+        def update(self, value: str) -> None:
+            self.text = value
+
+    fake_setup = types.ModuleType("vnalpha.commands.setup")
+
+    def failing_build_default_registry():
+        raise RuntimeError("registry disabled")
+
+    fake_setup.build_default_registry = failing_build_default_registry
+
+    panel = _FakePanel()
+
+    with monkeypatch.context() as m:
+        m.setitem(sys.modules, "vnalpha.commands.setup", fake_setup)
+        composer = ComposerInput()
+
+    assert composer._command_names == composer._FALLBACK_COMMAND_NAMES
+
+    composer.query_one = lambda selector, _type=None: panel
+    composer._render_suggestions("/")
+    assert panel.display is True
+    assert panel.text.startswith("/chat")

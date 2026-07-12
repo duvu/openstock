@@ -32,8 +32,28 @@ def emit_rejected(raw: str, reason: str) -> None:
 def capture_render_error(exc: Exception) -> None:
     """Capture a rendering failure through the existing observability hook."""
     try:
+        from vnalpha.observability.audit import log_audit
+
+        log_audit(
+            "TUI_RENDER_ERROR",
+            "OutputStream render failed",
+            status="FAILED",
+            level="ERROR",
+            extra={"error_type": type(exc).__name__},
+            mode="redacted",
+            module="vnalpha.tui.widgets.output_stream",
+            function="_write",
+        )
+    except Exception:
+        pass
+
+    try:
         from vnalpha.observability.errors import capture_exception
 
-        capture_exception(exc)
+        capture_exception(
+            exc,
+            likely_cause="TUI output render failure",
+            mode="redacted",
+        )
     except Exception:
         pass
