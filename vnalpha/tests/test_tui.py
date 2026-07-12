@@ -264,7 +264,9 @@ def test_composer_input_submission_still_works_when_suggestions_enabled():
 
 
 @skip_if_no_textual
-def test_composer_input_falls_back_to_known_command_names_when_registry_fails(monkeypatch):
+def test_composer_input_falls_back_to_known_command_names_when_registry_fails(
+    monkeypatch,
+):
     import sys
     import types
 

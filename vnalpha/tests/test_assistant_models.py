@@ -80,18 +80,24 @@ def test_supported_intents_include_persisted_context_reviews():
         "compare_symbols",
         "explain_symbol",
         "review_quality",
-        "review_market_regime",
-        "review_sector_strength",
         "review_symbol_sector_alignment",
         "show_lineage",
         "summarize_watchlist",
         "create_research_note",
         "show_history",
         "fetch_data",
+        "review_market_regime",
+        "review_sector_strength",
+        "deep_analyze_symbol",
+        "summarize_watchlist_deep",
+        "generate_shortlist",
+        "generate_research_scenario",
+        "review_setup_evidence",
+        "sandbox_research_calculation",
         "unsupported_or_unsafe",
     }
     assert SUPPORTED_INTENTS == expected
-    assert len(SUPPORTED_INTENTS) == 14
+    assert len(SUPPORTED_INTENTS) == 20
 
 
 # ---------------------------------------------------------------------------

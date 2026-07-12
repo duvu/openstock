@@ -51,7 +51,7 @@ if _TEXTUAL_AVAILABLE:
             self._messages: list[ConversationMessage] = []
 
         def compose(self) -> ComposeResult:
-            yield RichLog(id="output-log", markup=True, wrap=True, highlight=False)
+            yield RichLog(id="output-log", markup=False, wrap=True, highlight=False)
 
         def on_mount(self) -> None:
             try:
@@ -81,19 +81,7 @@ if _TEXTUAL_AVAILABLE:
             self._scroll_to_boundary("scroll_end")
 
         def show_assistant_message(self, text: str, style: str | None = None) -> None:
-            del style
-            display_text = text[10:] if text.startswith("Assistant:") else text
-            self.append_message(
-                AssistantAnswerMessage(
-                    text=display_text,
-                    summary=display_text,
-                    risks_caveats="",
-                    missing_data=[],
-                    grounded_source_refs=[],
-                    claim_source_refs={},
-                    tool_trace_summary="",
-                )
-            )
+            self._write(self._safe_text(text, style=style))
 
         def show_command_result(self, command: str, result: "RenderableType") -> None:
             self._write(self._safe_text(f"$ {command}", style="bold"))

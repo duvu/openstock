@@ -1,6 +1,0 @@
-Metadata-Version: 2.1
-Name: vnalpha
-Version: 0.1.0
-Summary: Alpha discovery research workspace for Vietnamese equities
-Requires-Python: >=3.10
-Provides-Extra: dev

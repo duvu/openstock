@@ -1,3 +1,5 @@
+# Specification: Opencode-like TUI workspace
+
 ## MODIFIED Requirements
 
 ### Requirement: ComposerInput shall be the only user input surface

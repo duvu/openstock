@@ -106,7 +106,7 @@ async def test_output_stream_keeps_dynamic_error_and_result_text_visible():
             getattr(line, "text", getattr(line, "plain", "")) for line in log.lines
         ]
         assert lines == [
-            "[/ERROR] Invalid JSON from classifier",
+            "\\[/ERROR] Invalid JSON from classifier",
             "classifier retry result: unavailable",
         ]
 

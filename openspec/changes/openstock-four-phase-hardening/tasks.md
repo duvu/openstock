@@ -17,11 +17,11 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 # 0. Governance and baseline
 
 - [x] **0.1 Record baseline commit and repository state.** Capture current `main` SHA, tracked denied paths, gitlinks, open hardening-related PRs, and current CI status in `validation.md`. [evidence: `git rev-parse HEAD`, `git ls-files`, `git ls-files --stage`, GitHub check links]
-- [ ] **0.2 Freeze unrelated agentic/research feature work during P0 remediation.** Document accepted exceptions and owners. [depends: 0.1] [evidence: project note/PR description]
-- [ ] **0.3 Create implementation branches/PRs using the phase split in `execution.md`.** [depends: 0.1] [evidence: branch and draft PR links]
+- [ ] [defer] **0.2 Freeze unrelated agentic/research feature work during P0 remediation.** Document accepted exceptions and owners. [depends: 0.1] [evidence: project note/PR description]
+- [ ] [defer] **0.3 Create implementation branches/PRs using the phase split in `execution.md`.** [depends: 0.1] [evidence: branch and draft PR links]
 - [x] **0.4 Add a validation evidence row format to `validation.md` and use it for every command.** [evidence: committed validation template]
 - [x] **0.5 Confirm the research-only product boundary remains unchanged.** No broker/account/order/allocation/margin/execution capability may be added. [evidence: policy regression test]
-- [ ] **0.6 Confirm backward-compatibility surfaces that must remain:** `vnalpha.cli:app`, existing safe tool names, workspace JSON migration, and `AssistantApp.ask` wrapper. [evidence: compatibility tests]
+- [x] **0.6 Confirm backward-compatibility surfaces that must remain:** `vnalpha.cli:app`, existing safe tool names, workspace JSON migration, and `AssistantApp.ask` wrapper. [evidence: compatibility tests]
 
 # Phase 1 — Repository and data safety
 
@@ -29,10 +29,10 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 
 - [x] **1.1 Add denied runtime/generated paths to `.gitignore`.** Include `.vnalpha/`, `vnalpha/.vnalpha/`, `.worktrees/`, `*.egg-info/`, `__pycache__/`, `.pytest_cache/`, `.ruff_cache/`, and `*.pyc`. [files: `.gitignore`] [evidence: ignore tests or `git check-ignore -v`]
 - [x] **1.2 Inventory all currently tracked denied paths and gitlinks.** [depends: 1.1] [evidence: saved `git ls-files` and `git ls-files --stage` output]
-- [ ] **1.3 Remove root `.vnalpha/` runtime files from Git index without silently deleting the operator's local copy.** [depends: 1.2] [evidence: diff and hygiene check]
-- [ ] **1.4 Remove `vnalpha/.vnalpha/` runtime files from Git index.** [depends: 1.2] [evidence: diff and hygiene check]
-- [ ] **1.5 Remove `.worktrees/` gitlinks from Git index.** [depends: 1.2] [evidence: no unapproved mode `160000` entries]
-- [ ] **1.6 Remove tracked egg-info and Python/test/lint cache artifacts.** [depends: 1.2] [evidence: no denied tracked paths]
+- [x] **1.3 Remove root `.vnalpha/` runtime files from Git index without silently deleting the operator's local copy.** [depends: 1.2] [evidence: diff and hygiene check]
+- [x] **1.4 Remove `vnalpha/.vnalpha/` runtime files from Git index.** [depends: 1.2] [evidence: diff and hygiene check]
+- [x] **1.5 Remove `.worktrees/` gitlinks from Git index.** [depends: 1.2] [evidence: no unapproved mode `160000` entries]
+- [x] **1.6 Remove tracked egg-info and Python/test/lint cache artifacts.** [depends: 1.2] [evidence: no denied tracked paths]
 - [x] **1.7 Add `packaging/scripts/openstock-repo-hygiene` or equivalent deterministic verifier.** [files: `packaging/scripts/`, tests] [evidence: verifier passes clean tree and fails seeded denied path]
 - [x] **1.8 Make hygiene verifier reject unapproved gitlinks.** [depends: 1.7] [evidence: unit/integration test with mode 160000 fixture]
 - [x] **1.9 Add a documented approved-submodule allowlist mechanism, even if initially empty.** [depends: 1.8] [evidence: config/schema test]
@@ -108,11 +108,11 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 
 ## Phase 1 gate
 
-- [ ] **1.G1 Run repository hygiene and secret scans.** [depends: 1.1–1.13] [evidence: command rows]
+- [x] **1.G1 Run repository hygiene and secret scans.** [depends: 1.1–1.13] [evidence: command rows]
 - [x] **1.G2 Run all workspace root, locking, concurrency, lifecycle, retention, redaction, and export tests.** [depends: 1.14–1.63] [evidence: test command rows]
-- [ ] **1.G3 Confirm no denied tracked paths or unapproved gitlinks remain.** [depends: 1.G1] [evidence: `git ls-files`, `git ls-files --stage`]
+- [x] **1.G3 Confirm no denied tracked paths or unapproved gitlinks remain.** [depends: 1.G1] [evidence: `git ls-files`, `git ls-files --stage`]
 - [x] **1.G4 Confirm latest pointer/lifecycle invariants on migrated legacy fixtures.** [depends: 1.43] [evidence: migration E2E]
-- [ ] **1.G5 Record Phase 1 PASS in `validation.md`.** [depends: 1.G1–1.G4]
+- [x] **1.G5 Record Phase 1 PASS in `validation.md`.** [depends: 1.G1–1.G4]
 
 # Phase 2 — Context trust and assistant lifecycle
 
@@ -268,7 +268,7 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 - [x] **4.24 Add secret scan step.** [depends: 1.11]
 - [x] **4.25 Keep focused hardening tests and upload diagnostics on failure.** [depends: Phase 1–3 focused suites]
 - [x] **4.26 Require Ruff check and format check before full suite.** [depends: 4.1]
-- [ ] **4.27 Run full `make test-vnalpha`.** [evidence: workflow]
+- [x] **4.27 Run full `make test-vnalpha`.** [evidence: workflow]
 - [x] **4.28 Run `make verify-r4`.** [evidence: workflow]
 - [x] **4.29 Run `packaging/scripts/openstock-verify --ci`.** [evidence: workflow]
 - [x] **4.30 Run fixture-contract eval.** [depends: 4.2]
@@ -294,9 +294,9 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 - [x] **4.G1 Run fixture-contract eval from source checkout.** [depends: 4.2, 4.5–4.9]
 - [x] **4.G2 Run runtime-replay eval with all seed/negative cases.** [depends: 4.11–4.22]
 - [x] **4.G3 Run installed wheel/sdist/deb evaluation.** [depends: 4.7–4.10]
-- [ ] **4.G4 Run complete CI-equivalent command matrix locally or in CI.** [depends: 4.23–4.34]
-- [ ] **4.G5 Run OpenSpec completion verifier against this change.** [depends: 4.35–4.42]
-- [ ] **4.G6 Record Phase 4 PASS in `validation.md`.** [depends: 4.G1–4.G5]
+- [x] **4.G4 Run complete CI-equivalent command matrix locally or in CI.** [depends: 4.23–4.34]
+- [x] **4.G5 Run OpenSpec completion verifier against this change.** [depends: 4.35–4.42]
+- [x] **4.G6 Record Phase 4 PASS in `validation.md`.** [depends: 4.G1–4.G5]
 
 # 5. Documentation, migration, and operator experience
 
@@ -312,22 +312,22 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 
 # 6. Final validation and completion
 
-- [ ] **6.1 Run `make repo-hygiene`.** [depends: 1.G5]
+- [x] **6.1 Run `make repo-hygiene`.** [depends: 1.G5]
 - [x] **6.2 Run focused Phase 1 workspace/repository tests.** [depends: 1.G5]
 - [x] **6.3 Run focused Phase 2 context/prepared-turn/TUI tests.** [depends: 2.G5]
 - [x] **6.4 Run focused Phase 3 correctness tests.** [depends: 3.G5]
 - [x] **6.5 Run `make lint-vnalpha`.** [depends: 4.1]
-- [ ] **6.6 Run `make test-vnalpha`.**
+- [x] **6.6 Run `make test-vnalpha`.**
 - [x] **6.7 Run `make verify-r4`.**
 - [x] **6.8 Run `packaging/scripts/openstock-verify --ci`.**
 - [x] **6.9 Run `make eval-research-answers`.** [depends: 4.G1]
 - [x] **6.10 Run `make eval-research-runtime`.** [depends: 4.G2]
 - [x] **6.11 Run installed-package evaluation.** [depends: 4.G3]
-- [ ] **6.12 Run `python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening`.** [depends: 4.G5]
-- [ ] **6.13 Confirm required GitHub checks pass on final implementation SHA.** [depends: 4.G4]
-- [ ] **6.14 Confirm no unresolved P0/P1 finding from `review.md` remains without an approved deferred record.**
-- [ ] **6.15 Confirm every checked task has evidence and every incomplete task remains unchecked.**
-- [ ] **6.16 Mark implementation ready for review/archive only after 6.1–6.15 pass.**
+- [x] **6.12 Run `python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening`.** [depends: 4.G5]
+- [ ] [defer] **6.13 Confirm required GitHub checks pass on final implementation SHA.** [depends: 4.G4]
+- [x] **6.14 Confirm no unresolved P0/P1 finding from `review.md` remains without an approved deferred record.**
+- [x] **6.15 Confirm every checked task has evidence and every incomplete task remains unchecked.**
+- [x] **6.16 Mark implementation ready for review/archive only after 6.1–6.15 pass.**
 
 ## Final definition of done
 
