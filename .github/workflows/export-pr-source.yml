@@ -17,9 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
+      - name: Checkout branch head
         uses: actions/checkout@v4
         with:
+          ref: fix/tui-slash-command-list
           fetch-depth: 0
           submodules: false
 
