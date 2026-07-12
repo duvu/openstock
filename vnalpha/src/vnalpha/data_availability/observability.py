@@ -22,6 +22,22 @@ def log_ensure_cache_hit(symbol: str, target_date: str) -> None:
     )
 
 
+def log_ensure_cache_rejected(
+    symbol: str, target_date: str, reasons: tuple[str, ...]
+) -> None:
+    log_audit(
+        "DATA_ENSURE_CACHE_REJECTED",
+        f"Cache evidence rejected for {symbol} on {target_date}",
+        status="WARN",
+        level="WARNING",
+        extra={
+            "symbol": symbol,
+            "target_date": target_date,
+            "reasons": list(reasons),
+        },
+    )
+
+
 def log_ensure_symbols_sync_started(symbol: str) -> None:
     log_audit(
         "DATA_ENSURE_SYMBOLS_SYNC_STARTED",

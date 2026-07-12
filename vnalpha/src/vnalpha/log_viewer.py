@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
@@ -165,22 +166,27 @@ _LEVEL_COLORS = {
     "error": "red",
     "critical": "bold red",
 }
+_TERMINAL_CONTROLS = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))|[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def _clean_log_text(value: object) -> str:
+    return _TERMINAL_CONTROLS.sub("", str(value))
 
 
 def format_record_rich(rec: LogRecord) -> str:
     """Format a log record as a Rich-markup string for console display."""
-    level = str(rec.get("level", "info")).lower()
+    level = _clean_log_text(rec.get("level", "info")).lower()
     color = _LEVEL_COLORS.get(level, "white")
-    ts = str(rec.get("timestamp", ""))[:23]  # trim microseconds
-    event = str(rec.get("event", ""))
-    logger_name = str(rec.get("logger", ""))
-    cid = str(rec.get("correlation_id", ""))
+    ts = _clean_log_text(rec.get("timestamp", ""))[:23]
+    event = _clean_log_text(rec.get("event", ""))
+    logger_name = _clean_log_text(rec.get("logger", ""))
+    cid = _clean_log_text(rec.get("correlation_id", ""))
 
     extra_parts = []
     skip_keys = {"level", "timestamp", "event", "logger", "correlation_id"}
     for k, v in rec.items():
         if k not in skip_keys:
-            extra_parts.append(f"{k}={v!r}")
+            extra_parts.append(f"{_clean_log_text(k)}={_clean_log_text(v)!r}")
 
     extra_str = "  " + "  ".join(extra_parts) if extra_parts else ""
     cid_str = f"  [dim]cid={cid[:8]}[/dim]" if cid else ""

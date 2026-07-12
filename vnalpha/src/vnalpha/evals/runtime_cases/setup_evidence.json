@@ -1,0 +1,70 @@
+{
+  "case_id": "setup_evidence",
+  "request": {
+    "current_user_prompt": "Review historical evidence for ACCUMULATION_BASE on 2026-07-01.",
+    "workspace_context": null,
+    "date": "2026-07-01"
+  },
+  "classifier_response": {
+    "intent": "review_setup_evidence",
+    "confidence": 0.99,
+    "entities": {
+      "setup_type": "ACCUMULATION_BASE",
+      "horizon_sessions": 20,
+      "date": "2026-07-01"
+    },
+    "needs_clarification": false,
+    "clarification_question": null,
+    "safety_flags": []
+  },
+  "synthesis_response": {
+    "summary": "Historical persisted evidence is available for the setup.",
+    "basis": "The seeded sample and lineage support a bounded evidence review.",
+    "risks_caveats": "Research-only context; sample size and historical outcomes are not predictive.",
+    "tool_trace_summary": "evidence.get_setup_history completed.",
+    "missing_data": [],
+    "grounded_source_refs": ["fixture://runtime/setup_evidence"],
+    "research_metadata": {}
+  },
+  "tool_outputs": [
+    {
+      "tool_name": "evidence.get_setup_history",
+      "arguments": {
+        "setup_type": "ACCUMULATION_BASE",
+        "date": "2026-07-01",
+        "horizon_sessions": 20
+      },
+      "data": {
+        "setup_type": "ACCUMULATION_BASE",
+        "horizon_sessions": 20,
+        "evidence": {"sample_status": "AVAILABLE"},
+        "lineage": {"source": "fixture"}
+      },
+      "artifact_refs": ["fixture://runtime/setup_evidence"],
+      "summary": "Seeded setup evidence.",
+      "warnings": []
+    }
+  ],
+  "expected": {
+    "outcome": "answer",
+    "intent": "review_setup_evidence",
+    "plan": [
+      {
+        "tool_name": "evidence.get_setup_history",
+        "arguments": {
+          "setup_type": "ACCUMULATION_BASE",
+          "date": "2026-07-01",
+          "horizon_sessions": 20
+        }
+      }
+    ],
+    "successful_trace_tools": ["evidence.get_setup_history"],
+    "groundedness_status": "PASS",
+    "policy_status": "PASS",
+    "fallback_used": false,
+    "audit_status": "persisted",
+    "required_missing_data": [],
+    "forbidden_source_refs": [],
+    "claim_source_refs": {}
+  }
+}

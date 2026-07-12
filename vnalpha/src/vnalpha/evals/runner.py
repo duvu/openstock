@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
+from typing import Final
 
 from vnalpha.evals.adapter import adapt_observation
 from vnalpha.evals.checks import evaluate_case
@@ -12,7 +15,9 @@ from vnalpha.evals.loader import load_golden_case
 from vnalpha.evals.models import GoldenCase
 from vnalpha.evals.report import EvaluatedCase, EvaluationRunReport, RunFailure
 
-DEFAULT_GOLDENS_ROOT = Path(__file__).resolve().parents[3] / "evals" / "goldens"
+DEFAULT_GOLDENS_ROOT: Final[Traversable] = resources.files("vnalpha.evals").joinpath(
+    "goldens"
+)
 _FAMILY_DIRECTORIES = {
     "research_answers": "research_answer",
     "scenario_plans": "scenario_plan",
@@ -22,9 +27,16 @@ _FAMILY_DIRECTORIES = {
 }
 
 
-def run_golden_corpus(root: Path = DEFAULT_GOLDENS_ROOT) -> EvaluationRunReport:
+def run_golden_corpus(root: Path | None = None) -> EvaluationRunReport:
     """Evaluate every safe YAML fixture below a fixed or privately supplied root."""
 
+    if root is None:
+        with resources.as_file(DEFAULT_GOLDENS_ROOT) as packaged_root:
+            return _run_golden_corpus(packaged_root)
+    return _run_golden_corpus(root)
+
+
+def _run_golden_corpus(root: Path) -> EvaluationRunReport:
     paths, discovery_failures, source_count = _discover_paths(root)
     failures: list[RunFailure] = list(discovery_failures)
     loaded_cases: list[tuple[Path, GoldenCase]] = []
@@ -33,27 +45,41 @@ def run_golden_corpus(root: Path = DEFAULT_GOLDENS_ROOT) -> EvaluationRunReport:
             case = load_golden_case(path)
         except GoldenCaseLoadError as error:
             failures.append(
-                _failure(path, None, "load", "valid YAML golden case", str(error))
+                _failure(
+                    _display_path(path, root),
+                    None,
+                    "load",
+                    "valid YAML golden case",
+                    str(error).replace(root.as_posix(), "."),
+                )
             )
             continue
-        family_failure = _family_failure(path, case.family)
+        family_failure = _family_failure(path, case.family, root)
         if family_failure is not None:
             failures.append(family_failure)
             continue
         loaded_cases.append((path, case))
-    failures.extend(_duplicate_failures(loaded_cases))
+    failures.extend(_duplicate_failures(loaded_cases, root))
     evaluations: list[EvaluatedCase] = []
     for path, case in loaded_cases:
         try:
             observation = adapt_observation(case)
         except InvalidEvaluationObservationError as error:
             failures.append(
-                _failure(path, case.case_id, "adapter", "valid observation", str(error))
+                _failure(
+                    _display_path(path, root),
+                    case.case_id,
+                    "adapter",
+                    "valid observation",
+                    str(error),
+                )
             )
             continue
         evaluations.append(
             EvaluatedCase(
-                path=path, case_id=case.case_id, result=evaluate_case(case, observation)
+                path=_display_path(path, root),
+                case_id=case.case_id,
+                result=evaluate_case(case, observation),
             )
         )
     return EvaluationRunReport(
@@ -136,11 +162,11 @@ def _discover_paths(root: Path) -> tuple[tuple[Path, ...], tuple[RunFailure, ...
     return tuple(safe_paths), tuple(failures), len(candidates)
 
 
-def _family_failure(path: Path, family: str) -> RunFailure | None:
+def _family_failure(path: Path, family: str, root: Path) -> RunFailure | None:
     expected_family = _FAMILY_DIRECTORIES.get(path.parent.name)
     if expected_family is None or expected_family != family:
         return _failure(
-            path,
+            _display_path(path, root),
             None,
             "family",
             expected_family or "known golden family directory",
@@ -151,13 +177,14 @@ def _family_failure(path: Path, family: str) -> RunFailure | None:
 
 def _duplicate_failures(
     loaded_cases: list[tuple[Path, GoldenCase]],
+    root: Path,
 ) -> tuple[RunFailure, ...]:
     paths_by_case_id: dict[str, list[Path]] = {}
     for path, case in loaded_cases:
         paths_by_case_id.setdefault(case.case_id, []).append(path)
     return tuple(
         _failure(
-            path,
+            _display_path(path, root),
             case_id,
             "duplicate_case_id",
             "unique case_id",
@@ -167,6 +194,13 @@ def _duplicate_failures(
         if len(case_paths) > 1
         for path in case_paths
     )
+
+
+def _display_path(path: Path, root: Path) -> Path:
+    try:
+        return path.relative_to(root)
+    except ValueError:
+        return Path(path.name)
 
 
 def _failure(

@@ -105,6 +105,7 @@ class CommandResult:
     artifacts: list[ResultArtifact] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     error: CommandError | None = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         self.status = CommandStatus(self.status)

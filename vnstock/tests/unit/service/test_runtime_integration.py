@@ -246,7 +246,11 @@ class TestErrorHandling:
         from vnstock.core.provider.exceptions import NoHealthyProviderError
 
         fake = MagicMock()
-        fake.fetch.side_effect = NoHealthyProviderError("equity.ohlcv")
+        fake.fetch.side_effect = NoHealthyProviderError(
+            "equity.ohlcv",
+            candidates=["KBS", "VCI"],
+            rejection_reasons={"KBS": "failing", "VCI": "cooldown"},
+        )
         runtime_dependency.override_runtime(fake)
 
         port = _get_free_port()
@@ -258,6 +262,8 @@ class TestErrorHandling:
         runtime_dependency.reset_runtime()
 
         assert status == 503
+        assert body["candidates"] == ["KBS", "VCI"]
+        assert body["rejection_reasons"] == {"KBS": "failing", "VCI": "cooldown"}
 
 
 # ---------------------------------------------------------------------------

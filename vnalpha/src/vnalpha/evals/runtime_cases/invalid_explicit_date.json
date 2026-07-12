@@ -1,0 +1,35 @@
+{
+  "case_id": "invalid_explicit_date",
+  "request": {
+    "current_user_prompt": "Review historical evidence for ACCUMULATION_BASE on 2026-13-40.",
+    "workspace_context": null,
+    "date": "2026-13-40"
+  },
+  "classifier_response": {
+    "intent": "review_setup_evidence",
+    "confidence": 0.99,
+    "entities": {
+      "setup_type": "ACCUMULATION_BASE",
+      "date": "2026-13-40"
+    },
+    "needs_clarification": false,
+    "clarification_question": null,
+    "safety_flags": []
+  },
+  "synthesis_response": null,
+  "tool_outputs": [],
+  "expected": {
+    "outcome": "validation_error",
+    "intent": "review_setup_evidence",
+    "plan": [],
+    "successful_trace_tools": [],
+    "groundedness_status": null,
+    "policy_status": null,
+    "fallback_used": null,
+    "audit_status": "absent",
+    "required_missing_data": [],
+    "forbidden_source_refs": [],
+    "claim_source_refs": {},
+    "validation_error_contains": "invalid date"
+  }
+}

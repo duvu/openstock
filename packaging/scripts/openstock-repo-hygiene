@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+ALLOWLIST=""
+
+usage() {
+  printf '%s\n' 'Usage: openstock-repo-hygiene [--root PATH] [--allowlist PATH] [--help]'
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --root)
+      [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+      ROOT="$(cd "$2" && pwd)"
+      shift 2
+      ;;
+    --allowlist)
+      [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+      ALLOWLIST="$2"
+      shift 2
+      ;;
+    --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ -z "$ALLOWLIST" ]; then
+  ALLOWLIST="$ROOT/packaging/config/approved-submodules.txt"
+fi
+
+denied=0
+tracked_path_matches() {
+  case "$1" in
+    .vnalpha|.vnalpha/*|vnalpha/.vnalpha|vnalpha/.vnalpha/*|.worktrees|.worktrees/*|*.egg-info|*.egg-info/*|*/.egg-info|*/.egg-info/*|__pycache__|*/__pycache__|__pycache__/*|*/__pycache__/*|.pytest_cache|*/.pytest_cache|.pytest_cache/*|*/.pytest_cache/*|.ruff_cache|*/.ruff_cache|.ruff_cache/*|*.pyc)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+while IFS= read -r -d '' path; do
+  if tracked_path_matches "$path"; then
+    printf '[FAIL] denied tracked path: %s\n' "$path"
+    denied=1
+  fi
+done < <(git -C "$ROOT" ls-files -z)
+
+while IFS= read -r path; do
+  allowed=1
+  if [ -f "$ALLOWLIST" ] && grep -Fxq "$path" "$ALLOWLIST"; then
+    allowed=0
+  fi
+  if [ "$allowed" -ne 0 ]; then
+    printf '[FAIL] unapproved gitlink: %s\n' "$path"
+    denied=1
+  fi
+done < <(git -C "$ROOT" ls-files --stage | awk '$1 == "160000" {print $4}')
+
+if [ "$denied" -ne 0 ]; then
+  exit 1
+fi
+
+printf '[OK] repository hygiene passed\n'

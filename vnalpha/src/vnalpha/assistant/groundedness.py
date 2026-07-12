@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
@@ -70,16 +70,16 @@ class GroundednessValidator:
 
         template = RESEARCH_TEMPLATES.get(plan.intent)
         missing_outputs = tuple(
-            step.tool_name
-            for step in plan.steps
-            if step.step_id not in tool_outputs
+            step.tool_name for step in plan.steps if step.step_id not in tool_outputs
         )
         valid_refs = tuple(sorted(_valid_source_refs(plan, tool_outputs)))
         messages: list[str] = []
         missing_fields: list[str] = []
 
         if missing_outputs:
-            messages.append("one or more required deterministic tool outputs are missing")
+            messages.append(
+                "one or more required deterministic tool outputs are missing"
+            )
 
         primary_data: dict[str, Any] | None = None
         if plan.steps:
@@ -98,12 +98,12 @@ class GroundednessValidator:
         explicit_missing = _missing_data(tool_outputs)
         if template is not None and primary_data is not None:
             missing_fields = [
-                field
-                for field in template.required_fields
-                if field not in primary_data
+                field for field in template.required_fields if field not in primary_data
             ]
         elif template is not None and not explicit_missing:
-            messages.append("primary research payload is unavailable without disclosure")
+            messages.append(
+                "primary research payload is unavailable without disclosure"
+            )
 
         hard_fail = bool(missing_outputs)
         if primary_data is None and not explicit_missing:
@@ -139,8 +139,15 @@ class GroundednessValidator:
 
         valid_refs = _valid_source_refs(plan, tool_outputs)
         supplied_refs = tuple(dict.fromkeys(answer.grounded_source_refs))
+        claim_refs = tuple(
+            dict.fromkeys(
+                ref for refs in answer.claim_source_refs.values() for ref in refs
+            )
+        )
         unsupported_refs = tuple(
-            ref for ref in supplied_refs if ref not in valid_refs
+            ref
+            for ref in dict.fromkeys((*supplied_refs, *claim_refs))
+            if ref not in valid_refs
         )
         payload_values = _numeric_payload_values(tool_outputs)
         unsupported_numbers = tuple(
@@ -158,9 +165,7 @@ class GroundednessValidator:
             ]
         ).lower()
         undisclosed_missing = tuple(
-            item
-            for item in required_missing
-            if item.lower() not in disclosed_text
+            item for item in required_missing if item.lower() not in disclosed_text
         )
 
         messages: list[str] = []
@@ -175,7 +180,9 @@ class GroundednessValidator:
                 "one or more source references are not present in the plan/tool payloads"
             )
         if unsupported_numbers:
-            messages.append("one or more numeric metrics are not present in tool payloads")
+            messages.append(
+                "one or more numeric metrics are not present in tool payloads"
+            )
         if undisclosed_missing:
             messages.append("one or more missing artifacts were not disclosed")
 
@@ -210,12 +217,11 @@ def _valid_source_refs(
     plan: AssistantPlan,
     tool_outputs: dict[str, Any],
 ) -> set[str]:
-    refs = {
-        f"tool:{step.tool_name}:{step.step_id}"
-        for step in plan.steps
-    } | {step.tool_name for step in plan.steps} | {
-        step.step_id for step in plan.steps
-    }
+    refs = (
+        {f"tool:{step.tool_name}:{step.step_id}" for step in plan.steps}
+        | {step.tool_name for step in plan.steps}
+        | {step.step_id for step in plan.steps}
+    )
     refs.update(str(step_id) for step_id in tool_outputs)
     for output in tool_outputs.values():
         if not isinstance(output, dict):
@@ -278,9 +284,7 @@ def _matches_payload_number(claim: str, payload_values: set[float]) -> bool:
         return False
     candidates = {round(value, digits) for digits in range(0, 7)}
     if is_percent:
-        candidates.update(
-            round(value / 100.0, digits) for digits in range(0, 7)
-        )
+        candidates.update(round(value / 100.0, digits) for digits in range(0, 7))
     return bool(candidates & payload_values)
 
 

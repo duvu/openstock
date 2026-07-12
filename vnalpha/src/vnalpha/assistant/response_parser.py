@@ -13,6 +13,12 @@ import json
 from vnalpha.assistant.errors import IntentClassificationError, SynthesisError
 from vnalpha.assistant.models import SUPPORTED_INTENTS, AssistantAnswer, IntentResult
 
+INTENT_ALIASES = {
+    "get_stock_info": "explain_symbol",
+    "show_stock_info": "explain_symbol",
+    "get_stock": "explain_symbol",
+}
+
 
 def strip_markdown_fence(text: str) -> str:
     """Remove one outer Markdown code fence from model output."""
@@ -29,17 +35,84 @@ def strip_markdown_fence(text: str) -> str:
     return inner.strip()
 
 
+def _extract_json_from_text(text: str) -> str | None:
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+
+    for idx in range(start, len(text)):
+        ch = text[idx]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : idx + 1]
+
+    return None
+
+
+def _preview(text: str, max_chars: int = 240) -> str:
+    normalized = text.strip().replace("\n", "\\n")
+    if len(normalized) <= max_chars:
+        return normalized
+    return f"{normalized[:max_chars]}…"
+
+
 def parse_intent_response(response_text: str, user_prompt: str = "") -> IntentResult:
     """Parse classifier JSON and normalize unknown intents to a safe refusal."""
     clean = strip_markdown_fence(response_text)
-    try:
-        data = json.loads(clean)
-    except json.JSONDecodeError as exc:
-        raise IntentClassificationError(
-            f"Invalid JSON from classifier: {response_text[:100]}"
-        ) from exc
+    parse_attempts: list[str] = [clean]
+    if clean != response_text:
+        parse_attempts.append(response_text)
+    extracted = _extract_json_from_text(response_text)
+    if extracted is not None:
+        parse_attempts.append(extracted)
 
-    intent = data.get("intent", "unsupported_or_unsafe")
+    data: dict | None = None
+    last_exc: json.JSONDecodeError | None = None
+    for candidate in parse_attempts:
+        if not candidate:
+            continue
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_exc = exc
+            continue
+        else:
+            if not isinstance(parsed, dict):
+                data = {}
+            else:
+                data = parsed
+            break
+
+    if data is None:
+        raise IntentClassificationError(
+            f"Invalid JSON from classifier: {_preview(response_text)}"
+        ) from last_exc
+
+    raw_intent = data.get("intent", "unsupported_or_unsafe")
+    if not isinstance(raw_intent, str):
+        raw_intent = "unsupported_or_unsafe"
+
+    intent = raw_intent.strip().lower().replace("-", "_")
+    if intent not in SUPPORTED_INTENTS:
+        intent = INTENT_ALIASES.get(intent, "unsupported_or_unsafe")
     if intent not in SUPPORTED_INTENTS:
         intent = "unsupported_or_unsafe"
     entities = data.get("entities", {})
@@ -73,6 +146,16 @@ def parse_synthesis_response(response_text: str) -> AssistantAnswer:
     metadata = data.get("research_metadata", {})
     if not isinstance(metadata, dict):
         metadata = {}
+    claim_source_refs: dict[str, list[str]] = {}
+    raw_claim_source_refs = data.get("claim_source_refs", {})
+    if isinstance(raw_claim_source_refs, dict):
+        for claim_id, refs in raw_claim_source_refs.items():
+            normalized_claim_id = str(claim_id).strip()
+            if not normalized_claim_id or not isinstance(refs, list):
+                continue
+            claim_source_refs[normalized_claim_id] = list(
+                dict.fromkeys(str(item) for item in refs if item)
+            )
     missing_data = data.get("missing_data", [])
     if not isinstance(missing_data, list):
         missing_data = [str(missing_data)]
@@ -88,4 +171,5 @@ def parse_synthesis_response(response_text: str) -> AssistantAnswer:
         else {},
         grounded_source_refs=[str(item) for item in source_refs],
         research_metadata=metadata,
+        claim_source_refs=claim_source_refs,
     )

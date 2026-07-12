@@ -69,14 +69,23 @@ _BASE_INTENT_LINES = [
     "- create_research_note: save a note about a symbol or session",
     "- show_history: research session history",
     "- fetch_data: explicit request to download, sync, or update OHLCV data",
+    "- sandbox_research_calculation: approval-gated offline research calculation requiring generated code",
     "- unsupported_or_unsafe: execution, unrestricted tools, or unsupported request",
 ]
+
+INTENT_CLASSIFICATION_SCHEMA: dict[str, str] = {"type": "json_object"}
+
 _RESEARCH_INTENT_LINES = [
     f"- {name}: {description}" for name, description in INTENT_DESCRIPTIONS.items()
 ]
 _EXAMPLE_LINES = [
     f'- "{example}" -> {name}' for name, example in INTENT_EXAMPLES.items()
 ]
+CONTEXT_INTENT_EXAMPLES: dict[str, str] = {
+    "review_market_regime": INTENT_EXAMPLES["review_market_regime"],
+    "review_sector_strength": INTENT_EXAMPLES["review_sector_strength"],
+    "review_symbol_sector_alignment": "How does FPT align with its sector context?",
+}
 
 CLASSIFIER_SYSTEM_PROMPT = "\n".join(
     [
@@ -88,7 +97,8 @@ CLASSIFIER_SYSTEM_PROMPT = "\n".join(
         "",
         "Rules:",
         "- Any buy/sell/order/trade/broker/account/allocation request is unsupported_or_unsafe.",
-        "- Any web search, Python execution, MCP, raw SQL, or filesystem request is unsupported_or_unsafe.",
+        "- Raw Python execution, MCP, raw SQL, or filesystem requests are unsupported_or_unsafe.",
+        "- Offline research calculations requiring generated code map to sandbox_research_calculation.",
         "- Requests to download/sync/fetch/update data map to fetch_data.",
         "- Use deep_analyze_symbol only for a full multi-factor symbol review; use explain_symbol for a score explanation.",
         "- Use summarize_watchlist_deep for structure/sector/setup/risk synthesis; use summarize_watchlist for a short summary.",
@@ -129,6 +139,7 @@ class IntentClassifier:
         try:
             response_text, usage = self._client.chat(
                 messages,
+                response_schema=INTENT_CLASSIFICATION_SCHEMA,
                 stage="classify",
                 task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
                 route_metadata={"requires_deep_reasoning": False},
@@ -142,6 +153,7 @@ class IntentClassifier:
             try:
                 response_text, usage = self._client.chat(
                     messages,
+                    response_schema=INTENT_CLASSIFICATION_SCHEMA,
                     stage="classify",
                     task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
                     model_profile=ModelProfile.DEFAULT,

@@ -17,6 +17,7 @@ from vnalpha.assistant.intent import (
     IntentClassifier,
     _deterministic_precheck,
 )
+from vnalpha.assistant.response_parser import parse_intent_response
 from vnalpha.assistant.models import (
     SUPPORTED_INTENTS,
     AssistantPlan,
@@ -138,17 +139,65 @@ class TestIntentClassifier:
         result = classifier.classify("Do something weird")
         assert result.intent == "unsupported_or_unsafe"
 
+    def test_llm_classification_uses_json_schema(self):
+        responses = [_fake_response("scan_candidates", 0.95)]
+        classifier = _make_classifier(responses)
+        result = classifier.classify("Show strongest candidates")
+        assert result.intent == "scan_candidates"
+        assert classifier._client.call_metadata[0]["response_schema"] == {
+            "type": "json_object"
+        }
+
+    def test_llm_classification_retry_keeps_json_schema(self):
+        responses = [
+            ("not valid json", {}),
+            _fake_response("show_lineage", 0.9, entities={"symbol": "FPT"}),
+        ]
+        classifier = _make_classifier(responses)
+        result = classifier.classify("Show me lineage for FPT")
+
+        assert result.intent == "show_lineage"
+        assert len(classifier._client.call_metadata) == 2
+        assert classifier._client.call_metadata[0]["response_schema"] == {
+            "type": "json_object"
+        }
+        assert classifier._client.call_metadata[1]["response_schema"] == {
+            "type": "json_object"
+        }
+        assert classifier._client.call_metadata[1]["model_profile"] == "default"
+
     def test_llm_invalid_json_raises_classification_error(self):
         fake = FakeLLMClient()
 
         # Override chat to return invalid JSON
-        def bad_chat(messages, response_schema=None, *, stage="unknown"):
+        def bad_chat(messages, response_schema=None, **kwargs):
             return "not valid json {{{{", {}
 
         fake.chat = bad_chat  # type: ignore[method-assign]
         classifier = IntentClassifier(fake)
         with pytest.raises(IntentClassificationError, match="Invalid JSON"):
             classifier.classify("Show me something")
+
+
+def test_parse_intent_response_recovers_markdown_fence() -> None:
+    response = """```json\n{"intent": "scan_candidates", "confidence": 0.92, "entities": {}}\n```"""
+    parsed = parse_intent_response(response)
+    assert parsed.intent == "scan_candidates"
+    assert parsed.confidence == 0.92
+
+
+def test_parse_intent_response_recovers_embedded_json() -> None:
+    response = 'Here is the JSON payload: {"intent":"explain_symbol","entities":{"symbol":"FPT"}}. End.'
+    parsed = parse_intent_response(response)
+    assert parsed.intent == "explain_symbol"
+    assert parsed.entities == {"symbol": "FPT"}
+
+
+def test_parse_intent_response_maps_legacy_json_intents() -> None:
+    response = '{"intent": "GET_STOCK_INFO", "entities": {"symbol": "FPT"}}'
+    parsed = parse_intent_response(response)
+    assert parsed.intent == "explain_symbol"
+    assert parsed.entities == {"symbol": "FPT"}
 
     def test_classifier_populates_entities(self):
         entities = {"symbol": "VNM", "date": "2025-01-15"}
@@ -255,6 +304,15 @@ class TestPlanBuilder:
         plan = self.builder.build(intent)
         assert len(plan.steps) == 1
         assert plan.steps[0].tool_name == "history.list_sessions"
+
+    def test_sandbox_calculation_plan_is_approval_gated_and_not_autonomous(self):
+        plan = self.builder.build(
+            _make_intent("sandbox_research_calculation", {"purpose": "compare returns"})
+        )
+
+        assert [step.tool_name for step in plan.steps] == ["sandbox.run_research_code"]
+        assert plan.steps[0].required_permission == "SANDBOX_APPROVAL"
+        assert "sandbox.run_research_code" not in SAFE_TOOLS
 
     def test_plan_note_tool_name(self):
         intent = _make_intent(

@@ -1,0 +1,34 @@
+case_id: missing-historical-caveat
+family: historical_evidence
+input: Summarize the historical evidence.
+expected_intent: historical_evidence
+required_tools: []
+required_claims:
+  - claim_id: sample_result
+    fact_ids:
+      - observed_sample
+facts:
+  - fact_id: observed_sample
+    artifact_id: fixture://failing/historical_sample
+    value: The observed sample contains 4 outcomes.
+forbidden_phrases: []
+required_caveats: []
+artifact_manifest:
+  - fixture://failing/historical_sample
+observation:
+  answer_text: The observed sample contains 4 outcomes.
+  caveats: []
+  missing_data: []
+  observed_claims:
+    - claim_id: sample_result
+      fact_ids:
+        - observed_sample
+  artifact_references:
+    - fixture://failing/historical_sample
+  refused: false
+  reframed: false
+missing_data_expectation: not_applicable
+policy_expectation: research_only
+sample_size: 4
+minimum_sample_size: 20
+caveat: Sample size is below the minimum threshold; treat this evidence as preliminary.

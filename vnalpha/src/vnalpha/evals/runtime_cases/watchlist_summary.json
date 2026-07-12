@@ -1,0 +1,59 @@
+{
+  "case_id": "watchlist_summary",
+  "request": {
+    "current_user_prompt": "Summarize the watchlist in depth for 2026-07-01.",
+    "workspace_context": null,
+    "date": "2026-07-01"
+  },
+  "classifier_response": {
+    "intent": "summarize_watchlist_deep",
+    "confidence": 0.99,
+    "entities": {"date": "2026-07-01"},
+    "needs_clarification": false,
+    "clarification_question": null,
+    "safety_flags": []
+  },
+  "synthesis_response": {
+    "summary": "The persisted watchlist structure is available for research review.",
+    "basis": "Seeded class, setup, sector, and risk distributions support the summary.",
+    "risks_caveats": "Research-only context; data quality and missing candidates require review.",
+    "tool_trace_summary": "watchlist.summarize_deep completed.",
+    "missing_data": [],
+    "grounded_source_refs": ["fixture://runtime/watchlist_summary"],
+    "research_metadata": {}
+  },
+  "tool_outputs": [
+    {
+      "tool_name": "watchlist.summarize_deep",
+      "arguments": {"date": "2026-07-01"},
+      "data": {
+        "watchlist_size": "seeded",
+        "candidate_class_distribution": {"WATCH_CANDIDATE": "present"},
+        "setup_distribution": {"ACCUMULATION_BASE": "present"},
+        "sector_distribution": {"TECHNOLOGY": "present"},
+        "risk_flag_distribution": {"STALE_DATA": "absent"}
+      },
+      "artifact_refs": ["fixture://runtime/watchlist_summary"],
+      "summary": "Seeded watchlist summary.",
+      "warnings": []
+    }
+  ],
+  "expected": {
+    "outcome": "answer",
+    "intent": "summarize_watchlist_deep",
+    "plan": [
+      {
+        "tool_name": "watchlist.summarize_deep",
+        "arguments": {"date": "2026-07-01"}
+      }
+    ],
+    "successful_trace_tools": ["watchlist.summarize_deep"],
+    "groundedness_status": "PASS",
+    "policy_status": "PASS",
+    "fallback_used": false,
+    "audit_status": "persisted",
+    "required_missing_data": [],
+    "forbidden_source_refs": [],
+    "claim_source_refs": {}
+  }
+}

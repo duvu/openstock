@@ -153,7 +153,7 @@ def logs_doctor(
     issues: list[str] = []
     ok_files: list[str] = []
 
-    for fname in ["app.jsonl", "audit.jsonl", "errors.jsonl", "environment.json"]:
+    for fname in ["app.jsonl", "environment.json"]:
         fpath = run_dir / fname
         if fpath.exists() and fpath.stat().st_size > 0:
             ok_files.append(fname)

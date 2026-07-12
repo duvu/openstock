@@ -46,7 +46,15 @@ def _insert_feature_snapshot(conn, symbol, date_str):
 def _insert_candidate_score(conn, symbol, date_str, as_of_bar_date=None):
     import json
 
-    lineage = {"as_of_bar_date": as_of_bar_date or date_str}
+    lineage = {
+        "as_of_bar_date": as_of_bar_date or date_str,
+        "scoring_version": "test-v1",
+        "feature_build_version": "test-v1",
+        "selected_provider": "test",
+        "ingestion_run_id": "test-run",
+        "source_quality_status": "pass",
+        "lineage_status": "COMPLETE",
+    }
     conn.execute(
         """
         INSERT INTO candidate_score
@@ -89,7 +97,7 @@ def _noop_score_universe(conn, date, universe, **kwargs):
 class TestCacheHit:
     """If candidate_score is fresh, return READY immediately without syncing."""
 
-    def test_returns_ready_on_cache_hit(self):
+    def test_returns_ready_on_complete_cache_hit(self):
         from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
         from vnalpha.data_availability.models import EnsureDataStatus
         from vnalpha.data_availability.policy import DataAvailabilityPolicy
@@ -97,9 +105,13 @@ class TestCacheHit:
         conn = _fresh_conn()
         date = "2025-06-30"
         _insert_symbol(conn, "FPT")
+        _insert_symbol(conn, "VNINDEX")
+        _insert_canonical_bars(conn, "FPT", [date])
+        _insert_canonical_bars(conn, "VNINDEX", [date])
+        _insert_feature_snapshot(conn, "FPT", date)
         _insert_candidate_score(conn, "FPT", date, as_of_bar_date=date)
 
-        policy = DataAvailabilityPolicy(auto_sync=True)
+        policy = DataAvailabilityPolicy(auto_sync=True, min_required_bars=1)
         result = ensure_symbol_analysis_ready(
             conn,
             "FPT",
@@ -107,6 +119,7 @@ class TestCacheHit:
             policy=policy,
             _sync_symbols_fn=_noop_sync_symbols,
             _sync_ohlcv_fn=_noop_sync_ohlcv,
+            _sync_index_fn=_noop_sync_index,
             _build_canonical_fn=_noop_build_canonical,
             _build_features_fn=_noop_build_features,
             _score_universe_fn=_noop_score_universe,

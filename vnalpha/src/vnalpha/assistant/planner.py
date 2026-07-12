@@ -7,7 +7,6 @@ from typing import Any
 
 from vnalpha.assistant.errors import PlanBuildError, PlanValidationError
 from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
-from vnalpha.assistant.tool_policy import assert_safe_tool
 
 
 def _resolve_symbol(entities: dict) -> str:
@@ -354,6 +353,21 @@ def _build_fetch_plan(_entities: dict) -> AssistantPlan:
     )
 
 
+def _build_sandbox_plan(entities: dict) -> AssistantPlan:
+    purpose = str(entities.get("purpose", "offline research calculation")).strip()
+    return AssistantPlan(
+        intent="sandbox_research_calculation",
+        steps=[
+            _step(
+                "sandbox.run_research_code",
+                {"purpose": purpose},
+                "Prepare an approval-gated sandbox research calculation",
+                "SANDBOX_APPROVAL",
+            )
+        ],
+    )
+
+
 def _build_refusal_plan(entities: dict) -> AssistantPlan:
     return AssistantPlan(
         intent="unsupported_or_unsafe",
@@ -383,6 +397,7 @@ _PLAN_BUILDERS = {
     "create_research_note": _build_note_plan,
     "show_history": _build_history_plan,
     "fetch_data": _build_fetch_plan,
+    "sandbox_research_calculation": _build_sandbox_plan,
     "unsupported_or_unsafe": _build_refusal_plan,
 }
 
@@ -391,7 +406,9 @@ def _validate_plan(plan: AssistantPlan) -> None:
     if plan.is_refusal():
         return
     for step in plan.steps:
-        assert_safe_tool(step.tool_name, error_type=PlanValidationError)
+        from vnalpha.assistant.tool_policy import assert_assistant_plan_tool
+
+        assert_assistant_plan_tool(step.tool_name, error_type=PlanValidationError)
 
 
 class PlanBuilder:

@@ -73,8 +73,7 @@ def test_workspace_context_excludes_raw_events_and_states_freshness(tmp_path):
     assert "compact" not in context.lower()
 
 
-def test_assistant_app_prefixes_workspace_and_existing_chat_context(tmp_path):
-    # Given: a workspace prefix and an existing chat context
+def test_assistant_app_persists_prompt_projection_and_context_refs(tmp_path):
     workspace = create_workspace(title="Research", root=tmp_path)
     workspace_context = build_workspace_context_prompt_prefix(
         workspace.workspace_id, root=tmp_path
@@ -83,7 +82,6 @@ def test_assistant_app_prefixes_workspace_and_existing_chat_context(tmp_path):
     run_migrations(conn=conn)
     app = AssistantApp(conn, llm_client=FakeLLMClient())
 
-    # When: the assistant receives both optional contexts
     app.ask(
         "Show candidates",
         no_execute=True,
@@ -91,8 +89,17 @@ def test_assistant_app_prefixes_workspace_and_existing_chat_context(tmp_path):
         workspace_context=workspace_context,
     )
 
-    # Then: both prefixes are retained before the original question
-    prompt = conn.execute("SELECT user_prompt FROM assistant_session").fetchone()[0]
-    assert prompt.startswith(workspace_context + "Context: date=2026-07-10\n")
-    assert prompt.endswith("Show candidates")
+    row = conn.execute(
+        """
+        SELECT user_prompt, prompt_text, prompt_summary,
+               workspace_context_ref, chat_context_ref, raw_stored
+        FROM assistant_session
+        """
+    ).fetchone()
+    assert row[0].startswith("prompt chars=")
+    assert row[1] is None
+    assert row[2].startswith("prompt chars=")
+    assert row[3]
+    assert row[4]
+    assert row[5] is False
     conn.close()

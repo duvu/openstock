@@ -6,10 +6,11 @@ from dataclasses import dataclass
 
 import duckdb
 
+from vnalpha.data_availability.cache import evaluate_cache_eligibility
 from vnalpha.data_availability.checks import (
     compute_lookback_start,
     get_benchmark_status,
-    get_candidate_score_status,
+    get_candidate_score_evidence,
     get_canonical_ohlcv_status,
     get_feature_snapshot_status,
     get_symbol_master_status,
@@ -28,6 +29,9 @@ class EnsureDataSnapshot:
     benchmark_bars: int
     feature_snapshot_exists: bool
     candidate_score_exists: bool
+    candidate_score_as_of_date: str | None = None
+    quality_status: str | None = None
+    lineage_fields: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +49,7 @@ def capture_availability_snapshot(
     """Capture all warehouse checks without triggering provisioning."""
 
     lookback_start = compute_lookback_start(target_date, policy.lookback_days)
+    score_evidence = get_candidate_score_evidence(conn, symbol, target_date)
     return EnsureDataSnapshot(
         symbol=symbol,
         target_date=target_date,
@@ -57,12 +62,10 @@ def capture_availability_snapshot(
             conn, policy.benchmark, target_date, lookback_start
         ),
         feature_snapshot_exists=get_feature_snapshot_status(conn, symbol, target_date),
-        candidate_score_exists=(
-            get_candidate_score_status(
-                conn, symbol, target_date, policy.stale_after_calendar_days
-            )
-            is not None
-        ),
+        candidate_score_exists=score_evidence.exists,
+        candidate_score_as_of_date=score_evidence.as_of_bar_date,
+        quality_status=score_evidence.quality_status,
+        lineage_fields=score_evidence.lineage_fields,
     )
 
 
@@ -71,7 +74,7 @@ def plan_data_availability(
 ) -> EnsureDataPlan:
     """Return the ordered actions required by a read-only snapshot."""
 
-    if snapshot.candidate_score_exists:
+    if evaluate_cache_eligibility(snapshot, policy).eligible:
         return EnsureDataPlan(snapshot=snapshot, actions=())
 
     actions: list[EnsureDataAction] = []
@@ -85,7 +88,10 @@ def plan_data_availability(
             (EnsureDataAction.OHLCV_SYNCED, EnsureDataAction.CANONICAL_BUILT)
         )
 
-    benchmark_missing = snapshot.benchmark_bars < policy.min_required_bars
+    benchmark_missing = (
+        policy.require_benchmark_history
+        and snapshot.benchmark_bars < policy.min_required_bars
+    )
     if benchmark_missing and policy.auto_sync:
         actions.extend(
             (
@@ -98,12 +104,14 @@ def plan_data_availability(
         snapshot.canonical_bars >= policy.min_required_bars or canonical_will_be_built
     )
     feature_will_be_built = (
-        not snapshot.feature_snapshot_exists and feature_can_be_built
+        policy.auto_sync
+        and not snapshot.feature_snapshot_exists
+        and feature_can_be_built
     )
     if feature_will_be_built:
         actions.append(EnsureDataAction.FEATURES_BUILT)
 
-    if snapshot.feature_snapshot_exists or feature_will_be_built:
+    if policy.auto_sync and (snapshot.feature_snapshot_exists or feature_will_be_built):
         actions.append(EnsureDataAction.SCORED)
 
     return EnsureDataPlan(snapshot=snapshot, actions=tuple(actions))

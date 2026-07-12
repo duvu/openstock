@@ -6,6 +6,7 @@ from vnalpha.commands.handlers.compare import handle_compare
 from vnalpha.commands.handlers.context import handle_context
 from vnalpha.commands.handlers.explain import handle_explain
 from vnalpha.commands.handlers.filter import handle_filter
+from vnalpha.commands.handlers.chat import handle_chat
 from vnalpha.commands.handlers.help import handle_help
 from vnalpha.commands.handlers.history import handle_history
 from vnalpha.commands.handlers.lineage import handle_lineage
@@ -16,6 +17,7 @@ from vnalpha.commands.handlers.research_context import (
     handle_market_regime,
     handle_sector_strength,
 )
+from vnalpha.commands.handlers.sandbox import handle_sandbox
 from vnalpha.commands.handlers.scan import handle_scan
 from vnalpha.commands.handlers.todo import handle_todo
 from vnalpha.commands.registry import CommandMeta, CommandRegistry
@@ -26,6 +28,24 @@ def build_default_registry() -> CommandRegistry:
     """Return a registry populated with capability-approved research commands."""
     reg = CommandRegistry()
 
+    reg.register(
+        CommandMeta(
+            name="sandbox",
+            description="Preview approval-gated sandbox work or inspect persisted job metadata.",
+            usage=(
+                "/sandbox run <purpose> | /sandbox status <job-id> | "
+                "/sandbox artifact <job-id> | /sandbox list --latest"
+            ),
+            examples=[
+                "/sandbox run compare persisted datasets",
+                "/sandbox status job-123",
+                "/sandbox artifact job-123",
+                "/sandbox list --latest",
+            ],
+            permissions=permission_names("sandbox"),
+            handler=handle_sandbox,
+        )
+    )
     reg.register(
         CommandMeta(
             name="market-regime",
@@ -74,6 +94,16 @@ def build_default_registry() -> CommandRegistry:
             ],
             permissions=permission_names("filter"),
             handler=handle_filter,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="chat",
+            description="Manage chat session control.",
+            usage="/chat new",
+            examples=["/chat new"],
+            permissions=permission_names("chat"),
+            handler=handle_chat,
         )
     )
     reg.register(
@@ -141,12 +171,13 @@ def build_default_registry() -> CommandRegistry:
             name="context",
             description="Inspect, maintain, resume, list, or export workspace context.",
             usage=(
-                "/context <status|compact|clean|new|resume|list|export> "
-                "[--execute|--no-compact|--resolved-errors]; aliases: "
+                "/context <status|repair|compact|clean|new|resume|list|export> "
+                "[--dry-run|--execute|--no-compact|--resolved-errors]; aliases: "
                 "/status, /compact, /clean, /new, /resume"
             ),
             examples=[
                 "/context status",
+                "/context repair --dry-run",
                 "/context compact",
                 "/context clean",
                 "/context clean --execute",

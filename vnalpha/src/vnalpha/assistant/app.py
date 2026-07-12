@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
+import json
+import os
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Callable
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from vnalpha.chat.context import ChatContext
     from vnalpha.tools.executor import TraceEvent
 
-from vnalpha.assistant.context import prefix_assistant_prompt
 from vnalpha.assistant.errors import AssistantError, RefusalError, SynthesisError
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.intent import IntentClassifier
 from vnalpha.assistant.models import (
     AssistantAnswer,
     AssistantPlan,
+    AssistantRequest,
+    PreparedAssistantTurn,
+    PromptPersistenceRecord,
     RefusalMessage,
+    plan_hash,
+    text_hash,
 )
 from vnalpha.assistant.planner import PlanBuilder
 from vnalpha.assistant.policy import check_intent_policy, check_policy
@@ -26,7 +34,58 @@ from vnalpha.warehouse.assistant_repo import (
     create_llm_trace,
     finish_assistant_session,
     finish_llm_trace,
+    finish_prepared_turn,
+    mark_assistant_session_prepared,
+    persist_prepared_turn,
 )
+from vnalpha.workspace_context.redaction import redact_workspace_text
+
+
+def _prompt_projection(request: AssistantRequest) -> PromptPersistenceRecord:
+    redacted = redact_workspace_text(request.current_user_prompt).text
+    prompt_digest = text_hash(redacted)
+    raw_stored = os.environ.get("VNALPHA_ASSISTANT_STORE_RAW", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    workspace_ref = (
+        text_hash(request.workspace_context)
+        if request.workspace_context is not None
+        else None
+    )
+    chat_payload = (
+        json.dumps(request.to_dict()["chat_context"], sort_keys=True)
+        if request.chat_context is not None
+        else None
+    )
+    chat_ref = text_hash(chat_payload) if chat_payload is not None else None
+    summary = f"prompt chars={len(redacted)} sha256={prompt_digest}"
+    return PromptPersistenceRecord(
+        prompt_text=redacted if raw_stored else None,
+        prompt_summary=summary,
+        prompt_hash=prompt_digest,
+        prompt_chars=len(redacted),
+        workspace_context_ref=workspace_ref,
+        chat_context_ref=chat_ref,
+        raw_stored=raw_stored,
+    )
+
+
+def _refusal_result(exc: RefusalError) -> tuple[RefusalMessage, AssistantPlan]:
+    reason = exc.args[0] if exc.args else str(exc)
+    return (
+        RefusalMessage(
+            reason=reason,
+            policy_category=getattr(exc, "policy_category", "UNKNOWN"),
+            suggestion=getattr(exc, "suggestion", None),
+        ),
+        AssistantPlan(
+            intent="unsupported_or_unsafe",
+            steps=[],
+            refusal_reason=reason,
+        ),
+    )
 
 
 class AssistantApp:
@@ -56,94 +115,96 @@ class AssistantApp:
         chat_context: "ChatContext | None" = None,
         workspace_context: str | None = None,
     ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
-        """Process one natural-language research question."""
+        """Process one request through the prepare/execute compatibility path."""
 
-        user_prompt = prefix_assistant_prompt(
-            user_prompt,
-            workspace_context,
-            chat_context,
+        request = AssistantRequest(
+            current_user_prompt=user_prompt,
+            workspace_context=workspace_context,
+            chat_context=chat_context,
+            date=date,
         )
+        prepared = self.prepare(request)
+        if isinstance(prepared, tuple):
+            return prepared
+        if no_execute:
+            return self._preview_prepared(prepared)
+        return self.execute_prepared(prepared, on_trace_event=on_trace_event)
+
+    def prepare(
+        self, request: AssistantRequest
+    ) -> PreparedAssistantTurn | tuple[RefusalMessage, AssistantPlan]:
+        """Perform safety, classification, policy, and planning exactly once."""
+
+        prompt = request.current_user_prompt
+        persistence = _prompt_projection(request)
         session_id = create_assistant_session(
             self._conn,
             surface=self._surface,
-            user_prompt=user_prompt,
+            user_prompt=persistence.prompt_summary,
+            prompt=persistence,
         )
-
         try:
             from vnalpha.observability.trace import log_trace
 
-            log_trace(
-                "ASSISTANT_ASK_STARTED",
-                "ask",
-                status="RUNNING",
-                module="vnalpha.assistant",
-            )
+            log_trace("ASSISTANT_PREPARED", "prepare", status="RUNNING")
         except Exception:  # noqa: BLE001
             pass
-
         try:
-            result = self._run(
-                user_prompt,
-                session_id,
-                date=date,
-                no_execute=no_execute,
-                on_trace_event=on_trace_event,
+            check_policy(prompt)
+            classify_trace_id = create_llm_trace(
+                self._conn,
+                assistant_session_id=session_id,
+                stage="classify",
+                model=self._llm_model(),
+                input_summary={"prompt_chars": len(prompt)},
             )
-            answer, _plan = result
             try:
-                from vnalpha.observability.audit import log_audit
-                from vnalpha.observability.trace import log_trace
-
-                answer_type = type(answer).__name__
-                summary_chars = len(getattr(answer, "summary", "") or "")
-                log_trace(
-                    "ASSISTANT_ASK_COMPLETED",
-                    "ask",
+                intent_result = self._classifier.classify(prompt)
+                finish_llm_trace(
+                    self._conn,
+                    classify_trace_id,
                     status="SUCCESS",
-                    module="vnalpha.assistant",
-                    extra={
-                        "answer_type": answer_type,
-                        "summary_chars": summary_chars,
-                    },
+                    output_summary={"intent": intent_result.intent},
+                    usage=self._classifier.last_usage,
                 )
-                log_audit(
-                    "ASSISTANT_ANSWER_LOGGED",
-                    f"Answer type={answer_type} summary_chars={summary_chars}",
-                    module="vnalpha.assistant",
+            except Exception as exc:
+                finish_llm_trace(
+                    self._conn,
+                    classify_trace_id,
+                    status="FAILED",
+                    error={"message": str(exc)},
                 )
-            except Exception:  # noqa: BLE001
-                pass
-            return result
+                raise
+            if request.date and "date" not in intent_result.entities:
+                intent_result.entities["date"] = request.date
+            check_intent_policy(intent_result)
+            plan = self._planner.build(intent_result)
+            turn = PreparedAssistantTurn(
+                prepared_turn_id=f"turn-{uuid4().hex}",
+                assistant_session_id=session_id,
+                request=request,
+                intent_result=intent_result,
+                plan=plan,
+                plan_hash=plan_hash(plan),
+                policy_status="PASS",
+                created_at=datetime.now(UTC).isoformat(),
+            )
+            persist_prepared_turn(self._conn, turn)
+            mark_assistant_session_prepared(
+                self._conn,
+                session_id,
+                intent=intent_result.intent,
+                plan=plan.to_dict(),
+            )
+            return turn
         except RefusalError as exc:
             finish_assistant_session(
                 self._conn,
                 session_id,
                 status="REFUSED",
-                refusal_reason=exc.args[0] if exc.args else str(exc),
-            )
-            try:
-                from vnalpha.observability.audit import log_audit
-
-                log_audit(
-                    "CHAT_REFUSAL",
-                    f"AssistantApp refusal: {str(exc)[:120]}",
-                    module="vnalpha.assistant",
-                )
-            except Exception:  # noqa: BLE001
-                pass
-            return RefusalMessage(
-                reason=exc.args[0] if exc.args else str(exc),
-                policy_category=(
-                    exc.policy_category
-                    if hasattr(exc, "policy_category")
-                    else "UNKNOWN"
-                ),
-                suggestion=exc.suggestion if hasattr(exc, "suggestion") else None,
-            ), AssistantPlan(
-                intent="unsupported_or_unsafe",
-                steps=[],
                 refusal_reason=str(exc),
             )
+            return _refusal_result(exc)
         except AssistantError as exc:
             finish_assistant_session(
                 self._conn,
@@ -151,135 +212,57 @@ class AssistantApp:
                 status="FAILED",
                 error={"error_type": type(exc).__name__, "message": str(exc)},
             )
-            try:
-                from vnalpha.observability.errors import capture_exception
-
-                capture_exception(exc)
-            except Exception:  # noqa: BLE001
-                pass
-            raise
-        except Exception as exc:
-            finish_assistant_session(
-                self._conn,
-                session_id,
-                status="FAILED",
-                error={"error_type": "RuntimeError", "message": str(exc)},
-            )
-            try:
-                from vnalpha.observability.errors import capture_exception
-
-                capture_exception(exc)
-            except Exception:  # noqa: BLE001
-                pass
             raise
 
-    def _run(
+    def execute_prepared(
         self,
-        user_prompt: str,
-        session_id: str,
+        prepared: PreparedAssistantTurn,
         *,
-        date: str | None = None,
-        no_execute: bool = False,
         on_trace_event: "Callable[[TraceEvent], None] | None" = None,
     ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
-        # 1. Deterministic safety check
-        check_policy(user_prompt)
+        """Execute the exact prepared plan without reclassification or replanning."""
 
-        # 2. Classify intent
-        classify_trace_id = create_llm_trace(
-            self._conn,
-            assistant_session_id=session_id,
-            stage="classify",
-            model=self._llm_model(),
-            input_summary={"prompt_chars": len(user_prompt)},
-        )
-        try:
-            intent_result = self._classifier.classify(user_prompt)
-            finish_llm_trace(
-                self._conn,
-                classify_trace_id,
-                status="SUCCESS",
-                output_summary={"intent": intent_result.intent},
-                usage=self._classifier.last_usage,
+        if plan_hash(prepared.plan) != prepared.plan_hash:
+            finish_prepared_turn(
+                self._conn, prepared.prepared_turn_id, status="HASH_MISMATCH"
             )
-        except Exception as exc:
-            finish_llm_trace(
-                self._conn,
-                classify_trace_id,
-                status="FAILED",
-                error={"message": str(exc)},
-            )
-            raise
-
-        if date and "date" not in intent_result.entities:
-            intent_result.entities["date"] = date
-
-        # 3. Post-classification policy check
-        check_intent_policy(intent_result)
-
-        # 4. Deterministic plan
-        plan = self._planner.build(intent_result)
-
-        if no_execute:
             finish_assistant_session(
                 self._conn,
-                session_id,
-                status="SUCCESS",
-                intent=intent_result.intent,
-                plan=plan.to_dict(),
+                prepared.assistant_session_id,
+                status="VALIDATION_ERROR",
+                error={
+                    "error_type": "PlanHashMismatch",
+                    "message": "prepared plan changed",
+                },
             )
-            return AssistantAnswer(
-                summary=(
-                    "[Plan preview — not executed]\n"
-                    f"{self._planner.preview(plan)}"
-                ),
-                basis="Plan preview only.",
-                risks_caveats="",
-                tool_trace_summary="No tools executed (--no-execute mode).",
-            ), plan
-
-        # 5. Execute deterministic tools
+            raise ValueError("Prepared plan hash mismatch; execution refused.")
         from vnalpha.assistant.executor import AssistantExecutor
 
         executor = AssistantExecutor(
             self._conn,
-            assistant_session_id=session_id,
+            assistant_session_id=prepared.assistant_session_id,
             on_trace_event=on_trace_event,
         )
-        tool_outputs = executor.execute(plan)
-
-        # 6. Synthesize and validate
+        tool_outputs = executor.execute(prepared.plan)
         synthesis_trace_id = create_llm_trace(
             self._conn,
-            assistant_session_id=session_id,
+            assistant_session_id=prepared.assistant_session_id,
             stage="synthesize",
             model=self._llm_model(),
-            input_summary={"steps": len(plan.steps)},
+            input_summary={"steps": len(prepared.plan.steps)},
         )
         try:
             answer = self._synthesizer.synthesize(
-                user_prompt,
-                plan,
+                prepared.request.current_user_prompt,
+                prepared.plan,
                 tool_outputs,
+                request=prepared.request,
             )
             finish_llm_trace(
                 self._conn,
                 synthesis_trace_id,
                 status="SUCCESS",
-                output_summary={
-                    "summary_length": len(answer.summary),
-                    "groundedness_status": (
-                        self._synthesizer.last_groundedness.status
-                        if self._synthesizer.last_groundedness
-                        else None
-                    ),
-                    "policy_status": (
-                        self._synthesizer.last_policy.status
-                        if self._synthesizer.last_policy
-                        else None
-                    ),
-                    "fallback_used": self._synthesizer.last_fallback_used,
-                },
+                output_summary={"summary_length": len(answer.summary)},
                 usage=self._synthesizer.last_usage,
             )
         except Exception as exc:
@@ -289,13 +272,12 @@ class AssistantApp:
                 status="FAILED",
                 error={"message": str(exc)},
             )
+            finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="FAILED")
             raise
-
-        # 7. Persist a dedicated deep-research audit before returning the answer.
-        if is_research_intent(plan.intent):
+        if is_research_intent(prepared.plan.intent):
             audit_id = self._persist_research_audit(
-                session_id=session_id,
-                plan=plan,
+                session_id=prepared.assistant_session_id,
+                plan=prepared.plan,
                 tool_outputs=tool_outputs,
                 answer=answer,
             )
@@ -303,17 +285,63 @@ class AssistantApp:
                 **answer.research_metadata,
                 "research_answer_audit_id": audit_id,
             }
-
-        # 8. Persist final session result
         finish_assistant_session(
             self._conn,
-            session_id,
+            prepared.assistant_session_id,
             status="SUCCESS",
-            intent=intent_result.intent,
-            plan=plan.to_dict(),
+            intent=prepared.intent_result.intent,
+            plan=prepared.plan.to_dict(),
             answer=answer.to_dict(),
         )
-        return answer, plan
+        finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="EXECUTED")
+        try:
+            from vnalpha.observability.trace import log_trace
+
+            log_trace("ASSISTANT_EXECUTED", "execute_prepared", status="SUCCESS")
+        except Exception:  # noqa: BLE001
+            pass
+        return answer, prepared.plan
+
+    def cancel_prepared(self, prepared: PreparedAssistantTurn) -> None:
+        """Cancel a prepared turn without executing its plan."""
+
+        finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="CANCELLED")
+        finish_assistant_session(
+            self._conn,
+            prepared.assistant_session_id,
+            status="VALIDATION_ERROR",
+            error={"error_type": "Cancelled", "message": "prepared turn cancelled"},
+        )
+        try:
+            from vnalpha.observability.trace import log_trace
+
+            log_trace("ASSISTANT_CANCELLED", "cancel_prepared", status="CANCELLED")
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _preview_prepared(
+        self, prepared: PreparedAssistantTurn
+    ) -> tuple[AssistantAnswer, AssistantPlan]:
+        finish_assistant_session(
+            self._conn,
+            prepared.assistant_session_id,
+            status="SUCCESS",
+            intent=prepared.intent_result.intent,
+            plan=prepared.plan.to_dict(),
+        )
+        finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="PREVIEWED")
+        return (
+            AssistantAnswer(
+                summary=(
+                    "[Plan preview — not executed]\n"
+                    f"{self._planner.preview(prepared.plan)}"
+                ),
+                basis="Plan preview only.",
+                risks_caveats="",
+                tool_trace_summary="No tools executed (--no-execute mode).",
+            ),
+            prepared.plan,
+        )
 
     def _persist_research_audit(
         self,

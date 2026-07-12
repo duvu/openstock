@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import duckdb
 import pytest
 
@@ -202,3 +204,57 @@ def test_repository_returns_missing_and_lists_only_safe_metadata() -> None:
         records = repository.list()
 
     assert records[0].code_digest == job.code_digest
+
+
+def test_repository_round_trips_typed_artifacts_through_derived_json() -> None:
+    from vnalpha.sandbox.repository import SandboxJobRepository
+
+    output_schema = SandboxOutputSchema.model_validate(
+        {
+            "artifacts": (
+                {
+                    "kind": "result",
+                    "path": "output/result.json",
+                    "media_type": "application/json",
+                },
+                {
+                    "kind": "summary",
+                    "path": "output/summary.md",
+                    "media_type": "text/markdown",
+                },
+                {
+                    "kind": "table",
+                    "path": "output/tables/data.csv",
+                    "media_type": "text/csv",
+                },
+            )
+        }
+    )
+    request = SandboxJobRequest.model_validate(
+        {
+            "purpose": "evaluate",
+            "code": "result = 1",
+            "correlation_id": "typed-round-trip",
+            "resource_limits": {
+                "cpu_millis": 500,
+                "memory_mb": 128,
+                "timeout_seconds": 10,
+            },
+        }
+    )
+    job = replace(
+        request.into_job(
+            job_id=SandboxJobId("typed-round-trip"),
+            run_id=SandboxRunId("typed-run"),
+        ),
+        output_schema=output_schema,
+    )
+    with in_memory_connection() as conn:
+        run_migrations(conn=conn)
+        repository = SandboxJobRepository(conn)
+        repository.create(job)
+
+        stored = repository.get(job.job_id)
+
+    assert stored is not None
+    assert stored.output_schema == output_schema

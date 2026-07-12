@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from vnalpha.workspace_context.models import WorkspaceState
 from vnalpha.workspace_context.storage import (
@@ -47,7 +48,53 @@ def test_resolve_workspace_root_defaults_to_workspace_directory(monkeypatch) -> 
     resolved = resolve_workspace_root()
 
     assert resolved == DEFAULT_WORKSPACE_ROOT
-    assert resolved.as_posix() == ".vnalpha/workspaces"
+    assert resolved.is_absolute()
+
+
+def test_resolve_workspace_root_uses_platform_state_directory(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv("VNALPHA_WORKSPACE_ROOT", raising=False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+    resolved = resolve_workspace_root()
+
+    assert resolved == tmp_path / "state" / "openstock" / "workspaces"
+
+
+def test_resolve_workspace_root_is_independent_of_current_directory(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv("VNALPHA_WORKSPACE_ROOT", raising=False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    first_dir = tmp_path / "first"
+    second_dir = tmp_path / "second"
+    first_dir.mkdir()
+    second_dir.mkdir()
+
+    monkeypatch.chdir(first_dir)
+    first = resolve_workspace_root()
+    monkeypatch.chdir(second_dir)
+    second = resolve_workspace_root()
+
+    assert first == second == tmp_path / "state" / "openstock" / "workspaces"
+
+
+def test_resolve_workspace_root_matches_from_repository_and_unrelated_cwds(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv("VNALPHA_WORKSPACE_ROOT", raising=False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir()
+    repository_root = Path(__file__).resolve().parents[3]
+
+    resolved = []
+    for cwd in (repository_root, repository_root / "vnalpha", unrelated):
+        monkeypatch.chdir(cwd)
+        resolved.append(resolve_workspace_root())
+
+    assert resolved == [tmp_path / "state" / "openstock" / "workspaces"] * 3
 
 
 def test_ensure_layout_and_state_round_trip(tmp_path) -> None:

@@ -1,4 +1,4 @@
-"""Tests for Section 9: Chat-local commands (/new /clear /context /plan /trace /help)."""
+"""Tests for Section 9: Chat-local commands (/clear /context /plan /trace /help)."""
 
 from __future__ import annotations
 
@@ -55,44 +55,44 @@ def _make_ctrl(conn, *, session_id=None, target_date="2026-07-07"):
 
 
 # ---------------------------------------------------------------------------
-# /new — create new session and reset context
+# /chat new — create new session and reset context
 # ---------------------------------------------------------------------------
 
 
-def test_cmd_new_creates_session(in_memory_conn):
-    """/new creates a new chat_session row and returns confirmation."""
+def test_cmd_chat_new_via_handle_turn_creates_session(in_memory_conn):
+    """/chat new creates a new chat_session through slash-command dispatch."""
     ctrl, messages = _make_ctrl(in_memory_conn)
 
     assert ctrl._chat_session_id is None
 
-    result = ctrl.handle_chat_local_command("new", [])
+    ctrl.handle_turn("/chat new")
 
     assert ctrl._chat_session_id is not None
-    assert "new chat session" in result.lower() or "session" in result.lower()
+    assert any("new chat session" in text.lower() for _, text in messages)
 
 
-def test_cmd_new_resets_pending_plan(in_memory_conn):
-    """/new clears any pending plan state."""
+def test_cmd_chat_new_resets_pending_plan(in_memory_conn):
+    """/chat new clears any pending plan state."""
     from unittest.mock import MagicMock
 
     ctrl, _ = _make_ctrl(in_memory_conn)
     ctrl._pending_plan = MagicMock()
     ctrl._pending_plan_turn_context = {"question": "something"}
 
-    ctrl.handle_chat_local_command("new", [])
+    ctrl.handle_turn("/chat new")
 
     assert ctrl._pending_plan is None
     assert ctrl._pending_plan_turn_context is None
 
 
-def test_cmd_new_session_id_changes(in_memory_conn):
-    """/new gives a different session_id on each call."""
+def test_cmd_chat_new_session_id_changes(in_memory_conn):
+    """/chat new gives a different session_id on each call."""
     ctrl, _ = _make_ctrl(in_memory_conn)
 
-    ctrl.handle_chat_local_command("new", [])
+    ctrl.handle_turn("/chat new")
     first_id = ctrl._chat_session_id
 
-    ctrl.handle_chat_local_command("new", [])
+    ctrl.handle_turn("/chat new")
     second_id = ctrl._chat_session_id
 
     assert first_id != second_id
@@ -301,7 +301,14 @@ def test_cmd_help_contains_all_local_commands(in_memory_conn):
     ctrl, _ = _make_ctrl(in_memory_conn)
     result = ctrl.handle_chat_local_command("help", [])
 
-    for cmd in ("/new", "/clear", "/context", "/plan", "/trace", "/help"):
+    for cmd in (
+        "/chat new",
+        "/clear",
+        "/context",
+        "/plan",
+        "/trace",
+        "/help",
+    ):
         assert cmd in result, f"Expected '{cmd}' in /help output"
 
 
@@ -334,7 +341,7 @@ def test_handle_turn_routes_help_to_chat_local(in_memory_conn):
     ctrl.handle_turn("/help")
 
     all_text = " ".join(t for _, t in messages)
-    assert "/new" in all_text
+    assert "/chat new" in all_text
     assert "/clear" in all_text
 
 

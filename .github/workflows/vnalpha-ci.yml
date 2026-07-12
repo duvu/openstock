@@ -31,6 +31,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Repository hygiene and secret scan
+        run: |
+          make repo-hygiene
+          packaging/scripts/openstock-secret-scan
+          bash packaging/tests/test_repo_hygiene.sh
+          bash packaging/tests/test_repo_secret_scan.sh
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 def ensure_symbol_analysis_ready(
     conn: duckdb.DuckDBPyConnection,
     symbol: str,
-    target_date: str,
+    target_date: str | None,
     *,
     policy: DataAvailabilityPolicy = DEFAULT_POLICY,
     client: VnstockClient | None = None,

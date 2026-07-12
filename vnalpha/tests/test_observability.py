@@ -1066,6 +1066,25 @@ class TestAuditExtendedFields:
 # ===========================================================================
 
 
+def test_logs_doctor_accepts_absent_event_driven_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from vnalpha.observability import cli_logs
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "app.jsonl").write_text('{"event_type":"CLI_STARTED"}\n')
+    (run_dir / "environment.json").write_text('{"run_id":"run"}\n')
+    monkeypatch.setattr(cli_logs, "_resolve_run_dir", lambda *_args: run_dir)
+
+    result = CliRunner().invoke(cli_logs.logs_app, ["doctor", "--latest"])
+
+    assert result.exit_code == 0
+    assert "Status: OK" in result.output
+
+
 class TestCommandLifecycleWrapper:
     """Tasks 3.22-3.24: CLI lifecycle context manager tests."""
 

@@ -124,6 +124,43 @@ Every generated-code execution requested through natural language or sandbox com
 - **THEN** the system does not execute the job
 - **AND** records the approval-gate rejection or pending state with the correlation ID
 
+#### Scenario: Approval binds an immutable sandbox job
+
+- **WHEN** a user explicitly approves a sandbox plan
+- **THEN** the system persists approval evidence bound to the exact sandbox job ID, plan digest, generated-code digest, approved input references, correlation ID, approver, and timestamp
+- **AND** executes only that exact approved job
+- **AND** does not reclassify, replan, regenerate code, or substitute inputs after approval
+
+### Requirement: Sandbox code shall be analyzed as Python modules
+
+The static guard SHALL parse and compile generated source as a Python module without
+executing it. Valid statement-based research scripts SHALL be eligible to pass the
+static guard when they do not violate a deny rule.
+
+Allowed imports SHALL be limited to `math`, `statistics`, `json`, `csv`, `datetime`,
+`collections`, `numpy`, `pandas`, and `matplotlib`, including their submodules.
+
+#### Scenario: Safe statement-based Python passes static guard
+
+- **WHEN** generated source contains valid Python assignments, imports, and output writes within policy
+- **THEN** the static guard analyzes the complete module AST without execution
+- **AND** permits it unless a deny rule is present
+
+#### Scenario: Code imports a non-approved module
+
+- **WHEN** generated code imports a module outside the approved import allowlist
+- **THEN** the static guard rejects the job before execution
+
+### Requirement: Assistant sandbox synthesis shall use validated artifacts only
+
+The final answer for sandbox research SHALL use only validated `result.json`,
+`summary.md`, and manifest evidence.
+
+#### Scenario: Sandbox output has not passed validation
+
+- **WHEN** a sandbox execution fails validation or has no validated artifacts
+- **THEN** the assistant does not synthesize a research result from generated code, stdout, stderr, or unvalidated output
+
 ### Requirement: Sandbox observability shall be closed-loop
 
 Sandbox lifecycle events SHALL be persisted with correlation IDs.

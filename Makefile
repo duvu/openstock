@@ -6,7 +6,8 @@
 
 .PHONY: help up-vnstock down-vnstock sync features score tui \
         install-vnalpha lint-vnalpha test-vnalpha \
-        verify-r0 verify-r2-ci verify-r4 build-vnalpha-deb verify-vnalpha-deb
+        eval-research-answers eval-research-runtime verify-hardening verify-r0 \
+        verify-r2-ci verify-r4 repo-hygiene build-vnalpha-deb verify-vnalpha-deb
 
 help: ## Show this help message
 	@printf "\nopenstock — local research workflow\n\n"
@@ -72,6 +73,24 @@ verify-r4: ## Run R4 chat-workspace acceptance tests (no network required)
 		tests/test_r4_clear.py \
 		tests/test_r4_persistence.py \
 		tests/test_r4_controller_persistence.py
+
+eval-research-answers: ## Evaluate offline golden fixtures
+	cd vnalpha && python -m vnalpha eval research-answers
+
+eval-research-runtime: ## Evaluate offline runtime-replay fixtures
+	cd vnalpha && python -m vnalpha eval research-runtime
+
+verify-hardening: ## Run hardening verification gates in dependency order
+	$(MAKE) repo-hygiene
+	$(MAKE) lint-vnalpha
+	$(MAKE) verify-r0
+	$(MAKE) verify-r2-ci
+	$(MAKE) verify-r4
+	$(MAKE) eval-research-answers
+	$(MAKE) eval-research-runtime
+
+repo-hygiene: ## Verify tracked paths and gitlinks against repository policy
+	packaging/scripts/openstock-repo-hygiene
 
 build-vnalpha-deb: ## Build the vnalpha Debian package
 	./packaging/build-deb.sh

@@ -17,6 +17,94 @@ def test_eval_research_answers_when_help_requested_is_registered_at_root() -> No
     assert "--ci" in result.output
 
 
+def test_eval_research_runtime_help_lists_ci_and_json_options() -> None:
+    from vnalpha.cli import app
+
+    result = CliRunner().invoke(app, ["eval", "research-runtime", "--help"])
+
+    assert result.exit_code == 0
+    assert "--ci" in result.output
+    assert "--json" in result.output
+
+
+def test_eval_research_runtime_when_ci_has_failures_exits_one(
+    monkeypatch,
+) -> None:
+    from vnalpha.evals.runtime_report import (
+        RuntimeCheckResult,
+        RuntimeReplayCaseResult,
+        RuntimeReplayReport,
+    )
+
+    def _failed_report() -> RuntimeReplayReport:
+        return RuntimeReplayReport(
+            source_count=1,
+            cases=(
+                RuntimeReplayCaseResult(
+                    case_id="market-regime_context_injection",
+                    checks=(
+                        RuntimeCheckResult(
+                            name="outcome",
+                            expected='"ANSWER"',
+                            actual='"REFUSAL"',
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(
+        "vnalpha.cli_app.eval.run_runtime_replay_corpus", _failed_report
+    )
+    from vnalpha.cli import app
+
+    result = CliRunner().invoke(app, ["eval", "research-runtime", "--ci"])
+
+    assert result.exit_code == 1
+    assert "FAIL case=market-regime_context_injection" in result.output
+    assert "failures=1" in result.output
+
+
+def test_eval_research_runtime_outputs_json_when_requested(
+    monkeypatch,
+) -> None:
+    from vnalpha.evals.runtime_report import (
+        RuntimeCheckResult,
+        RuntimeReplayCaseResult,
+        RuntimeReplayReport,
+    )
+
+    def _passed_report() -> RuntimeReplayReport:
+        return RuntimeReplayReport(
+            source_count=1,
+            cases=(
+                RuntimeReplayCaseResult(
+                    case_id="market-regime_context_injection",
+                    checks=(
+                        RuntimeCheckResult(
+                            name="outcome",
+                            expected='"ANSWER"',
+                            actual='"ANSWER"',
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(
+        "vnalpha.cli_app.eval.run_runtime_replay_corpus", _passed_report
+    )
+    from vnalpha.cli import app
+
+    result = CliRunner().invoke(
+        app, ["eval", "research-runtime", "--json"]
+    )
+
+    assert result.exit_code == 0
+    assert result.output.startswith("{")
+    assert '"mode":"runtime-replay"' in result.output.replace(" ", "")
+
+
 def test_eval_research_answers_when_ci_has_failures_exits_one(
     monkeypatch,
 ) -> None:

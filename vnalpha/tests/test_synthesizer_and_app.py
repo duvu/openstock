@@ -197,6 +197,7 @@ class TestAnswerSynthesizer:
                 "risks_caveats": "None.",
                 "tool_trace_summary": "sector.get_strength",
                 "missing_data": [],
+                "grounded_source_refs": ["step_1"],
             }
         )
         answer = AnswerSynthesizer(

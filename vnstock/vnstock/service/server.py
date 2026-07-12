@@ -167,7 +167,12 @@ class VnstockHandler(BaseHTTPRequestHandler):
                     health_data[pname][dataset] = h.to_dict()
         except Exception:
             health_data = {}
-        self._send_json(200, {"health": health_data})
+        providers = [
+            health
+            for datasets in health_data.values()
+            for health in datasets.values()
+        ]
+        self._send_json(200, {"health": health_data, "providers": providers})
 
     def _handle_providers_capabilities(self) -> None:
         """Return provider capabilities matrix (no auth material)."""
@@ -333,6 +338,11 @@ class VnstockHandler(BaseHTTPRequestHandler):
                     "error": "no_healthy_provider",
                     "message": str(exc)[:300],
                     "dataset": dataset,
+                    "candidates": list(exc.candidates),
+                    "rejection_reasons": {
+                        provider: reason[:200]
+                        for provider, reason in exc.rejection_reasons.items()
+                    },
                     "request_id": request_id,
                 },
             )

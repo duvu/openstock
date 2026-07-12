@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
-from typing import Any, TypeVar
+from enum import Enum
+from typing import Any, Final, TypeVar
 
 JsonDict = dict[str, Any]
 T = TypeVar("T")
+WORKSPACE_SCHEMA_VERSION: Final[int] = 2
+
+
+class WorkspaceStatus(str, Enum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+    CORRUPT = "corrupt"
+    TEMPORARY = "temporary"
 
 
 def _to_dict(value: Any) -> Any:
@@ -107,6 +116,7 @@ class WorkspaceState:
     mode: str
     created_at: str
     updated_at: str
+    schema_version: int = WORKSPACE_SCHEMA_VERSION
     active_date: str | None = None
     active_symbols: list[str] = field(default_factory=list)
     active_artifacts: list[WorkspaceArtifactRef] = field(default_factory=list)
@@ -127,6 +137,7 @@ class WorkspaceState:
             "mode": self.mode,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "schema_version": self.schema_version,
             "active_date": self.active_date,
             "active_symbols": list(self.active_symbols),
             "active_artifacts": [item.to_dict() for item in self.active_artifacts],
@@ -142,13 +153,16 @@ class WorkspaceState:
 
     @classmethod
     def from_dict(cls, payload: JsonDict) -> WorkspaceState:
+        status = str(payload["status"])
+        WorkspaceStatus(status)
         return cls(
             workspace_id=payload["workspace_id"],
             title=payload["title"],
-            status=payload["status"],
+            status=status,
             mode=payload["mode"],
             created_at=payload["created_at"],
             updated_at=payload["updated_at"],
+            schema_version=WORKSPACE_SCHEMA_VERSION,
             active_date=payload.get("active_date"),
             active_symbols=list(payload.get("active_symbols", [])),
             active_artifacts=[

@@ -132,6 +132,15 @@ class TestFilterSafeTools:
 
 
 class TestPermissionState:
+    def test_sandbox_tool_always_requires_approval(self):
+        from vnalpha.chat.safety import PermissionState, get_permission_state
+
+        assert (
+            get_permission_state(
+                "sandbox.run_research_code", ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS
+            )
+            == PermissionState.ASK
+        )
     def test_manual_data_fetch_returns_deny(self):
         from vnalpha.chat.safety import PermissionState, get_permission_state
 

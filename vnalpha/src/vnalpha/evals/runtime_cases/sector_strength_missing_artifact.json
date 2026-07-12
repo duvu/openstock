@@ -1,0 +1,60 @@
+{
+  "case_id": "sector_strength_missing_artifact",
+  "request": {
+    "current_user_prompt": "Review sector strength on 2026-07-01.",
+    "workspace_context": null,
+    "date": "2026-07-01"
+  },
+  "classifier_response": {
+    "intent": "review_sector_strength",
+    "confidence": 0.99,
+    "entities": {"date": "2026-07-01"},
+    "needs_clarification": false,
+    "clarification_question": null,
+    "safety_flags": []
+  },
+  "synthesis_response": {
+    "summary": "Caveat: no persisted sector-strength snapshot is available.",
+    "basis": "The seeded sector query returned no snapshots.",
+    "risks_caveats": "Research-only context; sector metadata coverage is incomplete.",
+    "tool_trace_summary": "sector.get_strength completed with missing data.",
+    "missing_data": ["sector_strength_snapshot"],
+    "grounded_source_refs": ["fixture://runtime/sector_query"],
+    "research_metadata": {}
+  },
+  "tool_outputs": [
+    {
+      "tool_name": "sector.get_strength",
+      "arguments": {"date": "2026-07-01"},
+      "data": {
+        "snapshots": [],
+        "freshness": {"as_of_date": "2026-07-01"},
+        "lineage": {"source": "fixture"},
+        "quality": "PARTIAL",
+        "missing_data": ["sector_strength_snapshot"],
+        "caveats": ["Sector snapshot unavailable"]
+      },
+      "artifact_refs": ["fixture://runtime/sector_query"],
+      "summary": "Seeded missing-sector payload.",
+      "warnings": ["Sector snapshot unavailable"]
+    }
+  ],
+  "expected": {
+    "outcome": "answer",
+    "intent": "review_sector_strength",
+    "plan": [
+      {
+        "tool_name": "sector.get_strength",
+        "arguments": {"date": "2026-07-01"}
+      }
+    ],
+    "successful_trace_tools": ["sector.get_strength"],
+    "groundedness_status": "PASS",
+    "policy_status": "PASS",
+    "fallback_used": false,
+    "audit_status": "persisted",
+    "required_missing_data": ["sector_strength_snapshot"],
+    "forbidden_source_refs": ["fixture://runtime/sector_strength_snapshot"],
+    "claim_source_refs": {}
+  }
+}

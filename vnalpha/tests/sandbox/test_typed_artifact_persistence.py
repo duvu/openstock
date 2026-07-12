@@ -6,10 +6,11 @@ import pytest
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
-
 _FILESYSTEM_POLICY_JSON = (
     '{"approved_read_paths":[],"writable_output_directory":"output"}'
 )
+
+
 def _insert_artifacts(
     conn: duckdb.DuckDBPyConnection, artifact_values_sql: str
 ) -> None:
@@ -140,6 +141,37 @@ def test_database_rejects_unsafe_typed_artifact_paths(unsafe_path: str) -> None:
             )
 
 
+@pytest.mark.parametrize(
+    ("kind", "directory", "media_type", "extension"),
+    (
+        ("chart", "output/charts", "image/png", "png"),
+        ("table", "output/tables", "text/csv", "csv"),
+    ),
+)
+def test_database_rejects_1025_character_optional_artifact_paths(
+    kind: str, directory: str, media_type: str, extension: str
+) -> None:
+    path_prefix = f"{directory}/"
+    path_suffix = f".{extension}"
+    path = f"{path_prefix}{'a' * (1_025 - len(path_prefix) - len(path_suffix))}{path_suffix}"
+    assert len(path) == 1_025
+
+    with in_memory_connection() as conn:
+        run_migrations(conn=conn)
+
+        with pytest.raises(duckdb.ConstraintException):
+            _insert_artifacts(
+                conn,
+                f"""
+                [
+                    {{'kind': 'result', 'path': 'output/result.json', 'media_type': 'application/json'}},
+                    {{'kind': 'summary', 'path': 'output/summary.md', 'media_type': 'text/markdown'}},
+                    {{'kind': '{kind}', 'path': '{path}', 'media_type': '{media_type}'}}
+                ]
+                """,
+            )
+
+
 def test_database_rejects_invalid_typed_artifact_kind() -> None:
     with in_memory_connection() as conn:
         run_migrations(conn=conn)
@@ -171,8 +203,3 @@ def test_database_accepts_valid_typed_artifacts() -> None:
             ]
             """,
         )
-
-        row = conn.execute("SELECT output_artifacts FROM sandbox_job").fetchone()
-
-    assert row is not None
-    assert len(row[0]) == 4

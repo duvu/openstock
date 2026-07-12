@@ -20,6 +20,7 @@ ExpectedArtifactPath = NewType("ExpectedArtifactPath", str)
 MAX_APPROVED_READ_PATHS: Final = 32
 MAX_APPROVED_READ_PATHS_JSON_LENGTH: Final = 4_096
 MAX_OUTPUT_ARTIFACTS: Final = 32
+MAX_OUTPUT_ARTIFACT_PATH_LENGTH: Final = 1_024
 MAX_OUTPUT_SCHEMA_JSON_LENGTH: Final = 8_192
 OUTPUT_DIRECTORY: Final = "output"
 
@@ -117,7 +118,9 @@ class SandboxExpectedArtifact(BaseModel):
     )
 
     kind: Literal["result", "summary", "chart", "table"]
-    path: ExpectedArtifactPath
+    path: Annotated[
+        ExpectedArtifactPath, Field(max_length=MAX_OUTPUT_ARTIFACT_PATH_LENGTH)
+    ]
     media_type: str = Field(min_length=1)
 
     @field_validator("media_type")

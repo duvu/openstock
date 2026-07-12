@@ -1,0 +1,78 @@
+{
+  "case_id": "shortlist_research_only",
+  "request": {
+    "current_user_prompt": "Generate a research shortlist for 2026-07-01.",
+    "workspace_context": null,
+    "date": "2026-07-01"
+  },
+  "classifier_response": {
+    "intent": "generate_shortlist",
+    "confidence": 0.99,
+    "entities": {"date": "2026-07-01"},
+    "needs_clarification": false,
+    "clarification_question": null,
+    "safety_flags": []
+  },
+  "synthesis_response": {
+    "summary": "A bounded research shortlist is available for further review.",
+    "basis": "The seeded shortlist methodology and persisted market context support prioritization.",
+    "risks_caveats": "Research-only output, not an execution list; review risk flags and confirmation evidence.",
+    "tool_trace_summary": "shortlist.generate and market.get_regime completed.",
+    "missing_data": [],
+    "grounded_source_refs": [
+      "fixture://runtime/shortlist",
+      "fixture://runtime/shortlist_market"
+    ],
+    "research_metadata": {}
+  },
+  "tool_outputs": [
+    {
+      "tool_name": "shortlist.generate",
+      "arguments": {"date": "2026-07-01"},
+      "data": {
+        "shortlist": ["FPT"],
+        "methodology": "seeded",
+        "freshness": {"as_of_date": "2026-07-01"},
+        "caveats": ["Human review required"]
+      },
+      "artifact_refs": ["fixture://runtime/shortlist"],
+      "summary": "Seeded shortlist.",
+      "warnings": []
+    },
+    {
+      "tool_name": "market.get_regime",
+      "arguments": {"date": "2026-07-01"},
+      "data": {
+        "snapshot": {"regime": "NEUTRAL"},
+        "freshness": {"as_of_date": "2026-07-01"},
+        "lineage": {"source": "fixture"},
+        "quality": "PASS"
+      },
+      "artifact_refs": ["fixture://runtime/shortlist_market"],
+      "summary": "Seeded market context.",
+      "warnings": []
+    }
+  ],
+  "expected": {
+    "outcome": "answer",
+    "intent": "generate_shortlist",
+    "plan": [
+      {
+        "tool_name": "shortlist.generate",
+        "arguments": {"date": "2026-07-01"}
+      },
+      {
+        "tool_name": "market.get_regime",
+        "arguments": {"date": "2026-07-01"}
+      }
+    ],
+    "successful_trace_tools": ["shortlist.generate", "market.get_regime"],
+    "groundedness_status": "PASS",
+    "policy_status": "PASS",
+    "fallback_used": false,
+    "audit_status": "persisted",
+    "required_missing_data": [],
+    "forbidden_source_refs": [],
+    "claim_source_refs": {}
+  }
+}

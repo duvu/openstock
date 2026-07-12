@@ -1,0 +1,31 @@
+case_id: unsupported-metric-claim
+family: research_answer
+input: Explain the current research evidence.
+expected_intent: explain_symbol
+required_tools: []
+required_claims:
+  - claim_id: declared_metric
+    fact_ids:
+      - declared_fact
+facts:
+  - fact_id: declared_fact
+    artifact_id: fixture://failing/declared_metric
+    value: The declared metric is 72.
+forbidden_phrases: []
+required_caveats: []
+artifact_manifest:
+  - fixture://failing/declared_metric
+observation:
+  answer_text: An unsupported metric is 91.
+  caveats: []
+  missing_data: []
+  observed_claims:
+    - claim_id: unsupported_metric
+      fact_ids:
+        - declared_fact
+  artifact_references:
+    - fixture://failing/declared_metric
+  refused: false
+  reframed: false
+missing_data_expectation: not_applicable
+policy_expectation: research_only

@@ -70,6 +70,7 @@ def run_migrations(
     _migrate_aggregate_outcome_columns(conn)
     _migrate_outcome_evaluation_run_columns(conn)
     _migrate_chat_message_visibility_columns(conn)
+    _migrate_assistant_prompt_columns(conn)
     logger.info("Warehouse migrations complete.")
     try:
         from vnalpha.observability.domain import log_migration_success
@@ -90,6 +91,23 @@ def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:
         conn.execute("ALTER TABLE tool_trace ALTER COLUMN session_id DROP NOT NULL")
     except Exception:
         pass
+
+
+def _migrate_assistant_prompt_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add prompt projection columns to databases created before hardening."""
+
+    for column, column_type in (
+        ("prompt_text", "VARCHAR"),
+        ("prompt_summary", "VARCHAR"),
+        ("prompt_hash", "VARCHAR"),
+        ("prompt_chars", "INTEGER"),
+        ("workspace_context_ref", "VARCHAR"),
+        ("chat_context_ref", "VARCHAR"),
+        ("raw_stored", "BOOLEAN DEFAULT FALSE"),
+    ):
+        conn.execute(
+            f"ALTER TABLE assistant_session ADD COLUMN IF NOT EXISTS {column} {column_type}"
+        )
 
 
 def _migrate_feature_snapshot_columns(conn: duckdb.DuckDBPyConnection) -> None:

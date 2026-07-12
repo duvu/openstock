@@ -4,7 +4,7 @@ import duckdb
 import pytest
 from pydantic import ValidationError
 
-from vnalpha.sandbox.contracts import SandboxFilesystemPolicy, SandboxOutputSchema
+from vnalpha.sandbox.contracts import SandboxOutputSchema
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -176,6 +176,16 @@ def test_legacy_migration_rejects_traversal_path_before_rebuilding() -> None:
         with pytest.raises(ValueError):
             run_migrations(conn=conn)
 
+        columns = conn.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'sandbox_job'
+            """
+        ).fetchall()
+
+    assert ("approved_input_paths_json",) in columns
+
 
 def test_legacy_migration_rejects_out_of_scope_optional_artifact() -> None:
     with in_memory_connection() as conn:
@@ -213,3 +223,52 @@ def test_legacy_migration_rejects_out_of_scope_optional_artifact() -> None:
 
         with pytest.raises(ValueError):
             run_migrations(conn=conn)
+
+
+def test_legacy_json_output_schema_migrates_to_typed_artifacts() -> None:
+    legacy_schema_json = """
+    {"artifacts":[
+        {"kind":"result","path":"output/result.json","media_type":"application/json"},
+        {"kind":"summary","path":"output/summary.md","media_type":"text/markdown"},
+        {"kind":"chart","path":"output/charts/chart.png","media_type":"image/png"}
+    ]}
+    """
+    with in_memory_connection() as conn:
+        _ = conn.execute(
+            """
+            CREATE TABLE sandbox_job (
+                job_id VARCHAR PRIMARY KEY,
+                run_id VARCHAR NOT NULL,
+                correlation_id VARCHAR NOT NULL,
+                purpose VARCHAR NOT NULL,
+                code_digest VARCHAR NOT NULL,
+                status VARCHAR NOT NULL,
+                cpu_millis INTEGER NOT NULL,
+                memory_mb INTEGER NOT NULL,
+                timeout_seconds INTEGER NOT NULL,
+                network_enabled BOOLEAN NOT NULL,
+                approved_input_paths_json VARCHAR NOT NULL,
+                output_schema_json VARCHAR NOT NULL,
+                result_summary VARCHAR,
+                rejection_reason VARCHAR,
+                failure_reason VARCHAR
+            )
+            """
+        )
+        _ = conn.execute(
+            """
+            INSERT INTO sandbox_job VALUES (
+                'legacy-job', 'legacy-run', 'legacy-correlation', 'evaluate', 'digest',
+                'queued', 1, 16, 1, FALSE, '[]', ?, NULL, NULL, NULL
+            )
+            """,
+            [legacy_schema_json],
+        )
+
+        run_migrations(conn=conn)
+        row = conn.execute(
+            "SELECT output_artifacts FROM sandbox_job WHERE job_id = 'legacy-job'"
+        ).fetchone()
+
+    assert row is not None
+    assert row[0][2]["path"] == "output/charts/chart.png"

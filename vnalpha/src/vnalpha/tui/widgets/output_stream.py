@@ -46,6 +46,15 @@ if _TEXTUAL_AVAILABLE:
         def compose(self) -> ComposeResult:
             yield RichLog(id="output-log", markup=True, wrap=True, highlight=False)
 
+        def on_mount(self) -> None:
+            # The output log is append-only: it must never steal keyboard focus
+            # from the composer input, otherwise typing "/" would not reach the
+            # Input and the slash-command suggestion list would never appear.
+            try:
+                self.query_one("#output-log", RichLog).can_focus = False
+            except Exception:  # noqa: BLE001
+                pass
+
         # ------------------------------------------------------------------
         # Public rendering methods
         # ------------------------------------------------------------------

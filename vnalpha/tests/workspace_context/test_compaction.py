@@ -190,3 +190,19 @@ def test_compact_workspace_uses_atomic_writer_and_emits_audit_event(
     assert summary == "Workspace compacted"
     assert set(metadata) == {"summary_lines"}
     assert isinstance(metadata["summary_lines"], int)
+
+
+def test_repeated_compaction_does_not_duplicate_retention_archives(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("VNALPHA_WORKSPACE_MAX_INPUTS", "1")
+    workspace = create_workspace(root=tmp_path)
+    record_input(workspace, "first", "user", root=tmp_path)
+    record_input(workspace, "second", "user", root=tmp_path)
+
+    archive_path = tmp_path / workspace.workspace_id / "archive" / "inputs.jsonl"
+    first_archive = archive_path.read_text(encoding="utf-8")
+    compact_workspace(workspace.workspace_id, root=tmp_path)
+    compact_workspace(workspace.workspace_id, root=tmp_path)
+
+    assert archive_path.read_text(encoding="utf-8") == first_archive

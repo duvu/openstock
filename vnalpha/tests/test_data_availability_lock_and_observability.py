@@ -196,7 +196,36 @@ class TestObservabilityEvents:
 
         conn = _fresh_conn()
         _insert_symbol(conn, "FPT")
-        lineage = {"as_of_bar_date": "2025-06-30"}
+        _insert_symbol(conn, "VNINDEX")
+        for symbol in ("FPT", "VNINDEX"):
+            conn.execute(
+                """
+                INSERT INTO canonical_ohlcv
+                (symbol, time, interval, open, high, low, close, volume,
+                 selected_provider, quality_status, ingestion_run_id)
+                VALUES (?, '2025-06-30', '1D', 10, 11, 9, 10.5, 1000,
+                        'test', 'pass', 'test-run')
+                """,
+                [symbol],
+            )
+        conn.execute(
+            """
+            INSERT INTO feature_snapshot
+            (symbol, date, close, feature_data_status, feature_build_version,
+             feature_generated_at)
+            VALUES ('FPT', '2025-06-30', 10.5, 'EXACT_DATE', 'test-v1',
+                    current_timestamp)
+            """
+        )
+        lineage = {
+            "as_of_bar_date": "2025-06-30",
+            "scoring_version": "test-v1",
+            "feature_build_version": "test-v1",
+            "selected_provider": "test",
+            "ingestion_run_id": "test-run",
+            "source_quality_status": "pass",
+            "lineage_status": "COMPLETE",
+        }
         conn.execute(
             """
             INSERT INTO candidate_score
@@ -210,7 +239,7 @@ class TestObservabilityEvents:
             [json.dumps(lineage)],
         )
 
-        policy = DataAvailabilityPolicy(auto_sync=False)
+        policy = DataAvailabilityPolicy(auto_sync=False, min_required_bars=1)
         with patch(
             "vnalpha.data_availability.observability.log_audit",
             side_effect=_capture_event,
@@ -223,6 +252,7 @@ class TestObservabilityEvents:
                 _lock_dir=tmp_path,
                 _sync_symbols_fn=_noop_sync_symbols,
                 _sync_ohlcv_fn=_noop_sync_ohlcv,
+                _sync_index_fn=_noop_sync_ohlcv,
                 _build_canonical_fn=_noop_build_canonical,
                 _build_features_fn=_noop_build_features,
                 _score_universe_fn=_noop_score_universe,

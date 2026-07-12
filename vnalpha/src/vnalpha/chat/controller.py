@@ -24,11 +24,16 @@ from vnalpha.commands.setup import build_default_registry
 from vnalpha.warehouse.migrations import run_migrations
 
 if TYPE_CHECKING:
-    from vnalpha.assistant.models import AssistantPlan
+    from vnalpha.assistant.models import (
+        AssistantPlan,
+        AssistantRequest,
+        PreparedAssistantTurn,
+        RefusalMessage,
+    )
     from vnalpha.tools.executor import TraceEvent
 
 CHAT_LOCAL_COMMANDS: frozenset[str] = frozenset(
-    {"new", "clear", "context", "plan", "trace", "help"}
+    {"clear", "context", "plan", "trace", "help"}
 )
 
 
@@ -62,6 +67,7 @@ class ChatController:
         self.execution_mode: ExecutionMode = execution_mode
         self._pending_plan: "AssistantPlan | None" = None
         self._pending_plan_turn_context: dict | None = None
+        self._pending_prepared_turn: "PreparedAssistantTurn | None" = None
 
     def _wrap_trace_with_persistence(
         self, original: Callable[["TraceEvent"], None] | None
@@ -144,8 +150,15 @@ class ChatController:
             result = executor.execute(raw)
             self._render_command_result(result)
             research_session_id = None
-            if result.metadata and isinstance(result.metadata, dict):
-                research_session_id = result.metadata.get("research_session_id")
+            metadata = getattr(result, "metadata", None)
+            if metadata and isinstance(metadata, dict):
+                research_session_id = metadata.get("research_session_id")
+                chat_session_id = metadata.get("chat_session_id")
+                if chat_session_id:
+                    self._chat_session_id = chat_session_id
+                    self._pending_plan = None
+                    self._pending_plan_turn_context = None
+                    self._pending_prepared_turn = None
             if result.status == "FAILED":
                 self._persist_message(
                     "system", result.summary or "Command failed.", "runtime_error"
@@ -183,6 +196,10 @@ class ChatController:
     ) -> str | None:
         self._on_message("bold cyan", f"You: {question}")
         self._persist_message("user", question, "prompt")
+        if not self._legacy_run_ask_override():
+            return self._handle_prepared_natural_language(
+                question, workspace_context=workspace_context
+            )
         try:
             from vnalpha.observability.audit import log_audit
 
@@ -377,6 +394,20 @@ class ChatController:
         return "Refused: the plan is not safe for execution."
 
     def approve_pending_plan(self) -> None:
+        if self._pending_prepared_turn is not None:
+            prepared = self._pending_prepared_turn
+            self._pending_prepared_turn = None
+            self._pending_plan = None
+            self._pending_plan_turn_context = None
+            self._persist_message("user", "Approved.", "plan_approval")
+            try:
+                answer, _plan = self._execute_prepared_turn(prepared)
+                self._render_prepared_answer(answer)
+            except Exception as exc:
+                error_text = format_runtime_error(str(exc))
+                self._on_message("red", error_text)
+                self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+            return
         if self._pending_plan is None:
             return
         if not is_safe_plan(self._pending_plan):
@@ -436,6 +467,26 @@ class ChatController:
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
 
     def cancel_pending_plan(self) -> None:
+        if self._pending_prepared_turn is not None:
+            prepared = self._pending_prepared_turn
+            self._pending_prepared_turn = None
+            self._pending_plan = None
+            self._pending_plan_turn_context = None
+            try:
+                from vnalpha.assistant.app import AssistantApp
+                from vnalpha.warehouse.migrations import run_migrations
+
+                conn = self._connection_factory()
+                try:
+                    run_migrations(conn=conn)
+                    AssistantApp(conn, surface=self._surface).cancel_prepared(prepared)
+                finally:
+                    conn.close()
+            except Exception:
+                pass
+            self._persist_message("user", "Cancelled.", "plan_cancel")
+            self._on_message("", "Plan canceled.")
+            return
         if self._pending_plan is not None:
             self._persist_message("user", "Cancelled.", "plan_cancel")
             try:
@@ -498,6 +549,7 @@ class ChatController:
             self._chat_session_id = new_id
             self._pending_plan = None
             self._pending_plan_turn_context = None
+            self._pending_prepared_turn = None
             return f"New chat session started. (id={new_id[:8]}…)"
         finally:
             conn.close()
@@ -641,7 +693,7 @@ class ChatController:
         """Return formatted help text for all chat-local commands."""
         lines = [
             "Chat-local commands:",
-            "  /new              — Start a new chat session",
+            "  /chat new         — Start a new chat session",
             "  /clear            — Clear the visible chat log (preserves transcript)",
             "  /clear --forget   — Clear visible log AND delete transcript",
             "  /context          — Show current session context state",
@@ -650,6 +702,7 @@ class ChatController:
             "  /plan off         — Set mode to AUTO_EXECUTE_SAFE_READ_ONLY",
             "  /plan only        — Set mode to PLAN_ONLY",
             "  /trace            — Show tool trace timeline for current session",
+            "  /new              — Alias for /context new",
             "  /help             — Show this help",
             "",
             "Research slash commands (routed to CommandExecutor):",
@@ -687,6 +740,111 @@ class ChatController:
             on_trace_event=self._on_trace,
             workspace_context=workspace_context,
         )
+
+    def _legacy_run_ask_override(self) -> bool:
+        return getattr(self._run_ask, "__func__", None) is not ChatController._run_ask
+
+    def _prepare_turn(
+        self, question: str, workspace_context: str | None
+    ) -> "PreparedAssistantTurn | tuple[RefusalMessage, AssistantPlan]":
+        from vnalpha.assistant.app import AssistantApp
+        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.migrations import run_migrations
+
+        conn = get_connection()
+        try:
+            run_migrations(conn=conn)
+            app = AssistantApp(conn, surface=self._surface)
+            return app.prepare(
+                AssistantRequest(
+                    current_user_prompt=question,
+                    workspace_context=workspace_context,
+                    date=self._target_date,
+                )
+            )
+        finally:
+            conn.close()
+
+    def _execute_prepared_turn(self, prepared: "PreparedAssistantTurn"):
+        from vnalpha.assistant.app import AssistantApp
+        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.migrations import run_migrations
+
+        conn = get_connection()
+        try:
+            run_migrations(conn=conn)
+            return AssistantApp(conn, surface=self._surface).execute_prepared(
+                prepared, on_trace_event=self._on_trace
+            )
+        finally:
+            conn.close()
+
+    def _handle_prepared_natural_language(
+        self, question: str, *, workspace_context: str | None
+    ) -> str | None:
+        try:
+            self._emit_stage(AssistantStage.CLASSIFYING)
+            self._emit_stage(AssistantStage.PLANNING)
+            prepared = self._prepare_turn(question, workspace_context)
+            if isinstance(prepared, tuple):
+                answer, _plan = prepared
+                self._render_prepared_answer(answer)
+                return getattr(answer, "reason", None)
+            plan = prepared.plan
+            if not is_safe_plan(plan):
+                refusal = self._evaluate_plan_permissions(plan) or (
+                    "Refused: the plan is not safe for execution."
+                )
+                self._on_message("yellow", refusal)
+                self._persist_error_message(
+                    refusal, ChatErrorKind.REFUSAL, role="assistant"
+                )
+                return refusal
+            if self.execution_mode == ExecutionMode.PLAN_ONLY:
+                self._on_message("dim", format_plan_preview(plan))
+                self._persist_message(
+                    "assistant", format_plan_preview(plan), "plan_preview"
+                )
+                return None
+            if self.execution_mode == ExecutionMode.PLAN_THEN_APPROVE:
+                self._pending_prepared_turn = prepared
+                self._pending_plan = plan
+                self._pending_plan_turn_context = {
+                    "prepared_turn_id": prepared.prepared_turn_id
+                }
+                preview_text = format_plan_preview(plan)
+                self._on_message("dim", preview_text)
+                self._persist_message("assistant", preview_text, "plan_preview")
+                return None
+            self._emit_stage(AssistantStage.SYNTHESIZING)
+            answer, _plan = self._execute_prepared_turn(prepared)
+            self._render_prepared_answer(answer)
+            return None
+        except Exception as exc:
+            error_text = format_runtime_error(str(exc))
+            self._on_message("red", error_text)
+            self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+            return error_text
+
+    def _render_prepared_answer(self, answer) -> None:
+        from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
+
+        if isinstance(answer, AssistantAnswer):
+            self._emit_stage(AssistantStage.FINAL, text=answer.summary)
+            self._on_message("bold green", f"Assistant: {answer.summary}")
+            self._persist_message("assistant", answer.summary, "answer")
+        elif isinstance(answer, RefusalMessage):
+            refusal_text = format_refusal(answer.reason)
+            self._on_message("yellow", refusal_text)
+            self._persist_error_message(
+                refusal_text, ChatErrorKind.REFUSAL, role="assistant"
+            )
+        else:
+            refusal_text = f"Refused: {answer.reason}"
+            self._on_message("yellow", refusal_text)
+            self._persist_error_message(
+                refusal_text, ChatErrorKind.REFUSAL, role="assistant"
+            )
 
     def _emit_stage(
         self,

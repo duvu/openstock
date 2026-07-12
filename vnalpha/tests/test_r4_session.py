@@ -1,11 +1,11 @@
-"""R4 session lifecycle tests — chat_session create/resume/new/context.
+"""R4 session lifecycle tests — chat_session create/resume/chat new/context.
 
 Task coverage:
   5.6.1  TUI start creates or resumes chat_session
-  5.6.2  /new creates a new chat_session and switches controller context
+  5.6.2  /chat new creates a new chat_session and switches controller context
   5.6.3  Chat session context stores target_date, selected symbol, mode, pending-plan
   5.6.4  /context reads deterministic controller/session context
-  5.6.5  Tests for session creation/resume/new/context
+  5.6.5  Tests for session creation/resume/chat new/context
 """
 
 from __future__ import annotations
@@ -94,51 +94,52 @@ def test_controller_has_no_session_by_default():
 
 
 # ---------------------------------------------------------------------------
-# 5.6.2: /new creates a new session and switches context
+# 5.6.2: /chat new creates a new session and switches context
 # ---------------------------------------------------------------------------
 
 
-def test_cmd_new_creates_new_session(conn):
-    """5.6.2: /new command creates a new chat_session in the database."""
+def test_cmd_chat_new_creates_new_session(conn):
+    """5.6.2: /chat new command creates a new chat_session in the database."""
     ctrl = _make_ctrl(conn)
-    ctrl._cmd_new()
+    ctrl.handle_turn("/chat new")
 
     assert ctrl._chat_session_id is not None
     row = conn.execute(
         "SELECT chat_session_id FROM chat_session WHERE chat_session_id = ?",
         [ctrl._chat_session_id],
     ).fetchone()
-    assert row is not None, "/new must create a persisted chat_session"
+    assert row is not None, "/chat new must create a persisted chat_session"
 
 
-def test_cmd_new_switches_session_id(conn):
-    """5.6.2: /new updates _chat_session_id to the new session."""
+def test_cmd_chat_new_switches_session_id(conn):
+    """5.6.2: /chat new updates _chat_session_id to the new session."""
     sid_old = create_chat_session(conn)
     ctrl = _make_ctrl(conn, session_id=sid_old)
 
-    ctrl._cmd_new()
-    assert ctrl._chat_session_id != sid_old, "/new must create a different session"
+    ctrl.handle_turn("/chat new")
+    assert ctrl._chat_session_id != sid_old, "/chat new must create a different session"
 
 
-def test_cmd_new_resets_pending_plan(conn):
-    """5.6.2: /new clears any pending plan from the previous session."""
+def test_cmd_chat_new_resets_pending_plan(conn):
+    """5.6.2: /chat new clears any pending plan from the previous session."""
     from vnalpha.assistant.models import AssistantPlan
 
     ctrl = _make_ctrl(conn)
     ctrl._pending_plan = AssistantPlan(intent="old_plan", steps=[])
-    ctrl._cmd_new()
+    ctrl.handle_turn("/chat new")
 
-    assert ctrl._pending_plan is None, "/new must clear _pending_plan"
+    assert ctrl._pending_plan is None, "/chat new must clear _pending_plan"
 
 
-def test_cmd_new_returns_confirmation_string(conn):
-    """5.6.2: /new returns a confirmation string with session info."""
+def test_cmd_chat_new_returns_confirmation_string(conn):
+    """5.6.2: /chat new returns a confirmation string with session info."""
     ctrl = _make_ctrl(conn)
-    result = ctrl._cmd_new()
+    result = ctrl.handle_turn("/chat new")
 
-    assert isinstance(result, str)
-    assert len(result) > 0
-    assert "session" in result.lower() or "new" in result.lower()
+    assert result is None
+    assert ctrl._chat_session_id is not None
+    assert len(ctrl._messages) > 0
+    assert "session" in ctrl._messages[-1][1].lower() or "chat session" in ctrl._messages[-1][1].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +237,7 @@ def test_cmd_context_shows_pending_plan_status(conn):
 
 
 # ---------------------------------------------------------------------------
-# 5.6.5: Tests for session creation/resume/new/context (integration)
+# 5.6.5: Tests for session creation/resume/chat new/context (integration)
 # ---------------------------------------------------------------------------
 
 
@@ -244,14 +245,14 @@ def test_full_session_lifecycle(conn):
     """5.6.5: Full session lifecycle — create, use, new, verify switch."""
     ctrl = _make_ctrl(conn)
 
-    ctrl._cmd_new()
+    ctrl.handle_turn("/chat new")
     first_sid = ctrl._chat_session_id
     assert first_sid is not None
 
-    ctrl._cmd_new()
+    ctrl.handle_turn("/chat new")
     second_sid = ctrl._chat_session_id
     assert second_sid is not None
-    assert second_sid != first_sid, "Each /new should produce a distinct session"
+    assert second_sid != first_sid, "Each /chat new should produce a distinct session"
 
 
 def test_session_messages_isolated_after_new(conn):
@@ -259,20 +260,21 @@ def test_session_messages_isolated_after_new(conn):
     from vnalpha.warehouse.chat_repo import append_chat_message
 
     ctrl = _make_ctrl(conn)
-    ctrl._cmd_new()
+    ctrl.handle_turn("/chat new")
     sid_a = ctrl._chat_session_id
     append_chat_message(
         conn, chat_session_id=sid_a, role="user", content="Session A message"
     )
 
-    ctrl._cmd_new()
+    ctrl.handle_turn("/chat new")
     sid_b = ctrl._chat_session_id
 
     msgs_a = list_chat_messages(conn, sid_a)
     msgs_b = list_chat_messages(conn, sid_b)
 
-    assert len(msgs_a) == 1
-    assert len(msgs_b) == 0
+    assert any(msg["content"] == "Session A message" for msg in msgs_a)
+    assert all(msg["chat_session_id"] == sid_a for msg in msgs_a)
+    assert all(msg["chat_session_id"] == sid_b for msg in msgs_b)
 
 
 def test_context_via_handle_turn(conn):
@@ -288,11 +290,11 @@ def test_context_via_handle_turn(conn):
     assert len(context_msgs) >= 1, "/context must produce output via handle_turn"
 
 
-def test_new_via_handle_turn(conn):
-    """5.6.5: /new is accessible via handle_turn."""
+def test_chat_new_via_handle_turn(conn):
+    """5.6.5: /chat new is accessible via handle_turn."""
     ctrl = _make_ctrl(conn)
-    ctrl.handle_turn("/new")
+    ctrl.handle_turn("/chat new")
 
     assert ctrl._chat_session_id is not None, (
-        "/new via handle_turn must create a session"
+        "/chat new via handle_turn must create a session"
     )

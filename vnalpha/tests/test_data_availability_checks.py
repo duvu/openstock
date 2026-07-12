@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import duckdb
+import pytest
 
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -45,7 +46,15 @@ def _insert_feature_snapshot(conn, symbol, date_str):
 def _insert_candidate_score(conn, symbol, date_str, as_of_bar_date=None):
     import json
 
-    lineage = {"as_of_bar_date": as_of_bar_date or date_str}
+    lineage = {
+        "as_of_bar_date": as_of_bar_date or date_str,
+        "scoring_version": "test-v1",
+        "feature_build_version": "test-v1",
+        "selected_provider": "test",
+        "ingestion_run_id": "test-run",
+        "source_quality_status": "pass",
+        "lineage_status": "COMPLETE",
+    }
     conn.execute(
         """
         INSERT INTO candidate_score
@@ -151,12 +160,12 @@ class TestComputeLookbackStart:
         result = compute_lookback_start("2025-06-30", 420)
         assert result == "2024-05-06"
 
-    def test_handles_invalid_date(self):
+    def test_rejects_invalid_date(self):
         from vnalpha.data_availability.checks import compute_lookback_start
+        from vnalpha.data_availability.dates import InvalidEnsureDateError
 
-        result = compute_lookback_start("not-a-date", 30)
-        assert result is not None
-        assert len(result) == 10
+        with pytest.raises(InvalidEnsureDateError, match="Invalid target date"):
+            compute_lookback_start("not-a-date", 30)
 
 
 class TestWeekendNonTradingDate:

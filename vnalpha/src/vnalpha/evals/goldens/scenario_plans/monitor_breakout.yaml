@@ -1,0 +1,36 @@
+case_id: scenario-monitor-breakout
+family: scenario_plan
+input: Outline a research monitoring scenario for FPT.
+expected_intent: research_scenario
+required_tools: []
+required_claims:
+  - claim_id: price_level
+    fact_ids:
+      - support_level
+facts:
+  - fact_id: support_level
+    artifact_id: fixture://scenario/fpt_levels
+    value: The observed support level is 118.0.
+forbidden_phrases:
+  - guaranteed
+required_caveats:
+  - This is a monitoring scenario, not a prediction.
+artifact_manifest:
+  - fixture://scenario/fpt_levels
+observation:
+  answer_text: Monitor the observed support level at 118.0. This is a monitoring scenario, not a prediction.
+  caveats: []
+  missing_data: []
+  observed_claims:
+    - claim_id: price_level
+      fact_ids:
+        - support_level
+  artifact_references:
+    - fixture://scenario/fpt_levels
+  refused: false
+  reframed: false
+missing_data_expectation: not_applicable
+policy_expectation: research_only
+monitoring: Monitor whether the observed support level remains intact.
+confirmation: Treat a sustained close above the observed range as confirmation.
+invalidation: Treat a close below the observed support level as invalidation.
