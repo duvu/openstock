@@ -770,6 +770,7 @@ class ChatController:
         self, question: str, workspace_context: str | None
     ) -> "PreparedAssistantTurn | tuple[RefusalMessage, AssistantPlan]":
         from vnalpha.assistant.app import AssistantApp
+        from vnalpha.assistant.models import AssistantRequest
         from vnalpha.warehouse.connection import get_connection
         from vnalpha.warehouse.migrations import run_migrations
 
