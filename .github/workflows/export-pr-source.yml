@@ -1,0 +1,32 @@
+name: export-pr-source
+
+on:
+  push:
+    branches:
+      - fix/tui-slash-command-list
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Archive source tree
+        run: git archive --format=tar.gz --output=openstock-source.tar.gz HEAD
+
+      - name: Upload source tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: openstock-pr-50-source
+          path: openstock-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
