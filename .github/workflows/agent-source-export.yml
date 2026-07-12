@@ -1,0 +1,94 @@
+name: Agent source export
+
+on:
+  push:
+    branches:
+      - agent/openstock-four-phase-hardening
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Archive repository source
+        run: git archive --format=zip --output=openstock-source.zip HEAD
+      - name: Scan real Git history without printing matched values
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+          import re
+          import subprocess
+          from pathlib import Path
+
+          patterns = (
+              ("private_key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
+              ("github_token", re.compile(r"\b(?:gh[opusr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")),
+              ("aws_access_key", re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b")),
+              ("bearer_token", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{20,}")),
+              ("assigned_secret", re.compile(r"(?i)\b(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret|refresh[_-]?token)\s*[:=]\s*['\"]?(?!\$\{|<|example|dummy|test|redacted)[A-Za-z0-9._~+/=-]{16,}")),
+              ("session_cookie", re.compile(r"(?i)\b(?:set-cookie|cookie)\s*[:=]\s*[^\s;,]{16,}")),
+          )
+          allowed = {
+              ("assigned_secret", "vnalpha/tests/sandbox/test_repository.py"),
+              ("assigned_secret", "vnalpha/tests/test_command_parser.py"),
+              ("private_key", "vnalpha/tests/test_repair.py"),
+              ("bearer_token", "vnstock/tests/unit/core/auth/test_auth_models.py"),
+              ("assigned_secret", "vnstock/tests/unit/core/test_flat_access_model.py"),
+              ("assigned_secret", "vnstock/vnstock/cli/auth.py"),
+              ("assigned_secret", "vnstock/vnstock/cli/tcbs_login.py"),
+              ("assigned_secret", "vnstock/vnstock/core/auth/credential_store.py"),
+              ("bearer_token", "vnstock/vnstock/core/auth/redaction.py"),
+              ("assigned_secret", "vnstock/vnstock/core/base/provider.py"),
+              ("assigned_secret", "vnstock/vnstock/explorer/tcbs/__init__.py"),
+              ("assigned_secret", "vnstock/vnstock/explorer/tcbs/auth.py"),
+              ("assigned_secret", "vnstock/vnstock/explorer/tcbs/auth_handler.py"),
+          }
+          result = subprocess.run(
+              ["git", "log", "--all", "--format=OPENSTOCK_COMMIT:%H", "-p", "--no-ext-diff"],
+              check=True,
+              capture_output=True,
+              text=True,
+              errors="replace",
+          )
+          commit = "unknown"
+          path = "unknown"
+          findings: set[tuple[str, str, str]] = set()
+          for raw in result.stdout.splitlines():
+              if raw.startswith("OPENSTOCK_COMMIT:"):
+                  commit = raw.split(":", 1)[1]
+                  continue
+              if raw.startswith("+++ b/"):
+                  path = raw[6:]
+                  continue
+              if not raw.startswith(("+", "-")) or raw.startswith(("+++", "---")):
+                  continue
+              value = raw[1:]
+              for category, pattern in patterns:
+                  if (category, path) not in allowed and pattern.search(value):
+                      findings.add((category, commit, path))
+          ordered = sorted(findings)
+          workspace_findings = [item for item in ordered if item[2].startswith((".vnalpha/", "vnalpha/.vnalpha/"))]
+          lines = [f"findings={len(ordered)}", f"workspace_findings={len(workspace_findings)}"]
+          lines.extend(f"{category} {commit} {path}" for category, commit, path in ordered)
+          lines.append("history_rewrite_required=yes" if workspace_findings else "history_rewrite_required=no")
+          Path("history-secret-scan.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print("\n".join(lines[:2] + [lines[-1]]))
+          PY
+      - name: Upload source and history-scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openstock-source-${{ github.sha }}
+          path: |
+            openstock-source.zip
+            history-secret-scan.txt
+          if-no-files-found: error
+          retention-days: 1
