@@ -9,7 +9,7 @@ try:
     from textual.binding import Binding
     from textual.message import Message
     from textual.widget import Widget
-    from textual.widgets import Input
+    from textual.widgets import Input, Static
 
     _TEXTUAL_AVAILABLE = True
 except ImportError:
@@ -55,6 +55,16 @@ if _TEXTUAL_AVAILABLE:
             padding: 0 1;
             width: 100%;
         }
+        #composer-suggestions {
+            width: 100%;
+            height: auto;
+            max-height: 12;
+            border: tall $accent;
+            padding: 0 1;
+            background: $surface;
+            color: $text;
+            display: none;
+        }
         """
 
         BINDINGS = [
@@ -68,6 +78,8 @@ if _TEXTUAL_AVAILABLE:
         def __init__(self, history: InputHistory | None = None, **kwargs) -> None:
             super().__init__(**kwargs)
             self._history = history if history is not None else InputHistory()
+            self._max_suggestions = 10
+            self._command_names = self._load_command_names()
 
         @property
         def history(self) -> InputHistory:
@@ -79,6 +91,75 @@ if _TEXTUAL_AVAILABLE:
                 placeholder="Ask or run /command ...",
                 id="composer-input-field",
             )
+            yield Static("", id="composer-suggestions")
+
+        def on_input_changed(self, event: Input.Changed) -> None:
+            self._render_suggestions(event.value)
+
+        def _load_command_names(self) -> list[str]:
+            try:
+                from vnalpha.commands.setup import build_default_registry
+
+                return build_default_registry().names()
+            except Exception:  # noqa: BLE001
+                # A failed registry build (e.g. a missing optional dependency for
+                # one handler) must not silently break slash-command discovery.
+                try:
+                    from vnalpha.observability.audit import log_audit
+
+                    log_audit(
+                        "TUI_COMMAND_NAMES_UNAVAILABLE",
+                        "slash suggestions disabled: command registry failed to build",
+                        module="vnalpha.tui.widgets.composer_input",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                return []
+
+        def _command_suggestions(self, raw_text: str) -> list[str]:
+            if not raw_text.startswith("/"):
+                return []
+
+            if not self._command_names:
+                return []
+
+            body = raw_text[1:]
+            if not body:
+                return self._command_names[: self._max_suggestions]
+
+            base = body.split(None, 1)[0]
+            if not base:
+                return self._command_names[: self._max_suggestions]
+
+            return [
+                name
+                for name in self._command_names
+                if name.lower().startswith(base.lower())
+            ][: self._max_suggestions]
+
+        def _render_suggestions(self, raw_text: str) -> None:
+            suggestions = self._command_suggestions(raw_text)
+
+            if not raw_text.startswith("/"):
+                return self._hide_suggestions()
+
+            try:
+                panel = self.query_one("#composer-suggestions", Static)
+            except Exception:
+                return
+
+            if not suggestions:
+                panel.display = False
+                return
+
+            panel.update("\n".join(f"/{name}" for name in suggestions))
+            panel.display = True
+
+        def _hide_suggestions(self) -> None:
+            try:
+                self.query_one("#composer-suggestions", Static).display = False
+            except Exception:
+                pass
 
         def on_input_submitted(self, event: Input.Submitted) -> None:
             """Post ComposerSubmitted for non-empty text, push to history, and clear."""
@@ -90,6 +171,7 @@ if _TEXTUAL_AVAILABLE:
             self._history.push(raw)
             self._history.reset_navigation()
             self._emit_history_pushed(raw)
+            self._hide_suggestions()
             self.post_message(self.ComposerSubmitted(text=raw))
 
         # ------------------------------------------------------------------
@@ -135,6 +217,7 @@ if _TEXTUAL_AVAILABLE:
             """Programmatically clear the input field."""
             try:
                 self.query_one("#composer-input-field", Input).clear()
+                self._hide_suggestions()
             except Exception:
                 pass
 

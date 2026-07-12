@@ -83,3 +83,10 @@ changes:
       - setup-historical-evidence-engine
     summary: "Composer-first rendering and drill-down for completed research-intelligence contracts."
     evidence: "Generic output stream exists; dedicated workflow polish is intentionally deferred."
+  tui-slash-command-on-typing-search:
+    status: in_progress
+    priority: P3
+    blocked_by:
+      - openstock-four-phase-hardening
+    summary: "Show slash-command suggestion list in the TUI composer on typing '/' with on-typing prefix filtering."
+    evidence: "ComposerInput renders filtered command suggestions from CommandRegistry.names(); AUTO_FOCUS + non-focusable output log keep the Input focused; headless pilot tests cover visibility, filtering, focus, and clipping."

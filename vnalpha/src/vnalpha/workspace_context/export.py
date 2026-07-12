@@ -79,8 +79,9 @@ def export_workspace(workspace_id: str, *, root: Path | None = None) -> ExportRe
         json.dumps(
             {
                 "workspace_id": workspace_id,
+                "schema_version": 2,
+                "redaction_mode": "redacted",
                 "generated_at": generated_at,
-                "source_path": str(paths.workspace_dir),
                 "files": exported_files,
                 "checksums": checksums,
             },

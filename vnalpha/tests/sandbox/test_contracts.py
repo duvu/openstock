@@ -156,6 +156,47 @@ def test_output_schema_accepts_unique_chart_and_table_artifacts_under_their_dire
     )
 
 
+@pytest.mark.parametrize(
+    ("kind", "directory", "media_type", "extension"),
+    (
+        ("chart", "output/charts", "image/png", "png"),
+        ("table", "output/tables", "text/csv", "csv"),
+    ),
+)
+def test_output_schema_rejects_1025_character_optional_artifact_paths(
+    kind: str, directory: str, media_type: str, extension: str
+) -> None:
+    from vnalpha.sandbox.contracts import SandboxOutputSchema
+
+    path_prefix = f"{directory}/"
+    path_suffix = f".{extension}"
+    path = f"{path_prefix}{'a' * (1_025 - len(path_prefix) - len(path_suffix))}{path_suffix}"
+    assert len(path) == 1_025
+
+    with pytest.raises(ValidationError):
+        _ = SandboxOutputSchema.model_validate(
+            {
+                "artifacts": (
+                    {
+                        "kind": "result",
+                        "path": "output/result.json",
+                        "media_type": "application/json",
+                    },
+                    {
+                        "kind": "summary",
+                        "path": "output/summary.md",
+                        "media_type": "text/markdown",
+                    },
+                    {
+                        "kind": kind,
+                        "path": path,
+                        "media_type": media_type,
+                    },
+                )
+            }
+        )
+
+
 def test_output_schema_requires_the_canonical_result_and_summary_artifacts() -> None:
     from vnalpha.sandbox.contracts import SandboxOutputSchema
 

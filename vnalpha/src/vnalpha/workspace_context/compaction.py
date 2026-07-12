@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from vnalpha.model_routing.models import ModelTaskType
+from vnalpha.workspace_context.locking import workspace_transaction
 from vnalpha.workspace_context.models import CompactionResult, WorkspaceState
 from vnalpha.workspace_context.observability import emit_workspace_audit_event
+from vnalpha.workspace_context.retention import enforce_retention
 from vnalpha.workspace_context.storage import (
     _atomic_write_text,
     append_workspace_event,
-    ensure_workspace_layout,
     load_workspace_state,
     resolve_workspace_root,
     save_workspace_state,
@@ -143,61 +144,78 @@ def compact_workspace(
     llm_client: LLMGatewayClient | None = None,
 ) -> CompactionResult:
     resolved_root = resolve_workspace_root(root)
-    paths = ensure_workspace_layout(root=resolved_root, workspace_id=workspace_id)
-    state = load_workspace_state(root=resolved_root, workspace_id=workspace_id)
-    before_size = dict(state.context_size)
-    generated_at = _now_iso()
-    deterministic_summary = _render_compact_markdown(state, generated_at)
-    compact_text = deterministic_summary
-    warnings: list[str] = []
-    model_route: dict | None = None
-    if llm_client is not None:
-        try:
-            compact_text, usage = _llm_compact(llm_client, deterministic_summary, state)
-            route = usage.get("model_route") if isinstance(usage, dict) else None
-            model_route = dict(route) if isinstance(route, dict) else None
-        except Exception as exc:
-            warnings.append(
-                f"LLM compaction failed; deterministic summary used instead: {exc}"
-            )
+    with workspace_transaction(workspace_id, root=resolved_root) as paths:
+        state = load_workspace_state(root=resolved_root, workspace_id=workspace_id)
+        before_size = dict(state.context_size)
+        generated_at = _now_iso()
+        deterministic_summary = _render_compact_markdown(state, generated_at)
+        compact_text = deterministic_summary
+        warnings: list[str] = []
+        model_route: dict | None = None
+        if llm_client is not None:
+            try:
+                compact_text, usage = _llm_compact(
+                    llm_client, deterministic_summary, state
+                )
+                route = usage.get("model_route") if isinstance(usage, dict) else None
+                model_route = dict(route) if isinstance(route, dict) else None
+            except Exception as exc:
+                warnings.append(
+                    f"LLM compaction failed; deterministic summary used instead: {exc}"
+                )
 
-    _atomic_write_text(paths.compact_path, compact_text)
-    updated_state = WorkspaceState.from_dict(
-        {
-            **state.to_dict(),
-            "updated_at": generated_at,
-            "last_compacted_at": generated_at,
+        _atomic_write_text(paths.compact_path, compact_text)
+        updated_state = WorkspaceState.from_dict(
+            {
+                **state.to_dict(),
+                "updated_at": generated_at,
+                "last_compacted_at": generated_at,
+            }
+        )
+        retention = enforce_retention(root=resolved_root, state=updated_state)
+        retained_state = retention.state
+        save_workspace_state(root=resolved_root, state=retained_state)
+        event_metadata: dict = {
+            "summary_lines": len(compact_text.splitlines()),
+            "archived_counts": retention.archived_counts,
         }
-    )
-    save_workspace_state(root=resolved_root, state=updated_state)
-    event_metadata: dict = {"summary_lines": len(compact_text.splitlines())}
-    if model_route is not None:
-        event_metadata["model_route"] = model_route
-    append_workspace_event(
-        root=resolved_root,
-        workspace_id=workspace_id,
-        event={
-            "event_id": f"evt-{generated_at}",
-            "event_type": "WORKSPACE_COMPACTED",
-            "workspace_id": workspace_id,
-            "created_at": generated_at,
-            "metadata": event_metadata,
-        },
-    )
-    emit_workspace_audit_event(
-        event_type="WORKSPACE_COMPACTED",
-        workspace_id=workspace_id,
-        summary="Workspace compacted",
-        metadata=event_metadata,
-    )
+        if model_route is not None:
+            event_metadata["model_route"] = model_route
+        append_workspace_event(
+            root=resolved_root,
+            workspace_id=workspace_id,
+            event={
+                "event_id": f"evt-{generated_at}",
+                "event_type": "WORKSPACE_COMPACTED",
+                "workspace_id": workspace_id,
+                "created_at": generated_at,
+                "metadata": event_metadata,
+            },
+        )
+        emit_workspace_audit_event(
+            event_type="WORKSPACE_COMPACTED",
+            workspace_id=workspace_id,
+            summary="Workspace compacted",
+            metadata={"summary_lines": len(compact_text.splitlines())},
+        )
 
-    return CompactionResult(
-        workspace_id=workspace_id,
-        compact_path="compact.md",
-        before_size=before_size,
-        after_size={"summary_lines": len(compact_text.splitlines())},
-        preserved_items=["active_symbols", "open_tasks", "warnings", "recent_inputs"],
-        archived_items=[],
-        warnings=warnings,
-        generated_at=generated_at,
-    )
+        after_size = dict(retained_state.context_size)
+        after_size["summary_lines"] = len(compact_text.splitlines())
+        return CompactionResult(
+            workspace_id=workspace_id,
+            compact_path="compact.md",
+            before_size=before_size,
+            after_size=after_size,
+            preserved_items=[
+                "active_symbols",
+                "open_tasks",
+                "warnings",
+                "recent_inputs",
+            ],
+            archived_items=[
+                f"{name}:{count}"
+                for name, count in sorted(retention.archived_counts.items())
+            ],
+            warnings=warnings,
+            generated_at=generated_at,
+        )

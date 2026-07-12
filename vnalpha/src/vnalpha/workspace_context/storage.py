@@ -2,14 +2,32 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, Final
+from uuid import uuid4
 
 from vnalpha.workspace_context.models import WorkspaceState
+from vnalpha.workspace_context.redaction import (
+    redact_workspace_mapping,
+    redact_workspace_text,
+)
 
-DEFAULT_WORKSPACE_ROOT = Path(".vnalpha") / "workspaces"
+
+def _platform_default_workspace_root() -> Path:
+    if os.name == "nt":
+        state_home = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+        base = Path(state_home) if state_home else Path.home() / "AppData" / "Local"
+    else:
+        state_home = os.environ.get("XDG_STATE_HOME")
+        base = Path(state_home) if state_home else Path.home() / ".local" / "state"
+    return base.expanduser() / "openstock" / "workspaces"
+
+
+DEFAULT_WORKSPACE_ROOT: Final[Path] = _platform_default_workspace_root()
 LATEST_POINTER_NAME = "latest.json"
 INDEX_NAME = "index.json"
 WORKSPACE_JSON_NAME = "workspace.json"
@@ -35,11 +53,11 @@ class WorkspacePaths:
 
 def resolve_workspace_root(root: Path | None = None) -> Path:
     if root is not None:
-        return Path(root)
+        return Path(root).expanduser()
     env_override = os.environ.get("VNALPHA_WORKSPACE_ROOT", "").strip()
     if env_override:
-        return Path(env_override)
-    return DEFAULT_WORKSPACE_ROOT
+        return Path(env_override).expanduser()
+    return _platform_default_workspace_root()
 
 
 def ensure_workspace_layout(
@@ -114,25 +132,73 @@ def load_workspace_index(*, root: Path | None = None) -> dict[str, Any]:
 
 def acquire_workspace_lock(*, root: Path | None = None, workspace_id: str) -> Path:
     paths = ensure_workspace_layout(root=root, workspace_id=workspace_id)
-    _atomic_write_text(paths.lock_path, workspace_id)
-    return paths.lock_path
+    from vnalpha.workspace_context.locking import acquire_lock
+
+    return acquire_lock(paths.lock_path, workspace_id).path
 
 
-def release_workspace_lock(*, root: Path | None = None, workspace_id: str) -> None:
+def release_workspace_lock(
+    *, root: Path | None = None, workspace_id: str, owner_token: str | None = None
+) -> None:
     paths = ensure_workspace_layout(root=root, workspace_id=workspace_id)
-    if paths.lock_path.exists():
-        paths.lock_path.unlink()
+    from vnalpha.workspace_context.locking import read_lock_metadata, release_lock
+
+    metadata = read_lock_metadata(paths.lock_path)
+    if metadata is None:
+        return
+    requested_token = owner_token
+    if requested_token is None:
+        if metadata.pid != os.getpid() or metadata.hostname != socket.gethostname():
+            return
+        requested_token = metadata.owner_token
+    release_lock(paths.lock_path, requested_token)
 
 
 def save_workspace_state(*, root: Path | None = None, state: WorkspaceState) -> Path:
     paths = ensure_workspace_layout(root=root, workspace_id=state.workspace_id)
+    payload = state.to_dict()
+    payload["title"] = redact_workspace_text(str(payload["title"])).text
+    payload["assumptions"] = [
+        redact_workspace_text(str(value)).text for value in payload["assumptions"]
+    ]
+    payload["warnings"] = [
+        redact_workspace_text(str(value)).text for value in payload["warnings"]
+    ]
+    payload["errors"] = [
+        redact_workspace_text(str(value)).text for value in payload["errors"]
+    ]
+    payload["recent_inputs"] = [
+        {
+            **item,
+            "summary": redact_workspace_text(str(item["summary"])).text,
+            "content": (
+                redact_workspace_text(str(item["content"])).text
+                if item.get("content") is not None
+                else None
+            ),
+        }
+        for item in payload["recent_inputs"]
+    ]
+    payload["open_tasks"] = [
+        {**item, "text": redact_workspace_text(str(item["text"])).text}
+        for item in payload["open_tasks"]
+    ]
+    payload["active_artifacts"] = [
+        {
+            **item,
+            "summary": redact_workspace_text(str(item["summary"])).text,
+            "metadata": redact_workspace_mapping(item.get("metadata", {})),
+        }
+        for item in payload["active_artifacts"]
+    ]
+    persisted_state = WorkspaceState.from_dict(payload)
     _atomic_write_text(
         paths.workspace_json_path,
-        json.dumps(state.to_dict(), indent=2, sort_keys=True),
+        json.dumps(persisted_state.to_dict(), indent=2, sort_keys=True),
     )
     from vnalpha.workspace_context.integration import render_context_markdown
 
-    _atomic_write_text(paths.context_path, render_context_markdown(state))
+    _atomic_write_text(paths.context_path, render_context_markdown(persisted_state))
     existing_index = load_workspace_index(root=paths.root)
     workspace_ids = set(existing_index["workspace_ids"])
     workspace_ids.add(state.workspace_id)
@@ -159,6 +225,26 @@ def save_latest_workspace_id(*, root: Path | None = None, workspace_id: str) -> 
     return latest_path
 
 
+def clear_latest_workspace_id(*, root: Path | None = None) -> None:
+    latest_path = resolve_workspace_root(root) / LATEST_POINTER_NAME
+    try:
+        latest_path.unlink()
+    except FileNotFoundError:
+        return
+
+
+def quarantine_latest_workspace_pointer(*, root: Path | None = None) -> Path | None:
+    latest_path = resolve_workspace_root(root) / LATEST_POINTER_NAME
+    if not latest_path.exists():
+        return None
+    quarantine_dir = latest_path.parent / "archive" / "quarantine"
+    quarantine_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    target = quarantine_dir / f"latest-{stamp}-{uuid4().hex[:8]}.json"
+    latest_path.replace(target)
+    return target
+
+
 def load_latest_workspace_id(*, root: Path | None = None) -> str | None:
     latest_path = resolve_workspace_root(root) / LATEST_POINTER_NAME
     if not latest_path.exists():
@@ -172,7 +258,10 @@ def append_workspace_event(
     *, root: Path | None = None, workspace_id: str, event: dict[str, Any]
 ) -> Path:
     paths = ensure_workspace_layout(root=root, workspace_id=workspace_id)
+    from vnalpha.workspace_context.redaction import redact_workspace_mapping
+
+    safe_event = redact_workspace_mapping(event)
     with paths.events_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(event, sort_keys=True))
+        handle.write(json.dumps(safe_event, sort_keys=True))
         handle.write("\n")
     return paths.events_path

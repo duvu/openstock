@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from enum import Enum
 
-from vnalpha.assistant.tool_policy import is_forbidden_tool, is_safe_tool
+from vnalpha.assistant.tool_policy import (
+    APPROVAL_REQUIRED_TOOLS,
+    is_forbidden_tool,
+    is_safe_tool,
+)
 from vnalpha.chat.modes import ExecutionMode
 
 
@@ -44,6 +48,8 @@ def get_permission_state(
 ) -> PermissionState:
     if is_safe_tool(tool_name):
         return PermissionState.ALLOW
+    if tool_name in APPROVAL_REQUIRED_TOOLS:
+        return PermissionState.ASK
     if is_forbidden_tool(tool_name):
         return PermissionState.HARD_DENY
     return PermissionState.DENY

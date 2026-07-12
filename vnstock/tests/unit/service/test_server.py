@@ -153,6 +153,8 @@ class TestProvidersEndpoints:
         status, body = _fetch(f"{service_url}/v1/providers/health")
         assert status == 200
         assert "health" in body
+        assert "providers" in body
+        assert isinstance(body["providers"], list)
 
     def test_providers_capabilities_returns_200(self, service_url):
         status, body = _fetch(f"{service_url}/v1/providers/capabilities")

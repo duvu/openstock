@@ -225,7 +225,14 @@ CREATE TABLE IF NOT EXISTS assistant_session (
     plan_json             VARCHAR,
     answer_json           VARCHAR,
     refusal_reason        VARCHAR,
-    error_json            VARCHAR
+    error_json            VARCHAR,
+    prompt_text           VARCHAR,
+    prompt_summary        VARCHAR,
+    prompt_hash           VARCHAR,
+    prompt_chars          INTEGER,
+    workspace_context_ref VARCHAR,
+    chat_context_ref      VARCHAR,
+    raw_stored            BOOLEAN DEFAULT FALSE
 )
 """
 
@@ -245,9 +252,25 @@ CREATE TABLE IF NOT EXISTS llm_trace (
 )
 """
 
+PREPARED_TURN_DDL = """
+CREATE TABLE IF NOT EXISTS prepared_assistant_turn (
+    prepared_turn_id       VARCHAR PRIMARY KEY,
+    assistant_session_id   VARCHAR NOT NULL,
+    created_at             TIMESTAMPTZ NOT NULL,
+    request_json            VARCHAR NOT NULL,
+    intent_json             VARCHAR NOT NULL,
+    plan_json               VARCHAR NOT NULL,
+    plan_hash               VARCHAR NOT NULL,
+    policy_status           VARCHAR NOT NULL,
+    status                  VARCHAR NOT NULL,
+    finished_at             TIMESTAMPTZ
+)
+"""
+
 ALL_DDL_PHASE59 = [
     ASSISTANT_SESSION_DDL,
     LLM_TRACE_DDL,
+    PREPARED_TURN_DDL,
 ]
 
 # Phase 6 outcome-tracking tables

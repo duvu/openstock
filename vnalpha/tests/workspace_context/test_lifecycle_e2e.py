@@ -13,8 +13,8 @@ from vnalpha.workspace_context.integration import (
 from vnalpha.workspace_context.lifecycle import (
     get_status,
     new_workspace,
+    reactivate_workspace,
     record_input,
-    resume_workspace,
 )
 from vnalpha.workspace_context.storage import ensure_workspace_layout
 
@@ -49,7 +49,7 @@ def test_workspace_context_lifecycle_preserves_safe_resumable_boundaries(
     )
     exported = export_workspace(previous.workspace_id, root=workspace_root)
     current = new_workspace(root=workspace_root)
-    resumed = resume_workspace(previous.workspace_id, root=workspace_root)
+    resumed = reactivate_workspace(previous.workspace_id, root=workspace_root)
 
     # Then: sensitive input and raw events stay outside persistent and assistant-facing context.
     state_text = paths.workspace_json_path.read_text(encoding="utf-8")
@@ -83,5 +83,5 @@ def test_workspace_context_lifecycle_preserves_safe_resumable_boundaries(
     # Then: creating a successor archives but does not erase the old workspace or external audit log.
     assert current.workspace_id != previous.workspace_id
     assert resumed.workspace_id == previous.workspace_id
-    assert resumed.status == "archived"
+    assert resumed.status == "active"
     assert external_audit_path.read_text(encoding="utf-8") == external_audit_text

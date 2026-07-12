@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 import vnalpha.workspace_context.persistence as persistence_module
 from vnalpha.workspace_context import lifecycle
 from vnalpha.workspace_context.lifecycle import (
     archive_workspace,
+    check_lifecycle_invariants,
     create_workspace,
     get_or_create_latest_workspace,
     get_status,
     list_workspaces,
+    reactivate_workspace,
     record_artifact,
     record_error,
     record_input,
@@ -129,7 +133,7 @@ def test_new_workspace_compacts_archives_and_keeps_old_workspace_resumable(
     )
 
     current = lifecycle.new_workspace(root=tmp_path)
-    resumed = resume_workspace(previous.workspace_id, root=tmp_path)
+    resumed = reactivate_workspace(previous.workspace_id, root=tmp_path)
     previous_events = (tmp_path / previous.workspace_id / "events.jsonl").read_text(
         encoding="utf-8"
     )
@@ -137,9 +141,9 @@ def test_new_workspace_compacts_archives_and_keeps_old_workspace_resumable(
     assert current.workspace_id != previous.workspace_id
     assert current.status == "active"
     assert (tmp_path / previous.workspace_id / "compact.md").exists()
-    assert resumed.status == "archived"
+    assert resumed.status == "active"
     assert load_latest_workspace_id(root=tmp_path) == previous.workspace_id
-    assert "WORKSPACE_RESUMED" in previous_events
+    assert "WORKSPACE_REACTIVATED" in previous_events
     assert "top-secret" not in previous_events
 
 
@@ -149,7 +153,7 @@ def test_new_workspace_skips_compaction_only_when_requested(tmp_path) -> None:
     lifecycle.new_workspace(no_compact=True, root=tmp_path)
 
     assert not (tmp_path / previous.workspace_id / "compact.md").exists()
-    assert resume_workspace(previous.workspace_id, root=tmp_path).status == "archived"
+    assert reactivate_workspace(previous.workspace_id, root=tmp_path).status == "active"
 
 
 def test_new_workspace_emits_workspace_and_audit_events(tmp_path, monkeypatch) -> None:
@@ -262,3 +266,61 @@ def test_workspace_events_exclude_raw_user_text(tmp_path) -> None:
     )
 
     assert "top-secret" not in events
+
+
+def test_archive_clears_latest_and_resume_requires_reactivation(tmp_path) -> None:
+    workspace = create_workspace(root=tmp_path)
+
+    archived = archive_workspace(workspace.workspace_id, root=tmp_path)
+
+    assert archived.status == "archived"
+    assert load_latest_workspace_id(root=tmp_path) is None
+    with pytest.raises(lifecycle.WorkspaceLifecycleError):
+        resume_workspace(workspace.workspace_id, root=tmp_path)
+
+    reactivated = reactivate_workspace(workspace.workspace_id, root=tmp_path)
+
+    assert reactivated.status == "active"
+    assert load_latest_workspace_id(root=tmp_path) == workspace.workspace_id
+
+
+def test_get_status_does_not_mutate_latest_or_events(tmp_path) -> None:
+    workspace = create_workspace(root=tmp_path)
+    events_path = tmp_path / workspace.workspace_id / "events.jsonl"
+    before = events_path.read_text(encoding="utf-8")
+
+    report = get_status(workspace.workspace_id, root=tmp_path)
+
+    assert report.workspace_id == workspace.workspace_id
+    assert load_latest_workspace_id(root=tmp_path) == workspace.workspace_id
+    assert events_path.read_text(encoding="utf-8") == before
+
+
+def test_corrupt_latest_pointer_recovers_to_a_new_active_workspace(tmp_path) -> None:
+    (tmp_path / "latest.json").write_text("{broken", encoding="utf-8")
+
+    workspace = get_or_create_latest_workspace(root=tmp_path)
+
+    assert workspace.status == "active"
+    assert load_latest_workspace_id(root=tmp_path) == workspace.workspace_id
+    assert list((tmp_path / "archive" / "quarantine").glob("latest-*.json"))
+
+
+def test_lifecycle_invariants_require_one_active_latest_workspace(tmp_path) -> None:
+    workspace = create_workspace(root=tmp_path)
+    clear_latest = tmp_path / "latest.json"
+    clear_latest.unlink()
+
+    with pytest.raises(lifecycle.WorkspaceLifecycleError):
+        check_lifecycle_invariants(root=tmp_path)
+
+    save_workspace_state(
+        root=tmp_path,
+        state=WorkspaceState.from_dict(
+            {
+                **workspace.to_dict(),
+                "status": "archived",
+            }
+        ),
+    )
+    check_lifecycle_invariants(root=tmp_path)

@@ -25,6 +25,15 @@ class DataAvailabilityPolicy:
     min_required_bars: int = 120
     auto_sync: bool = True
     stale_after_calendar_days: int = 7
+    require_benchmark_history: bool = True
+    acceptable_quality_statuses: tuple[str, ...] = ("pass",)
+    required_lineage_fields: tuple[str, ...] = (
+        "as_of_bar_date",
+        "scoring_version",
+        "feature_build_version",
+        "selected_provider",
+        "ingestion_run_id",
+    )
     source: str | None = None
     base_url: str | None = None
 

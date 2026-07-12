@@ -126,3 +126,138 @@ def test_tui_source_has_research_language():
     with open(wl_path) as f:
         src = f.read()
     assert "Research Candidates" in src or "research candidate" in src.lower()
+
+
+@skip_if_no_textual
+def test_composer_input_css_allows_suggestion_expansion():
+    from vnalpha.tui.app import VnAlphaApp
+
+    css = VnAlphaApp.CSS
+    assert "ComposerInput {" in css
+    assert "height: auto;" in css
+    assert "max-height: 16;" in css
+
+
+@skip_if_no_textual
+@pytest.mark.asyncio
+async def test_composer_input_focused_at_launch_shows_slash_suggestions():
+    """Typing '/' must reveal the command list when the composer input is focused.
+
+    Regression guard: if focus lands on the (previously focusable) output log
+    instead of the composer Input, printable keystrokes never reach the Input,
+    on_input_changed never fires, and the suggestion list is never shown.
+    """
+    from textual.widgets import Input, Static
+
+    from vnalpha.tui.app import VnAlphaApp
+
+    app = VnAlphaApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        inp = app.query_one("#composer-input-field", Input)
+        # The composer Input must own focus at launch (AUTO_FOCUS).
+        assert inp.has_focus is True
+
+        await pilot.press("/")
+        await pilot.pause()
+        panel = app.query_one("#composer-suggestions", Static)
+        assert panel.display is True
+        assert "/help" in str(panel.render())
+
+
+@skip_if_no_textual
+@pytest.mark.asyncio
+async def test_composer_suggestion_list_not_clipped():
+    """All matched suggestions must be visible, not clipped by the composer height."""
+    from textual.widgets import Static
+
+    from vnalpha.tui.app import VnAlphaApp
+
+    app = VnAlphaApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await pilot.press("/")
+        await pilot.pause()
+        panel = app.query_one("#composer-suggestions", Static)
+        # The suggestion panel must be tall enough to show the matched commands
+        # (up to _max_suggestions = 10) without being clipped by its own CSS.
+        from vnalpha.tui.widgets.composer_input import ComposerInput
+
+        assert "max-height: 12;" in ComposerInput.DEFAULT_CSS
+        assert panel.display is True
+
+
+@skip_if_no_textual
+def test_composer_input_shows_and_filters_command_suggestions():
+    from vnalpha.tui.widgets.composer_input import ComposerInput
+
+    class _FakePanel:
+        def __init__(self) -> None:
+            self.display = True
+            self.text = ""
+
+        def update(self, value: str) -> None:
+            self.text = value
+
+    panel = _FakePanel()
+    composer = ComposerInput()
+    composer._command_names = ["scan", "sandbox", "help", "status", "history"]
+    composer.query_one = lambda selector, _type=None: panel
+
+    composer._render_suggestions("/")
+    assert panel.display is True
+    assert panel.text == "/scan\n/sandbox\n/help\n/status\n/history"
+
+    composer._render_suggestions("/sc")
+    assert panel.display is True
+    assert panel.text == "/scan"
+
+    composer._render_suggestions("/help now")
+    assert panel.display is True
+    assert panel.text == "/help"
+
+    composer._render_suggestions("random text")
+    assert panel.display is False
+
+
+@skip_if_no_textual
+def test_composer_input_submission_still_works_when_suggestions_enabled():
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from vnalpha.tui.widgets.composer_input import ComposerInput
+
+    class _FakePanel:
+        def __init__(self) -> None:
+            self.display = True
+            self.text = ""
+
+        def update(self, value: str) -> None:
+            self.text = value
+
+    panel = _FakePanel()
+    composer = ComposerInput()
+    composer._command_names = ["scan", "help"]
+    composer.query_one = lambda selector, _type=None: panel
+
+    messages: list[object] = []
+
+    def _capture(message: object) -> None:
+        messages.append(message)
+
+    composer.post_message = _capture
+
+    composer._render_suggestions("/s")
+    assert panel.display is True
+
+    event = SimpleNamespace(
+        value=" /scan now ",
+        input=Mock(),
+        stop=lambda: None,
+    )
+    composer.on_input_submitted(event)
+
+    assert len(messages) == 1
+    assert isinstance(messages[0], ComposerInput.ComposerSubmitted)
+    assert messages[0].text == "/scan now"
+    assert panel.display is False

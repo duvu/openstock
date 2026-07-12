@@ -4,6 +4,11 @@ import json
 import uuid
 from datetime import datetime, timezone
 
+from vnalpha.assistant.models import (
+    PreparedAssistantTurn,
+    PromptPersistenceRecord,
+)
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -15,15 +20,31 @@ def create_assistant_session(
     surface: str,
     user_prompt: str,
     intent: str | None = None,
+    prompt: PromptPersistenceRecord | None = None,
 ) -> str:
     session_id = str(uuid.uuid4())
     conn.execute(
         """
         INSERT INTO assistant_session
-            (assistant_session_id, started_at, status, surface, user_prompt, intent)
-        VALUES (?, ?, 'RUNNING', ?, ?, ?)
+            (assistant_session_id, started_at, status, surface, user_prompt, intent,
+             prompt_text, prompt_summary, prompt_hash, prompt_chars,
+             workspace_context_ref, chat_context_ref, raw_stored)
+        VALUES (?, ?, 'RUNNING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [session_id, _now(), surface, user_prompt, intent],
+        [
+            session_id,
+            _now(),
+            surface,
+            user_prompt,
+            intent,
+            prompt.prompt_text if prompt else None,
+            prompt.prompt_summary if prompt else None,
+            prompt.prompt_hash if prompt else None,
+            prompt.prompt_chars if prompt else None,
+            prompt.workspace_context_ref if prompt else None,
+            prompt.chat_context_ref if prompt else None,
+            prompt.raw_stored if prompt else False,
+        ],
     )
     return session_id
 
@@ -61,6 +82,23 @@ def finish_assistant_session(
             json.dumps(error) if error else None,
             session_id,
         ],
+    )
+
+
+def mark_assistant_session_prepared(
+    conn,
+    session_id: str,
+    *,
+    intent: str,
+    plan: dict,
+) -> None:
+    conn.execute(
+        """
+        UPDATE assistant_session
+        SET status = 'PREPARED', intent = ?, plan_json = ?
+        WHERE assistant_session_id = ?
+        """,
+        [intent, json.dumps(plan, sort_keys=True), session_id],
     )
 
 
@@ -157,3 +195,40 @@ def _model_from_usage(usage: dict | None) -> str | None:
         return None
     model_id = route.get("model_id")
     return str(model_id) if model_id else None
+
+
+def persist_prepared_turn(conn, turn: PreparedAssistantTurn) -> None:
+    conn.execute(
+        """
+        INSERT INTO prepared_assistant_turn
+            (prepared_turn_id, assistant_session_id, created_at, request_json,
+             intent_json, plan_json, plan_hash, policy_status, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED')
+        """,
+        [
+            turn.prepared_turn_id,
+            turn.assistant_session_id,
+            turn.created_at,
+            json.dumps(turn.request.to_dict(), sort_keys=True),
+            json.dumps(turn.intent_result.__dict__, sort_keys=True),
+            json.dumps(turn.plan.to_dict(), sort_keys=True),
+            turn.plan_hash,
+            turn.policy_status,
+        ],
+    )
+
+
+def finish_prepared_turn(
+    conn,
+    prepared_turn_id: str,
+    *,
+    status: str,
+) -> None:
+    conn.execute(
+        """
+        UPDATE prepared_assistant_turn
+        SET status = ?, finished_at = ?
+        WHERE prepared_turn_id = ?
+        """,
+        [status, _now(), prepared_turn_id],
+    )

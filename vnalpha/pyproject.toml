@@ -34,6 +34,13 @@ vnalpha = "vnalpha.cli:app"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"vnalpha.evals" = [
+    "goldens/*/*.yaml",
+    "goldens/failing/*/*.yaml",
+    "runtime_cases/*.json",
+]
+
 [tool.ruff]
 line-length = 88
 target-version = "py310"

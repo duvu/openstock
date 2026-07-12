@@ -58,7 +58,7 @@ def test_chat_local_commands_constant():
     """CHAT_LOCAL_COMMANDS contains the expected set of local commands."""
     from vnalpha.chat.controller import CHAT_LOCAL_COMMANDS
 
-    expected = {"new", "clear", "context", "plan", "trace", "help"}
+    expected = {"clear", "context", "plan", "trace", "help"}
     assert CHAT_LOCAL_COMMANDS == expected
 
 
@@ -106,10 +106,6 @@ class TestClassifyInput:
         ctrl = self._make_controller()
         assert ctrl.classify_input("/help") == "chat_local"
 
-    def test_slash_new_is_chat_local(self):
-        ctrl = self._make_controller()
-        assert ctrl.classify_input("/new") == "chat_local"
-
     def test_slash_clear_is_chat_local(self):
         ctrl = self._make_controller()
         assert ctrl.classify_input("/clear") == "chat_local"
@@ -129,6 +125,14 @@ class TestClassifyInput:
     def test_unknown_slash_is_slash_command(self):
         ctrl = self._make_controller()
         assert ctrl.classify_input("/nonexistent") == "slash_command"
+
+    def test_slash_new_is_slash_command(self):
+        ctrl = self._make_controller()
+        assert ctrl.classify_input("/new") == "slash_command"
+
+    def test_slash_chat_new_is_slash_command(self):
+        ctrl = self._make_controller()
+        assert ctrl.classify_input("/chat new") == "slash_command"
 
 
 # ---------------------------------------------------------------------------

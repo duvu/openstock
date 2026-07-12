@@ -8,6 +8,9 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Mapping, TypeVar
+
+_RecordValue = TypeVar("_RecordValue")
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -31,7 +34,7 @@ def read_jsonl(path: Path) -> list[dict]:
     return records
 
 
-def append_jsonl(path: Path, record: dict) -> None:  # noqa: C901
+def append_jsonl(path: Path, record: Mapping[str, _RecordValue]) -> None:  # noqa: C901
     """Append *record* as one JSON line to *path*.
 
     - Creates parent directories if needed.

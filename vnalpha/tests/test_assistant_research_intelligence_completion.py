@@ -74,15 +74,18 @@ def test_research_prompt_contains_template_and_bounded_source_refs():
 
     assert "Required payload fields" in context["research_template"]
     assert artifact_ref in context["valid_grounded_source_refs"]
-    assert f"tool:analysis.deep_symbol:{plan.steps[0].step_id}" in context[
-        "valid_grounded_source_refs"
-    ]
+    assert (
+        f"tool:analysis.deep_symbol:{plan.steps[0].step_id}"
+        in context["valid_grounded_source_refs"]
+    )
 
 
 def test_grounded_research_answer_passes_and_records_validation_metadata():
     plan = _deep_plan()
     tool_outputs, artifact_ref = _deep_payload(plan)
-    synth = AnswerSynthesizer(FakeLLMClient(responses=[_response()]))
+    synth = AnswerSynthesizer(
+        FakeLLMClient(responses=[_response(grounded_source_refs=[artifact_ref])])
+    )
 
     answer = synth.synthesize("Review FPT", plan, tool_outputs)
 

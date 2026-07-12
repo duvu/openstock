@@ -16,6 +16,7 @@ import duckdb
 
 from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.normalizers import normalize_date, normalize_symbol
+from vnalpha.tools.artifact_references import ArtifactReferenceBuilder
 from vnalpha.tools.errors import ToolExecutionError
 from vnalpha.tools.models import ToolOutput
 from vnalpha.tools.research_context import (
@@ -43,10 +44,16 @@ def deep_symbol_analysis(
     normalized_symbol = _require_symbol(symbol)
     target_date = _resolve_symbol_date(conn, normalized_symbol, date)
     if target_date is None:
-        missing = f"No persisted market artifacts are available for {normalized_symbol}."
+        missing = (
+            f"No persisted market artifacts are available for {normalized_symbol}."
+        )
         return ToolOutput(
             data=_missing_payload(
-                "analysis.deep_symbol", normalized_symbol, date, ["symbol_history"], missing
+                "analysis.deep_symbol",
+                normalized_symbol,
+                date,
+                ["symbol_history"],
+                missing,
             ),
             summary=missing,
             warnings=[missing],
@@ -63,28 +70,61 @@ def deep_symbol_analysis(
 
     missing_data: list[str] = []
     caveats: list[str] = []
-    artifact_refs: list[str] = []
+    artifact_refs = ArtifactReferenceBuilder()
     if score is None:
         missing_data.append("candidate_score")
-        caveats.append(f"No candidate score exists for {normalized_symbol} on {target_date}.")
+        caveats.append(
+            f"No candidate score exists for {normalized_symbol} on {target_date}."
+        )
     else:
-        artifact_refs.append(f"candidate_score:{normalized_symbol}:{target_date}")
+        artifact_refs.add_if_present(
+            "candidate_score", f"{normalized_symbol}:{target_date}", True
+        )
     if feature is None:
         missing_data.append("feature_snapshot")
-        caveats.append(f"No feature snapshot exists for {normalized_symbol} on {target_date}.")
+        caveats.append(
+            f"No feature snapshot exists for {normalized_symbol} on {target_date}."
+        )
     else:
-        artifact_refs.append(f"feature_snapshot:{normalized_symbol}:{target_date}")
+        artifact_refs.add_if_present(
+            "feature_snapshot", f"{normalized_symbol}:{target_date}", True
+        )
     if not bars:
         missing_data.append("canonical_ohlcv")
-        caveats.append(f"No canonical OHLCV exists for {normalized_symbol} through {target_date}.")
+        caveats.append(
+            f"No canonical OHLCV exists for {normalized_symbol} through {target_date}."
+        )
     else:
-        artifact_refs.append(f"canonical_ohlcv:{normalized_symbol}:through:{target_date}")
+        artifact_refs.add_if_present(
+            "canonical_ohlcv", f"{normalized_symbol}:through:{target_date}", True
+        )
 
     caveats.extend(_tool_warnings(market))
     caveats.extend(_tool_warnings(sector))
     market_data = _tool_data(market)
     sector_data = _tool_data(sector)
-    artifact_refs.extend(_context_artifact_refs(market_data, sector_data, normalized_symbol))
+    market_date = market_data.get("as_of_date")
+    artifact_refs.add_if_present(
+        "market_regime_snapshot",
+        str(market_date),
+        bool(market_date and market_data.get("snapshot") is not None),
+    )
+    sector_date = sector_data.get("as_of_date")
+    sector_name = sector_data.get("sector") or normalized_symbol
+    sector_snapshot_present = bool(
+        sector_date and sector_data.get("snapshot") is not None
+    )
+    artifact_refs.add_if_present(
+        "sector_strength_snapshot",
+        f"{sector_name}:{sector_date}",
+        sector_snapshot_present,
+    )
+    if not sector_snapshot_present:
+        missing_data.append("sector_strength_snapshot")
+        caveats.append(
+            "No persisted sector strength snapshot was available for "
+            f"{normalized_symbol} on or before {target_date}."
+        )
 
     data = {
         "tool": "analysis.deep_symbol",
@@ -104,9 +144,9 @@ def deep_symbol_analysis(
             "feature_generated_at": feature.get("feature_generated_at")
             if feature
             else None,
-            "score_generated_at": (score or {}).get("lineage_json", {}).get(
-                "generated_at"
-            ),
+            "score_generated_at": (score or {})
+            .get("lineage_json", {})
+            .get("generated_at"),
         },
         "lineage": {
             "candidate_score": (score or {}).get("lineage_json", {}),
@@ -118,7 +158,7 @@ def deep_symbol_analysis(
             if isinstance(sector_data, dict)
             else {},
         },
-        "artifact_refs": list(dict.fromkeys(artifact_refs)),
+        "artifact_refs": artifact_refs.build(),
         "missing_data": missing_data,
         "caveats": list(dict.fromkeys(caveats)),
         "policy": {"mode": "research_only", "disclaimer": _RESEARCH_ONLY_CAVEAT},
@@ -165,8 +205,12 @@ def summarize_watchlist_deep(
 
     class_counts = Counter(str(row.get("candidate_class") or "UNKNOWN") for row in rows)
     setup_counts = Counter(str(row.get("setup_type") or "UNCLASSIFIED") for row in rows)
-    sector_counts = Counter(sectors.get(row["symbol"]) or "UNCLASSIFIED" for row in rows)
-    quality_counts = Counter(str(row.get("data_quality_status") or "unknown") for row in rows)
+    sector_counts = Counter(
+        sectors.get(row["symbol"]) or "UNCLASSIFIED" for row in rows
+    )
+    quality_counts = Counter(
+        str(row.get("data_quality_status") or "unknown") for row in rows
+    )
     risk_counts: Counter[str] = Counter()
     for row in rows:
         risk_counts.update(_risk_flags(row.get("risk_flags_json")))
@@ -186,6 +230,8 @@ def summarize_watchlist_deep(
     ]
     market_data = _tool_data(market)
     caveats = _tool_warnings(market)
+    artifact_refs = ArtifactReferenceBuilder()
+    artifact_refs.add_if_present("daily_watchlist", target_date, bool(rows))
     data = {
         "tool": "watchlist.summarize_deep",
         "available": True,
@@ -206,7 +252,7 @@ def summarize_watchlist_deep(
             if isinstance(market_data, dict)
             else {},
         },
-        "artifact_refs": [f"daily_watchlist:{target_date}"],
+        "artifact_refs": artifact_refs.build(),
         "missing_data": [],
         "caveats": caveats,
         "policy": {"mode": "research_only", "disclaimer": _RESEARCH_ONLY_CAVEAT},
@@ -238,12 +284,17 @@ def generate_shortlist(
             warnings=[caveat],
         )
 
-    rows = [row for row in get_watchlist_rich(conn, target_date) if float(row.get("score") or 0) >= threshold]
+    watchlist_rows = get_watchlist_rich(conn, target_date)
+    rows = [row for row in watchlist_rows if float(row.get("score") or 0) >= threshold]
     sectors = _symbol_sector_map(conn, [row["symbol"] for row in rows])
     sector_scores = _sector_score_map(conn, target_date)
     ranked: list[dict[str, Any]] = []
     for row in rows:
-        evidence = row.get("evidence_json") if isinstance(row.get("evidence_json"), dict) else {}
+        evidence = (
+            row.get("evidence_json")
+            if isinstance(row.get("evidence_json"), dict)
+            else {}
+        )
         risks = _risk_flags(row.get("risk_flags_json"))
         sector = sectors.get(row["symbol"])
         sector_score = float(sector_scores.get(sector, 0.0))
@@ -251,7 +302,13 @@ def generate_shortlist(
         risk_quality = float(evidence.get("risk_quality_score") or 0.0)
         penalty = min(0.20, 0.04 * len(risks))
         shortlist_score = round(
-            max(0.0, 0.75 * candidate_score + 0.15 * sector_score + 0.10 * risk_quality - penalty),
+            max(
+                0.0,
+                0.75 * candidate_score
+                + 0.15 * sector_score
+                + 0.10 * risk_quality
+                - penalty,
+            ),
             6,
         )
         reasons = [
@@ -276,17 +333,40 @@ def generate_shortlist(
                 "why_shortlisted": reasons,
                 "why_not_immediate": (
                     [f"risk flag: {flag}" for flag in risks]
-                    or ["No execution conclusion is produced; confirmation remains required."]
+                    or [
+                        "No execution conclusion is produced; confirmation remains required."
+                    ]
                 ),
             }
         )
     ranked.sort(key=lambda item: (-item["shortlist_score"], item["symbol"]))
     selected = ranked[:limit]
     caveats = [_RESEARCH_ONLY_CAVEAT]
+    missing_data: list[str] = []
     if len(rows) < limit:
         caveats.append(
             f"Only {len(rows)} candidates met the persisted score threshold {threshold:.3f}."
         )
+    if not watchlist_rows:
+        missing_data.append("daily_watchlist")
+    if not rows:
+        missing_data.append("eligible_watchlist_candidates")
+    if not sector_scores:
+        missing_data.append("sector_strength_snapshot")
+        caveats.append(
+            "Sector component defaulted to 0.0 because no persisted sector "
+            "strength snapshot was available."
+        )
+    artifact_refs = ArtifactReferenceBuilder()
+    artifact_refs.add_if_present("daily_watchlist", target_date, bool(watchlist_rows))
+    artifact_refs.add_if_present(
+        "sector_strength_snapshot", target_date, bool(sector_scores)
+    )
+    lineage_sources: list[str] = []
+    if watchlist_rows:
+        lineage_sources.append("persisted watchlist")
+    if sector_scores:
+        lineage_sources.append("persisted sector snapshots")
     data = {
         "tool": "shortlist.generate",
         "available": bool(selected),
@@ -300,13 +380,16 @@ def generate_shortlist(
         },
         "shortlist": selected,
         "considered_count": len(rows),
-        "artifact_refs": [
-            f"daily_watchlist:{target_date}",
-            f"sector_strength_snapshot:{target_date}",
-        ],
-        "freshness": {"watchlist_date": target_date, "sector_context_date": target_date},
-        "lineage": {"source": "persisted watchlist and sector snapshots"},
-        "missing_data": [] if rows else ["eligible_watchlist_candidates"],
+        "artifact_refs": artifact_refs.build(),
+        "freshness": {
+            "watchlist_date": target_date if watchlist_rows else None,
+            "sector_context_date": target_date if sector_scores else None,
+        },
+        "lineage": {
+            "source": " and ".join(lineage_sources)
+            or "no persisted shortlist artifacts"
+        },
+        "missing_data": missing_data,
         "caveats": caveats,
         "policy": {"mode": "research_only", "disclaimer": _RESEARCH_ONLY_CAVEAT},
     }
@@ -328,7 +411,9 @@ def generate_research_scenario(
     normalized_symbol = _require_symbol(symbol)
     target_date = analysis.get("as_of_date") if isinstance(analysis, dict) else date
     if not isinstance(analysis, dict) or not analysis.get("available"):
-        caveat = f"Insufficient persisted data to build a scenario for {normalized_symbol}."
+        caveat = (
+            f"Insufficient persisted data to build a scenario for {normalized_symbol}."
+        )
         return ToolOutput(
             data=_missing_payload(
                 "scenario.generate_research_plan",
@@ -380,7 +465,9 @@ def generate_research_scenario(
     ]
     confirmation_conditions = [item for item in confirmation_conditions if item]
     invalidation_conditions = [item for item in invalidation_conditions if item]
-    caveats = list(dict.fromkeys([*_tool_warnings(analysis_output), _RESEARCH_ONLY_CAVEAT]))
+    caveats = list(
+        dict.fromkeys([*_tool_warnings(analysis_output), _RESEARCH_ONLY_CAVEAT])
+    )
     data = {
         "tool": "scenario.generate_research_plan",
         "available": True,
@@ -408,7 +495,9 @@ def generate_research_scenario(
             },
             {
                 "name": "neutral",
-                "conditions": ["Confirmation conditions are not met and invalidation is not triggered."],
+                "conditions": [
+                    "Confirmation conditions are not met and invalidation is not triggered."
+                ],
                 "interpretation": "Maintain observation status; no execution conclusion is produced.",
             },
             {
@@ -418,8 +507,12 @@ def generate_research_scenario(
             },
         ],
         "risk_reward_context": {
-            "risk_distance": round(risk_distance, 6) if risk_distance is not None else None,
-            "reward_distance": round(reward_distance, 6) if reward_distance is not None else None,
+            "risk_distance": round(risk_distance, 6)
+            if risk_distance is not None
+            else None,
+            "reward_distance": round(reward_distance, 6)
+            if reward_distance is not None
+            else None,
             "reward_risk_ratio": reward_risk,
             "basis": "20-session persisted support/resistance distance; descriptive only",
         },
@@ -466,7 +559,7 @@ def get_setup_history(
                hit_rate, failure_rate, avg_max_drawdown, computed_at::VARCHAR,
                evaluation_run_id, evaluator_version, metric_policy_version
         FROM setup_type_performance
-        WHERE {' AND '.join(where)}
+        WHERE {" AND ".join(where)}
         ORDER BY as_of_date DESC
         LIMIT 1
         """,
@@ -509,6 +602,12 @@ def get_setup_history(
     caveats = [_RESEARCH_ONLY_CAVEAT]
     if sample_size < 20:
         caveats.append(f"Small sample size: {sample_size} candidate outcome(s).")
+    artifact_refs = ArtifactReferenceBuilder()
+    artifact_refs.add_if_present(
+        "setup_type_performance",
+        f"{normalized_setup}:{horizon}:{evidence['as_of_date']}",
+        True,
+    )
     data = {
         "tool": "evidence.get_setup_history",
         "available": True,
@@ -517,9 +616,7 @@ def get_setup_history(
         "setup_type": normalized_setup,
         "horizon_sessions": horizon,
         "evidence": evidence,
-        "artifact_refs": [
-            f"setup_type_performance:{normalized_setup}:{horizon}:{evidence['as_of_date']}"
-        ],
+        "artifact_refs": artifact_refs.build(),
         "freshness": {"computed_at": evidence.get("computed_at")},
         "lineage": {
             "evaluation_run_id": evidence.get("evaluation_run_id"),
@@ -717,8 +814,20 @@ def _symbol_metadata(conn: duckdb.DuckDBPyConnection, symbol: str) -> dict[str, 
         [symbol],
     ).fetchone()
     if row is None:
-        return {"symbol": symbol, "exchange": None, "name": None, "sector": None, "industry": None}
-    return dict(zip(["symbol", "exchange", "name", "sector", "industry", "is_active"], row, strict=True))
+        return {
+            "symbol": symbol,
+            "exchange": None,
+            "name": None,
+            "sector": None,
+            "industry": None,
+        }
+    return dict(
+        zip(
+            ["symbol", "exchange", "name", "sector", "industry", "is_active"],
+            row,
+            strict=True,
+        )
+    )
 
 
 def _latest_quality(
@@ -768,18 +877,6 @@ def _sector_score_map(
         for item in snapshots
         if isinstance(item, dict)
     }
-
-
-def _context_artifact_refs(
-    market_data: dict[str, Any], sector_data: dict[str, Any], symbol: str
-) -> list[str]:
-    refs: list[str] = []
-    if market_data.get("as_of_date"):
-        refs.append(f"market_regime_snapshot:{market_data['as_of_date']}")
-    if sector_data.get("as_of_date"):
-        sector = sector_data.get("sector") or symbol
-        refs.append(f"sector_strength_snapshot:{sector}:{sector_data['as_of_date']}")
-    return refs
 
 
 def _tool_data(output: ToolOutput) -> dict[str, Any]:

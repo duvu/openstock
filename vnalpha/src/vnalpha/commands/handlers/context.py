@@ -12,6 +12,7 @@ from vnalpha.workspace_context.lifecycle import (
     list_workspaces,
     new_workspace,
 )
+from vnalpha.workspace_context.recovery import inspect_workspace, recover_workspace
 
 
 def handle_context(parsed: ParsedCommand, **kwargs) -> CommandResult:
@@ -49,6 +50,43 @@ def handle_context(parsed: ParsedCommand, **kwargs) -> CommandResult:
                 )
             ],
             warnings=list(report.warnings),
+        )
+
+    if subcommand == "repair":
+        if parsed.options.get("dry-run", False) is True:
+            invalid = inspect_workspace()
+            return CommandResult(
+                status="SUCCESS",
+                title="/context repair",
+                summary=(
+                    "Workspace repair dry run found no malformed files."
+                    if not invalid
+                    else f"Workspace repair would quarantine {len(invalid)} file(s)."
+                ),
+                panels=[
+                    ResultPanel(
+                        title="Workspace Repair",
+                        content={"dry_run": True, "invalid_paths": list(invalid)},
+                    )
+                ],
+            )
+        result = recover_workspace()
+        return CommandResult(
+            status="SUCCESS",
+            title="/context repair",
+            summary=f"Workspace {result.workspace.workspace_id} is available after repair.",
+            panels=[
+                ResultPanel(
+                    title="Workspace Repair",
+                    content={
+                        "dry_run": False,
+                        "workspace_id": result.workspace.workspace_id,
+                        "temporary": result.temporary,
+                        "quarantined_paths": list(result.quarantined_paths),
+                    },
+                )
+            ],
+            warnings=list(result.warnings),
         )
 
     if subcommand == "compact":
@@ -221,5 +259,5 @@ def handle_context(parsed: ParsedCommand, **kwargs) -> CommandResult:
 
     raise CommandValidationError(
         "Unsupported /context subcommand: "
-        f"{subcommand}. Supported: status, compact, clean, new, resume, list, export."
+        f"{subcommand}. Supported: status, repair, compact, clean, new, resume, list, export."
     )

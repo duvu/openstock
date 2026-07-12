@@ -24,7 +24,9 @@ class ModelOverrideStore:
         self._workspace_root = workspace_root
         self._lock = RLock()
 
-    def get_current_override(self, workspace_id: str | None = None) -> ModelRouteOverride:
+    def get_current_override(
+        self, workspace_id: str | None = None
+    ) -> ModelRouteOverride:
         with self._lock:
             return ModelRouteOverride(
                 session_profile=self._session_profile,
@@ -46,7 +48,9 @@ class ModelOverrideStore:
             elif normalized_scope == "workspace":
                 self._write_workspace_profile(parsed, workspace_id)
             else:
-                raise ValueError("Model override scope must be 'session' or 'workspace'.")
+                raise ValueError(
+                    "Model override scope must be 'session' or 'workspace'."
+                )
         self._emit_override_event("MODEL_OVERRIDE_SET", parsed, normalized_scope)
         return self.get_current_override(workspace_id)
 
@@ -63,7 +67,13 @@ class ModelOverrideStore:
             if normalized_scope in {"all", "workspace"}:
                 path = self._workspace_override_path(workspace_id, create=False)
                 if path is not None:
-                    path.unlink(missing_ok=True)
+                    from vnalpha.workspace_context.locking import workspace_transaction
+
+                    with workspace_transaction(
+                        path.parent.name,
+                        root=path.parent.parent,
+                    ):
+                        path.unlink(missing_ok=True)
             if normalized_scope not in {"all", "session", "workspace"}:
                 raise ValueError(
                     "Model override reset scope must be 'all', 'session', or 'workspace'."
@@ -94,9 +104,11 @@ class ModelOverrideStore:
             sort_keys=True,
         )
         try:
+            from vnalpha.workspace_context.locking import workspace_transaction
             from vnalpha.workspace_context.storage import _atomic_write_text
 
-            _atomic_write_text(path, payload)
+            with workspace_transaction(path.parent.name, root=path.parent.parent):
+                _atomic_write_text(path, payload)
         except ImportError:
             path.write_text(payload, encoding="utf-8")
 

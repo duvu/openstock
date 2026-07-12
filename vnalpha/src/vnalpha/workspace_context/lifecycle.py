@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 from uuid import uuid4
 
 from vnalpha.workspace_context.compaction import compact_workspace
+from vnalpha.workspace_context.locking import workspace_transaction
 from vnalpha.workspace_context.models import (
     WorkspaceResumeSummary,
     WorkspaceState,
+    WorkspaceStatus,
     WorkspaceStatusReport,
 )
 from vnalpha.workspace_context.mutations import (
@@ -23,23 +26,36 @@ from vnalpha.workspace_context.persistence import (
 from vnalpha.workspace_context.persistence import (
     now_iso as _now_iso,
 )
-from vnalpha.workspace_context.persistence import (
-    persist_workspace as _persist,
-)
 from vnalpha.workspace_context.storage import (
+    clear_latest_workspace_id,
     ensure_workspace_layout,
     load_latest_workspace_id,
     load_workspace_state,
+    quarantine_latest_workspace_pointer,
     resolve_workspace_root,
     save_latest_workspace_id,
+    save_workspace_state,
 )
 
 MAX_CONTEXT_EVENTS: Final = 100
 MAX_CONTEXT_INPUTS: Final = 50
 MAX_CONTEXT_ARTIFACTS: Final = 50
 
+
+class WorkspaceLifecycleError(RuntimeError):
+    def __init__(self, workspace_id: str, operation: str, reason: str) -> None:
+        self.workspace_id = workspace_id
+        self.operation = operation
+        self.reason = reason
+        super().__init__(reason)
+
+    def __str__(self) -> str:
+        return f"Cannot {self.operation} workspace {self.workspace_id}: {self.reason}"
+
+
 __all__ = [
     "archive_workspace",
+    "check_lifecycle_invariants",
     "create_workspace",
     "get_or_create_latest_workspace",
     "get_resume_summary",
@@ -50,6 +66,7 @@ __all__ = [
     "record_error",
     "record_input",
     "record_warning",
+    "reactivate_workspace",
     "resume_workspace",
 ]
 
@@ -63,9 +80,35 @@ def _default_title(workspace_id: str) -> str:
 
 
 def get_or_create_latest_workspace(root: Path | None = None) -> WorkspaceState:
-    latest_id = load_latest_workspace_id(root=root)
+    try:
+        latest_id = load_latest_workspace_id(root=root)
+    except json.JSONDecodeError:
+        quarantine_latest_workspace_pointer(root=root)
+        latest_id = None
     if latest_id is not None:
-        return load_workspace_state(root=root, workspace_id=latest_id)
+        try:
+            latest = load_workspace_state(root=root, workspace_id=latest_id)
+        except (
+            FileNotFoundError,
+            KeyError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ):
+            clear_latest_workspace_id(root=root)
+        else:
+            if latest.status == WorkspaceStatus.ACTIVE.value:
+                return latest
+            clear_latest_workspace_id(root=root)
+    active = [
+        state
+        for state in list_workspaces(root=root)
+        if state.status == WorkspaceStatus.ACTIVE.value
+    ]
+    if active:
+        selected = active[0]
+        save_latest_workspace_id(root=root, workspace_id=selected.workspace_id)
+        return selected
     return create_workspace(root=root)
 
 
@@ -85,12 +128,14 @@ def create_workspace(
         updated_at=now,
         context_size={"events": 1, "inputs": 0, "artifacts": 0},
     )
-    _persist(resolved_root, state)
-    _append_event(
-        root=resolved_root,
-        workspace_id=workspace_id,
-        event_type="WORKSPACE_CREATED",
-    )
+    with workspace_transaction(workspace_id, root=resolved_root):
+        save_workspace_state(root=resolved_root, state=state)
+        save_latest_workspace_id(root=resolved_root, workspace_id=workspace_id)
+        _append_event(
+            root=resolved_root,
+            workspace_id=workspace_id,
+            event_type="WORKSPACE_CREATED",
+        )
     return state
 
 
@@ -102,18 +147,25 @@ def resume_workspace(
     if target_id is None:
         return create_workspace(root=resolved_root)
     state = load_workspace_state(root=resolved_root, workspace_id=target_id)
-    save_latest_workspace_id(root=resolved_root, workspace_id=target_id)
-    _append_event(
-        root=resolved_root,
-        workspace_id=target_id,
-        event_type="WORKSPACE_RESUMED",
-        payload={
-            "mode": state.mode,
-            "status": state.status,
-            "active_symbol_count": len(state.active_symbols),
-            "open_task_count": len(state.open_tasks),
-        },
-    )
+    if state.status != WorkspaceStatus.ACTIVE.value:
+        raise WorkspaceLifecycleError(
+            target_id,
+            "resume",
+            f"workspace status is {state.status}; reactivate it explicitly first",
+        )
+    with workspace_transaction(target_id, root=resolved_root):
+        save_latest_workspace_id(root=resolved_root, workspace_id=target_id)
+        _append_event(
+            root=resolved_root,
+            workspace_id=target_id,
+            event_type="WORKSPACE_RESUMED",
+            payload={
+                "mode": state.mode,
+                "status": state.status,
+                "active_symbol_count": len(state.active_symbols),
+                "open_task_count": len(state.open_tasks),
+            },
+        )
     return state
 
 
@@ -164,17 +216,53 @@ def list_workspaces(root: Path | None = None) -> list[WorkspaceState]:
             continue
         workspace_json = child / "workspace.json"
         if workspace_json.exists():
-            states.append(
-                load_workspace_state(root=resolved_root, workspace_id=child.name)
-            )
+            try:
+                states.append(
+                    load_workspace_state(root=resolved_root, workspace_id=child.name)
+                )
+            except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+                continue
     return sorted(
         states, key=lambda state: (state.updated_at, state.workspace_id), reverse=True
     )
 
 
+def check_lifecycle_invariants(root: Path | None = None) -> None:
+    states = list_workspaces(root=root)
+    active = [state for state in states if state.status == WorkspaceStatus.ACTIVE.value]
+    latest_id = load_latest_workspace_id(root=root)
+    if len(active) > 1:
+        raise WorkspaceLifecycleError(
+            "*",
+            "validate lifecycle",
+            "more than one active workspace exists",
+        )
+    if active and latest_id != active[0].workspace_id:
+        raise WorkspaceLifecycleError(
+            active[0].workspace_id,
+            "validate lifecycle",
+            "latest pointer does not reference the active workspace",
+        )
+    if latest_id is not None and not any(
+        state.workspace_id == latest_id and state.status == WorkspaceStatus.ACTIVE.value
+        for state in states
+    ):
+        raise WorkspaceLifecycleError(
+            latest_id,
+            "validate lifecycle",
+            "latest pointer does not reference a valid active workspace",
+        )
+
+
 def archive_workspace(workspace_id: str, root: Path | None = None) -> WorkspaceState:
     resolved_root = resolve_workspace_root(root)
     state = load_workspace_state(root=resolved_root, workspace_id=workspace_id)
+    if state.status != WorkspaceStatus.ACTIVE.value:
+        raise WorkspaceLifecycleError(
+            workspace_id,
+            "archive",
+            f"workspace status is {state.status}",
+        )
     archived = WorkspaceState.from_dict(
         {
             **state.to_dict(),
@@ -182,20 +270,53 @@ def archive_workspace(workspace_id: str, root: Path | None = None) -> WorkspaceS
             "updated_at": _now_iso(),
         }
     )
-    _persist(resolved_root, archived)
-    _append_event(
-        root=resolved_root,
-        workspace_id=workspace_id,
-        event_type="WORKSPACE_ARCHIVED",
-    )
+    with workspace_transaction(workspace_id, root=resolved_root):
+        save_workspace_state(root=resolved_root, state=archived)
+        if load_latest_workspace_id(root=resolved_root) == workspace_id:
+            clear_latest_workspace_id(root=resolved_root)
+        _append_event(
+            root=resolved_root,
+            workspace_id=workspace_id,
+            event_type="WORKSPACE_ARCHIVED",
+        )
     return archived
+
+
+def reactivate_workspace(workspace_id: str, root: Path | None = None) -> WorkspaceState:
+    resolved_root = resolve_workspace_root(root)
+    state = load_workspace_state(root=resolved_root, workspace_id=workspace_id)
+    if state.status != WorkspaceStatus.ARCHIVED.value:
+        raise WorkspaceLifecycleError(
+            workspace_id,
+            "reactivate",
+            f"workspace status is {state.status}",
+        )
+    reactivated = WorkspaceState.from_dict(
+        {
+            **state.to_dict(),
+            "status": WorkspaceStatus.ACTIVE.value,
+            "updated_at": _now_iso(),
+        }
+    )
+    with workspace_transaction(workspace_id, root=resolved_root):
+        save_workspace_state(root=resolved_root, state=reactivated)
+        save_latest_workspace_id(root=resolved_root, workspace_id=workspace_id)
+        _append_event(
+            root=resolved_root,
+            workspace_id=workspace_id,
+            event_type="WORKSPACE_REACTIVATED",
+        )
+    return reactivated
 
 
 def get_status(
     workspace_id: str | None = None, root: Path | None = None
 ) -> WorkspaceStatusReport:
-    state = resume_workspace(workspace_id=workspace_id, root=root)
     resolved_root = resolve_workspace_root(root)
+    if workspace_id is None:
+        state = get_or_create_latest_workspace(root=resolved_root)
+    else:
+        state = load_workspace_state(root=resolved_root, workspace_id=workspace_id)
     stale_artifacts = [
         artifact.artifact_id
         for artifact in state.active_artifacts

@@ -8,3 +8,10 @@ vnalpha/src/*.egg-info/
 .env.*
 !.env.example
 .worktrees/
+.vnalpha/
+vnalpha/.vnalpha/
+**/*.egg-info/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+*.pyc

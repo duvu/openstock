@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date as DateType
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -17,6 +15,8 @@ from vnalpha.data_availability.actions import (
     execute_action,
     log_action_failure,
 )
+from vnalpha.data_availability.cache import evaluate_cache_eligibility
+from vnalpha.data_availability.dates import normalize_optional_date
 from vnalpha.data_availability.lock import EnsureLock
 from vnalpha.data_availability.models import (
     EnsureDataAction,
@@ -24,10 +24,7 @@ from vnalpha.data_availability.models import (
     EnsureDataStatus,
 )
 from vnalpha.data_availability.observability import (
-    log_ensure_cache_hit,
-    log_ensure_failed,
-    log_ensure_partial,
-    log_ensure_ready,
+    log_ensure_cache_rejected,
     log_ensure_started,
 )
 from vnalpha.data_availability.planner import (
@@ -36,6 +33,11 @@ from vnalpha.data_availability.planner import (
     plan_data_availability,
 )
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
+from vnalpha.data_availability.results import (
+    cache_hit_result,
+    finalise_result,
+    missing_symbol_result,
+)
 
 if TYPE_CHECKING:
     from vnalpha.clients.vnstock.client import VnstockClient
@@ -50,6 +52,16 @@ _PROVISION_ACTIONS: Final[tuple[EnsureDataAction, ...]] = (
 
 @dataclass(frozen=True, slots=True)
 class EnsureRequest:
+    conn: duckdb.DuckDBPyConnection
+    symbol: str
+    target_date: str | None
+    policy: DataAvailabilityPolicy
+    client: VnstockClient | None
+    lock_dir: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedEnsureRequest:
     conn: duckdb.DuckDBPyConnection
     symbol: str
     target_date: str
@@ -85,7 +97,7 @@ def ensure_data_availability(
     """Ensure symbol analysis data while retaining the established best-effort flow."""
 
     symbol, target_date = _normalise_inputs(request.symbol, request.target_date)
-    normalised_request = EnsureRequest(
+    normalised_request = NormalizedEnsureRequest(
         conn=request.conn,
         symbol=symbol,
         target_date=target_date,
@@ -107,8 +119,11 @@ def ensure_data_availability(
     try:
         log_ensure_started(symbol, target_date)
         snapshot = _snapshot(normalised_request)
-        if snapshot.candidate_score_exists:
-            return _cache_hit(result, snapshot)
+        eligibility = evaluate_cache_eligibility(snapshot, request.policy)
+        if eligibility.eligible:
+            return cache_hit_result(result, snapshot)
+        result.cache_rejection_reasons.extend(eligibility.reasons)
+        log_ensure_cache_rejected(symbol, target_date, eligibility.reasons)
 
         first_plan = plan_data_availability(snapshot, request.policy)
         context = _action_context(normalised_request, snapshot, dependencies)
@@ -123,7 +138,7 @@ def ensure_data_availability(
         )
         snapshot = _snapshot(normalised_request)
         if not snapshot.symbol_known:
-            return _missing_symbol(result, symbol, target_date)
+            return missing_symbol_result(result)
 
         plan = plan_data_availability(snapshot, normalised_request.policy)
         context = _action_context(normalised_request, snapshot, dependencies)
@@ -151,28 +166,24 @@ def ensure_data_availability(
             result,
         )
         final_snapshot = _snapshot(normalised_request)
-        return _finalise(result, final_snapshot, normalised_request.policy)
+        return finalise_result(result, final_snapshot, normalised_request.policy)
     finally:
         lock.release()
 
 
-def _normalise_inputs(symbol: str, target_date: str) -> tuple[str, str]:
+def _normalise_inputs(symbol: str, target_date: str | None) -> tuple[str, str]:
     normalised_symbol = symbol.upper().strip()
-    try:
-        DateType.fromisoformat(target_date)
-    except (TypeError, ValueError):
-        return normalised_symbol, datetime.now(timezone.utc).date().isoformat()
-    return normalised_symbol, target_date
+    return normalised_symbol, normalize_optional_date(target_date)
 
 
-def _snapshot(request: EnsureRequest) -> EnsureDataSnapshot:
+def _snapshot(request: NormalizedEnsureRequest) -> EnsureDataSnapshot:
     return capture_availability_snapshot(
         request.conn, request.symbol, request.target_date, request.policy
     )
 
 
 def _action_context(
-    request: EnsureRequest,
+    request: NormalizedEnsureRequest,
     snapshot: EnsureDataSnapshot,
     dependencies: EnsureDependencies,
 ) -> ActionContext:
@@ -213,64 +224,3 @@ def _legacy_warning(warning: str) -> str:
     }
     action, _, detail = warning.partition(" failed: ")
     return f"{replacements[action]} failed: {detail}"
-
-
-def _cache_hit(
-    result: EnsureDataResult, snapshot: EnsureDataSnapshot
-) -> EnsureDataResult:
-    result.canonical_bars = snapshot.canonical_bars
-    result.feature_snapshot_exists = snapshot.feature_snapshot_exists
-    result.candidate_score_exists = True
-    result.actions_taken.append(EnsureDataAction.CACHE_HIT)
-    result.freshness = "cache_hit"
-    result.lineage_actions = [EnsureDataAction.CACHE_HIT.value]
-    result.status = EnsureDataStatus.READY
-    log_ensure_cache_hit(result.symbol, result.target_date)
-    return result
-
-
-def _missing_symbol(
-    result: EnsureDataResult, symbol: str, target_date: str
-) -> EnsureDataResult:
-    result.errors.append(f"Symbol '{symbol}' not found in symbol_master.")
-    result.status = EnsureDataStatus.FAILED
-    log_ensure_failed(symbol, target_date, result.errors)
-    return result
-
-
-def _finalise(
-    result: EnsureDataResult,
-    snapshot: EnsureDataSnapshot,
-    policy: DataAvailabilityPolicy,
-) -> EnsureDataResult:
-    result.canonical_bars = snapshot.canonical_bars
-    result.feature_snapshot_exists = snapshot.feature_snapshot_exists
-    result.candidate_score_exists = snapshot.candidate_score_exists
-    result.lineage_actions = [action.value for action in result.actions_taken]
-    if snapshot.canonical_bars < policy.min_required_bars:
-        result.freshness = "missing_canonical"
-    elif snapshot.candidate_score_exists:
-        result.freshness = "ready"
-    else:
-        result.freshness = "partial"
-
-    if snapshot.canonical_bars < policy.min_required_bars:
-        result.warnings.append(
-            "Insufficient canonical bars: "
-            f"{snapshot.canonical_bars} < {policy.min_required_bars} required."
-        )
-    if snapshot.benchmark_bars < policy.min_required_bars:
-        result.warnings.append(
-            f"Benchmark '{policy.benchmark}' has insufficient bars: "
-            f"{snapshot.benchmark_bars}. RS features will be NaN."
-        )
-    if not snapshot.candidate_score_exists:
-        if not result.warnings:
-            result.warnings.append("Candidate score not available after provisioning.")
-        result.status = EnsureDataStatus.PARTIAL
-        log_ensure_partial(result.symbol, result.target_date, result.warnings)
-        return result
-
-    result.status = EnsureDataStatus.READY
-    log_ensure_ready(result.symbol, result.target_date, result.lineage_actions)
-    return result

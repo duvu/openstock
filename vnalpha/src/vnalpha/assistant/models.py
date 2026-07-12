@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
+import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from vnalpha.assistant.research_intelligence_intents import (
     RESEARCH_INTELLIGENCE_INTENTS,
 )
 
+if TYPE_CHECKING:
+    from vnalpha.chat.context import ChatContext
+
 
 class AssistantSessionStatus(str, Enum):
     RUNNING = "RUNNING"
+    PREPARED = "PREPARED"
     SUCCESS = "SUCCESS"
     REFUSED = "REFUSED"
     VALIDATION_ERROR = "VALIDATION_ERROR"
@@ -43,6 +49,7 @@ _BASE_SUPPORTED_INTENTS = frozenset(
         "create_research_note",
         "show_history",
         "fetch_data",
+        "sandbox_research_calculation",
         "unsupported_or_unsafe",
     }
 )
@@ -89,6 +96,94 @@ class AssistantPlan:
         return dataclasses.asdict(self)
 
 
+@dataclass(frozen=True, slots=True)
+class AssistantRequest:
+    """Typed boundary separating the current request from historical context."""
+
+    current_user_prompt: str
+    workspace_context: str | None = None
+    chat_context: "ChatContext | None" = None
+    date: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        context = (
+            dataclasses.asdict(self.chat_context)
+            if self.chat_context is not None
+            else None
+        )
+        return {
+            "current_user_prompt": self.current_user_prompt,
+            "workspace_context": self.workspace_context,
+            "chat_context": context,
+            "date": self.date,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PromptPersistenceRecord:
+    """Bounded assistant prompt projection persisted in the warehouse."""
+
+    prompt_text: str | None
+    prompt_summary: str
+    prompt_hash: str
+    prompt_chars: int
+    workspace_context_ref: str | None
+    chat_context_ref: str | None
+    raw_stored: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedAssistantTurn:
+    """One immutable prepared plan that may be previewed or executed exactly."""
+
+    prepared_turn_id: str
+    assistant_session_id: str
+    request: AssistantRequest
+    intent_result: IntentResult
+    plan: AssistantPlan
+    plan_hash: str
+    policy_status: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "prepared_turn_id": self.prepared_turn_id,
+            "assistant_session_id": self.assistant_session_id,
+            "request": self.request.to_dict(),
+            "intent_result": dataclasses.asdict(self.intent_result),
+            "plan": self.plan.to_dict(),
+            "plan_hash": self.plan_hash,
+            "policy_status": self.policy_status,
+            "created_at": self.created_at,
+        }
+
+
+def canonical_plan_json(plan: AssistantPlan) -> str:
+    """Serialize a plan deterministically for approval identity checks."""
+
+    return json.dumps(
+        plan.to_dict(),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
+def plan_hash(plan: AssistantPlan) -> str:
+    """Return the SHA-256 identity of a canonical plan."""
+
+    return hashlib.sha256(canonical_plan_json(plan).encode("utf-8")).hexdigest()
+
+
+def text_hash(text: str) -> str:
+    """Return a stable SHA-256 identity for a bounded text projection."""
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 @dataclass
 class AssistantAnswer:
     summary: str
@@ -99,6 +194,7 @@ class AssistantAnswer:
     raw_tool_outputs: dict[str, Any] = field(default_factory=dict)
     grounded_source_refs: list[str] = field(default_factory=list)
     research_metadata: dict[str, Any] = field(default_factory=dict)
+    claim_source_refs: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)

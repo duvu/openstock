@@ -5,6 +5,7 @@ from typing import Final
 from vnalpha.sandbox.contracts import (
     MAX_APPROVED_READ_PATHS,
     MAX_APPROVED_READ_PATHS_JSON_LENGTH,
+    MAX_OUTPUT_ARTIFACT_PATH_LENGTH,
     MAX_OUTPUT_ARTIFACTS,
 )
 from vnalpha.sandbox.models import (
@@ -18,12 +19,11 @@ CREATE TYPE IF NOT EXISTS sandbox_artifact_kind AS ENUM ('result', 'summary', 'c
 """
 
 _ARTIFACT_MEMBER_CHECKS: Final = "\n        AND ".join(
-    "(length(artifacts) < {index} OR sandbox_artifact_is_valid("
-    "list_extract(artifacts, {index})))".format(index=index)
+    f"(length(artifacts) < {index} OR sandbox_artifact_is_valid(list_extract(artifacts, {index})))"
     for index in range(1, MAX_OUTPUT_ARTIFACTS + 1)
 )
 
-SANDBOX_ARTIFACT_VALIDATION_DDL: Final = """
+SANDBOX_ARTIFACT_VALIDATION_DDL: Final = f"""
 CREATE MACRO IF NOT EXISTS sandbox_artifact_is_valid(artifact) AS (
     coalesce(
         artifact IS NOT NULL
@@ -31,6 +31,7 @@ CREATE MACRO IF NOT EXISTS sandbox_artifact_is_valid(artifact) AS (
         AND artifact.path IS NOT NULL
         AND artifact.media_type IS NOT NULL
         AND length(artifact.path) > 0
+        AND length(artifact.path) <= {MAX_OUTPUT_ARTIFACT_PATH_LENGTH}
         AND NOT starts_with(artifact.path, '/')
         AND instr(artifact.path, '\\') = 0
         AND NOT list_contains(string_split(artifact.path, '/'), '')
@@ -125,11 +126,26 @@ CREATE TABLE IF NOT EXISTS sandbox_job (
 )
 """
 
+_SANDBOX_APPROVAL_TABLE_DDL: Final = """
+CREATE TABLE IF NOT EXISTS sandbox_approval (
+    approval_id VARCHAR PRIMARY KEY,
+    job_id VARCHAR NOT NULL,
+    plan_digest VARCHAR NOT NULL CHECK (length(plan_digest) = 64),
+    code_digest VARCHAR NOT NULL CHECK (length(code_digest) = 64),
+    input_references_json VARCHAR NOT NULL CHECK (json_valid(input_references_json)),
+    input_references_digest VARCHAR NOT NULL CHECK (length(input_references_digest) = 64),
+    correlation_id VARCHAR NOT NULL,
+    approver VARCHAR NOT NULL CHECK (length(trim(approver)) > 0),
+    approved_at TIMESTAMPTZ NOT NULL
+)
+"""
+
 SANDBOX_DDL: Final[tuple[str, ...]] = (
     SANDBOX_ARTIFACT_KIND_DDL,
     SANDBOX_ARTIFACT_VALIDATION_DDL,
     SANDBOX_ARTIFACT_LIST_VALIDATION_DDL,
     _SANDBOX_JOB_TABLE_DDL,
+    _SANDBOX_APPROVAL_TABLE_DDL,
     "CREATE INDEX IF NOT EXISTS sandbox_job_correlation_idx ON sandbox_job (correlation_id)",
 )
 

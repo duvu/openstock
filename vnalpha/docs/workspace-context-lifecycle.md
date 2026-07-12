@@ -17,7 +17,7 @@ Workspace summaries are not a data source and may be stale. Check fresh warehous
 
 ## Storage layout
 
-By default, workspaces are stored under `.vnalpha/workspaces`. Set `VNALPHA_WORKSPACE_ROOT` to use another root, for example:
+By default on Linux and macOS, workspaces are stored under `~/.local/state/openstock/workspaces`; on Windows they use the local application state directory. The resolution order is an explicit function argument, `VNALPHA_WORKSPACE_ROOT`, then the platform state directory. Set `VNALPHA_WORKSPACE_ROOT` to use another root, for example:
 
 ```bash
 VNALPHA_WORKSPACE_ROOT=/srv/vnalpha/workspaces vnalpha cmd "/context status"
@@ -26,7 +26,7 @@ VNALPHA_WORKSPACE_ROOT=/srv/vnalpha/workspaces vnalpha cmd "/context status"
 The root contains a portable latest-workspace pointer and an index. Each workspace has its own files:
 
 ```text
-.vnalpha/workspaces/
+~/.local/state/openstock/workspaces/
 ├── latest.json
 ├── index.json
 ├── <workspace-id>/
@@ -55,6 +55,10 @@ Run these commands in the vnalpha command surface, such as `vnalpha cmd "..."` o
 | `/context resume [workspace-id]` | `/resume` | Resumes the latest workspace, or the named workspace id. |
 | `/context list` | None | Lists available workspace ids, titles, modes, statuses, and update times. |
 | `/context export [workspace-id]` | None | Creates a portable bundle for the selected workspace or the active workspace. |
+
+`/context repair --dry-run` reports malformed latest/workspace files without changing them. `/context repair` quarantines malformed files and recovers a usable workspace. TUI startup applies the same recovery service and continues with a temporary recovery workspace if the canonical root is unavailable.
+
+Legacy project-local roots are never merged implicitly. `detect_legacy_workspace_roots()` reports `.vnalpha/workspaces` and `vnalpha/.vnalpha/workspaces` candidates only when the canonical root has no active workspace. Call `migrate_legacy_workspaces(destination_root=resolve_workspace_root())` with an explicit `source_root` when more than one legacy root is present; migration keeps a timestamped backup under `archive/legacy-migration/` and updates the canonical latest pointer only for an active source workspace.
 
 `/context` with no subcommand behaves as `/context status`.
 
@@ -96,7 +100,7 @@ Starting a new workspace does not remove audit logs.
 
 ### Resume and list
 
-`/context resume` loads the workspace named by `latest.json`. Passing an id resumes that workspace and makes it the latest one. The resume result includes its title, status, mode, active date and symbols, open task count, and last compaction time.
+`/context resume` loads the active workspace named by `latest.json`. Passing an id resumes that active workspace and makes it the latest one. Archived workspaces are not resumed implicitly; call the `reactivate_workspace()` service explicitly when an archived workspace should become active again. The resume result includes its title, status, mode, active date and symbols, open task count, and last compaction time.
 
 Use `/context list` before resuming an older workspace when you need its id.
 
@@ -123,7 +127,7 @@ Use `/context list` before resuming an older workspace when you need its id.
 | You need to skip the automatic summary before starting over | Run `/context new --no-compact`. |
 | You need an earlier session | Run `/context list`, then `/context resume <workspace-id>`. |
 | A summary disagrees with current data | Treat the summary as stale context and refresh the relevant warehouse data. |
-| Workspace files are in an unexpected location | Check `VNALPHA_WORKSPACE_ROOT`; otherwise use the default `.vnalpha/workspaces` path. |
+| Workspace files are in an unexpected location | Check `VNALPHA_WORKSPACE_ROOT`; otherwise inspect the platform state directory and run legacy-root detection before migration. |
 | An artifact listed in status is missing | Run `/context status` and then compact after resolving or replacing the missing artifact. |
 
 ## Practical examples

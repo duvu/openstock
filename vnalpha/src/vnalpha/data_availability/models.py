@@ -28,6 +28,18 @@ class EnsureDataAction(str, Enum):
     SCORED = "SCORED"
 
 
+@dataclass(frozen=True, slots=True)
+class CacheEligibility:
+    eligible: bool
+    reasons: tuple[str, ...]
+    score_fresh: bool
+    feature_present: bool
+    canonical_sufficient: bool
+    benchmark_sufficient: bool
+    quality_acceptable: bool
+    lineage_acceptable: bool
+
+
 @dataclass
 class EnsureDataResult:
     """Result from ensure_symbol_analysis_ready."""
@@ -44,6 +56,7 @@ class EnsureDataResult:
     candidate_score_exists: bool = False
     freshness: str = "unknown"
     lineage_actions: list[str] = field(default_factory=list)
+    cache_rejection_reasons: list[str] = field(default_factory=list)
     extra: dict[str, JsonValue] = field(default_factory=dict)
 
     @property
@@ -59,6 +72,7 @@ class EnsureDataResult:
             "candidate_score": self.candidate_score_exists,
             "freshness": self.freshness,
             "lineage_actions": self.lineage_actions,
+            "cache_rejection_reasons": self.cache_rejection_reasons,
             "actions_taken": [a.value for a in self.actions_taken],
             "warnings": self.warnings,
             "errors": self.errors,

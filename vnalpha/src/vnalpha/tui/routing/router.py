@@ -60,9 +60,9 @@ class TuiInputRouter:
         self._setup_executor()
 
     def _load_active_workspace(self) -> WorkspaceState:
-        from vnalpha.tui.workspace_context import load_active_workspace
+        from vnalpha.workspace_context.recovery import recover_workspace
 
-        return load_active_workspace()
+        return recover_workspace().workspace
 
     def _bootstrap_session(self) -> str | None:
         return self._lifecycle_hooks.bootstrap_session()
@@ -81,7 +81,6 @@ class TuiInputRouter:
         raw = text.strip()
         if not raw:
             return
-        self._record_workspace_input(raw)
         self._output.show_user_input(raw)
         if raw == "/clear":
             self._output.clear_visible()
@@ -99,8 +98,10 @@ class TuiInputRouter:
             self._handle_cancel()
             return
         if self._busy:
+            events.emit_rejected(raw, "busy")
             self._output.show_warning("Still processing, please wait…", source="router")
             return
+        self._record_workspace_input(raw)
         self._set_busy(True)
         self._set_status_routing()
         try:
@@ -131,9 +132,16 @@ class TuiInputRouter:
         return self._command_path.result_to_markup(result)
 
     def _record_workspace_input(self, raw: str) -> None:
-        from vnalpha.tui.workspace_context import record_workspace_input
+        try:
+            from vnalpha.tui.workspace_context import record_workspace_input
 
-        record_workspace_input(self._workspace, raw)
+            record_workspace_input(self._workspace, raw)
+        except Exception as exc:
+            self._output.show_warning(
+                "Workspace input history is unavailable; continuing.",
+                source="workspace",
+            )
+            events.capture_render_error(exc)
 
     def close(self) -> None:
         """Close the router-owned command connection exactly once."""
@@ -151,9 +159,16 @@ class TuiInputRouter:
         self._lifecycle_hooks.render_trace(event)
 
     def _record_command_artifacts(self, result: CommandResult) -> None:
-        from vnalpha.tui.workspace_context import record_command_artifacts
+        try:
+            from vnalpha.tui.workspace_context import record_command_artifacts
 
-        record_command_artifacts(self._workspace, result)
+            record_command_artifacts(self._workspace, result)
+        except Exception as exc:
+            self._output.show_warning(
+                "Workspace artifact history is unavailable; continuing.",
+                source="workspace",
+            )
+            events.capture_render_error(exc)
 
     def _refresh_workspace_after_context_command(
         self, raw: str, status: CommandStatus
@@ -169,12 +184,18 @@ class TuiInputRouter:
         return True
 
     def _notify_workspace_change(self) -> None:
-        from vnalpha.tui.workspace_context import notify_workspace_change
+        try:
+            from vnalpha.tui.workspace_context import notify_workspace_change
 
-        notify_workspace_change(
-            self._on_workspace_change,
-            self._load_active_workspace(),
-        )
+            notify_workspace_change(
+                self._on_workspace_change,
+                self._load_active_workspace(),
+            )
+        except Exception as exc:
+            self._output.show_warning(
+                "Workspace refresh is unavailable; continuing.", source="workspace"
+            )
+            events.capture_render_error(exc)
 
     def _has_pending_plan(self) -> bool:
         return (

@@ -8,6 +8,7 @@ from vnalpha.policy.assistant_policy import AUTONOMOUS_PLAN_TOOL_NAMES
 from vnalpha.policy.safety_policy import FORBIDDEN_TOOL_NAMES, FORBIDDEN_TOOL_PREFIXES
 
 SAFE_TOOLS = AUTONOMOUS_PLAN_TOOL_NAMES
+APPROVAL_REQUIRED_TOOLS = frozenset({"sandbox.run_research_code"})
 
 
 def is_forbidden_tool(tool_name: str) -> bool:
@@ -25,6 +26,11 @@ def is_safe_tool(tool_name: str) -> bool:
     return tool_name in SAFE_TOOLS and not is_forbidden_tool(tool_name)
 
 
+def is_assistant_plan_tool(tool_name: str) -> bool:
+    """Return whether a tool may appear in an assistant plan at all."""
+    return (is_safe_tool(tool_name) or tool_name in APPROVAL_REQUIRED_TOOLS) and not is_forbidden_tool(tool_name)
+
+
 def assert_safe_tool(
     tool_name: str, error_type: type[AssistantError] = ToolExecutionError
 ) -> None:
@@ -33,6 +39,12 @@ def assert_safe_tool(
         raise error_type(
             f"Tool '{tool_name}' is not allowed by the assistant tool policy."
         )
+
+
+def assert_assistant_plan_tool(tool_name: str, error_type: type[AssistantError]) -> None:
+    """Reject planned tools outside the autonomous or approval-gated allowlists."""
+    if not is_assistant_plan_tool(tool_name):
+        raise error_type(f"Tool '{tool_name}' is not allowed by the assistant tool policy.")
 
 
 def unsafe_tools_in_plan(plan: AssistantPlan) -> tuple[str, ...]:

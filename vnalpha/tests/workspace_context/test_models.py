@@ -81,6 +81,26 @@ def test_workspace_state_round_trip_serialization() -> None:
     assert restored.open_tasks[0].source_refs == ["artifacts/watchlist.json"]
 
 
+def test_workspace_state_has_versioned_status_contract() -> None:
+    state = WorkspaceState(
+        workspace_id="ws-versioned",
+        title="Versioned",
+        status="active",
+        mode="research",
+        created_at="2026-07-09T01:02:03+00:00",
+        updated_at="2026-07-09T01:02:03+00:00",
+    )
+
+    payload = state.to_dict()
+    migrated = WorkspaceState.from_dict(
+        {key: value for key, value in payload.items() if key != "schema_version"}
+    )
+
+    assert payload["schema_version"] == 2
+    assert migrated.schema_version == 2
+    assert migrated.status == "active"
+
+
 def test_workspace_report_models_round_trip() -> None:
     report = WorkspaceStatusReport(
         workspace_id="ws-20260709-001",

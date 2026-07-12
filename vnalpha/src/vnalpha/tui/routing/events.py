@@ -15,6 +15,20 @@ def emit_routed(route_type: str, raw: str) -> None:
         pass
 
 
+def emit_rejected(raw: str, reason: str) -> None:
+    del raw
+    try:
+        from vnalpha.observability.audit import log_audit
+
+        log_audit(
+            "TUI_INPUT_REJECTED",
+            f"reason={reason}",
+            module="vnalpha.tui.input_router",
+        )
+    except Exception:
+        pass
+
+
 def capture_render_error(exc: Exception) -> None:
     """Capture a rendering failure through the existing observability hook."""
     try:

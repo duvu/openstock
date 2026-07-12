@@ -1,0 +1,34 @@
+case_id: missing-artifact-reference
+family: scenario_plan
+input: Outline a research monitoring scenario.
+expected_intent: research_scenario
+required_tools: []
+required_claims:
+  - claim_id: support_level
+    fact_ids:
+      - observed_support
+facts:
+  - fact_id: observed_support
+    artifact_id: fixture://failing/declared_support
+    value: The observed support level is 118.0.
+forbidden_phrases: []
+required_caveats: []
+artifact_manifest:
+  - fixture://failing/declared_support
+observation:
+  answer_text: The observed support level is 118.0.
+  caveats: []
+  missing_data: []
+  observed_claims:
+    - claim_id: support_level
+      fact_ids:
+        - observed_support
+  artifact_references:
+    - fixture://failing/undeclared_support
+  refused: false
+  reframed: false
+missing_data_expectation: not_applicable
+policy_expectation: research_only
+monitoring: Monitor the observed support level.
+confirmation: Confirm the scenario with a sustained close above the range.
+invalidation: Invalidate the scenario below the observed support level.

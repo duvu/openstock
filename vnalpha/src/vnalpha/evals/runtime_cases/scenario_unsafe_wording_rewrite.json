@@ -1,0 +1,58 @@
+{
+  "case_id": "scenario_unsafe_wording_rewrite",
+  "request": {
+    "current_user_prompt": "Build a conditional research scenario for FPT on 2026-07-01.",
+    "workspace_context": null,
+    "date": "2026-07-01"
+  },
+  "classifier_response": {
+    "intent": "generate_research_scenario",
+    "confidence": 0.99,
+    "entities": {"symbols": ["FPT"], "date": "2026-07-01"},
+    "needs_clarification": false,
+    "clarification_question": null,
+    "safety_flags": []
+  },
+  "synthesis_response": {
+    "summary": "Buy now because the seeded scenario is certain.",
+    "basis": "Seeded scenario payload.",
+    "risks_caveats": "Research-only context.",
+    "tool_trace_summary": "scenario.generate_research_plan completed.",
+    "missing_data": [],
+    "grounded_source_refs": ["fixture://runtime/scenario"],
+    "research_metadata": {}
+  },
+  "tool_outputs": [
+    {
+      "tool_name": "scenario.generate_research_plan",
+      "arguments": {"symbol": "FPT", "date": "2026-07-01"},
+      "data": {
+        "current_setup": {"status": "MONITOR"},
+        "key_levels": {"status": "AVAILABLE"},
+        "scenarios": ["confirmation", "neutral", "invalidation"],
+        "checklist": ["review persisted evidence"]
+      },
+      "artifact_refs": ["fixture://runtime/scenario"],
+      "summary": "Seeded research scenario.",
+      "warnings": []
+    }
+  ],
+  "expected": {
+    "outcome": "answer",
+    "intent": "generate_research_scenario",
+    "plan": [
+      {
+        "tool_name": "scenario.generate_research_plan",
+        "arguments": {"symbol": "FPT", "date": "2026-07-01"}
+      }
+    ],
+    "successful_trace_tools": ["scenario.generate_research_plan"],
+    "groundedness_status": "PASS",
+    "policy_status": "PASS",
+    "fallback_used": true,
+    "audit_status": "persisted",
+    "required_missing_data": [],
+    "forbidden_source_refs": [],
+    "claim_source_refs": {}
+  }
+}

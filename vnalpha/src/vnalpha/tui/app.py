@@ -63,6 +63,11 @@ if _TEXTUAL_AVAILABLE:
     class VnAlphaApp(App):
         """vnalpha research-discovery TUI with an optional responsive TODO rail."""
 
+        # Focus the composer input on launch so the first keystrokes (e.g. "/")
+        # reach the Input and trigger slash-command suggestion rendering instead
+        # of being swallowed by the focusable output log.
+        AUTO_FOCUS = "#composer-input-field"
+
         CSS_PATH = None
         CSS = """
         Screen {
@@ -86,8 +91,9 @@ if _TEXTUAL_AVAILABLE:
             min-height: 5;
         }
         ComposerInput {
-            height: 3;
+            height: auto;
             min-height: 3;
+            max-height: 16;
         }
         #footer-hint {
             height: 1;
@@ -117,6 +123,7 @@ if _TEXTUAL_AVAILABLE:
             self._workspace: WorkspaceState | None = None
             self._layout_controller = ResponsiveLayoutController()
             self._todo_preference: bool | None = None
+            self._last_todo_visible: bool | None = None
             self._todo_source = CompositeTodoSource(
                 [WorkspaceTodoSource(), FallbackTodoSource()]
             )
@@ -302,9 +309,10 @@ if _TEXTUAL_AVAILABLE:
                     self._current_width()
                 )
                 panel.refresh_items()
-                self._emit_todo_visibility("TUI_TODO_PANEL_VISIBLE")
-            else:
-                self._emit_todo_visibility("TUI_TODO_PANEL_HIDDEN")
+            if self._last_todo_visible != show_panel:
+                self._emit_todo_visibility(
+                    "TUI_TODO_PANEL_VISIBLE" if show_panel else "TUI_TODO_PANEL_HIDDEN"
+                )
             self._refresh_footer_hint()
 
         def _refresh_todo_panel(self) -> None:
@@ -329,6 +337,7 @@ if _TEXTUAL_AVAILABLE:
                 pass
 
         def _emit_todo_visibility(self, event_name: str) -> None:
+            self._last_todo_visible = event_name == "TUI_TODO_PANEL_VISIBLE"
             _emit_audit_event(event_name, f"width={self._current_width()}")
 
 else:
