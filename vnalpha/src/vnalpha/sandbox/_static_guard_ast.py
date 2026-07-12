@@ -26,7 +26,9 @@ _NETWORK_IMPORT_ROOTS: Final = frozenset(
     {"requests", "httpx", "urllib", "socket", "http", "ftplib", "websocket"}
 )
 _SHELL_IMPORT_ROOTS: Final = frozenset({"os", "subprocess", "shutil"})
-_DYNAMIC_NAMES: Final = frozenset({"eval", "exec", "compile", "__import__", "globals", "locals"})
+_DYNAMIC_NAMES: Final = frozenset(
+    {"eval", "exec", "compile", "__import__", "globals", "locals"}
+)
 
 
 @final
@@ -96,7 +98,14 @@ class SandboxGuardAstVisitor(ast.NodeVisitor):
             self._add(SandboxGuardRule.DYNAMIC_REFLECTION, node)
         elif any(term in normalized for term in FORBIDDEN_TOOL_PREFIXES):
             self._add(SandboxGuardRule.TRADING_BOUNDARY, node)
-        elif normalized in {"system", "popen", "run", "call", "check_call", "check_output"}:
+        elif normalized in {
+            "system",
+            "popen",
+            "run",
+            "call",
+            "check_call",
+            "check_output",
+        }:
             self._add(SandboxGuardRule.SHELL_PROCESS, node)
 
     def _add(self, rule: SandboxGuardRule, node: ast.AST) -> None:

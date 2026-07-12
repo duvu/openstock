@@ -17,6 +17,10 @@ class PlanValidationError(AssistantError):
     """Raised when a built plan fails validation."""
 
 
+class AssistantInputValidationError(AssistantError):
+    pass
+
+
 class ToolExecutionError(AssistantError):
     """Raised when a tool call fails during plan execution."""
 

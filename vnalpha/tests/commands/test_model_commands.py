@@ -77,3 +77,29 @@ def test_model_invalid_scope_is_validation_error_at_handler_boundary() -> None:
         assert "scope" in str(exc)
     else:
         raise AssertionError("Expected invalid scope to be rejected")
+
+
+def test_model_status_reports_session_identity_and_override(monkeypatch) -> None:
+    monkeypatch.setenv("VNALPHA_MODEL_DEFAULT", "default-model")
+    monkeypatch.setenv("VNALPHA_MODEL_SMALL", "small-model")
+    DEFAULT_OVERRIDE_STORE.clear_override(scope="all")
+    try:
+        DEFAULT_OVERRIDE_STORE.set_override(
+            "small", scope="session", session_id="session-a"
+        )
+        result = handle_model(
+            ParsedCommand(
+                command_name="model",
+                raw_text="/model status",
+                positional=["status"],
+            ),
+            session_id="session-a",
+        )
+
+        content = result.panels[0].content
+        assert isinstance(content, dict)
+        assert content["session_id"] == "session-a"
+        assert content["active_override"] == "small"
+        assert content["override_source"] == "session"
+    finally:
+        DEFAULT_OVERRIDE_STORE.clear_override(scope="all")

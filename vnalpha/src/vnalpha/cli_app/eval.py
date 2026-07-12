@@ -6,7 +6,7 @@ import typer
 
 from vnalpha.evals.report import render_report
 from vnalpha.evals.runner import run_golden_corpus
-from vnalpha.evals.runtime_report import runtime_report_json, render_runtime_report
+from vnalpha.evals.runtime_report import render_runtime_report, runtime_report_json
 from vnalpha.evals.runtime_runner import run_runtime_replay_corpus
 
 app = typer.Typer(name="eval", help="Deterministic offline evaluation commands.")

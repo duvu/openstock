@@ -166,7 +166,9 @@ _LEVEL_COLORS = {
     "error": "red",
     "critical": "bold red",
 }
-_TERMINAL_CONTROLS = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))|[\x00-\x08\x0b-\x1f\x7f]")
+_TERMINAL_CONTROLS = re.compile(
+    r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))|[\x00-\x08\x0b-\x1f\x7f]"
+)
 
 
 def _clean_log_text(value: object) -> str:

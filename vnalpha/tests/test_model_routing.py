@@ -196,7 +196,7 @@ def test_fallback_chain_resolves_in_order_and_skips_duplicate_models() -> None:
 
     duplicate_config = ModelRoutingConfig(
         default_model_id="same",
-        profile_models={profile: "same" for profile in ModelProfile},
+        profile_models=dict.fromkeys(ModelProfile, "same"),
     )
     duplicate_decision = resolve_model_route(duplicate_config, stage="classify")
     assert fallback_route_decisions(duplicate_config, duplicate_decision) == ()
@@ -321,12 +321,78 @@ def test_model_commands_set_status_and_reset(monkeypatch, tmp_path) -> None:
     assert DEFAULT_OVERRIDE_STORE.get_current_override().session_profile is None
 
 
+def test_session_overrides_are_isolated_and_cleanup_by_session() -> None:
+    store = ModelOverrideStore()
+
+    store.set_override("small", scope="session", session_id="session-a")
+    store.set_override("reasoning", scope="session", session_id="session-b")
+
+    assert (
+        store.get_current_override(session_id="session-a").session_profile
+        is ModelProfile.SMALL
+    )
+    assert (
+        store.get_current_override(session_id="session-b").session_profile
+        is ModelProfile.REASONING
+    )
+
+    client = LLMGatewayClient(
+        LLMGatewayConfig(
+            model="default-model",
+            endpoint="https://example.invalid",
+            timeout=1,
+            max_output_tokens=1,
+            max_retries=0,
+            store_raw=False,
+        ),
+        routing_config=_config(),
+        override_store=store,
+    )
+    session_b_route = client.resolve_route(
+        stage="classify", route_metadata={"session_id": "session-b"}
+    )
+    assert session_b_route.profile is ModelProfile.REASONING
+
+    store.clear_override(scope="session", session_id="session-a")
+
+    assert store.get_current_override(session_id="session-a").session_profile is None
+    assert (
+        store.get_current_override(session_id="session-b").session_profile
+        is ModelProfile.REASONING
+    )
+
+
 def test_gateway_routing_parameters_are_keyword_only() -> None:
     signature = inspect.signature(LLMGatewayClient.chat)
     for name in ("task_type", "model_profile", "route_metadata"):
         parameter = signature.parameters[name]
         assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
         assert parameter.default is None
+
+
+def test_chat_controller_close_clears_session_override() -> None:
+    from vnalpha.chat.controller import ChatController
+
+    DEFAULT_OVERRIDE_STORE.clear_override(scope="all")
+    try:
+        DEFAULT_OVERRIDE_STORE.set_override(
+            "small", scope="session", session_id="chat-session"
+        )
+        controller = ChatController(
+            on_message=lambda _style, _text: None,
+            chat_session_id="chat-session",
+        )
+
+        controller.close()
+
+        assert (
+            DEFAULT_OVERRIDE_STORE.get_current_override(
+                session_id="chat-session"
+            ).session_profile
+            is None
+        )
+    finally:
+        DEFAULT_OVERRIDE_STORE.clear_override(scope="all")
 
 
 def test_fake_gateway_accepts_metadata_without_changing_legacy_calls() -> None:

@@ -29,10 +29,10 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 
 - [x] **1.1 Add denied runtime/generated paths to `.gitignore`.** Include `.vnalpha/`, `vnalpha/.vnalpha/`, `.worktrees/`, `*.egg-info/`, `__pycache__/`, `.pytest_cache/`, `.ruff_cache/`, and `*.pyc`. [files: `.gitignore`] [evidence: ignore tests or `git check-ignore -v`]
 - [x] **1.2 Inventory all currently tracked denied paths and gitlinks.** [depends: 1.1] [evidence: saved `git ls-files` and `git ls-files --stage` output]
-- [x] **1.3 Remove root `.vnalpha/` runtime files from Git index without silently deleting the operator's local copy.** [depends: 1.2] [evidence: diff and hygiene check]
-- [x] **1.4 Remove `vnalpha/.vnalpha/` runtime files from Git index.** [depends: 1.2] [evidence: diff and hygiene check]
-- [x] **1.5 Remove `.worktrees/` gitlinks from Git index.** [depends: 1.2] [evidence: no unapproved mode `160000` entries]
-- [x] **1.6 Remove tracked egg-info and Python/test/lint cache artifacts.** [depends: 1.2] [evidence: no denied tracked paths]
+- [ ] **1.3 Remove root `.vnalpha/` runtime files from Git index without silently deleting the operator's local copy.** [depends: 1.2] [evidence: diff and hygiene check]
+- [ ] **1.4 Remove `vnalpha/.vnalpha/` runtime files from Git index.** [depends: 1.2] [evidence: diff and hygiene check]
+- [ ] **1.5 Remove `.worktrees/` gitlinks from Git index.** [depends: 1.2] [evidence: no unapproved mode `160000` entries]
+- [ ] **1.6 Remove tracked egg-info and Python/test/lint cache artifacts.** [depends: 1.2] [evidence: no denied tracked paths]
 - [x] **1.7 Add `packaging/scripts/openstock-repo-hygiene` or equivalent deterministic verifier.** [files: `packaging/scripts/`, tests] [evidence: verifier passes clean tree and fails seeded denied path]
 - [x] **1.8 Make hygiene verifier reject unapproved gitlinks.** [depends: 1.7] [evidence: unit/integration test with mode 160000 fixture]
 - [x] **1.9 Add a documented approved-submodule allowlist mechanism, even if initially empty.** [depends: 1.8] [evidence: config/schema test]
@@ -108,11 +108,11 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 
 ## Phase 1 gate
 
-- [x] **1.G1 Run repository hygiene and secret scans.** [depends: 1.1–1.13] [evidence: command rows]
+- [ ] **1.G1 Run repository hygiene and secret scans.** [depends: 1.1–1.13] [evidence: command rows]
 - [x] **1.G2 Run all workspace root, locking, concurrency, lifecycle, retention, redaction, and export tests.** [depends: 1.14–1.63] [evidence: test command rows]
-- [x] **1.G3 Confirm no denied tracked paths or unapproved gitlinks remain.** [depends: 1.G1] [evidence: `git ls-files`, `git ls-files --stage`]
+- [ ] **1.G3 Confirm no denied tracked paths or unapproved gitlinks remain.** [depends: 1.G1] [evidence: `git ls-files`, `git ls-files --stage`]
 - [x] **1.G4 Confirm latest pointer/lifecycle invariants on migrated legacy fixtures.** [depends: 1.43] [evidence: migration E2E]
-- [x] **1.G5 Record Phase 1 PASS in `validation.md`.** [depends: 1.G1–1.G4]
+- [ ] **1.G5 Record Phase 1 PASS in `validation.md`.** [depends: 1.G1–1.G4]
 
 # Phase 2 — Context trust and assistant lifecycle
 
@@ -206,123 +206,123 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 
 ## 3D. Compaction, commands, UI events, and model scope
 
-- [ ] **3.22 Confirm real compaction behavior from Phase 1 is used by `/context compact`.** [depends: 1.49, 2.G5] [evidence: command E2E]
+- [x] **3.22 Confirm real compaction behavior from Phase 1 is used by `/context compact`.** [depends: 1.49, 2.G5] [evidence: command E2E]
 - [x] **3.23 Resolve `/new` namespace:** `/new` workspace alias, `/chat new` chat session. [files: parser/chat controller/help] [evidence: routing tests]
 - [x] **3.24 Remove/deprecate ambiguous chat-local `/new` and add migration/help text.** [depends: 3.23] [evidence: docs/tests]
-- [ ] **3.25 Track previous TODO visibility and emit events only on transitions.** [files: TUI app] [evidence: resize test]
-- [ ] **3.26 Scope session model override by session ID or ContextVar.** [files: model routing override store] [evidence: two-session isolation test]
-- [ ] **3.27 Clean session override state when session ends.** [depends: 3.26] [evidence: lifecycle test]
-- [ ] **3.28 Update `/model status` to report effective scope/session identity safely.** [depends: 3.26] [evidence: command test]
+- [x] **3.25 Track previous TODO visibility and emit events only on transitions.** [files: TUI app] [evidence: resize test]
+- [x] **3.26 Scope session model override by session ID or ContextVar.** [files: model routing override store] [evidence: two-session isolation test]
+- [x] **3.27 Clean session override state when session ends.** [depends: 3.26] [evidence: lifecycle test]
+- [x] **3.28 Update `/model status` to report effective scope/session identity safely.** [depends: 3.26] [evidence: command test]
 
 ## 3E. Source-reference semantics
 
 - [x] **3.29 Stop auto-filling missing model-generated `grounded_source_refs` before validation.** [depends: 2.G5] [files: synthesizer] [evidence: missing-ref fallback test]
 - [x] **3.30 Permit deterministic fallback to populate bounded source refs.** [depends: 3.29] [evidence: fallback test]
 - [x] **3.31 Add optional `claim_source_refs` answer metadata contract.** [depends: 3.29] [evidence: parser/model tests]
-- [ ] **3.32 Add at least one runtime-replay case requiring claim-level source mapping.** [depends: 3.31, Phase 4 runtime runner]
+- [x] **3.32 Add at least one runtime-replay case requiring claim-level source mapping.** [depends: 3.31, Phase 4 runtime runner]
 
 ## Phase 3 gate
 
 - [x] **3.G1 Run data lock/date/cache eligibility focused tests.** [depends: 3.1–3.16]
 - [x] **3.G2 Run research artifact-reference and grounded-source tests.** [depends: 3.17–3.21, 3.29–3.31]
-- [ ] **3.G3 Run context compact, command namespace, TODO event, and model isolation tests.** [depends: 3.22–3.28]
-- [ ] **3.G4 Run relevant existing regression suites for data availability, assistant, TUI, model routing, and workspace.** [depends: 3.G1–3.G3]
-- [ ] **3.G5 Record Phase 3 PASS in `validation.md`.** [depends: 3.G1–3.G4]
+- [x] **3.G3 Run context compact, command namespace, TODO event, and model isolation tests.** [depends: 3.22–3.28]
+- [x] **3.G4 Run relevant existing regression suites for data availability, assistant, TUI, model routing, and workspace.** [depends: 3.G1–3.G3]
+- [x] **3.G5 Record Phase 3 PASS in `validation.md`.** [depends: 3.G1–3.G4]
 
 # Phase 4 — CI, evaluation, and release governance
 
 ## 4A. Lint and root operator commands
 
-- [ ] **4.1 Fix all existing Ruff check and format failures on the implementation base.** [depends: 3.G5] [evidence: `make lint-vnalpha`]
+- [x] **4.1 Fix all existing Ruff check and format failures on the implementation base.** [depends: 3.G5] [evidence: `make lint-vnalpha`]
 - [x] **4.2 Add root Make target `eval-research-answers`.** [files: root Makefile] [evidence: command]
 - [x] **4.3 Add root Make target `eval-research-runtime`.** [evidence: command]
-- [ ] **4.4 Add root Make target `verify-hardening` running phase gates in documented order.** [depends: 4.2, 4.3, 1.10] [evidence: target dry run/full run]
+- [x] **4.4 Add root Make target `verify-hardening` running phase gates in documented order.** [depends: 4.2, 4.3, 1.10] [evidence: target dry run/full run]
 
 ## 4B. Package golden corpus
 
-- [ ] **4.5 Move or mirror golden fixtures into installable package resources.** [files: `vnalpha/src/vnalpha/evals/goldens/` or package-data config]
-- [ ] **4.6 Load default corpus using `importlib.resources`, not repository-relative parents.** [depends: 4.5] [evidence: unit tests]
-- [ ] **4.7 Declare package-data for wheel/sdist.** [depends: 4.5] [evidence: built artifact inspection]
-- [ ] **4.8 Ensure Debian packaging includes or correctly installs the corpus.** [depends: 4.5] [evidence: package verification]
-- [ ] **4.9 Add isolated installed-wheel eval test.** [depends: 4.6, 4.7] [evidence: CI command]
-- [ ] **4.10 Add installed-deb or packaging fixture eval check where feasible.** [depends: 4.8] [evidence: packaging test or approved defer]
+- [x] **4.5 Move or mirror golden fixtures into installable package resources.** [files: `vnalpha/src/vnalpha/evals/goldens/` or package-data config]
+- [x] **4.6 Load default corpus using `importlib.resources`, not repository-relative parents.** [depends: 4.5] [evidence: unit tests]
+- [x] **4.7 Declare package-data for wheel/sdist.** [depends: 4.5] [evidence: built artifact inspection]
+- [x] **4.8 Ensure Debian packaging includes or correctly installs the corpus.** [depends: 4.5] [evidence: package verification]
+- [x] **4.9 Add isolated installed-wheel eval test.** [depends: 4.6, 4.7] [evidence: CI command]
+- [x] **4.10 Add installed-deb or packaging fixture eval check where feasible.** [depends: 4.8] [evidence: packaging test or approved defer]
 
 ## 4C. Runtime-replay evaluation
 
-- [ ] **4.11 Define typed runtime-replay case schema.** Fields include request, expected intent, seeded artifacts/tool outputs, fake LLM responses, expected plan, policy, groundedness, audit. [depends: 3.G5] [files: eval contracts/models] [evidence: schema tests]
-- [ ] **4.12 Add strict loader with unknown-field rejection and safe logical artifact refs.** [depends: 4.11] [evidence: loader tests]
-- [ ] **4.13 Add deterministic fake classifier/gateway adapter that uses production response parsers.** [depends: 4.11] [evidence: adapter tests]
-- [ ] **4.14 Add seeded in-memory warehouse/tool registry adapter using production tool interfaces.** [depends: 4.11] [evidence: adapter tests]
-- [ ] **4.15 Add runtime runner through `AssistantApp.prepare()` and `execute_prepared()`.** [depends: 2.17, 2.19, 4.13, 4.14] [evidence: E2E]
-- [ ] **4.16 Assert intent, exact plan tools/arguments, tool traces, groundedness, policy, fallback, and audit outcome.** [depends: 4.15] [evidence: check tests]
-- [ ] **4.17 Prohibit network access in runtime-replay mode.** [depends: 4.15] [evidence: network-block test]
-- [ ] **4.18 Add runtime-replay seed cases for all research intents.** [depends: 4.15] [evidence: corpus count/report]
-- [ ] **4.19 Add negative cases:** prompt injection in context, missing refs, fabricated number, missing sector artifact, invalid date, unsafe scenario wording. [depends: 4.15] [evidence: expected failure/rewrite reports]
-- [ ] **4.20 Add claim-source mapping case.** [depends: 3.31, 4.15]
+- [x] **4.11 Define typed runtime-replay case schema.** Fields include request, expected intent, seeded artifacts/tool outputs, fake LLM responses, expected plan, policy, groundedness, audit. [depends: 3.G5] [files: eval contracts/models] [evidence: schema tests]
+- [x] **4.12 Add strict loader with unknown-field rejection and safe logical artifact refs.** [depends: 4.11] [evidence: loader tests]
+- [x] **4.13 Add deterministic fake classifier/gateway adapter that uses production response parsers.** [depends: 4.11] [evidence: adapter tests]
+- [x] **4.14 Add seeded in-memory warehouse/tool registry adapter using production tool interfaces.** [depends: 4.11] [evidence: adapter tests]
+- [x] **4.15 Add runtime runner through `AssistantApp.prepare()` and `execute_prepared()`.** [depends: 2.17, 2.19, 4.13, 4.14] [evidence: E2E]
+- [x] **4.16 Assert intent, exact plan tools/arguments, tool traces, groundedness, policy, fallback, and audit outcome.** [depends: 4.15] [evidence: check tests]
+- [x] **4.17 Prohibit network access in runtime-replay mode.** [depends: 4.15] [evidence: network-block test]
+- [x] **4.18 Add runtime-replay seed cases for all research intents.** [depends: 4.15] [evidence: corpus count/report]
+- [x] **4.19 Add negative cases:** prompt injection in context, missing refs, fabricated number, missing sector artifact, invalid date, unsafe scenario wording. [depends: 4.15] [evidence: expected failure/rewrite reports]
+- [x] **4.20 Add claim-source mapping case.** [depends: 3.31, 4.15]
 - [x] **4.21 Add CLI `vnalpha eval research-runtime --ci`.** [depends: 4.15] [evidence: CLI tests]
 - [x] **4.22 Add stable human-readable and machine-readable reports.** [depends: 4.15] [evidence: snapshot/schema tests]
 
 ## 4D. CI and diagnostics
 
-- [ ] **4.23 Add repository hygiene step as first CI gate.** [depends: 1.10]
-- [ ] **4.24 Add secret scan step.** [depends: 1.11]
-- [ ] **4.25 Keep focused hardening tests and upload diagnostics on failure.** [depends: Phase 1–3 focused suites]
-- [ ] **4.26 Require Ruff check and format check before full suite.** [depends: 4.1]
+- [x] **4.23 Add repository hygiene step as first CI gate.** [depends: 1.10]
+- [x] **4.24 Add secret scan step.** [depends: 1.11]
+- [x] **4.25 Keep focused hardening tests and upload diagnostics on failure.** [depends: Phase 1–3 focused suites]
+- [x] **4.26 Require Ruff check and format check before full suite.** [depends: 4.1]
 - [ ] **4.27 Run full `make test-vnalpha`.** [evidence: workflow]
-- [ ] **4.28 Run `make verify-r4`.** [evidence: workflow]
-- [ ] **4.29 Run `packaging/scripts/openstock-verify --ci`.** [evidence: workflow]
-- [ ] **4.30 Run fixture-contract eval.** [depends: 4.2]
-- [ ] **4.31 Run runtime-replay eval.** [depends: 4.3, 4.21]
-- [ ] **4.32 Run installed-package eval.** [depends: 4.9]
-- [ ] **4.33 Upload concise logs for each failed gate.** [depends: 4.23–4.32]
-- [ ] **4.34 Add concurrency control that cancels obsolete PR runs without canceling main validation.** [evidence: workflow review/test]
+- [x] **4.28 Run `make verify-r4`.** [evidence: workflow]
+- [x] **4.29 Run `packaging/scripts/openstock-verify --ci`.** [evidence: workflow]
+- [x] **4.30 Run fixture-contract eval.** [depends: 4.2]
+- [x] **4.31 Run runtime-replay eval.** [depends: 4.3, 4.21]
+- [x] **4.32 Run installed-package eval.** [depends: 4.9]
+- [x] **4.33 Upload concise logs for each failed gate.** [depends: 4.23–4.32]
+- [x] **4.34 Add concurrency control that cancels obsolete PR runs without canceling main validation.** [evidence: workflow review/test]
 
 ## 4E. OpenSpec completion governance
 
-- [ ] **4.35 Add `scripts/check-openspec-completion.py`.** [files: scripts/tests] [evidence: unit tests]
-- [ ] **4.36 Parse unchecked tasks and explicit deferred records.** [depends: 4.35] [evidence: fixture tests]
-- [ ] **4.37 Parse validation evidence rows and required command matrix.** [depends: 4.35] [evidence: tests]
-- [ ] **4.38 Fail when tasks are checked but validation says pending/not run.** [depends: 4.37] [evidence: negative test]
-- [ ] **4.39 Fail when a completion-ready change has unchecked non-deferred tasks.** [depends: 4.36] [evidence: negative test]
-- [ ] **4.40 Fail archival readiness when required evidence is absent.** [depends: 4.36, 4.37] [evidence: test]
-- [ ] **4.41 Add verifier to CI and `verify-hardening`.** [depends: 4.35–4.40] [evidence: workflow/Make test]
-- [ ] **4.42 Reconcile existing active/archived OpenSpecs whose task/evidence state is inconsistent, without falsifying execution history.** [depends: 4.35] [evidence: reconciliation report]
-- [ ] **4.43 Document required GitHub branch-protection checks and merge policy.** [depends: 4.23–4.41] [evidence: docs]
+- [x] **4.35 Add `scripts/check-openspec-completion.py`.** [files: scripts/tests] [evidence: unit tests]
+- [x] **4.36 Parse unchecked tasks and explicit deferred records.** [depends: 4.35] [evidence: fixture tests]
+- [x] **4.37 Parse validation evidence rows and required command matrix.** [depends: 4.35] [evidence: tests]
+- [x] **4.38 Fail when tasks are checked but validation says pending/not run.** [depends: 4.37] [evidence: negative test]
+- [x] **4.39 Fail when a completion-ready change has unchecked non-deferred tasks.** [depends: 4.36] [evidence: negative test]
+- [x] **4.40 Fail archival readiness when required evidence is absent.** [depends: 4.36, 4.37] [evidence: test]
+- [x] **4.41 Add verifier to CI and `verify-hardening`.** [depends: 4.35–4.40] [evidence: workflow/Make test]
+- [x] **4.42 Reconcile existing active/archived OpenSpecs whose task/evidence state is inconsistent, without falsifying execution history.** [depends: 4.35] [evidence: reconciliation report]
+- [x] **4.43 Document required GitHub branch-protection checks and merge policy.** [depends: 4.23–4.41] [evidence: docs]
 
 ## Phase 4 gate
 
-- [ ] **4.G1 Run fixture-contract eval from source checkout.** [depends: 4.2, 4.5–4.9]
-- [ ] **4.G2 Run runtime-replay eval with all seed/negative cases.** [depends: 4.11–4.22]
-- [ ] **4.G3 Run installed wheel/sdist/deb evaluation.** [depends: 4.7–4.10]
+- [x] **4.G1 Run fixture-contract eval from source checkout.** [depends: 4.2, 4.5–4.9]
+- [x] **4.G2 Run runtime-replay eval with all seed/negative cases.** [depends: 4.11–4.22]
+- [x] **4.G3 Run installed wheel/sdist/deb evaluation.** [depends: 4.7–4.10]
 - [ ] **4.G4 Run complete CI-equivalent command matrix locally or in CI.** [depends: 4.23–4.34]
 - [ ] **4.G5 Run OpenSpec completion verifier against this change.** [depends: 4.35–4.42]
 - [ ] **4.G6 Record Phase 4 PASS in `validation.md`.** [depends: 4.G1–4.G5]
 
 # 5. Documentation, migration, and operator experience
 
-- [ ] **5.1 Update architecture/package-boundary docs for transactional workspace and prepared turns.** [depends: Phase 1–2]
-- [ ] **5.2 Update workspace lifecycle docs for root migration, status state machine, locking, compaction, redaction, export, and repair.** [depends: Phase 1]
-- [ ] **5.3 Update assistant docs for untrusted context, store_raw, prepare/execute, and plan approval identity.** [depends: Phase 2]
-- [ ] **5.4 Update data availability docs for strict dates, cache eligibility, and lock semantics.** [depends: Phase 3]
-- [ ] **5.5 Update model routing docs for session isolation.** [depends: 3.26–3.28]
-- [ ] **5.6 Update TUI help/docs for `/new`, `/chat new`, busy behavior, workspace recovery, and TODO visibility.** [depends: 2.28–2.36, 3.23–3.25]
-- [ ] **5.7 Update eval docs for fixture-contract vs runtime-replay and installed-package behavior.** [depends: Phase 4]
-- [ ] **5.8 Add migration guide for tracked runtime files and legacy workspace roots.** [depends: 1.3–1.20]
-- [ ] **5.9 Add rollback notes and feature flags only where necessary; do not preserve unsafe behavior as default.** [evidence: docs/review]
+- [x] **5.1 Update architecture/package-boundary docs for transactional workspace and prepared turns.** [depends: Phase 1–2]
+- [x] **5.2 Update workspace lifecycle docs for root migration, status state machine, locking, compaction, redaction, export, and repair.** [depends: Phase 1]
+- [x] **5.3 Update assistant docs for untrusted context, store_raw, prepare/execute, and plan approval identity.** [depends: Phase 2]
+- [x] **5.4 Update data availability docs for strict dates, cache eligibility, and lock semantics.** [depends: Phase 3]
+- [x] **5.5 Update model routing docs for session isolation.** [depends: 3.26–3.28]
+- [x] **5.6 Update TUI help/docs for `/new`, `/chat new`, busy behavior, workspace recovery, and TODO visibility.** [depends: 2.28–2.36, 3.23–3.25]
+- [x] **5.7 Update eval docs for fixture-contract vs runtime-replay and installed-package behavior.** [depends: Phase 4]
+- [x] **5.8 Add migration guide for tracked runtime files and legacy workspace roots.** [depends: 1.3–1.20]
+- [x] **5.9 Add rollback notes and feature flags only where necessary; do not preserve unsafe behavior as default.** [evidence: docs/review]
 
 # 6. Final validation and completion
 
 - [ ] **6.1 Run `make repo-hygiene`.** [depends: 1.G5]
-- [ ] **6.2 Run focused Phase 1 workspace/repository tests.** [depends: 1.G5]
-- [ ] **6.3 Run focused Phase 2 context/prepared-turn/TUI tests.** [depends: 2.G5]
-- [ ] **6.4 Run focused Phase 3 correctness tests.** [depends: 3.G5]
-- [ ] **6.5 Run `make lint-vnalpha`.** [depends: 4.1]
+- [x] **6.2 Run focused Phase 1 workspace/repository tests.** [depends: 1.G5]
+- [x] **6.3 Run focused Phase 2 context/prepared-turn/TUI tests.** [depends: 2.G5]
+- [x] **6.4 Run focused Phase 3 correctness tests.** [depends: 3.G5]
+- [x] **6.5 Run `make lint-vnalpha`.** [depends: 4.1]
 - [ ] **6.6 Run `make test-vnalpha`.**
-- [ ] **6.7 Run `make verify-r4`.**
-- [ ] **6.8 Run `packaging/scripts/openstock-verify --ci`.**
-- [ ] **6.9 Run `make eval-research-answers`.** [depends: 4.G1]
-- [ ] **6.10 Run `make eval-research-runtime`.** [depends: 4.G2]
-- [ ] **6.11 Run installed-package evaluation.** [depends: 4.G3]
+- [x] **6.7 Run `make verify-r4`.**
+- [x] **6.8 Run `packaging/scripts/openstock-verify --ci`.**
+- [x] **6.9 Run `make eval-research-answers`.** [depends: 4.G1]
+- [x] **6.10 Run `make eval-research-runtime`.** [depends: 4.G2]
+- [x] **6.11 Run installed-package evaluation.** [depends: 4.G3]
 - [ ] **6.12 Run `python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening`.** [depends: 4.G5]
 - [ ] **6.13 Confirm required GitHub checks pass on final implementation SHA.** [depends: 4.G4]
 - [ ] **6.14 Confirm no unresolved P0/P1 finding from `review.md` remains without an approved deferred record.**

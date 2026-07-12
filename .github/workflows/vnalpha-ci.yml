@@ -20,7 +20,7 @@ on:
 
 concurrency:
   group: vnalpha-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
@@ -95,4 +95,83 @@ jobs:
         run: make verify-r4
 
       - name: OpenStock verification
-        run: packaging/scripts/openstock-verify --ci
+        shell: bash
+        run: |
+          set -o pipefail
+          packaging/scripts/openstock-verify --ci 2>&1 | tee packaging-verify.log
+
+      - name: Upload packaging diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaging-verify-log
+          path: packaging-verify.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Fixture-contract evaluation
+        shell: bash
+        run: |
+          set -o pipefail
+          make eval-research-answers 2>&1 | tee eval-research-answers.log
+
+      - name: Upload fixture-evaluation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-research-answers-log
+          path: eval-research-answers.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Runtime-replay evaluation
+        shell: bash
+        run: |
+          set -o pipefail
+          make eval-research-runtime 2>&1 | tee eval-research-runtime.log
+
+      - name: Upload runtime-evaluation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-research-runtime-log
+          path: eval-research-runtime.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Installed wheel and sdist evaluations
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/vnalpha-package-check
+          mkdir -p /tmp/vnalpha-package-check/wheel /tmp/vnalpha-package-check/sdist
+          python -m pip wheel --quiet --no-deps --no-build-isolation \
+            --wheel-dir /tmp/vnalpha-package-check/wheel ./vnalpha
+          python -m build --quiet --sdist --no-isolation \
+            --outdir /tmp/vnalpha-package-check/sdist ./vnalpha
+          for artifact in \
+            /tmp/vnalpha-package-check/wheel/*.whl \
+            /tmp/vnalpha-package-check/sdist/*.tar.gz; do
+            install_root="/tmp/vnalpha-package-check/installed-$(basename "${artifact}")"
+            python -m pip install --quiet --no-deps --target "${install_root}" "${artifact}"
+            (
+              cd /tmp
+              PYTHONPATH="${install_root}" python -c 'from vnalpha.cli import app; app()' eval research-answers --ci
+              PYTHONPATH="${install_root}" python -c 'from vnalpha.cli import app; app()' eval research-runtime --ci
+            )
+          done 2>&1 | tee installed-package-evals.log
+
+      - name: Upload installed-package diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-package-evals-log
+          path: installed-package-evals.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: OpenSpec verifier tests
+        run: python -m pytest -q scripts/tests/test_check_openspec_completion.py
+
+      - name: OpenSpec completion verifier
+        run: python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening

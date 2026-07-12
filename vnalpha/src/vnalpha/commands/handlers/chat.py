@@ -7,9 +7,7 @@ from vnalpha.commands.models import CommandResult, ParsedCommand
 def handle_chat(parsed: ParsedCommand, **kwargs) -> CommandResult:
     subcommand = parsed.positional[0].lower() if parsed.positional else ""
     if subcommand != "new":
-        raise CommandValidationError(
-            "Unsupported /chat subcommand. Supported: new."
-        )
+        raise CommandValidationError("Unsupported /chat subcommand. Supported: new.")
 
     conn = kwargs.get("conn")
     if conn is None:
@@ -19,7 +17,9 @@ def handle_chat(parsed: ParsedCommand, **kwargs) -> CommandResult:
     from vnalpha.warehouse.migrations import run_migrations
 
     target_date = (
-        parsed.options.get("date") if isinstance(parsed.options.get("date"), str) else None
+        parsed.options.get("date")
+        if isinstance(parsed.options.get("date"), str)
+        else None
     )
     run_migrations(conn=conn)
     chat_session_id = create_chat_session(

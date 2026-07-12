@@ -86,9 +86,7 @@ def decision_for_profile(
         provider=config.provider_for(profile),
         override_source=override_source,
         fallback_chain=(
-            config.fallback_chain(profile)
-            if fallback_chain is None
-            else fallback_chain
+            config.fallback_chain(profile) if fallback_chain is None else fallback_chain
         ),
     )
 

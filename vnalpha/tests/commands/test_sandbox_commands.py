@@ -15,7 +15,12 @@ from vnalpha.commands.setup import build_default_registry
 from vnalpha.sandbox.artifact_writer import SandboxArtifactWriter
 from vnalpha.sandbox.docker_orchestration import SandboxDockerOrchestrator
 from vnalpha.sandbox.docker_runtime import DockerRunner
-from vnalpha.sandbox.models import SandboxJob, SandboxJobId, SandboxJobRequest, SandboxRunId
+from vnalpha.sandbox.models import (
+    SandboxJob,
+    SandboxJobId,
+    SandboxJobRequest,
+    SandboxRunId,
+)
 from vnalpha.sandbox.repository import SandboxJobRepository
 from vnalpha.sandbox.static_guard import SandboxStaticGuard
 from vnalpha.warehouse.connection import in_memory_connection

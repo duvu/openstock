@@ -50,8 +50,9 @@ def test_render_report_when_check_fails_includes_diagnostic_and_stable_totals() 
     )
 
 
-def test_render_report_when_operational_and_check_failures_are_unsorted_orders_all_details(
-) -> None:
+def test_render_report_when_operational_and_check_failures_are_unsorted_orders_all_details() -> (
+    None
+):
     # Given: unsorted operational failures and check failures across three source fixtures
     from vnalpha.evals.report import (
         EvaluatedCase,
@@ -93,8 +94,12 @@ def test_render_report_when_operational_and_check_failures_are_unsorted_orders_a
             EvaluatedCase(Path("research_answers/a.yaml"), "alpha", alpha_result),
         ),
         failures=(
-            RunFailure(Path("research_answers/c.yaml"), None, "load", "YAML", "invalid"),
-            RunFailure(Path("research_answers/a.yaml"), None, "adapter", "valid", "invalid"),
+            RunFailure(
+                Path("research_answers/c.yaml"), None, "load", "YAML", "invalid"
+            ),
+            RunFailure(
+                Path("research_answers/a.yaml"), None, "adapter", "valid", "invalid"
+            ),
         ),
     )
 
@@ -119,7 +124,11 @@ def test_render_report_when_only_load_failure_labels_operational_failure() -> No
     report = EvaluationRunReport(
         source_count=1,
         evaluations=(),
-        failures=(RunFailure(Path("research_answers/broken.yaml"), None, "load", "YAML", "invalid"),),
+        failures=(
+            RunFailure(
+                Path("research_answers/broken.yaml"), None, "load", "YAML", "invalid"
+            ),
+        ),
     )
 
     # When: the report renders the malformed-only corpus result

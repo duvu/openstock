@@ -20,7 +20,9 @@ class ModelProfile(str, Enum):
             return cls(normalized)
         except ValueError as exc:
             allowed = ", ".join(profile.value for profile in cls)
-            raise ValueError(f"Unknown model profile '{value}'. Expected one of: {allowed}.") from exc
+            raise ValueError(
+                f"Unknown model profile '{value}'. Expected one of: {allowed}."
+            ) from exc
 
 
 class ModelRouteStage(str, Enum):

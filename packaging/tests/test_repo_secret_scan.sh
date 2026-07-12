@@ -18,7 +18,7 @@ if ! bash "$SCRIPT" --root "$TMP_ROOT" >/dev/null; then
   exit 1
 fi
 
-printf 'API_KEY=live-secret-123456\n' >> "$TMP_ROOT/README.md"
+printf 'API_KEY=%s123456\n' 'live-secret-' >> "$TMP_ROOT/README.md"
 git -C "$TMP_ROOT" add README.md
 git -C "$TMP_ROOT" commit -qm secret
 

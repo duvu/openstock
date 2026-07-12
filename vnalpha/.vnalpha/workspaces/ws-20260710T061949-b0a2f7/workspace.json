@@ -5,8 +5,8 @@
   "assumptions": [],
   "context_size": {
     "artifacts": 0,
-    "events": 180,
-    "inputs": 179
+    "events": 186,
+    "inputs": 185
   },
   "created_at": "2026-07-10T06:19:49.595367+00:00",
   "data_freshness": {},
@@ -2162,11 +2162,83 @@
       "redaction_status": "redacted",
       "source": "tui",
       "summary": "/score"
+    },
+    {
+      "content": "/context status",
+      "created_at": "2026-07-12T00:52:46.692128+00:00",
+      "input_id": "input-1ae30e92",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 15
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/context status"
+    },
+    {
+      "content": "/watchlist",
+      "created_at": "2026-07-12T00:52:57.166831+00:00",
+      "input_id": "input-861da74d",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 10
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/watchlist"
+    },
+    {
+      "content": "what is the trend for FPT?",
+      "created_at": "2026-07-12T00:52:57.199913+00:00",
+      "input_id": "input-88f1f489",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 26
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "what is the trend for FPT?"
+    },
+    {
+      "content": "/clear",
+      "created_at": "2026-07-12T00:52:57.226532+00:00",
+      "input_id": "input-890d18a5",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/clear"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-12T00:52:57.252433+00:00",
+      "input_id": "input-bc3af35a",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
+    },
+    {
+      "content": "/score",
+      "created_at": "2026-07-12T00:52:57.282398+00:00",
+      "input_id": "input-0b78bf50",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 6
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/score"
     }
   ],
   "status": "active",
   "title": "Workspace ws-20260710T061949-b0a2f7",
-  "updated_at": "2026-07-10T14:44:48.574185+00:00",
+  "updated_at": "2026-07-12T00:52:57.282398+00:00",
   "warnings": [],
   "workspace_id": "ws-20260710T061949-b0a2f7"
 }

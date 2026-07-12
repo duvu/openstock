@@ -9,7 +9,6 @@ from vnalpha.tools.setup import build_local_tool_registry
 from vnalpha.warehouse.assistant_repo import create_assistant_session
 from vnalpha.warehouse.migrations import run_migrations
 
-
 RESEARCH_TOOL_NAMES = {
     "analysis.deep_symbol",
     "market.get_regime",

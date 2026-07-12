@@ -123,7 +123,9 @@ class IntentClassifier:
         self._client = llm_client
         self.last_usage: dict | None = None
 
-    def classify(self, user_prompt: str) -> IntentResult:
+    def classify(
+        self, user_prompt: str, *, session_id: str | None = None
+    ) -> IntentResult:
         """Classify intent with small-profile routing and one stronger JSON retry."""
         unsafe_category = _deterministic_precheck(user_prompt)
         if unsafe_category:
@@ -136,13 +138,16 @@ class IntentClassifier:
             )
 
         messages = _build_classifier_messages(user_prompt)
+        route_metadata = {"requires_deep_reasoning": False}
+        if session_id is not None:
+            route_metadata["session_id"] = session_id
         try:
             response_text, usage = self._client.chat(
                 messages,
                 response_schema=INTENT_CLASSIFICATION_SCHEMA,
                 stage="classify",
                 task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
-                route_metadata={"requires_deep_reasoning": False},
+                route_metadata=route_metadata,
             )
         except Exception as exc:
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
@@ -157,7 +162,7 @@ class IntentClassifier:
                     stage="classify",
                     task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
                     model_profile=ModelProfile.DEFAULT,
-                    route_metadata={"requires_deep_reasoning": False},
+                    route_metadata=route_metadata,
                 )
                 result = parse_intent_response(response_text, user_prompt)
             except Exception as exc:

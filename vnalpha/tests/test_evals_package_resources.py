@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from importlib import resources
-from pathlib import Path
+import os
 import subprocess
 import sys
 import zipfile
+from importlib import resources
+from pathlib import Path
 
 
 def test_default_golden_corpus_when_package_is_imported_uses_package_data() -> None:
@@ -53,4 +54,75 @@ def test_wheel_when_built_contains_the_complete_golden_corpus(tmp_path: Path) ->
             for name in archive.namelist()
             if name.startswith("vnalpha/evals/goldens/") and name.endswith(".yaml")
         }
+        runtime_entries = {
+            name
+            for name in archive.namelist()
+            if name.startswith("vnalpha/evals/runtime_cases/")
+            and name.endswith(".json")
+        }
     assert len(golden_entries) == 10
+    assert len(runtime_entries) == 10
+
+
+def test_installed_wheel_when_cli_runs_both_offline_evals(tmp_path: Path) -> None:
+    # Given: a wheel installed into an isolated target directory with no source checkout on sys.path
+    project_root = Path(__file__).resolve().parents[1]
+    wheel_dir = tmp_path / "wheel"
+    wheel_dir.mkdir()
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            "--no-deps",
+            "--no-build-isolation",
+            "--wheel-dir",
+            str(wheel_dir),
+            str(project_root),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    wheel = next(wheel_dir.glob("vnalpha-*.whl"))
+    install_root = tmp_path / "installed"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-deps",
+            "--target",
+            str(install_root),
+            str(wheel),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    # When: the installed package's real CLI entry point runs both deterministic eval modes
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(install_root)
+    for command in (
+        ("eval", "research-answers", "--ci"),
+        ("eval", "research-runtime", "--ci"),
+    ):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from vnalpha.cli import app; app()",
+                *command,
+            ],
+            cwd=tmp_path,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        # Then: package resources are discoverable without repository-relative paths
+        assert result.returncode == 0, result.stdout + result.stderr

@@ -7,7 +7,8 @@
 .PHONY: help up-vnstock down-vnstock sync features score tui \
         install-vnalpha lint-vnalpha test-vnalpha \
         eval-research-answers eval-research-runtime verify-hardening verify-r0 \
-        verify-r2-ci verify-r4 repo-hygiene build-vnalpha-deb verify-vnalpha-deb
+        verify-r2-ci verify-r4 repo-hygiene verify-vnalpha-package \
+        build-vnalpha-deb verify-vnalpha-deb
 
 help: ## Show this help message
 	@printf "\nopenstock — local research workflow\n\n"
@@ -74,20 +75,33 @@ verify-r4: ## Run R4 chat-workspace acceptance tests (no network required)
 		tests/test_r4_persistence.py \
 		tests/test_r4_controller_persistence.py
 
+verify-vnalpha-package: ## Build and exercise an offline Debian packaging fixture
+	rm -rf /tmp/openstock-hardening-deb
+	mkdir -p /tmp/openstock-hardening-deb
+	./packaging/build-deb.sh --offline --output-dir /tmp/openstock-hardening-deb
+	./packaging/test/test_packaging.sh /tmp/openstock-hardening-deb/vnalpha_*.deb
+
 eval-research-answers: ## Evaluate offline golden fixtures
-	cd vnalpha && python -m vnalpha eval research-answers
+	cd vnalpha && PYTHONPATH=src python -c 'from vnalpha.cli import app; app()' eval research-answers --ci
 
 eval-research-runtime: ## Evaluate offline runtime-replay fixtures
-	cd vnalpha && python -m vnalpha eval research-runtime
+	cd vnalpha && PYTHONPATH=src python -c 'from vnalpha.cli import app; app()' eval research-runtime --ci
 
 verify-hardening: ## Run hardening verification gates in dependency order
 	$(MAKE) repo-hygiene
+	packaging/scripts/openstock-secret-scan
 	$(MAKE) lint-vnalpha
 	$(MAKE) verify-r0
 	$(MAKE) verify-r2-ci
+	$(MAKE) test-vnalpha
 	$(MAKE) verify-r4
+	packaging/scripts/openstock-verify --ci
+	$(MAKE) verify-vnalpha-package
 	$(MAKE) eval-research-answers
 	$(MAKE) eval-research-runtime
+	python -m pytest -q scripts/tests/test_check_openspec_completion.py
+	python scripts/check-openspec-completion.py \
+		openspec/changes/openstock-four-phase-hardening
 
 repo-hygiene: ## Verify tracked paths and gitlinks against repository policy
 	packaging/scripts/openstock-repo-hygiene

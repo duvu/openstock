@@ -68,7 +68,9 @@ def test_load_golden_case_when_observation_claim_id_is_invalid_rejects_boundary(
     # Given: an otherwise valid case with an invalid observed logical claim identity
     path = tmp_path / "invalid.yaml"
     path.write_text(
-        _case_document().replace("claim_id: summary\n      fact_ids", "claim_id: Bad-ID\n      fact_ids", 1),
+        _case_document().replace(
+            "claim_id: summary\n      fact_ids", "claim_id: Bad-ID\n      fact_ids", 1
+        ),
         encoding="utf-8",
     )
 
@@ -83,7 +85,12 @@ def test_load_golden_case_when_observation_claim_id_is_invalid_rejects_boundary(
 
 @pytest.mark.parametrize(
     ("field", "invalid_boolean"),
-    (("refused", '"false"'), ("refused", "0"), ("reframed", '"false"'), ("reframed", "0")),
+    (
+        ("refused", '"false"'),
+        ("refused", "0"),
+        ("reframed", '"false"'),
+        ("reframed", "0"),
+    ),
 )
 def test_load_golden_case_when_observation_boolean_is_coerced_rejects_boundary(
     tmp_path: Path, field: str, invalid_boolean: str

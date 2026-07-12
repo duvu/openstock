@@ -139,7 +139,10 @@ def test_cmd_chat_new_returns_confirmation_string(conn):
     assert result is None
     assert ctrl._chat_session_id is not None
     assert len(ctrl._messages) > 0
-    assert "session" in ctrl._messages[-1][1].lower() or "chat session" in ctrl._messages[-1][1].lower()
+    assert (
+        "session" in ctrl._messages[-1][1].lower()
+        or "chat session" in ctrl._messages[-1][1].lower()
+    )
 
 
 # ---------------------------------------------------------------------------

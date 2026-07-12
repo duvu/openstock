@@ -47,7 +47,14 @@ def _build_scan_plan(entities: dict) -> AssistantPlan:
         args["universe"] = entities["universe"]
     return AssistantPlan(
         intent="scan_candidates",
-        steps=[_step("watchlist.scan", args, "Retrieve ranked research candidates", "READ_WATCHLIST")],
+        steps=[
+            _step(
+                "watchlist.scan",
+                args,
+                "Retrieve ranked research candidates",
+                "READ_WATCHLIST",
+            )
+        ],
         required_artifacts=["daily_watchlist", "candidate_score"],
     )
 
@@ -56,23 +63,44 @@ def _build_filter_plan(entities: dict) -> AssistantPlan:
     args = _date_args(entities, filters=entities.get("filters", {}))
     return AssistantPlan(
         intent="filter_candidates",
-        steps=[_step("watchlist.filter", args, "Filter candidates by criteria", "READ_WATCHLIST")],
+        steps=[
+            _step(
+                "watchlist.filter",
+                args,
+                "Filter candidates by criteria",
+                "READ_WATCHLIST",
+            )
+        ],
         required_artifacts=["candidate_score"],
     )
 
 
 def _build_compare_plan(entities: dict) -> AssistantPlan:
-    symbols = [str(item).strip().upper() for item in entities.get("symbols", []) if item]
+    symbols = [
+        str(item).strip().upper() for item in entities.get("symbols", []) if item
+    ]
     args = _date_args(entities, symbols=symbols)
-    quality_tool = "quality.get_many_status" if len(symbols) > 1 else "quality.get_status"
+    quality_tool = (
+        "quality.get_many_status" if len(symbols) > 1 else "quality.get_status"
+    )
     quality_args = _date_args(entities, symbols=symbols)
     if quality_tool == "quality.get_status" and symbols:
         quality_args = _date_args(entities, symbol=symbols[0])
     return AssistantPlan(
         intent="compare_symbols",
         steps=[
-            _step("candidate.compare", args, "Compare candidate scores and evidence", "READ_SCORE"),
-            _step(quality_tool, quality_args, "Check data quality for each symbol", "READ_QUALITY"),
+            _step(
+                "candidate.compare",
+                args,
+                "Compare candidate scores and evidence",
+                "READ_SCORE",
+            ),
+            _step(
+                quality_tool,
+                quality_args,
+                "Check data quality for each symbol",
+                "READ_QUALITY",
+            ),
         ],
         required_artifacts=["candidate_score", "canonical_ohlcv"],
     )
@@ -86,9 +114,21 @@ def _build_explain_plan(entities: dict) -> AssistantPlan:
     return AssistantPlan(
         intent="explain_symbol",
         steps=[
-            _step("candidate.explain", args, "Explain candidate score and evidence", "READ_SCORE"),
-            _step("lineage.get_symbol_lineage", args, "Retrieve data lineage", "READ_LINEAGE"),
-            _step("quality.get_status", args, "Check data quality status", "READ_QUALITY"),
+            _step(
+                "candidate.explain",
+                args,
+                "Explain candidate score and evidence",
+                "READ_SCORE",
+            ),
+            _step(
+                "lineage.get_symbol_lineage",
+                args,
+                "Retrieve data lineage",
+                "READ_LINEAGE",
+            ),
+            _step(
+                "quality.get_status", args, "Check data quality status", "READ_QUALITY"
+            ),
         ],
         required_artifacts=["candidate_score", "ingestion_run"],
     )
@@ -126,7 +166,11 @@ def _build_quality_plan(entities: dict) -> AssistantPlan:
         args["symbol"] = symbol
     return AssistantPlan(
         intent="review_quality",
-        steps=[_step("quality.get_status", args, "Review data quality status", "READ_QUALITY")],
+        steps=[
+            _step(
+                "quality.get_status", args, "Review data quality status", "READ_QUALITY"
+            )
+        ],
         required_artifacts=["canonical_ohlcv"],
     )
 

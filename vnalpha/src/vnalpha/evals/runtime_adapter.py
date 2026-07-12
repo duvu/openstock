@@ -60,9 +60,7 @@ def _seeded_implementation(seed: SeededToolOutput):
     return execute
 
 
-def _skip_data_ensure(
-    _conn: duckdb.DuckDBPyConnection, _step: ToolPlanStep
-) -> None:
+def _skip_data_ensure(_conn: duckdb.DuckDBPyConnection, _step: ToolPlanStep) -> None:
     return None
 
 

@@ -28,7 +28,9 @@ def is_safe_tool(tool_name: str) -> bool:
 
 def is_assistant_plan_tool(tool_name: str) -> bool:
     """Return whether a tool may appear in an assistant plan at all."""
-    return (is_safe_tool(tool_name) or tool_name in APPROVAL_REQUIRED_TOOLS) and not is_forbidden_tool(tool_name)
+    return (
+        is_safe_tool(tool_name) or tool_name in APPROVAL_REQUIRED_TOOLS
+    ) and not is_forbidden_tool(tool_name)
 
 
 def assert_safe_tool(
@@ -41,10 +43,14 @@ def assert_safe_tool(
         )
 
 
-def assert_assistant_plan_tool(tool_name: str, error_type: type[AssistantError]) -> None:
+def assert_assistant_plan_tool(
+    tool_name: str, error_type: type[AssistantError]
+) -> None:
     """Reject planned tools outside the autonomous or approval-gated allowlists."""
     if not is_assistant_plan_tool(tool_name):
-        raise error_type(f"Tool '{tool_name}' is not allowed by the assistant tool policy.")
+        raise error_type(
+            f"Tool '{tool_name}' is not allowed by the assistant tool policy."
+        )
 
 
 def unsafe_tools_in_plan(plan: AssistantPlan) -> tuple[str, ...]:

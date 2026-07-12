@@ -115,9 +115,7 @@ def test_assistant_app_persists_validated_research_answer_audit(monkeypatch):
     assert audits[0]["research_answer_audit_id"] == audit_id
     assert audits[0]["intent"] == "deep_analyze_symbol"
     assert audits[0]["tools"] == ["analysis.deep_symbol"]
-    assert audits[0]["artifact_refs"] == [
-        "candidate_score:FPT:2026-07-10"
-    ]
+    assert audits[0]["artifact_refs"] == ["candidate_score:FPT:2026-07-10"]
     assert audits[0]["groundedness_status"] == "PASS"
     assert audits[0]["policy_status"] == "PASS"
     assert audits[0]["dataset_freshness"]
@@ -127,7 +125,5 @@ def test_assistant_app_persists_validated_research_answer_audit(monkeypatch):
     ).fetchone()
     assert session[0] == "SUCCESS"
     persisted_answer = json.loads(session[1])
-    assert persisted_answer["research_metadata"][
-        "research_answer_audit_id"
-    ] == audit_id
+    assert persisted_answer["research_metadata"]["research_answer_audit_id"] == audit_id
     conn.close()

@@ -166,12 +166,8 @@ def validate_research_answer_policy(
     answer: AssistantAnswer, intent: str
 ) -> ResearchPolicyResult:
     """Validate final wording for deep research, shortlist, and scenario outputs."""
-    text = " ".join(
-        (answer.summary, answer.basis, answer.risks_caveats)
-    ).lower()
-    violations = tuple(
-        phrase for phrase in _OUTPUT_EXECUTION_PHRASES if phrase in text
-    )
+    text = " ".join((answer.summary, answer.basis, answer.risks_caveats)).lower()
+    violations = tuple(phrase for phrase in _OUTPUT_EXECUTION_PHRASES if phrase in text)
     disclaimer_present = (
         "research-only" in text
         or "research only" in text

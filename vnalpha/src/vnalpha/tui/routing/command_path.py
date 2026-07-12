@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+from functools import partial
 from typing import TYPE_CHECKING
 
 import anyio
@@ -29,9 +31,15 @@ class CommandPath:
                 router._set_status_error("CommandExecutor unavailable")
                 return
             with command_lifecycle("tui research command", raw):
-                result = await anyio.to_thread.run_sync(
-                    router._command_executor.execute, raw
-                )
+                executor = router._command_executor
+                execute = executor.execute
+                session_id = getattr(router._chat_controller, "_chat_session_id", None)
+                if (
+                    session_id
+                    and "session_scope_id" in inspect.signature(execute).parameters
+                ):
+                    execute = partial(execute, session_scope_id=session_id)
+                result = await anyio.to_thread.run_sync(execute, raw)
             router._output.show_command_result(raw, self.result_to_markup(result))
             workspace_changed = router._refresh_workspace_after_context_command(
                 raw, result.status

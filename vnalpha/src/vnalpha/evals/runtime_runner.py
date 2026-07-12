@@ -7,6 +7,7 @@ from typing import assert_never
 import duckdb
 
 from vnalpha.assistant.app import AssistantApp
+from vnalpha.assistant.errors import AssistantInputValidationError
 from vnalpha.assistant.gateway import FakeLLMClient
 from vnalpha.assistant.models import (
     AssistantAnswer,
@@ -51,25 +52,29 @@ def run_runtime_replay_case(case: RuntimeReplayCase) -> RuntimeReplayCaseResult:
             date=case.request.date,
         )
         with seeded_assistant_executor(case):
-            prepared = app.prepare(request)
-            match prepared:
-                case PreparedAssistantTurn():
-                    answer, plan = app.execute_prepared(
-                        prepared, on_trace_event=traces.append
-                    )
-                    observation = _answer_observation(
-                        conn,
-                        case,
-                        client,
-                        answer,
-                        plan,
-                        traces,
-                        prepared.assistant_session_id,
-                    )
-                case (RefusalMessage(), AssistantPlan() as plan):
-                    observation = _refusal_observation(case, client, plan)
-                case unreachable:
-                    assert_never(unreachable)
+            try:
+                prepared = app.prepare(request)
+            except AssistantInputValidationError as exc:
+                observation = _validation_error_observation(case, client, str(exc))
+            else:
+                match prepared:
+                    case PreparedAssistantTurn():
+                        answer, plan = app.execute_prepared(
+                            prepared, on_trace_event=traces.append
+                        )
+                        observation = _answer_observation(
+                            conn,
+                            case,
+                            client,
+                            answer,
+                            plan,
+                            traces,
+                            prepared.assistant_session_id,
+                        )
+                    case (RefusalMessage(), AssistantPlan() as plan):
+                        observation = _refusal_observation(case, client, plan)
+                    case unreachable:
+                        assert_never(unreachable)
     return RuntimeReplayCaseResult(case_id=case.case_id, checks=observation)
 
 
@@ -110,8 +115,7 @@ def _answer_observation(
         metadata.policy.status.value if metadata.policy is not None else None
     )
     audit_count = conn.execute(
-        "SELECT COUNT(*) FROM research_answer_audit "
-        "WHERE assistant_session_id = ?",
+        "SELECT COUNT(*) FROM research_answer_audit WHERE assistant_session_id = ?",
         [assistant_session_id],
     ).fetchone()[0]
     audit_status = (
@@ -170,13 +174,46 @@ def _refusal_observation(
     return (
         *_base_checks(case, RuntimeOutcome.REFUSAL, plan),
         _check("successful_trace_tools", case.expected.successful_trace_tools, ()),
-        _check("groundedness_status", _enum_value(case.expected.groundedness_status), None),
+        _check(
+            "groundedness_status", _enum_value(case.expected.groundedness_status), None
+        ),
         _check("policy_status", _enum_value(case.expected.policy_status), None),
         _check("fallback_used", case.expected.fallback_used, None),
         _check("audit_status", case.expected.audit_status.value, "absent"),
         _check("required_missing_data", (), ()),
         _check("forbidden_source_refs", (), ()),
         _check("claim_source_refs", case.expected.claim_source_refs, {}),
+        _check(
+            "classifier_context_isolation",
+            True,
+            _classifier_context_isolated(case, client),
+        ),
+    )
+
+
+def _validation_error_observation(
+    case: RuntimeReplayCase,
+    client: FakeLLMClient,
+    message: str,
+) -> tuple[RuntimeCheckResult, ...]:
+    plan = AssistantPlan(intent=case.expected.intent, steps=[])
+    expected_fragment = case.expected.validation_error_contains or ""
+    actual_fragment = (
+        expected_fragment if expected_fragment.lower() in message.lower() else message
+    )
+    return (
+        *_base_checks(case, RuntimeOutcome.VALIDATION_ERROR, plan),
+        _check("successful_trace_tools", case.expected.successful_trace_tools, ()),
+        _check(
+            "groundedness_status", _enum_value(case.expected.groundedness_status), None
+        ),
+        _check("policy_status", _enum_value(case.expected.policy_status), None),
+        _check("fallback_used", case.expected.fallback_used, None),
+        _check("audit_status", case.expected.audit_status.value, "absent"),
+        _check("required_missing_data", (), ()),
+        _check("forbidden_source_refs", (), ()),
+        _check("claim_source_refs", case.expected.claim_source_refs, {}),
+        _check("validation_error_contains", expected_fragment, actual_fragment),
         _check(
             "classifier_context_isolation",
             True,
@@ -208,7 +245,10 @@ def _classifier_context_isolated(
     if historical_context is None:
         return True
     if not client.calls:
-        return case.expected.outcome is RuntimeOutcome.REFUSAL
+        return case.expected.outcome in {
+            RuntimeOutcome.REFUSAL,
+            RuntimeOutcome.VALIDATION_ERROR,
+        }
     return historical_context not in json.dumps(client.calls[0], sort_keys=True)
 
 

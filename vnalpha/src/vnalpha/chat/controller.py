@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING, Callable, Literal
 
 from vnalpha.assistant.tool_policy import is_safe_plan
@@ -68,6 +69,14 @@ class ChatController:
         self._pending_plan: "AssistantPlan | None" = None
         self._pending_plan_turn_context: dict | None = None
         self._pending_prepared_turn: "PreparedAssistantTurn | None" = None
+
+    def close(self) -> None:
+        if self._chat_session_id:
+            from vnalpha.model_routing import DEFAULT_OVERRIDE_STORE
+
+            DEFAULT_OVERRIDE_STORE.clear_override(
+                scope="session", session_id=self._chat_session_id
+            )
 
     def _wrap_trace_with_persistence(
         self, original: Callable[["TraceEvent"], None] | None
@@ -147,7 +156,11 @@ class ChatController:
                 registry=registry,
                 default_date=self._target_date,
             )
-            result = executor.execute(raw)
+            execute_parameters = inspect.signature(executor.execute).parameters
+            if self._chat_session_id and "session_scope_id" in execute_parameters:
+                result = executor.execute(raw, session_scope_id=self._chat_session_id)
+            else:
+                result = executor.execute(raw)
             self._render_command_result(result)
             research_session_id = None
             metadata = getattr(result, "metadata", None)
@@ -155,6 +168,15 @@ class ChatController:
                 research_session_id = metadata.get("research_session_id")
                 chat_session_id = metadata.get("chat_session_id")
                 if chat_session_id:
+                    if (
+                        self._chat_session_id
+                        and self._chat_session_id != chat_session_id
+                    ):
+                        from vnalpha.model_routing import DEFAULT_OVERRIDE_STORE
+
+                        DEFAULT_OVERRIDE_STORE.clear_override(
+                            scope="session", session_id=self._chat_session_id
+                        )
                     self._chat_session_id = chat_session_id
                     self._pending_plan = None
                     self._pending_plan_turn_context = None

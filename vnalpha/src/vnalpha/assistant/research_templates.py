@@ -57,9 +57,7 @@ RESEARCH_TEMPLATES: Final[dict[str, ResearchTemplate]] = {
         required_fields=("snapshots", "freshness", "lineage", "quality"),
         allowed_wording=("persisted ranking", "sector context"),
         required_caveats=("metadata coverage", "freshness", "research-only"),
-        missing_data_rule=(
-            "State when sector metadata or snapshots are unavailable."
-        ),
+        missing_data_rule=("State when sector metadata or snapshots are unavailable."),
     ),
     "summarize_watchlist_deep": ResearchTemplate(
         required_fields=(
@@ -97,9 +95,7 @@ RESEARCH_TEMPLATES: Final[dict[str, ResearchTemplate]] = {
         required_fields=("setup_type", "horizon_sessions", "evidence", "lineage"),
         allowed_wording=("historical persisted evidence", "sample size"),
         required_caveats=("sample size", "historical outcomes", "not predictive"),
-        missing_data_rule=(
-            "State when no setup-outcome evidence exists."
-        ),
+        missing_data_rule=("State when no setup-outcome evidence exists."),
     ),
 }
 
@@ -232,9 +228,11 @@ def _summary_for_intent(intent: str, payloads: list[dict[str, Any]]) -> str:
             for item in primary.get("shortlist", [])
             if isinstance(item, dict) and item.get("symbol")
         ]
-        return "Research shortlist: " + (
-            ", ".join(symbols) if symbols else "no eligible symbols"
-        ) + "."
+        return (
+            "Research shortlist: "
+            + (", ".join(symbols) if symbols else "no eligible symbols")
+            + "."
+        )
     if intent == "generate_research_scenario":
         return (
             f"Conditional research scenario for {primary.get('symbol', 'the symbol')} "

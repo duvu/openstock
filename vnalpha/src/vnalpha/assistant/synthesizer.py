@@ -177,6 +177,7 @@ class AnswerSynthesizer:
         tool_outputs: dict[str, Any],
         *,
         request: AssistantRequest | None = None,
+        session_id: str | None = None,
     ) -> AssistantAnswer:
         """Synthesize and validate a grounded, policy-safe answer."""
 
@@ -202,23 +203,27 @@ class AnswerSynthesizer:
         symbol_count = _symbol_count(plan)
         context_bytes = len(messages[-1]["content"].encode("utf-8"))
 
+        route_metadata = {
+            "symbol_count": symbol_count,
+            "artifact_count": len(tool_outputs),
+            "context_bytes": context_bytes,
+            "requires_deep_reasoning": task_type
+            in {
+                ModelTaskType.MULTI_SYMBOL_COMPARISON.value,
+                ModelTaskType.DEEP_SYMBOL_ANALYSIS.value,
+                ModelTaskType.SHORTLIST_GENERATION.value,
+                ModelTaskType.RESEARCH_SCENARIO.value,
+            },
+        }
+        if session_id is not None:
+            route_metadata["session_id"] = session_id
+
         try:
             response_text, usage = self._client.chat(
                 messages,
                 stage="synthesize",
                 task_type=task_type,
-                route_metadata={
-                    "symbol_count": symbol_count,
-                    "artifact_count": len(tool_outputs),
-                    "context_bytes": context_bytes,
-                    "requires_deep_reasoning": task_type
-                    in {
-                        ModelTaskType.MULTI_SYMBOL_COMPARISON.value,
-                        ModelTaskType.DEEP_SYMBOL_ANALYSIS.value,
-                        ModelTaskType.SHORTLIST_GENERATION.value,
-                        ModelTaskType.RESEARCH_SCENARIO.value,
-                    },
-                },
+                route_metadata=route_metadata,
             )
             self.last_usage = usage
             answer = parse_synthesis_response(response_text)

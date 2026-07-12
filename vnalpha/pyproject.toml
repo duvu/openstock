@@ -26,6 +26,7 @@ dev = [
     "pytest-asyncio",
     "ruff>=0.4",
     "respx>=0.21",
+    "build>=1.2",
 ]
 
 [project.scripts]
@@ -52,5 +53,5 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-q"]
-pythonpath = ["src"]
+addopts = ["-q", "--import-mode=importlib"]
+pythonpath = ["src", "."]

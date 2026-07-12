@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from vnalpha.commands.handlers.chat import handle_chat
 from vnalpha.commands.handlers.compare import handle_compare
 from vnalpha.commands.handlers.context import handle_context
 from vnalpha.commands.handlers.explain import handle_explain
 from vnalpha.commands.handlers.filter import handle_filter
-from vnalpha.commands.handlers.chat import handle_chat
 from vnalpha.commands.handlers.help import handle_help
 from vnalpha.commands.handlers.history import handle_history
 from vnalpha.commands.handlers.lineage import handle_lineage

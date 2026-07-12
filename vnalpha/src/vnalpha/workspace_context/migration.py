@@ -10,13 +10,13 @@ from uuid import uuid4
 
 from vnalpha.workspace_context.models import WorkspaceState
 from vnalpha.workspace_context.storage import (
+    _atomic_write_text,
     load_latest_workspace_id,
     load_workspace_index,
     load_workspace_state,
     resolve_workspace_root,
     save_latest_workspace_id,
     save_workspace_state,
-    _atomic_write_text,
 )
 
 
@@ -89,9 +89,7 @@ def detect_legacy_workspace_roots(
 def _workspace_ids(root: Path) -> tuple[str, ...]:
     indexed = load_workspace_index(root=root).get("workspace_ids", [])
     candidates = {
-        workspace_id
-        for workspace_id in indexed
-        if isinstance(workspace_id, str)
+        workspace_id for workspace_id in indexed if isinstance(workspace_id, str)
     }
     if root.is_dir():
         candidates.update(
