@@ -1,5 +1,5 @@
 # Authoritative registry for non-archived OpenSpec changes.
-reviewed_at: 2026-07-11
+reviewed_at: 2026-07-12
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
@@ -43,6 +43,14 @@ changes:
       - openstock-four-phase-hardening
     summary: "Durable data contracts for reusable research-intelligence artifacts."
     evidence: "Market/sector snapshots and research answer audit exist; the remaining proposed persisted models do not."
+  symbol-knowledge-memory:
+    status: planned
+    priority: P2
+    blocked_by:
+      - openstock-four-phase-hardening
+      - research-intelligence-data-model-foundation
+    summary: "Per-symbol Markdown knowledge cards backed by structured claims, continuous validated updates, auditable correction, compaction, and bounded temporal retrieval."
+    evidence: "OpenSpec draft only; no runtime implementation yet."
   deep-symbol-analysis-engine:
     status: partial
     priority: P2
