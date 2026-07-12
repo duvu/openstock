@@ -23,6 +23,11 @@ jobs:
           fetch-depth: 0
           submodules: false
 
+      - name: Print source tree identity
+        run: |
+          echo "HEAD_SHA=$(git rev-parse HEAD)"
+          echo "BASE_TREE_SHA=$(git rev-parse 'HEAD^{tree}')"
+
       - name: Archive source tree
         run: git archive --format=tar.gz --output=openstock-source.tar.gz HEAD
 
