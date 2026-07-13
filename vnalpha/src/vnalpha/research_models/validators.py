@@ -4,6 +4,7 @@ from dataclasses import fields, is_dataclass
 from datetime import date, datetime
 from typing import Any
 
+from vnalpha.policy.safety_policy import FORBIDDEN_TOOL_PREFIXES
 from vnalpha.research_models.contracts import ResearchModel
 from vnalpha.research_models.models import (
     ResearchAnswerAudit,
@@ -11,21 +12,7 @@ from vnalpha.research_models.models import (
     SetupEvidenceSnapshot,
 )
 
-_EXECUTION_FIELD_NAMES = frozenset(
-    {
-        "account",
-        "allocation",
-        "broker",
-        "execution",
-        "margin",
-        "order",
-        "portfolio",
-        "position",
-        "transfer",
-        "trade",
-        "trading",
-    }
-)
+_EXECUTION_FIELD_NAMES = FORBIDDEN_TOOL_PREFIXES | frozenset({"execution"})
 
 
 class ResearchModelValidationError(ValueError):
