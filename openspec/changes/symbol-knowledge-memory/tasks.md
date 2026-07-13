@@ -71,25 +71,25 @@
 
 - [ ] 6.1 Add configurable symbol-card token budget and uncompacted-event thresholds. [evidence: config tests]
 - [ ] 6.2 Implement micro-compaction for deduplication, supersession, expiry, and recent-change maintenance. [depends: 5.2–5.5] [evidence: focused compaction tests]
-- [ ] 6.3 Implement macro-compaction from canonical structured claims, not prior summary text alone. [depends: 3.4, 5.1–5.10] [evidence: source-of-truth tests]
-- [ ] 6.4 Preserve pinned claims, user regions, active risks, conflicts, open questions, and important rejected hypotheses. [evidence: preservation tests]
-- [ ] 6.5 Produce dry-run retained/archive/conflict counts, source coverage, token estimates, and proposed diff. [evidence: dry-run command tests]
-- [ ] 6.6 Ensure dry-run performs no mutation. [evidence: hash/database immutability test]
-- [ ] 6.7 Persist compaction manifests with before/after generations and hashes. [evidence: manifest tests]
+- [x] 6.3 Implement macro-compaction from canonical structured claims, not prior summary text alone. [depends: 3.4, 5.1–5.10] [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
+- [x] 6.4 Preserve pinned claims, user regions, active risks, conflicts, open questions, and important rejected hypotheses. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
+- [x] 6.5 Produce dry-run retained/archive/conflict counts, source coverage, token estimates, and proposed diff. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
+- [x] 6.6 Ensure dry-run performs no mutation. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
+- [x] 6.7 Persist compaction manifests with before/after generations and hashes. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
 - [ ] 6.8 Rotate and compress eligible archive events without deleting referenced evidence. [evidence: archive and reference-retention tests]
-- [ ] 6.9 Prove repeated compaction without new input is idempotent and creates no duplicate archive entries. [evidence: repeated-run test]
+- [x] 6.9 Prove repeated compaction without new input is idempotent and creates no duplicate archive entries. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
 - [ ] 6.10 Add scheduled maintenance entry point with bounded work and failure isolation per symbol. [evidence: scheduler/service tests]
 
 ## 7. Retrieval and context construction
 
-- [ ] 7.1 Implement exact symbol retrieval before optional lexical or semantic ranking. [depends: 2.5] [evidence: retrieval tests]
-- [ ] 7.2 Enforce as-of filtering using claim date, source publication date when known, and validity window. [evidence: no-lookahead tests]
-- [ ] 7.3 Exclude expired, superseded, and rejected claims by default. [evidence: status-filter tests]
+- [x] 7.1 Implement exact symbol retrieval before optional lexical or semantic ranking. [depends: 2.5] [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
+- [x] 7.2 Enforce as-of filtering using claim date, source publication date when known, and validity window. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
+- [x] 7.3 Exclude expired, superseded, and rejected claims by default. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
 - [ ] 7.4 Include conflict metadata, risks, caveats, and missing data when relevant. [evidence: retrieval tests]
 - [ ] 7.5 Add configurable total memory context budget and per-section allocation. [evidence: budget tests]
-- [ ] 7.6 Select claims atomically as whole units; do not truncate claims mid-record. [evidence: tight-budget tests]
-- [ ] 7.7 Mark memory context as untrusted and subordinate to current policy and validated tool output. [evidence: prompt contract tests]
-- [ ] 7.8 Add retrieval metadata for selected and omitted claims, token estimate, freshness, and source coverage. [evidence: result contract tests]
+- [x] 7.6 Select claims atomically as whole units; do not truncate claims mid-record. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
+- [x] 7.7 Mark memory context as untrusted and subordinate to current policy and validated tool output. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
+- [x] 7.8 Add retrieval metadata for selected and omitted claims, token estimate, freshness, and source coverage. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
 - [ ] 7.9 Prove archive growth does not increase configured prompt budget. [evidence: scale test]
 
 ## 8. Command and TUI surface

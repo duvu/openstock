@@ -1,3 +1,7 @@
+from vnalpha.symbol_memory.compaction import (
+    MemoryCompactionPreview,
+    SymbolMemoryCompactionService,
+)
 from vnalpha.symbol_memory.ingestion import (
     MemoryEvidence,
     MemoryIngestionError,
@@ -23,6 +27,7 @@ from vnalpha.symbol_memory.models import (
 from vnalpha.symbol_memory.paths import SymbolPathError, normalize_symbol
 from vnalpha.symbol_memory.recovery import SymbolCardInspection, inspect_symbol_card
 from vnalpha.symbol_memory.repository import SymbolMemoryRepository
+from vnalpha.symbol_memory.retrieval import SymbolMemoryRetrievalService
 from vnalpha.symbol_memory.validators import MemoryValidationError, validate_claim
 
 __all__ = [
@@ -30,6 +35,7 @@ __all__ = [
     "ClaimStatus",
     "MemoryClaim",
     "MemoryCardError",
+    "MemoryCompactionPreview",
     "MemoryEvidence",
     "MemoryIngestionError",
     "MemoryIngestionResult",
@@ -41,7 +47,9 @@ __all__ = [
     "ParsedSymbolCard",
     "SymbolPathError",
     "SymbolMemoryRepository",
+    "SymbolMemoryRetrievalService",
     "SymbolMemoryIngestionService",
+    "SymbolMemoryCompactionService",
     "SymbolMemoryLifecycleService",
     "SymbolCardInspection",
     "normalize_symbol",
