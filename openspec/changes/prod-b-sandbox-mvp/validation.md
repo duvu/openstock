@@ -15,6 +15,7 @@ working tree.
 | 2026-07-13T01:04:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 10.1–10.7 | `make lint-vnalpha && make test-vnalpha && make verify-r4 && packaging/scripts/openstock-verify --ci` | 0 | Lint, full suite, R4, and verifier passed. | `openspec/changes/prod-b-sandbox-mvp/evidence/dependency-closure.md` |
 | 2026-07-13T01:04:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 10.4 | `PIP_INDEX_URL=https://pypi.org/simple make verify-vnalpha-package` | 0 | Standalone package bundled 31 wheels and passed 55 clean no-index install/eval checks. | `openspec/changes/prod-b-sandbox-mvp/evidence/dependency-closure.md` |
 | 2026-07-13T01:04:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | OpenSpec | `openspec validate prod-b-sandbox-mvp --strict` | 0 | Strict requirement/scenario validation passed. | `openspec/changes/prod-b-sandbox-mvp/evidence/dependency-closure.md` |
+| 2026-07-13T01:18:00Z | `5dc6dce` | 10.8 | `gh pr view 62 --json number,state,url,headRefOid` | 0 | Draft dependency-closure PR published with local gate evidence attached. | https://github.com/duvu/openstock/pull/62 |
 
 ## Manual surface evidence
 
@@ -27,5 +28,5 @@ working tree.
 
 ## PR evidence
 
-Pending publication of the final implementation SHA. Historical PR #58 is merged
-and does not contain the current dependency-closure worktree.
+Draft PR #62 contains the dependency-closure implementation and evidence:
+https://github.com/duvu/openstock/pull/62

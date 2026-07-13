@@ -114,4 +114,4 @@
 - [x] 10.5 Run `make lint-vnalpha`.
 - [x] 10.6 Run `make verify-r4`.
 - [x] 10.7 Run `openstock-verify --ci`.
-- [ ] 10.8 Attach validation evidence to PR.
+- [x] 10.8 Attach validation evidence to PR.
