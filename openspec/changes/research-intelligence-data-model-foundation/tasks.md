@@ -55,8 +55,8 @@
 
 ## 6. Validation
 
-- [ ] 6.1 Run `make test-vnalpha`.
-- [ ] 6.2 Run `make lint-vnalpha`.
-- [ ] 6.3 Run `make verify-r4`.
-- [ ] 6.4 Run `openstock-verify --ci`.
+- [x] 6.1 Run `make test-vnalpha`.
+- [x] 6.2 Run `make lint-vnalpha`.
+- [x] 6.3 Run `make verify-r4`.
+- [x] 6.4 Run `openstock-verify --ci`.
 - [ ] 6.5 Attach validation evidence to implementation PR.
