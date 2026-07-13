@@ -1,3 +1,9 @@
+from vnalpha.symbol_memory.markdown import (
+    MemoryCardError,
+    ParsedSymbolCard,
+    parse_symbol_card,
+    write_symbol_card,
+)
 from vnalpha.symbol_memory.models import (
     ClaimOrigin,
     ClaimStatus,
@@ -8,18 +14,24 @@ from vnalpha.symbol_memory.models import (
     MemoryRetrievalResult,
 )
 from vnalpha.symbol_memory.paths import SymbolPathError, normalize_symbol
+from vnalpha.symbol_memory.repository import SymbolMemoryRepository
 from vnalpha.symbol_memory.validators import MemoryValidationError, validate_claim
 
 __all__ = [
     "ClaimOrigin",
     "ClaimStatus",
     "MemoryClaim",
+    "MemoryCardError",
     "MemoryCompactionRun",
     "MemoryDocument",
     "MemoryEvent",
     "MemoryRetrievalResult",
     "MemoryValidationError",
+    "ParsedSymbolCard",
     "SymbolPathError",
+    "SymbolMemoryRepository",
     "normalize_symbol",
+    "parse_symbol_card",
     "validate_claim",
+    "write_symbol_card",
 ]

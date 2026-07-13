@@ -24,6 +24,7 @@ from vnalpha.warehouse.schema import (
     ALL_DDL_PHASE510,
     ALL_DDL_RESEARCH_AUTOMATION,
 )
+from vnalpha.warehouse.symbol_memory_schema import ALL_DDL_SYMBOL_MEMORY
 
 logger = get_logger("warehouse.migrations")
 
@@ -60,6 +61,8 @@ def run_migrations(
     for ddl in ALL_DDL_RESEARCH_ANSWER_AUDIT:
         conn.execute(ddl)
     for ddl in ALL_DDL_RESEARCH_MODELS:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_SYMBOL_MEMORY:
         conn.execute(ddl)
     _migrate_research_answer_audit_columns(conn)
     _migrate_research_artifact_columns(conn)
