@@ -166,6 +166,7 @@ class AnswerSynthesizer:
     def __init__(self, llm_client: LLMGatewayClient):
         self._client = llm_client
         self.last_usage: dict | None = None
+        self.last_raw_responses: list[dict[str, Any]] = []
         self.last_groundedness: GroundednessResult | None = None
         self.last_policy: ResearchPolicyResult | None = None
         self.last_fallback_used = False
@@ -182,6 +183,7 @@ class AnswerSynthesizer:
         """Synthesize and validate a grounded, policy-safe answer."""
 
         self.last_usage = None
+        self.last_raw_responses = []
         self.last_groundedness = None
         self.last_policy = None
         self.last_fallback_used = False
@@ -225,9 +227,16 @@ class AnswerSynthesizer:
                 task_type=task_type,
                 route_metadata=route_metadata,
             )
+            self.last_raw_responses = [
+                dict(response) for response in self._client.last_raw_responses
+            ]
             self.last_usage = usage
             answer = parse_synthesis_response(response_text)
         except Exception as exc:
+            if not self.last_raw_responses:
+                self.last_raw_responses = [
+                    dict(response) for response in self._client.last_raw_responses
+                ]
             if not research_intent:
                 if isinstance(exc, SynthesisError):
                     raise

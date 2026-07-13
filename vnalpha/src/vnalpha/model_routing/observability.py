@@ -26,6 +26,8 @@ class RouteMetadata(TypedDict, total=False):
     fallback_to: str
     scope: str
     profile: str
+    response_content_chars: int
+    finish_reason: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +142,8 @@ def emit_call_succeeded(
     *,
     latency_ms: float,
     usage: Mapping[str, Any] | None = None,
+    response_content_chars: int | None = None,
+    finish_reason: str | None = None,
     metadata: Mapping[str, Any] | None = None,
 ) -> None:
     usage_data = dict(usage or {})
@@ -155,6 +159,8 @@ def emit_call_succeeded(
             "tokens_out": usage_data.get("completion_tokens")
             or usage_data.get("output_tokens"),
             "estimated_cost": usage_data.get("estimated_cost"),
+            "response_content_chars": response_content_chars,
+            "finish_reason": finish_reason,
         },
     )
 
@@ -164,6 +170,8 @@ def emit_call_failed(
     error: Exception,
     *,
     latency_ms: float,
+    response_content_chars: int | None = None,
+    finish_reason: str | None = None,
     metadata: Mapping[str, Any] | None = None,
 ) -> None:
     _emit(
@@ -174,6 +182,8 @@ def emit_call_failed(
             **dict(metadata or {}),
             "latency_ms": round(latency_ms, 2),
             "error_type": type(error).__name__,
+            "response_content_chars": response_content_chars,
+            "finish_reason": finish_reason,
         },
         status="FAILED",
         level="ERROR",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -187,7 +187,12 @@ class AssistantApp:
                     self._conn,
                     classify_trace_id,
                     status="SUCCESS",
-                    output_summary={"intent": intent_result.intent},
+                    output_summary={
+                        "intent": intent_result.intent,
+                        **self._raw_response_summary(
+                            self._classifier.last_raw_responses
+                        ),
+                    },
                     usage=self._classifier.last_usage,
                 )
             except Exception as exc:
@@ -195,7 +200,12 @@ class AssistantApp:
                     self._conn,
                     classify_trace_id,
                     status="FAILED",
-                    error={"message": str(exc)},
+                    error={
+                        "message": str(exc),
+                        **self._raw_response_summary(
+                            self._classifier.last_raw_responses
+                        ),
+                    },
                 )
                 raise
             if request.date and "date" not in intent_result.entities:
@@ -328,7 +338,10 @@ class AssistantApp:
                 self._conn,
                 synthesis_trace_id,
                 status="SUCCESS",
-                output_summary={"summary_length": len(answer.summary)},
+                output_summary={
+                    "summary_length": len(answer.summary),
+                    **self._raw_response_summary(self._synthesizer.last_raw_responses),
+                },
                 usage=self._synthesizer.last_usage,
             )
         except Exception as exc:
@@ -336,7 +349,10 @@ class AssistantApp:
                 self._conn,
                 synthesis_trace_id,
                 status="FAILED",
-                error={"message": str(exc)},
+                error={
+                    "message": str(exc),
+                    **self._raw_response_summary(self._synthesizer.last_raw_responses),
+                },
             )
             finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="FAILED")
             raise
@@ -453,3 +469,11 @@ class AssistantApp:
         config = getattr(self._llm, "config", None)
         model = getattr(config, "model", None)
         return str(model or type(self._llm).__name__)
+
+    def _raw_response_summary(
+        self, raw_responses: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
+        config = getattr(self._llm, "config", None)
+        if not getattr(config, "store_raw", False):
+            return {}
+        return {"raw_responses": raw_responses}

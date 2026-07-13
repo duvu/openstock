@@ -28,6 +28,8 @@ def _log_llm_error(
     *,
     attempt: int | None = None,
     cause: Exception | None = None,
+    response_content_chars: int | None = None,
+    finish_reason: str | None = None,
 ) -> None:
     try:
         import structlog
@@ -40,6 +42,8 @@ def _log_llm_error(
             error=str(exc),
             attempt=attempt,
             cause=str(cause) if cause else None,
+            response_content_chars=response_content_chars,
+            finish_reason=finish_reason,
         )
     except Exception:  # noqa: BLE001
         pass
@@ -114,6 +118,7 @@ class LLMGatewayClient:
         )
         self._override_store = override_store or DEFAULT_OVERRIDE_STORE
         self._last_route_decision: ModelRouteDecision | None = None
+        self._last_raw_responses: list[dict[str, Any]] = []
 
     def resolve_route(
         self,
@@ -173,6 +178,7 @@ class LLMGatewayClient:
 
         safe_metadata = redact_route_metadata(route_metadata or {})
         emit_route_selected(primary, safe_metadata)
+        self._last_raw_responses = []
         routes = (primary, *fallback_route_decisions(self._routing_config, primary))
         previous: ModelRouteDecision | None = None
         last_error: Exception | None = None
@@ -235,6 +241,8 @@ class LLMGatewayClient:
         started = time.monotonic()
         last_transport_error: Exception | None = None
         for attempt in range(self._config.max_retries + 1):
+            response_content_chars: int | None = None
+            finish_reason: str | None = None
             try:
                 response = httpx.post(
                     self._config.endpoint,
@@ -242,15 +250,40 @@ class LLMGatewayClient:
                     headers=headers,
                     timeout=self._config.timeout,
                 )
+                if self._config.store_raw:
+                    self._last_raw_responses.append(
+                        {
+                            "model_id": decision.model_id,
+                            "status_code": response.status_code,
+                            "body": response.text,
+                        }
+                    )
                 response.raise_for_status()
                 data = response.json()
-                content = data["choices"][0]["message"]["content"]
+                choice = data["choices"][0]
+                content = choice["message"]["content"]
+                raw_finish_reason = choice.get("finish_reason")
+                if isinstance(raw_finish_reason, str):
+                    finish_reason = raw_finish_reason
+                if not isinstance(content, str):
+                    raise LLMResponseError(
+                        "LLM response from model "
+                        f"'{decision.model_id}' has no textual completion content."
+                    )
+                response_content_chars = len(content)
+                if not content.strip():
+                    raise LLMResponseError(
+                        "LLM response from model "
+                        f"'{decision.model_id}' has empty completion content."
+                    )
                 usage = data.get("usage", {})
                 latency_ms = (time.monotonic() - started) * 1000
                 emit_call_succeeded(
                     decision,
                     latency_ms=latency_ms,
                     usage=usage,
+                    response_content_chars=response_content_chars,
+                    finish_reason=finish_reason,
                     metadata=route_metadata,
                 )
                 return content, dict(usage) if isinstance(usage, dict) else {}
@@ -284,6 +317,24 @@ class LLMGatewayClient:
                 if fallbackable:
                     raise _FallbackableCallError(error) from exc
                 raise error from exc
+            except LLMResponseError as exc:
+                latency_ms = (time.monotonic() - started) * 1000
+                emit_call_failed(
+                    decision,
+                    exc,
+                    latency_ms=latency_ms,
+                    response_content_chars=response_content_chars,
+                    finish_reason=finish_reason,
+                    metadata=route_metadata,
+                )
+                _log_llm_error(
+                    decision.stage,
+                    exc,
+                    attempt=attempt,
+                    response_content_chars=response_content_chars,
+                    finish_reason=finish_reason,
+                )
+                raise _FallbackableCallError(exc) from exc
             except (KeyError, TypeError, ValueError) as exc:
                 error = LLMResponseError(
                     f"Malformed LLM response from model '{decision.model_id}': {exc}"
@@ -293,7 +344,16 @@ class LLMGatewayClient:
                     decision,
                     error,
                     latency_ms=latency_ms,
+                    response_content_chars=response_content_chars,
+                    finish_reason=finish_reason,
                     metadata=route_metadata,
+                )
+                _log_llm_error(
+                    decision.stage,
+                    error,
+                    attempt=attempt,
+                    response_content_chars=response_content_chars,
+                    finish_reason=finish_reason,
                 )
                 raise _FallbackableCallError(error) from exc
 
@@ -322,6 +382,10 @@ class LLMGatewayClient:
     @property
     def last_route_decision(self) -> ModelRouteDecision | None:
         return self._last_route_decision
+
+    @property
+    def last_raw_responses(self) -> tuple[dict[str, Any], ...]:
+        return tuple(dict(response) for response in self._last_raw_responses)
 
 
 class FakeLLMClient:
@@ -371,3 +435,7 @@ class FakeLLMClient:
     @property
     def last_route_decision(self) -> ModelRouteDecision | None:
         return self._last_route_decision
+
+    @property
+    def last_raw_responses(self) -> tuple[dict[str, Any], ...]:
+        return ()
