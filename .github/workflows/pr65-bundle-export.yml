@@ -1,0 +1,42 @@
+name: PR65 bundle export
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout helper branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Fetch PR 65 inputs
+        run: |
+          git fetch origin main feat/research-workflow-handlers --no-tags
+          git cat-file -e 905a829b0e899cd05e5ce3d75864fd19965d5384^{commit}
+
+      - name: Create git bundle
+        run: |
+          git branch pr65-original 905a829b0e899cd05e5ce3d75864fd19965d5384
+          git bundle create openstock-pr65.bundle \
+            refs/heads/pr65-original \
+            refs/remotes/origin/main \
+            refs/remotes/origin/feat/research-workflow-handlers
+          git bundle verify openstock-pr65.bundle
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: openstock-pr65-bundle
+          path: openstock-pr65.bundle
+          if-no-files-found: error
+          retention-days: 1
