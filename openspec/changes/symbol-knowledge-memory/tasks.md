@@ -142,12 +142,12 @@
 - [x] 11.9 Run `make test-vnalpha`. [evidence: command log, 2026-07-13]
 - [x] 11.10 Run `make verify-r4`. [evidence: command log, 2026-07-13]
 - [x] 11.11 Run `packaging/scripts/openstock-verify --ci`. [evidence: command log, 2026-07-13]
-- [ ] 11.12 Attach exact validation evidence to the implementation PR before checking phase gates.
+- [x] 11.12 Attach exact validation evidence to the implementation PR before checking phase gates. [evidence: draft PR #71, exact implementation SHA `3af296419b04155e4aee16d45258f6d458fd8ba2`]
 
 ## Phase gates
 
-- [ ] G1 Domain, migrations, canonical paths, and explicit user-note workflow pass.
-- [ ] G2 Claim authority, correction, conflict, and temporal lifecycle pass.
-- [ ] G3 Compaction, archive, atomicity, and recovery pass.
-- [ ] G4 Retrieval budgets, no-lookahead, and prompt trust pass.
-- [ ] G5 Command/TUI surface and repository-wide regression gates pass.
+- [x] G1 Domain, migrations, canonical paths, and explicit user-note workflow pass. [evidence: 35 focused tests on `3af2964`; draft PR #71]
+- [x] G2 Claim authority, correction, conflict, and temporal lifecycle pass. [evidence: 21 focused tests on `3af2964`; draft PR #71]
+- [x] G3 Compaction, archive, atomicity, and recovery pass. [evidence: 19 focused tests on `3af2964`; draft PR #71]
+- [x] G4 Retrieval budgets, no-lookahead, and prompt trust pass. [evidence: 16 focused tests and five runtime replay cases on `3af2964`; draft PR #71]
+- [x] G5 Command/TUI surface and repository-wide regression gates pass. [evidence: manual command QA, lint, full vnalpha suite, R4, packaging, and strict OpenSpec validation on `3af2964`; draft PR #71]
