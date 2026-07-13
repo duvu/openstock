@@ -21,7 +21,8 @@ def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
             subject="",
             view="deep_analysis",
             artifact_id="analysis.deep_symbol:unavailable",
-            output=kwargs.get("tool_output") or _empty_tool_output("No database connection."),
+            output=kwargs.get("tool_output")
+            or _empty_tool_output("No database connection."),
             data=None,
         )
 

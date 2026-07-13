@@ -61,7 +61,9 @@ def result_to_markup(result: CommandResult) -> RenderableType:
             parts.append(Text(_value_text(rp.content)))
 
     if result.artifacts:
-        artifact_lines = "\n".join(f"  artifact_id: {artifact.name}" for artifact in result.artifacts)
+        artifact_lines = "\n".join(
+            f"  artifact_id: {artifact.name}" for artifact in result.artifacts
+        )
         parts.append(Text.from_markup("\n[bold]Artifacts[/bold]"))
         parts.append(Text(artifact_lines))
 

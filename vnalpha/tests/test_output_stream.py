@@ -158,7 +158,11 @@ async def test_artifact_navigation_restores_visible_transcript() -> None:
         await pilot.pause()
 
         before = _lines(log)
-        assert before == ["Workspace resumed: ws-123", "$ /analyze FPT", "rendered result"]
+        assert before == [
+            "Workspace resumed: ws-123",
+            "$ /analyze FPT",
+            "rendered result",
+        ]
 
         assert output.open_latest_artifact_detail() is True
         await pilot.pause()

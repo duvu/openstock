@@ -165,16 +165,18 @@ def test_materialize_assistant_plan_persists_queued_job_preview_and_request_evid
     assert stored is not None
     assert stored.status.value == "queued"
 
-    artifact_root = tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    artifact_root = (
+        tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    )
     assert (artifact_root / "request.json").exists()
     assert (artifact_root / "generated_code.py").exists()
     assert (artifact_root / "inputs/references.json").exists()
 
     lifecycle = [
         json.loads(line)
-        for line in (artifact_root / "lifecycle.jsonl").read_text(
-            encoding="utf-8"
-        ).splitlines()
+        for line in (artifact_root / "lifecycle.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert [event["event_type"] for event in lifecycle] == ["SANDBOX_JOB_CREATED"]
     assert lifecycle[0]["correlation_id"] == step.arguments["correlation_id"]
@@ -217,12 +219,14 @@ def test_execute_prepared_turn_records_approval_and_returns_validated_artifact_o
     assert answer.summary == "Sandbox calculation completed for approved purpose."
     assert "validated artifacts only" in answer.risks_caveats.lower()
 
-    artifact_root = tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    artifact_root = (
+        tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    )
     lifecycle = [
         json.loads(line)
-        for line in (artifact_root / "lifecycle.jsonl").read_text(
-            encoding="utf-8"
-        ).splitlines()
+        for line in (artifact_root / "lifecycle.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert [event["event_type"] for event in lifecycle] == [
         "SANDBOX_JOB_CREATED",
@@ -233,6 +237,23 @@ def test_execute_prepared_turn_records_approval_and_returns_validated_artifact_o
     manifest = json.loads((artifact_root / "manifest.json").read_text(encoding="utf-8"))
     manifest_paths = {entry["path"] for entry in manifest["entries"]}
     assert "lifecycle.jsonl" in manifest_paths
+
+
+def test_execute_prepared_turn_rejects_reusing_approval_after_terminal_result(
+    tmp_path: Path,
+) -> None:
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn)
+    runner = _WritingRunner()
+    service = _service(tmp_path, conn, docker_runner=runner)
+    plan = service.materialize_assistant_plan(_sandbox_plan("single execution"))
+    prepared = _prepared_turn(plan)
+    service.approve_prepared_turn(prepared)
+    _ = service.execute_prepared_turn(prepared)
+
+    with pytest.raises(ValueError, match="cannot transition from succeeded"):
+        _ = service.execute_prepared_turn(prepared)
+    assert len(runner.calls) == 1
 
 
 def test_execute_prepared_turn_blocks_without_approved_record(tmp_path: Path) -> None:
@@ -250,10 +271,14 @@ def test_execute_prepared_turn_blocks_without_approved_record(tmp_path: Path) ->
         service.execute_prepared_turn(_prepared_turn(plan))
 
     assert runner.calls == []
-    artifact_root = tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    artifact_root = (
+        tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    )
     lifecycle = [
         json.loads(line)
-        for line in (artifact_root / "lifecycle.jsonl").read_text(encoding="utf-8").splitlines()
+        for line in (artifact_root / "lifecycle.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert [event["event_type"] for event in lifecycle] == ["SANDBOX_JOB_CREATED"]
 
@@ -290,12 +315,14 @@ def test_execute_prepared_turn_emits_guard_rejection_without_starting_runner(
     assert runner.calls == []
     assert "rejected" in answer.summary.lower()
 
-    artifact_root = tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    artifact_root = (
+        tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    )
     lifecycle = [
         json.loads(line)
-        for line in (artifact_root / "lifecycle.jsonl").read_text(
-            encoding="utf-8"
-        ).splitlines()
+        for line in (artifact_root / "lifecycle.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert [event["event_type"] for event in lifecycle] == [
         "SANDBOX_JOB_CREATED",
@@ -326,12 +353,14 @@ def test_execute_prepared_turn_marks_runtime_failure_and_does_not_synthesize_str
     assert _STDERR_SECRET not in serialized_answer
     assert "failed" in answer.summary.lower()
 
-    artifact_root = tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    artifact_root = (
+        tmp_path / "runs/run-sandbox-service/sandbox" / step.arguments["job_id"]
+    )
     lifecycle = [
         json.loads(line)
-        for line in (artifact_root / "lifecycle.jsonl").read_text(
-            encoding="utf-8"
-        ).splitlines()
+        for line in (artifact_root / "lifecycle.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert [event["event_type"] for event in lifecycle] == [
         "SANDBOX_JOB_CREATED",

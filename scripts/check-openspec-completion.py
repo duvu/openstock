@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-TASK_RE = re.compile(r"^\s*-\s+\[([ xX])\]\s+\*\*([0-9]+(?:\.[0-9A-Z]+)?)\b")
+TASK_RE = re.compile(r"^\s*-\s+\[([ xX])\]\s+(?:\*\*)?([0-9]+(?:\.[0-9A-Z]+)?)\b")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 SIBLING_RE = re.compile(r"^  \S.*:$")
 REQUIRED_DEFER_FIELDS = (
@@ -131,6 +131,25 @@ def _required_commands(text: str) -> tuple[str, ...]:
     return tuple(commands)
 
 
+def _evidence_task_ids(value: str) -> frozenset[str]:
+    task_ids: set[str] = set()
+    for token in re.split(r"\s*,\s*", value):
+        normalized = token.strip().replace("-", "–")
+        range_match = re.fullmatch(
+            r"([0-9]+)\.([0-9]+)\s*–\s*(?:(\1)\.)?([0-9]+)",
+            normalized,
+        )
+        if range_match is not None:
+            section = range_match.group(1)
+            start = int(range_match.group(2))
+            end = int(range_match.group(4))
+            if start <= end:
+                task_ids.update(f"{section}.{index}" for index in range(start, end + 1))
+            continue
+        task_ids.update(re.findall(r"\b[0-9]+\.(?:[0-9]+|[A-Z][0-9]+)\b", normalized))
+    return frozenset(task_ids)
+
+
 def _pending_validation(text: str) -> bool:
     relevant = text.split("## Evidence row format", 1)[0]
     relevant += text.split("## Phase 1 validation matrix", 1)[-1]
@@ -203,6 +222,22 @@ def verify_change(change_dir: Path) -> VerificationResult:
     if _pending_validation(validation_text):
         messages.append(
             "validation.md still contains pending phase or completion gates"
+        )
+
+    evidenced_task_ids = frozenset(
+        task_id
+        for row in rows
+        if row.exit_code == "0"
+        for task_id in _evidence_task_ids(row.task)
+    )
+    missing_evidence = tuple(
+        task.task_id
+        for task in tasks
+        if task.checked and task.task_id not in evidenced_task_ids
+    )
+    if missing_evidence:
+        messages.append(
+            "checked tasks without evidence: " + ", ".join(missing_evidence)
         )
 
     commands = _required_commands(validation_text)

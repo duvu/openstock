@@ -430,6 +430,9 @@ Research outputs SHALL not emit a reference merely because a default value was u
 
 ### Requirement: Public command and operational event semantics shall be consistent
 
+Public commands SHALL have unambiguous ownership, and operational events SHALL
+be emitted only for real state transitions.
+
 #### Scenario: `/new` creates workspace
 
 - **WHEN** `/new` is submitted
@@ -510,6 +513,9 @@ Default evaluation SHALL not depend on repository-relative paths.
 
 ### Requirement: Evaluation shall support fixture-contract and runtime-replay modes
 
+Evaluation SHALL provide deterministic fixture-contract validation and a
+network-free runtime-replay mode that exercises production orchestration seams.
+
 #### Scenario: Fixture-contract mode remains deterministic
 
 - **GIVEN** typed static observations
@@ -543,6 +549,9 @@ Default evaluation SHALL not depend on repository-relative paths.
 ---
 
 ### Requirement: Root commands and CI shall enforce all hardening gates
+
+Root operator commands and CI SHALL fail closed when any required hygiene,
+quality, test, packaging, evaluation, or OpenSpec gate fails.
 
 #### Scenario: Root Make targets exist
 
@@ -605,6 +614,9 @@ A deterministic verifier SHALL prevent task and validation state from diverging.
 ---
 
 ### Requirement: Final hardening validation shall pass as one reproducible gate
+
+The final implementation SHA SHALL pass the complete reproducible hardening
+matrix and retain evidence linked to that exact SHA.
 
 #### Scenario: `verify-hardening` passes
 

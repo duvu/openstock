@@ -5,15 +5,15 @@ from vnalpha.research_automation.models import (
     DatasetRef,
     OfflineEventStudy,
     PatternScan,
-    ResearchArtifactLifecycleState,
     ResearchArtifact,
+    ResearchArtifactLifecycleState,
     ResearchArtifactStatus,
     ResearchArtifactType,
     ResearchExperiment,
     ResearchFeature,
     ResearchHypothesis,
-    now_utc,
     new_research_artifact_id,
+    now_utc,
 )
 
 __all__ = [

@@ -114,12 +114,8 @@ def workflow_metadata(
         "workflow_status": "partial"
         if isinstance(missing_data, list) and missing_data
         else "complete",
-        "missing_data": list(missing_data)
-        if isinstance(missing_data, list)
-        else [],
-        "artifact_refs": list(artifact_refs)
-        if isinstance(artifact_refs, list)
-        else [],
+        "missing_data": list(missing_data) if isinstance(missing_data, list) else [],
+        "artifact_refs": list(artifact_refs) if isinstance(artifact_refs, list) else [],
         "caveats": list(caveats) if isinstance(caveats, list) else [],
     }
 

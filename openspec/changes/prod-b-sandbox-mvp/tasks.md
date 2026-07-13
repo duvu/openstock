@@ -2,12 +2,12 @@
 
 ## 0. Governance
 
-- [ ] 0.1 Keep all sandbox behavior inside the read-only research boundary.
-- [ ] 0.2 Deny broker/order/account/portfolio/margin/transfer/allocation/trading execution capabilities.
-- [ ] 0.3 Do not expose unrestricted shell access.
-- [ ] 0.4 Do not allow network access in sandbox MVP, enforced through Docker `--network none`.
-- [ ] 0.5 Preserve redaction-by-default logging and record explicit approval for every generated-code execution.
-- [ ] 0.6 Persist enough canonical evidence to reproduce and audit every sandbox result, including Docker preflight, image digest, effective limits, mount and security policy, generated-code hash, inputs, guard, execution, validation, and lifecycle results.
+- [x] 0.1 Keep all sandbox behavior inside the read-only research boundary.
+- [x] 0.2 Deny broker/order/account/portfolio/margin/transfer/allocation/trading execution capabilities.
+- [x] 0.3 Do not expose unrestricted shell access.
+- [x] 0.4 Do not allow network access in sandbox MVP, enforced through Docker `--network none`.
+- [x] 0.5 Preserve redaction-by-default logging and record explicit approval for every generated-code execution.
+- [x] 0.6 Persist enough canonical evidence to reproduce and audit every sandbox result, including Docker preflight, image digest, effective limits, mount and security policy, generated-code hash, inputs, guard, execution, validation, and lifecycle results.
 
 ## 1. Sandbox domain model
 
@@ -79,39 +79,39 @@
 - [x] 7.1 Correct static guard analysis to parse and compile complete Python modules without execution, retaining all deny rules.
 - [x] 7.2 Add immutable sandbox approval persistence bound to job ID, plan digest, generated-code digest, approved input references, correlation ID, approver, and timestamp.
 - [x] 7.3 Extend intent/planning to identify sandbox-required calculations and create a non-autonomous `sandbox.run_research_code` plan step.
-- [ ] 7.4 Preview purpose, generated-code summary and digest, input dataset list, limits, and image digest; require explicit approval in every chat mode.
-- [ ] 7.5 Add one Docker-only sandbox execution service that verifies the exact approval binding and executes only the retained approved SandboxJob after preflight.
-- [ ] 7.6 Synthesize final answer from validated sandbox outputs only.
+- [x] 7.4 Preview purpose, generated-code summary and digest, input dataset list, limits, and image digest; require explicit approval in every chat mode.
+- [x] 7.5 Add one Docker-only sandbox execution service that verifies the exact approval binding and executes only the retained approved SandboxJob after preflight.
+- [x] 7.6 Synthesize final answer from validated sandbox outputs only.
 
 ## 8. Observability
 
-- [ ] 8.1 Emit `SANDBOX_JOB_CREATED`.
-- [ ] 8.2 Emit `SANDBOX_GUARD_REJECTED` when guard fails.
-- [ ] 8.3 Emit `SANDBOX_JOB_STARTED`.
-- [ ] 8.4 Emit `SANDBOX_JOB_SUCCEEDED`.
-- [ ] 8.5 Emit `SANDBOX_JOB_FAILED`.
-- [ ] 8.6 Include correlation ID in every sandbox event.
-- [ ] 8.7 Preserve redaction-by-default.
+- [x] 8.1 Emit `SANDBOX_JOB_CREATED`.
+- [x] 8.2 Emit `SANDBOX_GUARD_REJECTED` when guard fails.
+- [x] 8.3 Emit `SANDBOX_JOB_STARTED`.
+- [x] 8.4 Emit `SANDBOX_JOB_SUCCEEDED`.
+- [x] 8.5 Emit `SANDBOX_JOB_FAILED`.
+- [x] 8.6 Include correlation ID in every sandbox event.
+- [x] 8.7 Preserve redaction-by-default.
 
 ## 9. Tests
 
-- [ ] 9.1 Test safe generated calculation succeeds only after explicit approval in the hardened Docker runtime.
-- [ ] 9.2 Test network import is rejected.
-- [ ] 9.3 Test shell/subprocess pattern is rejected.
-- [ ] 9.4 Test write outside output directory is rejected.
-- [ ] 9.5 Test broker/order/account/trading references are rejected.
-- [ ] 9.6 Test missing output artifact fails validation and canonical evidence is persisted.
-- [ ] 9.7 Test `/sandbox run` lifecycle events.
-- [ ] 9.8 Test `/sandbox status` rendering.
-- [ ] 9.9 Test artifact manifest and canonical container-security evidence persistence.
+- [x] 9.1 Test safe generated calculation succeeds only after explicit approval in the hardened Docker runtime.
+- [x] 9.2 Test network import is rejected.
+- [x] 9.3 Test shell/subprocess pattern is rejected.
+- [x] 9.4 Test write outside output directory is rejected.
+- [x] 9.5 Test broker/order/account/trading references are rejected.
+- [x] 9.6 Test missing output artifact fails validation and canonical evidence is persisted.
+- [x] 9.7 Test `/sandbox run` lifecycle events.
+- [x] 9.8 Test `/sandbox status` rendering.
+- [x] 9.9 Test artifact manifest and canonical container-security evidence persistence.
 
 ## 10. Documentation and validation
 
 - [x] 10.1 Add sandbox architecture docs.
 - [x] 10.2 Document safe/unsafe imports and patterns as defense-in-depth controls.
 - [x] 10.3 Document the read-only research boundary, Linux-only Docker contract, approval gate, and no-fallback behavior for sandbox.
-- [ ] 10.4 Run `make test-vnalpha`.
-- [ ] 10.5 Run `make lint-vnalpha`.
+- [x] 10.4 Run `make test-vnalpha`.
+- [x] 10.5 Run `make lint-vnalpha`.
 - [x] 10.6 Run `make verify-r4`.
-- [ ] 10.7 Run `openstock-verify --ci`.
-- [ ] 10.8 Attach validation evidence to PR.
+- [x] 10.7 Run `openstock-verify --ci`.
+- [x] 10.8 Attach validation evidence to PR.

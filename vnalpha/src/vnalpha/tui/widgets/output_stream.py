@@ -187,7 +187,9 @@ if _TEXTUAL_AVAILABLE:
         def open_latest_artifact_detail(self) -> bool:
             if not self._latest_artifact_states:
                 return False
-            return self.open_artifact_detail(self._latest_artifact_states[-1].artifact_id)
+            return self.open_artifact_detail(
+                self._latest_artifact_states[-1].artifact_id
+            )
 
         def open_artifact_detail(self, artifact_id: str) -> bool:
             state = self._artifact_state(artifact_id)
@@ -398,7 +400,9 @@ if _TEXTUAL_AVAILABLE:
                     return state
             return None
 
-        def _artifact_renderable(self, state: "ArtifactDetailState") -> "RenderableType":
+        def _artifact_renderable(
+            self, state: "ArtifactDetailState"
+        ) -> "RenderableType":
             from vnalpha.tui.research_navigation import artifact_detail_renderable
 
             return artifact_detail_renderable(state)
@@ -495,7 +499,9 @@ else:
         def append_assistant_answer(self, answer: "AssistantAnswerMessage") -> None:
             del answer
 
-        def register_command_result(self, command: str, result: "CommandResult") -> None:
+        def register_command_result(
+            self, command: str, result: "CommandResult"
+        ) -> None:
             del command, result
 
         def open_latest_artifact_detail(self) -> bool:

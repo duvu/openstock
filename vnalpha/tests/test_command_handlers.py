@@ -314,7 +314,9 @@ class TestResearchPlanHandler:
 
 
 class TestSetupEvidenceHandler:
-    def test_setup_evidence_returns_empty_result_without_history(self, conn_with_data, reg):
+    def test_setup_evidence_returns_empty_result_without_history(
+        self, conn_with_data, reg
+    ):
         conn, today = conn_with_data
         parsed = parse(f"/setup-evidence ACCUMULATION_BASE --date {today}")
         result = reg.execute(

@@ -60,6 +60,17 @@ def test_complete_change_returns_zero(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
+def test_plain_task_format_is_supported(tmp_path: Path) -> None:
+    module = _module()
+    change = _write_change(
+        tmp_path,
+        "- [x] 1.1 Do the thing.\n",
+        _validation(),
+    )
+
+    assert module.verify_change(change).exit_code == 0
+
+
 def test_unchecked_completion_ready_change_returns_one(tmp_path: Path) -> None:
     module = _module()
     (tmp_path.parent / "active-changes.yaml").write_text(
@@ -119,6 +130,33 @@ def test_missing_required_command_evidence_returns_one(tmp_path: Path) -> None:
     result = module.verify_change(change)
     assert result.exit_code == 1
     assert "required command" in " ".join(result.messages)
+
+
+def test_checked_task_without_matching_evidence_returns_one(tmp_path: Path) -> None:
+    module = _module()
+    change = _write_change(
+        tmp_path,
+        "- [x] **1.1 First task.**\n- [x] **1.2 Second task.**\n",
+        _validation(),
+    )
+
+    result = module.verify_change(change)
+
+    assert result.exit_code == 1
+    assert "checked tasks without evidence: 1.2" in " ".join(result.messages)
+
+
+def test_evidence_range_covers_each_checked_task(tmp_path: Path) -> None:
+    module = _module()
+    change = _write_change(
+        tmp_path,
+        "- [x] **1.1 First task.**\n- [x] **1.2 Second task.**\n",
+        _validation().replace("| 1.1 |", "| 1.1–1.2 |"),
+    )
+
+    result = module.verify_change(change)
+
+    assert result.exit_code == 0
 
 
 def test_archived_change_without_required_evidence_returns_one(tmp_path: Path) -> None:
