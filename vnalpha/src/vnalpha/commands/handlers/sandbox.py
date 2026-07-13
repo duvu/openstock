@@ -48,12 +48,15 @@ def _run_preview(parsed: ParsedCommand, *, conn, surface: str) -> CommandResult:
         raise CommandValidationError("/sandbox run requires a purpose.")
     from vnalpha.sandbox.execution_service import SandboxExecutionService
 
-    preview = SandboxExecutionService(conn, surface=surface).prepare_job(purpose)
+    prepared = SandboxExecutionService(conn, surface=surface).prepare_turn(
+        purpose, raw_request=parsed.raw_text
+    )
+    arguments = prepared.plan.steps[0].arguments
     return CommandResult(
         status="SUCCESS",
         title="/sandbox run",
         summary=(
-            f"Sandbox job {preview.job.job_id} is queued and awaiting approval; "
+            f"Sandbox job {arguments['job_id']} is queued and awaiting approval; "
             "execution has not started."
         ),
         panels=[
@@ -79,6 +82,7 @@ def _run_preview(parsed: ParsedCommand, *, conn, surface: str) -> CommandResult:
                 },
             )
         ],
+        pending_prepared_turn=prepared,
     )
 
 

@@ -24,6 +24,7 @@ from vnalpha.sandbox.docker_runner import (
     parse_docker_image_reference,
 )
 from vnalpha.sandbox.repository import SandboxJobRepository
+from vnalpha.sandbox.static_guard import SandboxStaticGuard
 from vnalpha.warehouse.migrations import run_migrations
 
 _IMAGE = parse_docker_image_reference(
@@ -145,9 +146,7 @@ def test_materialize_assistant_plan_persists_queued_job_preview_and_request_evid
     run_migrations(conn=conn)
     service = _service(tmp_path, conn)
 
-    plan = service.materialize_assistant_plan(
-        _sandbox_plan("compare persisted datasets")
-    )
+    plan = service.materialize_assistant_plan(_sandbox_plan("mean of 1, 2, 3"))
 
     step = plan.steps[0]
     assert step.arguments["job_id"]
@@ -182,6 +181,27 @@ def test_materialize_assistant_plan_persists_queued_job_preview_and_request_evid
     assert lifecycle[0]["correlation_id"] == step.arguments["correlation_id"]
 
 
+def test_prepare_turn_persists_exact_materialized_sandbox_plan(tmp_path: Path) -> None:
+    # Given: a migrated warehouse and a supported sandbox purpose
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn)
+    service = _service(tmp_path, conn)
+
+    # When: the slash-command preparation path creates an approvable turn
+    prepared = service.prepare_turn(
+        "mean of 1, 2, 3", raw_request="/sandbox run mean of 1, 2, 3"
+    )
+
+    # Then: the exact materialized plan is hash-bound and durably prepared
+    assert prepared.plan_hash == plan_hash(prepared.plan)
+    assert prepared.plan.steps[0].arguments["job_id"]
+    row = conn.execute(
+        "SELECT plan_hash, status FROM prepared_assistant_turn WHERE prepared_turn_id = ?",
+        [prepared.prepared_turn_id],
+    ).fetchone()
+    assert row == (prepared.plan_hash, "PREPARED")
+
+
 def test_execute_prepared_turn_records_approval_and_returns_validated_artifact_only_answer(
     tmp_path: Path,
 ) -> None:
@@ -190,7 +210,7 @@ def test_execute_prepared_turn_records_approval_and_returns_validated_artifact_o
     runner = _WritingRunner()
     service = _service(tmp_path, conn, docker_runner=runner)
 
-    plan = service.materialize_assistant_plan(_sandbox_plan("approved purpose"))
+    plan = service.materialize_assistant_plan(_sandbox_plan("mean of 1, 2, 3"))
     prepared = _prepared_turn(plan)
     service.approve_prepared_turn(prepared)
 
@@ -262,7 +282,7 @@ def test_execute_prepared_turn_blocks_without_approved_record(tmp_path: Path) ->
     runner = _WritingRunner()
     service = _service(tmp_path, conn, docker_runner=runner)
 
-    plan = service.materialize_assistant_plan(_sandbox_plan("needs approval"))
+    plan = service.materialize_assistant_plan(_sandbox_plan("mean of 1, 2, 3"))
     step = plan.steps[0]
     with pytest.raises(
         ValueError,
@@ -281,6 +301,41 @@ def test_execute_prepared_turn_blocks_without_approved_record(tmp_path: Path) ->
         .splitlines()
     ]
     assert [event["event_type"] for event in lifecycle] == ["SANDBOX_JOB_CREATED"]
+
+
+def test_execute_prepared_turn_claims_job_before_static_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given: an approved job and probes around claim and guard evaluation
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn)
+    runner = _WritingRunner()
+    service = _service(tmp_path, conn, docker_runner=runner)
+    plan = service.materialize_assistant_plan(_sandbox_plan("mean of 1, 2, 3"))
+    prepared = _prepared_turn(plan)
+    service.approve_prepared_turn(prepared)
+    claimed = False
+    original_claim = SandboxJobRepository.claim_for_validation
+    original_evaluate = SandboxStaticGuard.evaluate
+
+    def recording_claim(repository, job_id) -> None:
+        nonlocal claimed
+        original_claim(repository, job_id)
+        claimed = True
+
+    def guarded_evaluate(code: str):
+        assert claimed
+        return original_evaluate(code)
+
+    monkeypatch.setattr(SandboxJobRepository, "claim_for_validation", recording_claim)
+    monkeypatch.setattr(SandboxStaticGuard, "evaluate", guarded_evaluate)
+
+    # When: the exact prepared turn executes
+    _ = service.execute_prepared_turn(prepared)
+
+    # Then: the atomic claim was consumed before any guard or runner work
+    assert claimed
+    assert len(runner.calls) == 1
 
 
 def test_execute_prepared_turn_emits_guard_rejection_without_starting_runner(
@@ -338,7 +393,7 @@ def test_execute_prepared_turn_marks_runtime_failure_and_does_not_synthesize_str
     runner = _RuntimeFailureRunner()
     service = _service(tmp_path, conn, docker_runner=runner)
 
-    plan = service.materialize_assistant_plan(_sandbox_plan("runtime failure purpose"))
+    plan = service.materialize_assistant_plan(_sandbox_plan("mean of 1, 2, 3"))
     prepared = _prepared_turn(plan)
     service.approve_prepared_turn(prepared)
     answer = service.execute_prepared_turn(prepared)

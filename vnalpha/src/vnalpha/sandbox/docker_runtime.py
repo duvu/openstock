@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final, Protocol, final
 
@@ -73,6 +73,7 @@ class DockerExecutionResult:
     stdout_truncated: bool = False
     stderr_truncated: bool = False
     cleanup_succeeded: bool | None = None
+    preflight: DockerPreflightResult | None = None
 
 
 class DockerCommand(Protocol):
@@ -183,7 +184,9 @@ class DockerRunner:
 
         preflight = self.preflight(request.image)
         if preflight.failure_code is not None:
-            return _failed_execution(preflight.failure_code, preflight.detail)
+            return _failed_execution(
+                preflight.failure_code, preflight.detail, preflight=preflight
+            )
         container_name = docker_container_name(request)
         try:
             execution = self.command.invoke(
@@ -192,12 +195,15 @@ class DockerRunner:
             )
         except FileNotFoundError:
             return _failed_execution(
-                DockerFailureCode.DOCKER_NOT_FOUND, "Docker client is not available"
+                DockerFailureCode.DOCKER_NOT_FOUND,
+                "Docker client is not available",
+                preflight=preflight,
             )
         except OSError:
             return _failed_execution(
                 DockerFailureCode.DOCKER_LAUNCH_FAILED,
                 "Docker command could not be launched",
+                preflight=preflight,
             )
         except subprocess.TimeoutExpired:
             return DockerExecutionResult(
@@ -207,9 +213,10 @@ class DockerRunner:
                 failure_code=DockerFailureCode.RUNTIME_TIMEOUT,
                 detail="Docker execution timed out",
                 cleanup_succeeded=self._kill_container(container_name),
+                preflight=preflight,
             )
         if execution.return_code == 0:
-            return execution
+            return replace(execution, preflight=preflight)
         return DockerExecutionResult(
             return_code=execution.return_code,
             stdout=execution.stdout,
@@ -218,6 +225,7 @@ class DockerRunner:
             detail="Docker execution failed",
             stdout_truncated=execution.stdout_truncated,
             stderr_truncated=execution.stderr_truncated,
+            preflight=preflight,
         )
 
     def _kill_container(self, container_name: DockerContainerName) -> bool:
@@ -246,7 +254,10 @@ def _preflight_failure(
 
 
 def _failed_execution(
-    failure_code: DockerFailureCode, detail: str
+    failure_code: DockerFailureCode,
+    detail: str,
+    *,
+    preflight: DockerPreflightResult | None = None,
 ) -> DockerExecutionResult:
     return DockerExecutionResult(
         return_code=_FAILED_RETURN_CODE,
@@ -254,4 +265,5 @@ def _failed_execution(
         stderr=b"",
         failure_code=failure_code,
         detail=detail,
+        preflight=preflight,
     )

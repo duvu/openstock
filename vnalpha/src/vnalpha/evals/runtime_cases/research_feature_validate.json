@@ -1,0 +1,8 @@
+{
+  "case_id": "research_feature_validate",
+  "request": {"current_user_prompt": "Validate the rs_20 research feature.", "workspace_context": null, "date": null},
+  "classifier_response": {"intent": "validate_feature", "confidence": 0.99, "entities": {"feature": "rs_20"}, "needs_clarification": false, "clarification_question": null, "safety_flags": []},
+  "synthesis_response": {"summary": "The persisted feature passed schema and coverage validation.", "basis": "Deterministic validation checked rows, symbols, dates, and quality.", "risks_caveats": "Research-only validation; source quality can change.", "tool_trace_summary": "research.feature.validate completed.", "missing_data": [], "grounded_source_refs": ["fixture://runtime/research_feature_validate"], "research_metadata": {}},
+  "tool_outputs": [{"tool_name": "research.feature.validate", "arguments": {"feature": "rs_20"}, "data": {"artifact_id": "feature-1", "schema_valid": true, "symbol_count": 30, "row_count": 600, "period_start": "2026-01-01", "period_end": "2026-07-01", "missing_ratio": 0.0, "quality_status": "good", "warnings": []}, "artifact_refs": ["fixture://runtime/research_feature_validate"], "summary": "Seeded feature validation.", "warnings": []}],
+  "expected": {"outcome": "answer", "intent": "validate_feature", "plan": [{"tool_name": "research.feature.validate", "arguments": {"feature": "rs_20"}}], "successful_trace_tools": ["research.feature.validate"], "groundedness_status": "PASS", "policy_status": "PASS", "fallback_used": false, "audit_status": "persisted", "required_missing_data": [], "forbidden_source_refs": [], "claim_source_refs": {}}
+}

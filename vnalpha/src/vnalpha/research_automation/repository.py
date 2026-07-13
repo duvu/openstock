@@ -139,7 +139,7 @@ class ResearchAutomationRepository:
         self, artifact_id: str, state: ResearchArtifactLifecycleState
     ) -> None:
         self._conn.execute(
-            "UPDATE research_artifact SET lifecycle_state = ?, updated_at_ts = current_timestamp WHERE artifact_id = ?",
+            "UPDATE research_artifact SET lifecycle_state = ?, updated_at_ts = now() WHERE artifact_id = ?",
             [state.value, artifact_id],
         )
 
@@ -221,7 +221,13 @@ class ResearchAutomationRepository:
                 artifact.run_id,
                 artifact.correlation_id,
                 artifact.status.value,
+                artifact.lifecycle_state.value,
                 artifact.sandbox_job_id,
+                artifact.related_experiment_id,
+                artifact.related_feature_id,
+                artifact.related_hypothesis_id,
+                artifact.related_pattern_id,
+                artifact.related_offline_event_study_id,
                 _serialize_payload(_dataset_refs_payload(artifact.input_datasets)),
                 _serialize_payload(artifact.parameters),
                 _serialize_payload(artifact.metrics),
@@ -237,8 +243,8 @@ class ResearchAutomationRepository:
                 _as_path(outputs_payload.get("validation_json")),
                 _as_path(outputs_payload.get("reproducibility_manifest")),
                 _as_path(outputs_payload.get("generated_code_path")),
-                datetime.utcnow(),
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
+                datetime.now(timezone.utc),
             ],
         )
 
@@ -263,7 +269,20 @@ def _dataset_refs_payload(dataset_refs: tuple[DatasetRef, ...]) -> list[dict[str
 
 
 def _serialize_payload(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        default=_json_compatible,
+    )
+
+
+def _json_compatible(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, tuple):
+        return list(value)
+    raise TypeError(f"Unsupported research artifact JSON value: {type(value).__name__}")
 
 
 def _coerce_lifecycle_state(
@@ -339,7 +358,7 @@ INSERT INTO research_artifact (
     result_path, summary_path, lineage_path, validation_path,
     reproducibility_manifest_path, generated_code_path, created_at_ts, updated_at_ts
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 ) ON CONFLICT (artifact_id) DO UPDATE SET
     artifact_type = excluded.artifact_type,
     name = excluded.name,
@@ -415,7 +434,7 @@ ON CONFLICT (artifact_id) DO UPDATE SET
     end_date = excluded.end_date,
     horizon_sessions = excluded.horizon_sessions,
     definition_json = excluded.definition_json,
-    updated_at_ts = current_timestamp
+    updated_at_ts = now()
 """
 
 _UPSERT_FEATURE_SQL = """
@@ -427,7 +446,7 @@ ON CONFLICT (artifact_id) DO UPDATE SET
     feature_expression = excluded.feature_expression,
     universe = excluded.universe,
     definition_json = excluded.definition_json,
-    updated_at_ts = current_timestamp
+    updated_at_ts = now()
 """
 
 _UPSERT_HYPOTHESIS_SQL = """
@@ -441,7 +460,7 @@ ON CONFLICT (artifact_id) DO UPDATE SET
     horizon_sessions = excluded.horizon_sessions,
     event_condition = excluded.event_condition,
     definition_json = excluded.definition_json,
-    updated_at_ts = current_timestamp
+    updated_at_ts = now()
 """
 
 _UPSERT_PATTERN_SCAN_SQL = """
@@ -453,7 +472,7 @@ ON CONFLICT (artifact_id) DO UPDATE SET
     universe = excluded.universe,
     scan_date = excluded.scan_date,
     definition_json = excluded.definition_json,
-    updated_at_ts = current_timestamp
+    updated_at_ts = now()
 """
 
 _UPSERT_OFFLINE_EVENT_STUDY_SQL = """
@@ -470,5 +489,5 @@ ON CONFLICT (artifact_id) DO UPDATE SET
     start_date = excluded.start_date,
     end_date = excluded.end_date,
     definition_json = excluded.definition_json,
-    updated_at_ts = current_timestamp
+    updated_at_ts = now()
 """

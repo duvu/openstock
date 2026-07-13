@@ -61,7 +61,7 @@ def test_wheel_when_built_contains_the_complete_golden_corpus(tmp_path: Path) ->
             and name.endswith(".json")
         }
     assert len(golden_entries) == 10
-    assert len(runtime_entries) == 10
+    assert len(runtime_entries) == 16
 
 
 def test_installed_wheel_when_cli_runs_both_offline_evals(tmp_path: Path) -> None:

@@ -185,7 +185,36 @@ def test_run_does_not_invoke_docker_run_after_failed_preflight(tmp_path: Path) -
 
     # Then
     assert result.failure_code is docker_runner.DockerFailureCode.DOCKER_NOT_FOUND
+    assert result.preflight is not None
+    assert (
+        result.preflight.failure_code
+        is docker_runner.DockerFailureCode.DOCKER_NOT_FOUND
+    )
     assert [call.argv for call in command.calls] == [_VERSION_ARGV]
+
+
+def test_run_retains_successful_preflight_with_execution_result(tmp_path: Path) -> None:
+    # Given: a Linux daemon, local digest image, and successful container run
+    request = _request(tmp_path)
+    command = _FakeDockerCommand(
+        iter(
+            (
+                DockerExecutionResult(return_code=0, stdout=b"linux\n", stderr=b""),
+                DockerExecutionResult(
+                    return_code=0, stdout=b"sha256:local", stderr=b""
+                ),
+                DockerExecutionResult(return_code=0, stdout=b"result", stderr=b""),
+            )
+        )
+    )
+
+    # When: the hardened runner completes
+    result = docker_runner.DockerRunner(command, "Linux").run(request)
+
+    # Then: the exact successful preflight remains attached for persistence
+    assert result.preflight is not None
+    assert result.preflight.failure_code is None
+    assert result.preflight.server_os == "linux"
 
 
 def test_run_kills_the_deterministic_container_after_a_runtime_timeout(

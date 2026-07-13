@@ -295,8 +295,8 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 - [x] **4.G2 Run runtime-replay eval with all seed/negative cases.** [depends: 4.11–4.22]
 - [x] **4.G3 Run installed wheel/sdist/deb evaluation.** [depends: 4.7–4.10]
 - [x] **4.G4 Run complete CI-equivalent command matrix locally or in CI.** [depends: 4.23–4.34]
-- [x] **4.G5 Run OpenSpec completion verifier against this change.** [depends: 4.35–4.42]
-- [x] **4.G6 Record Phase 4 PASS in `validation.md`.** [depends: 4.G1–4.G5]
+- [ ] **4.G5 Run OpenSpec completion verifier successfully against this change at the exact final implementation SHA.** [depends: 4.35–4.42]
+- [ ] **4.G6 Record Phase 4 PASS in `validation.md`.** [depends: 4.G1–4.G5]
 
 # 5. Documentation, migration, and operator experience
 

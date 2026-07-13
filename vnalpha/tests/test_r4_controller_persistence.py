@@ -135,19 +135,19 @@ class TestNaturalLanguagePersistence:
 
 
 class TestSlashCommandPersistence:
-    def _make_fake_result(self, *, status="OK", research_session_id=None):
-        class FakeResult:
-            pass
+    def _make_fake_result(self, *, status="SUCCESS", research_session_id=None):
+        from vnalpha.commands.models import CommandResult
 
-        r = FakeResult()
-        r.status = status
-        r.title = "Scan done"
-        r.summary = "Found 3 candidates"
-        r.tables = []
-        r.metadata = (
-            {"research_session_id": research_session_id} if research_session_id else {}
+        return CommandResult(
+            status=status,
+            title="Scan done",
+            summary="Found 3 candidates",
+            metadata=(
+                {"research_session_id": research_session_id}
+                if research_session_id
+                else {}
+            ),
         )
-        return r
 
     def test_slash_command_input_persisted(self, conn):
         ctrl, sid = _make_ctrl(conn)

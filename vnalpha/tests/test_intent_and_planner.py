@@ -24,6 +24,7 @@ from vnalpha.assistant.models import (
     ToolPlanStep,
 )
 from vnalpha.assistant.planner import PlanBuilder, _validate_plan
+from vnalpha.assistant.response_json import parse_json_response
 from vnalpha.assistant.response_parser import parse_intent_response
 from vnalpha.assistant.tool_policy import SAFE_TOOLS
 
@@ -178,6 +179,16 @@ class TestIntentClassifier:
         with pytest.raises(IntentClassificationError, match="Invalid JSON"):
             classifier.classify("Show me something")
 
+    def test_llm_invalid_json_fails_after_retry(self):
+        responses = [("not valid json {{{{", {}), ("still bad {{{{", {})]
+        classifier = _make_classifier(responses)
+        with pytest.raises(
+            IntentClassificationError, match="Invalid JSON from classifier"
+        ):
+            classifier.classify("Show me something")
+        assert len(classifier._client.call_metadata) == 2
+        assert classifier._client.call_metadata[1]["model_profile"] == "default"
+
 
 def test_parse_intent_response_recovers_markdown_fence() -> None:
     response = """```json\n{"intent": "scan_candidates", "confidence": 0.92, "entities": {}}\n```"""
@@ -198,6 +209,11 @@ def test_parse_intent_response_maps_legacy_json_intents() -> None:
     parsed = parse_intent_response(response)
     assert parsed.intent == "explain_symbol"
     assert parsed.entities == {"symbol": "FPT"}
+
+
+def test_parse_json_response_rejects_non_object_payload() -> None:
+    with pytest.raises(IntentClassificationError, match="Invalid JSON from classifier"):
+        parse_json_response("[]", context="classifier")
 
     def test_classifier_populates_entities(self):
         entities = {"symbol": "VNM", "date": "2025-01-15"}

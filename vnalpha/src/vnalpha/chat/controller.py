@@ -163,6 +163,12 @@ class ChatController:
             else:
                 result = executor.execute(raw)
             self._render_command_result(result)
+            if result.pending_prepared_turn is not None:
+                self._pending_prepared_turn = result.pending_prepared_turn
+                self._pending_plan = result.pending_prepared_turn.plan
+                self._pending_plan_turn_context = {
+                    "prepared_turn_id": result.pending_prepared_turn.prepared_turn_id
+                }
             research_session_id = None
             metadata = getattr(result, "metadata", None)
             if metadata and isinstance(metadata, dict):

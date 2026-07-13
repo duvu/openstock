@@ -1,5 +1,9 @@
 """Research automation domain models and persistence helpers."""
 
+from vnalpha.research_automation.dataset_resolver import (
+    DatasetResolution,
+    DatasetResolver,
+)
 from vnalpha.research_automation.models import (
     ArtifactOutputs,
     DatasetRef,
@@ -19,6 +23,8 @@ from vnalpha.research_automation.models import (
 __all__ = [
     "ArtifactOutputs",
     "DatasetRef",
+    "DatasetResolution",
+    "DatasetResolver",
     "OfflineEventStudy",
     "PatternScan",
     "ResearchArtifact",

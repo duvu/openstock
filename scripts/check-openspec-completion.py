@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,10 @@ from pathlib import Path
 
 TASK_RE = re.compile(r"^\s*-\s+\[([ xX])\]\s+(?:\*\*)?([0-9]+(?:\.[0-9A-Z]+)?)\b")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+FINAL_SHA_RE = re.compile(
+    r"^Final implementation SHA:\s*`?([^`\s]+)`?\s*$", re.MULTILINE
+)
 SIBLING_RE = re.compile(r"^  \S.*:$")
 REQUIRED_DEFER_FIELDS = (
     "Task ID",
@@ -161,6 +166,45 @@ def _pending_validation(text: str) -> bool:
     )
 
 
+def _final_implementation_sha(text: str) -> str | None:
+    match = FINAL_SHA_RE.search(text)
+    if match is None or FULL_SHA_RE.fullmatch(match.group(1)) is None:
+        return None
+    return match.group(1)
+
+
+def _evidence_commit(value: str) -> str:
+    return value.strip().strip("`")
+
+
+def _normalized_command(value: str) -> str:
+    return " ".join(value.strip().strip("`").split())
+
+
+def _commit_exists(change_dir: Path, commit: str) -> bool:
+    repository = subprocess.run(
+        ("git", "-C", str(change_dir), "rev-parse", "--show-toplevel"),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if repository.returncode != 0:
+        return False
+    result = subprocess.run(
+        (
+            "git",
+            "-C",
+            repository.stdout.strip(),
+            "cat-file",
+            "-e",
+            f"{commit}^{{commit}}",
+        ),
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
 def _registry_status(change_dir: Path) -> str | None:
     registry = change_dir.parents[1] / "active-changes.yaml"
     if not registry.is_file():
@@ -241,11 +285,49 @@ def verify_change(change_dir: Path) -> VerificationResult:
         )
 
     commands = _required_commands(validation_text)
-    evidence_commands = tuple(row.command for row in rows if row.exit_code == "0")
+    completion_candidate = all(task.checked or task.deferred for task in tasks)
+    final_sha = (
+        _final_implementation_sha(validation_text) if completion_candidate else None
+    )
+    if completion_candidate and final_sha is None:
+        messages.append(
+            "completion requires an exact 40-character Final implementation SHA"
+        )
+    elif final_sha is not None and not _commit_exists(change_dir, final_sha):
+        messages.append(
+            f"Final implementation SHA does not name a commit in this repository: {final_sha}"
+        )
+    if completion_candidate:
+        for row in rows:
+            if row.exit_code != "0":
+                continue
+            commit = _evidence_commit(row.commit)
+            if FULL_SHA_RE.fullmatch(commit) is None:
+                messages.append(
+                    f"successful evidence row requires an exact commit SHA: {row.task}"
+                )
+            elif not _commit_exists(change_dir, commit):
+                messages.append(
+                    "successful evidence commit does not name a commit in this "
+                    f"repository: {commit}"
+                )
     for command in commands:
-        if not any(command in evidence for evidence in evidence_commands):
+        matching_rows = tuple(
+            row
+            for row in rows
+            if row.exit_code == "0"
+            and _normalized_command(row.command) == _normalized_command(command)
+        )
+        if not matching_rows:
             messages.append(
                 f"required command has no successful evidence row: {command}"
+            )
+        elif final_sha is not None and not any(
+            _evidence_commit(row.commit) == final_sha for row in matching_rows
+        ):
+            messages.append(
+                "required command has no evidence at the exact final implementation SHA: "
+                + command
             )
     defer_errors = _defer_errors(tasks_text, tasks)
     if defer_errors:

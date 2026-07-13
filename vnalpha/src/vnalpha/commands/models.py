@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal, assert_never
+from typing import TYPE_CHECKING, Any, Literal, assert_never
+
+if TYPE_CHECKING:
+    from vnalpha.assistant.models import PreparedAssistantTurn
 
 
 class CommandStatus(str, Enum):
@@ -106,6 +109,7 @@ class CommandResult:
     warnings: list[str] = field(default_factory=list)
     error: CommandError | None = None
     metadata: dict[str, Any] | None = None
+    pending_prepared_turn: PreparedAssistantTurn | None = None
 
     def __post_init__(self) -> None:
         self.status = CommandStatus(self.status)

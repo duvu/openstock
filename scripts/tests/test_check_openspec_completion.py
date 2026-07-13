@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
+
+_FINAL_SHA = "a" * 40
 
 
 def _module():
@@ -16,10 +19,43 @@ def _module():
 
 
 def _write_change(tmp_path: Path, tasks: str, validation: str) -> Path:
+    if not (tmp_path / ".git").exists():
+        _ = subprocess.run(
+            ("git", "init", "-q", str(tmp_path)), check=True, capture_output=True
+        )
+        _ = subprocess.run(
+            ("git", "-C", str(tmp_path), "config", "user.email", "test@example.com"),
+            check=True,
+            capture_output=True,
+        )
+        _ = subprocess.run(
+            ("git", "-C", str(tmp_path), "config", "user.name", "OpenSpec Test"),
+            check=True,
+            capture_output=True,
+        )
+        (tmp_path / "sentinel").write_text("fixture\n", encoding="utf-8")
+        _ = subprocess.run(
+            ("git", "-C", str(tmp_path), "add", "sentinel"),
+            check=True,
+            capture_output=True,
+        )
+        _ = subprocess.run(
+            ("git", "-C", str(tmp_path), "commit", "-q", "-m", "fixture"),
+            check=True,
+            capture_output=True,
+        )
+    commit = subprocess.run(
+        ("git", "-C", str(tmp_path), "rev-parse", "HEAD"),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     change = tmp_path / "change"
     change.mkdir()
     (change / "tasks.md").write_text(tasks, encoding="utf-8")
-    (change / "validation.md").write_text(validation, encoding="utf-8")
+    (change / "validation.md").write_text(
+        validation.replace(_FINAL_SHA, commit), encoding="utf-8"
+    )
     return change
 
 
@@ -33,7 +69,7 @@ Phase gates: {status}
 
 | UTC timestamp | Commit SHA | Phase/task | Command | Exit | Result summary | Evidence artifact |
 |---|---|---|---|---:|---|---|
-| 2026-07-12T00:00:00Z | abc123 | 1.1 | {command} | 0 | passed | local transcript |
+| 2026-07-12T00:00:00Z | {_FINAL_SHA} | 1.1 | {command} | 0 | passed | local transcript |
 
 ## Phase 1 validation matrix
 
@@ -46,6 +82,8 @@ Phase gates: {status}
 ```bash
 {command}
 ```
+
+Final implementation SHA: {_FINAL_SHA}
 """
 
 

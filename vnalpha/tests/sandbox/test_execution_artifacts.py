@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -76,8 +77,10 @@ def test_persist_execution_writes_canonical_metadata_and_exact_stream_bytes(
             b'  "cleanup_succeeded": null,\n'
             b'  "detail": "",\n'
             b'  "failure_code": null,\n'
+            b'  "preflight": null,\n'
             b'  "return_code": 0,\n'
-            b'  "schema_version": 1,\n'
+            b'  "schema_version": 2,\n'
+            b'  "security_controls": null,\n'
             b'  "status": "succeeded",\n'
             b'  "stderr_truncated": false,\n'
             b'  "stdout_truncated": true\n'
@@ -86,6 +89,66 @@ def test_persist_execution_writes_canonical_metadata_and_exact_stream_bytes(
         assert (storage.job_dir / "output/stdout.txt").read_bytes() == b"stdout\xff"
         assert (storage.job_dir / "output/stderr.txt").read_bytes() == b"stderr\x00"
         assert not (storage.job_dir / "manifest.json").exists()
+
+
+def test_execution_evidence_records_preflight_and_effective_security_controls(
+    tmp_path: Path,
+) -> None:
+    # Given: one successful preflight and an exact hardened Docker request
+    from vnalpha.sandbox.docker_policy import DockerExecutionRequest
+    from vnalpha.sandbox.docker_runner import DockerPreflightResult
+    from vnalpha.sandbox.execution_evidence import (
+        SandboxExecutionEvidence,
+        SandboxExecutionStatus,
+    )
+
+    code_path = tmp_path / "generated.py"
+    code_path.write_text("result = 2\n", encoding="utf-8")
+    output_path = tmp_path / "output"
+    output_path.mkdir()
+    job = _job()
+    request = DockerExecutionRequest(
+        image=f"registry.example/openstock/sandbox@sha256:{'a' * 64}",
+        code_path=code_path,
+        input_paths=(),
+        output_path=output_path,
+        resource_limits=job.resource_limits,
+    )
+    result = DockerExecutionResult(
+        return_code=0,
+        stdout=b"",
+        stderr=b"",
+        preflight=DockerPreflightResult(
+            docker_available=True,
+            linux_supported=True,
+            detail="ready",
+            server_os="linux",
+        ),
+    )
+
+    # When: execution evidence is serialized
+    evidence = SandboxExecutionEvidence.from_result(
+        SandboxExecutionStatus.SUCCEEDED, result, request
+    )
+    payload = json.loads(evidence.to_json_bytes())
+
+    # Then: positive preflight and controls are durable without host paths
+    assert payload["preflight"] == {
+        "detail": "ready",
+        "docker_available": True,
+        "failure_code": None,
+        "linux_supported": True,
+        "server_os": "linux",
+    }
+    controls = payload["security_controls"]
+    assert controls["image_digest"] == f"sha256:{'a' * 64}"
+    assert controls["network"] == "none"
+    assert controls["root_read_only"] is True
+    assert controls["capabilities_dropped"] == "ALL"
+    assert controls["no_new_privileges"] is True
+    assert controls["environment_forwarded"] is False
+    assert controls["input_mount_count"] == 0
+    assert str(tmp_path) not in evidence.to_json_bytes().decode("utf-8")
 
 
 def test_persist_execution_removes_manifest_before_a_failed_retry(

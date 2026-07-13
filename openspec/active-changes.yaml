@@ -7,11 +7,11 @@ policy:
   research_only_boundary: true
 changes:
   openstock-four-phase-hardening:
-    status: complete
+    status: partial
     priority: P0
     blocked_by: []
     summary: "Repository, workspace, assistant lifecycle, runtime, CI, evaluation, and packaging hardening."
-    evidence: "PR #62 merged; PR #63 final implementation SHA c5e3688 passed vnalpha-ci run 29218144573 and source export run 29218144547."
+    evidence: "Implementation and prior CI evidence exist; strengthened completion verification now requires all required gates on one exact new final SHA."
   prod-b-sandbox-mvp:
     status: complete
     priority: P1

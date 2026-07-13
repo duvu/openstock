@@ -41,6 +41,7 @@ The documentation is organized around the main engineering concerns:
 - [Phased roadmap](10-roadmap-phases.md)
 - [Deployment architecture](11-deployment-architecture.md)
 - [Sandboxed compute](sandbox-compute.md)
+- [Research automation](research-automation.md)
 - [Research answer evaluation fixtures](research-answer-evaluation.md)
 - [Four-phase hardening guide](four-phase-hardening.md)
 - [Hardening branch protection](branch-protection.md)

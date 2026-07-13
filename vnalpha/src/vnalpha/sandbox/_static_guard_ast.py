@@ -130,12 +130,31 @@ def _call_name(node: ast.expr) -> str:
 
 
 def _opens_outside_output(node: ast.Call) -> bool:
-    if len(node.args) < 2 or not isinstance(node.args[1], ast.Constant):
+    mode_node = _open_mode_node(node)
+    if mode_node is None:
         return False
-    mode = node.args[1].value
-    if not isinstance(mode, str) or not any(flag in mode for flag in "wax+"):
+    if not isinstance(mode_node, ast.Constant) or not isinstance(mode_node.value, str):
+        return True
+    if not any(flag in mode_node.value for flag in "wax+"):
         return False
     if not node.args or not isinstance(node.args[0], ast.Constant):
         return True
     path = node.args[0].value
-    return not isinstance(path, str) or not path.startswith("output/")
+    return not isinstance(path, str) or not _is_contained_output_path(path)
+
+
+def _open_mode_node(node: ast.Call) -> ast.expr | None:
+    if len(node.args) >= 2:
+        return node.args[1]
+    return next(
+        (keyword.value for keyword in node.keywords if keyword.arg == "mode"), None
+    )
+
+
+def _is_contained_output_path(path: str) -> bool:
+    parts = path.split("/")
+    return (
+        len(parts) >= 2
+        and parts[0] == "output"
+        and all(part not in {"", ".", ".."} for part in parts[1:])
+    )
