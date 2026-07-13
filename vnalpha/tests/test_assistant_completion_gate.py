@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 
 import duckdb
+import httpx
 import pytest
 
 from vnalpha.assistant.app import AssistantApp
-from vnalpha.assistant.gateway import FakeLLMClient
+from vnalpha.assistant.gateway import FakeLLMClient, LLMGatewayClient, LLMGatewayConfig
 from vnalpha.warehouse.migrations import run_migrations
 
 
@@ -87,6 +88,63 @@ def test_no_execute_creates_no_tool_trace(conn):
     app.ask("Show strongest candidates", date="2026-07-06", no_execute=True)
 
     assert conn.execute("SELECT COUNT(*) FROM tool_trace").fetchone()[0] == 0
+
+
+def test_raw_classifier_response_is_stored_in_llm_trace_when_enabled(
+    conn, monkeypatch
+) -> None:
+    monkeypatch.setenv("VNALPHA_LLM_API_KEY", "test-key")
+    raw_body = json.dumps(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "intent": "scan_candidates",
+                                "confidence": 0.95,
+                                "entities": {},
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+    )
+
+    def fake_post(url, *, json, headers, timeout):
+        del json, headers, timeout
+        return httpx.Response(
+            200,
+            request=httpx.Request("POST", url),
+            content=raw_body,
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    client = LLMGatewayClient(
+        LLMGatewayConfig(
+            model="stored-model",
+            endpoint="https://llm.example.test/v1/chat/completions",
+            timeout=1,
+            max_output_tokens=256,
+            max_retries=0,
+            store_raw=True,
+        )
+    )
+    app = AssistantApp(conn, surface="cli", llm_client=client)
+
+    app.ask("Show strongest candidates", date="2026-07-06", no_execute=True)
+
+    summary_json = conn.execute(
+        "SELECT output_summary_json FROM llm_trace WHERE stage = 'classify'"
+    ).fetchone()[0]
+    assert json.loads(summary_json)["raw_responses"] == [
+        {
+            "body": raw_body,
+            "model_id": "stored-model",
+            "status_code": 200,
+        }
+    ]
 
 
 def test_unsafe_prompt_refused_before_tool_execution(conn):

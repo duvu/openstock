@@ -90,6 +90,76 @@ def test_gateway_fallback_emits_explicit_audit_events(monkeypatch, tmp_path) -> 
     ]
 
 
+def test_gateway_falls_back_when_completion_content_is_empty(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("VNALPHA_LLM_API_KEY", "test-key")
+    calls: list[str] = []
+    captured: list[dict] = []
+
+    def fake_log_audit(event_type, summary, **kwargs):
+        del summary
+        captured.append({"event_type": event_type, **kwargs})
+
+    def fake_post(url, *, json, headers, timeout):
+        del headers, timeout
+        calls.append(json["model"])
+        request = httpx.Request("POST", url)
+        content = (
+            "" if json["model"] == "small-model" else '{"intent":"scan_candidates"}'
+        )
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"content": content},
+                    }
+                ],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 1},
+            },
+        )
+
+    monkeypatch.setattr("vnalpha.observability.audit.log_audit", fake_log_audit)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    client = LLMGatewayClient(
+        LLMGatewayConfig(
+            model="default-model",
+            endpoint="https://llm.example.test/v1/chat/completions",
+            timeout=1,
+            max_output_tokens=256,
+            max_retries=0,
+            store_raw=False,
+        ),
+        routing_config=_routing_config(),
+        override_store=ModelOverrideStore(workspace_root=tmp_path),
+    )
+
+    content, usage = client.chat(
+        [{"role": "user", "content": "analyze"}],
+        stage="classify",
+        task_type="intent_classification",
+    )
+
+    assert content == '{"intent":"scan_candidates"}'
+    assert calls == ["small-model", "default-model"]
+    assert usage["model_route"]["profile"] == "default"
+    assert [event["event_type"] for event in captured] == [
+        "MODEL_ROUTE_SELECTED",
+        "MODEL_CALL_STARTED",
+        "MODEL_CALL_FAILED",
+        "MODEL_FALLBACK_USED",
+        "MODEL_CALL_STARTED",
+        "MODEL_CALL_SUCCEEDED",
+    ]
+    failure_metadata = captured[2]["extra"]
+    assert failure_metadata["response_content_chars"] == 0
+    assert failure_metadata["finish_reason"] == "stop"
+    assert "content" not in failure_metadata
+
+
 def test_llm_trace_persists_actual_successful_route_model() -> None:
     connection = duckdb.connect(":memory:")
     try:

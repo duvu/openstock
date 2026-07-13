@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -122,6 +122,7 @@ class IntentClassifier:
     def __init__(self, llm_client: LLMGatewayClient):
         self._client = llm_client
         self.last_usage: dict | None = None
+        self.last_raw_responses: list[dict[str, Any]] = []
 
     def classify(
         self, user_prompt: str, *, session_id: str | None = None
@@ -130,6 +131,7 @@ class IntentClassifier:
         unsafe_category = _deterministic_precheck(user_prompt)
         if unsafe_category:
             self.last_usage = None
+            self.last_raw_responses = []
             return IntentResult(
                 intent="unsupported_or_unsafe",
                 confidence=1.0,
@@ -137,6 +139,7 @@ class IntentClassifier:
                 safety_flags=[unsafe_category],
             )
 
+        self.last_raw_responses = []
         messages = _build_classifier_messages(user_prompt)
         route_metadata = {"requires_deep_reasoning": False}
         if session_id is not None:
@@ -150,7 +153,9 @@ class IntentClassifier:
                 route_metadata=route_metadata,
             )
         except Exception as exc:
+            self._capture_gateway_raw_responses()
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
+        self._capture_gateway_raw_responses()
 
         try:
             result = parse_classifier_response(response_text, user_prompt)
@@ -164,12 +169,14 @@ class IntentClassifier:
                     model_profile=ModelProfile.DEFAULT,
                     route_metadata=route_metadata,
                 )
+                self._capture_gateway_raw_responses()
                 result = parse_classifier_response(response_text, user_prompt)
             except IntentClassificationError as retry_exc:
                 raise IntentClassificationError(
                     f"Invalid JSON from classifier after retry: {retry_exc}"
                 ) from retry_exc
             except Exception as exc:
+                self._capture_gateway_raw_responses()
                 raise IntentClassificationError(
                     f"LLM classifier retry failed: {exc}"
                 ) from exc
@@ -180,6 +187,11 @@ class IntentClassifier:
             intent=result.intent,
             confidence=result.confidence,
             entities=result.entities,
-            raw_response=response_text[:200],
+            response_content_chars=len(response_text),
         )
         return result
+
+    def _capture_gateway_raw_responses(self) -> None:
+        self.last_raw_responses.extend(
+            dict(response) for response in self._client.last_raw_responses
+        )

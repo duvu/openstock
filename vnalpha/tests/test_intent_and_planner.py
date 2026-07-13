@@ -149,6 +149,23 @@ class TestIntentClassifier:
             "type": "json_object"
         }
 
+    def test_success_log_excludes_classifier_raw_response(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        def fake_info(event: str, **kwargs: object) -> None:
+            captured["event"] = event
+            captured.update(kwargs)
+
+        monkeypatch.setattr("vnalpha.assistant.intent._log.info", fake_info)
+        response, usage = _fake_response("scan_candidates", 0.95)
+        classifier = _make_classifier([(response, usage)])
+
+        classifier.classify("Show strongest candidates")
+
+        assert captured["event"] == "intent_classified"
+        assert captured["response_content_chars"] == len(response)
+        assert "raw_response" not in captured
+
     def test_llm_classification_retry_keeps_json_schema(self):
         responses = [
             ("not valid json", {}),
