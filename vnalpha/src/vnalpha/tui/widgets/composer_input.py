@@ -296,6 +296,14 @@ if _TEXTUAL_AVAILABLE:
             except Exception:
                 pass
 
+        def set_suggestion_limit(self, limit: int) -> None:
+            self._max_suggestions = max(1, limit)
+            try:
+                value = self.query_one("#composer-input-field", Input).value
+            except Exception:
+                return
+            self._render_suggestions(value)
+
         def focus_input(self) -> None:
             """Focus the underlying Input widget."""
             try:
@@ -384,3 +392,6 @@ else:
 
         def set_disabled(self, disabled: bool) -> None:
             pass
+
+        def set_suggestion_limit(self, limit: int) -> None:
+            del limit

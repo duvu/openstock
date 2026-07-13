@@ -39,10 +39,14 @@ if _TEXTUAL_AVAILABLE:
         DEFAULT_CSS = """
         OutputStream {
             height: 1fr;
+            min-height: 0;
+            overflow: hidden;
             border: round $surface-darken-1;
         }
         OutputStream > RichLog {
             height: 1fr;
+            min-height: 0;
+            overflow-y: auto;
             scrollbar-gutter: stable;
         }
         """

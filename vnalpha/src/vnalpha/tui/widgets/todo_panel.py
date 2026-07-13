@@ -60,11 +60,14 @@ if _TEXTUAL_AVAILABLE:
 
         DEFAULT_CSS = """
         TodoPanel {
+            height: 1fr;
+            min-height: 0;
             width: 32;
             min-width: 28;
             max-width: 40;
             border: round $accent;
             padding: 0 1;
+            overflow-y: auto;
             display: block;
         }
         """

@@ -4,7 +4,12 @@ from typing import Optional
 
 import typer
 
-from vnalpha.core.logging import set_correlation_id
+from vnalpha.core.logging import (
+    LogSurface,
+    configure_logging,
+    get_logger,
+    set_correlation_id,
+)
 from vnalpha.observability.commands import command_lifecycle
 
 
@@ -25,7 +30,14 @@ def tui(
             )
             raise typer.Exit(code=1) from err
 
-        VnAlphaApp(date=date).run()
+        logging_result = configure_logging(surface=LogSurface.TUI)
+        get_logger("vnalpha.cli.tui").info(
+            "LOGGING_SURFACE_CONFIGURED",
+            surface=logging_result.surface.value,
+            file_enabled=logging_result.file_enabled,
+            console_enabled=logging_result.console_enabled,
+        )
+        VnAlphaApp(date=date, logging_warning=logging_result.error_id).run()
 
 
 def register(app: typer.Typer) -> None:

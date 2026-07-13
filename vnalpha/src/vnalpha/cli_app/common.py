@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from vnalpha.core.logging import configure_logging
+from vnalpha.core.logging import LogSurface, configure_logging
 
 
 def configure_app(app: typer.Typer) -> None:
@@ -10,7 +10,7 @@ def configure_app(app: typer.Typer) -> None:
     def _app_callback() -> None:
         """Configure logging at the start of every CLI invocation."""
         _load_dotenv()
-        configure_logging()
+        configure_logging(surface=LogSurface.CLI)
         try:
             from vnalpha.observability.context import init_run_context
             from vnalpha.observability.logger import log_app

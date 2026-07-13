@@ -72,6 +72,7 @@ if _TEXTUAL_AVAILABLE:
         CSS = """
         Screen {
             layout: vertical;
+            overflow: hidden;
         }
         StatusBar {
             height: 1;
@@ -81,14 +82,19 @@ if _TEXTUAL_AVAILABLE:
             height: 1fr;
             width: 100%;
             layout: horizontal;
+            min-height: 0;
+            overflow: hidden;
         }
         #output-column {
             height: 1fr;
             width: 1fr;
+            min-height: 0;
+            overflow: hidden;
         }
         OutputStream {
             height: 1fr;
-            min-height: 5;
+            min-height: 0;
+            overflow: hidden;
         }
         ComposerInput {
             height: auto;
@@ -125,7 +131,12 @@ if _TEXTUAL_AVAILABLE:
             Binding("f12", "toggle_log_viewer", "Log Viewer", show=False),
         ]
 
-        def __init__(self, date: Optional[str] = None, **kwargs):
+        def __init__(
+            self,
+            date: Optional[str] = None,
+            logging_warning: str | None = None,
+            **kwargs,
+        ):
             _load_dotenv()
             super().__init__(**kwargs)
             self.target_date: str = resolve_date(date)
@@ -134,6 +145,7 @@ if _TEXTUAL_AVAILABLE:
             self._layout_controller = ResponsiveLayoutController()
             self._todo_preference: bool | None = None
             self._last_todo_visible: bool | None = None
+            self._logging_warning = logging_warning
             self._todo_source = CompositeTodoSource(
                 [WorkspaceTodoSource(), FallbackTodoSource()]
             )
@@ -155,6 +167,11 @@ if _TEXTUAL_AVAILABLE:
             self._emit_tui_started()
             self._apply_responsive_layout()
             self._ensure_composer_focus()
+            if self._logging_warning is not None:
+                self.query_one("#output-stream", OutputStream).show_warning(
+                    self._logging_warning,
+                    source="logging",
+                )
 
         def on_unmount(self) -> None:
             if self._router is not None:
@@ -323,6 +340,9 @@ if _TEXTUAL_AVAILABLE:
         def _current_width(self) -> int:
             return self.size.width if self.size.width > 0 else 120
 
+        def _current_height(self) -> int:
+            return self.size.height if self.size.height > 0 else 30
+
         def _footer_hint_text(self) -> str:
             workspace_hint = (
                 f"ws={self._workspace.workspace_id} · {self._workspace.mode}"
@@ -345,8 +365,16 @@ if _TEXTUAL_AVAILABLE:
 
         def _apply_responsive_layout(self) -> None:
             panel = self.query_one("#todo-panel", TodoPanel)
+            composer = self.query_one("#composer-input", ComposerInput)
+            footer = self.query_one("#footer-hint", Static)
             show_panel = self._layout_controller.should_show_todo(
                 self._current_width(), self._todo_preference
+            )
+            composer.set_suggestion_limit(
+                self._layout_controller.suggestion_limit(self._current_height())
+            )
+            footer.display = self._layout_controller.should_show_footer(
+                self._current_height()
             )
             panel.display = show_panel
             if show_panel:
@@ -408,7 +436,13 @@ else:
         SUB_TITLE = "Vietnamese Market Research Tool"
         BINDINGS = []
 
-        def __init__(self, date: Optional[str] = None, **kwargs):
+        def __init__(
+            self,
+            date: Optional[str] = None,
+            logging_warning: str | None = None,
+            **kwargs,
+        ):
+            del logging_warning
             self.target_date: str = resolve_date(date)
 
         def run(self) -> None:

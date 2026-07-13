@@ -85,7 +85,7 @@ changes:
       - research-scenario-plan-engine
       - setup-historical-evidence-engine
     summary: "Composer-first rendering and drill-down for completed research-intelligence contracts."
-    evidence: "Composer-first TUI now renders `/analyze`, `/watchlist-summary`, `/shortlist`, `/research-plan`, and `/setup-evidence` with artifact-aware status/warnings plus detail/back/id/note/assistant helpers; focused pytest coverage and headless manual QA confirm transcript restoration and read-only workflow navigation while upstream research engines remain partial."
+    evidence: "Rendering integrity is implemented and validated as this change's prerequisite: surface-aware logging is file-only during TUI ownership and workspace geometry is covered at supported viewports. Composer-first TUI now renders `/analyze`, `/watchlist-summary`, `/shortlist`, `/research-plan`, and `/setup-evidence` with artifact-aware status/warnings plus detail/back/id/note/assistant helpers; focused pytest coverage and headless manual QA confirm transcript restoration and read-only workflow navigation while upstream research engines remain partial."
   tui-slash-command-on-typing-search:
     status: in_progress
     priority: P3

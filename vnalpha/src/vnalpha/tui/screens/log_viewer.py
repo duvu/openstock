@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 
+import anyio
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, RichLog, Static
@@ -20,21 +21,38 @@ class LogScreen(Screen):
     TITLE = "Log Viewer"
 
     CSS = """
+    LogScreen {
+        layout: vertical;
+        background: $background;
+        overflow: hidden;
+    }
+    #log-body {
+        height: 1fr;
+        min-height: 0;
+        overflow: hidden;
+    }
     #log-toolbar {
-        height: 3;
+        height: auto;
+        max-height: 3;
         padding: 0 1;
         background: $surface;
+        overflow: hidden;
     }
     #log-toolbar Button {
-        margin: 0 1;
-        min-width: 10;
+        margin: 0;
+        min-width: 7;
     }
     #log-display {
+        height: 1fr;
+        min-height: 0;
+        overflow-y: auto;
         border: solid $primary;
     }
     """
 
     LEVELS = ("ALL", "DEBUG", "INFO", "WARNING", "ERROR")
+    MAX_RECORDS = 1_000
+    BINDINGS = [Binding("escape", "close", "Close", show=False)]
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -45,17 +63,16 @@ class LogScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Vertical(
-            Horizontal(
+        with Vertical(id="log-body"):
+            yield Horizontal(
                 Static("[b]Level:[/b]  ", id="level-label"),
                 *[
                     Button(lvl, id=f"btn-{lvl}", variant="default")
                     for lvl in self.LEVELS
                 ],
                 id="log-toolbar",
-            ),
-            RichLog(id="log-display", highlight=True, markup=True, wrap=True),
-        )
+            )
+            yield RichLog(id="log-display", highlight=True, markup=True, wrap=True)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -65,13 +82,16 @@ class LogScreen(Screen):
     def on_unmount(self) -> None:
         self._stopped = True
 
+    def action_close(self) -> None:
+        self.app.pop_screen()
+
     async def _tail_log_async(self) -> None:
         """Async worker: poll the log file every 0.5 s for new lines."""
         log_path = default_log_path()
         while not self._stopped:
             if log_path.exists():
                 await self._read_new_lines(log_path)
-            await asyncio.sleep(0.5)
+            await anyio.sleep(0.5)
 
     async def _read_new_lines(self, log_path: Path) -> None:
         """Read new lines from log file since last position and update display."""
@@ -96,6 +116,8 @@ class LogScreen(Screen):
                 self._file_pos = fh.tell()
             for rec in new_records:
                 self._all_records.append(rec)
+                if len(self._all_records) > self.MAX_RECORDS:
+                    self._all_records = self._all_records[-self.MAX_RECORDS :]
                 if self._passes_filter(rec):
                     log_widget = self.query_one("#log-display", RichLog)
                     log_widget.write(format_record_rich(rec))

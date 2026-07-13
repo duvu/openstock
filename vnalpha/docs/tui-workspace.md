@@ -202,6 +202,32 @@ or legacy `done` items. Item events and audit metadata redact task text.
 
 ---
 
+## Terminal Rendering and Logging Integrity
+
+The full-screen TUI owns terminal rendering. OpenStock diagnostic logging is
+surface-aware:
+
+| Surface | Structured rotating file | Direct terminal diagnostics |
+|---|---:|---:|
+| CLI | Yes | Yes, on stderr |
+| TUI | Yes | No |
+| Test | Fixture-selected | No by default |
+
+The `vnalpha tui` command reconciles logging to the TUI surface before Textual
+starts. F12 reads the same structured file log, so diagnostics remain available
+without bypassing Textual's frame. If file logging cannot initialize, the TUI
+shows the stable `TUI_LOGGING_INIT_FAILED` warning instead of falling back to
+stderr.
+
+The workspace requires a minimum `80x20` viewport. At shorter heights the
+footer may be hidden; transcript, composer, and active screen regions remain
+contained. Slash-command suggestions are limited to four rows below 24 lines,
+six rows from 24 through 29 lines, and ten rows at 30 lines or more. The
+transcript RichLog and F12 LogScreen own their respective scrolling regions;
+the TODO rail scrolls inside the main body.
+
+---
+
 ## Input History
 
 Shell-like input history with Up/Down navigation:
