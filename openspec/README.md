@@ -27,8 +27,9 @@ P0  openstock-four-phase-hardening (completed; archived 2026-07-13)
 P1  prod-b-sandbox-mvp
     + tui-terminal-rendering-integrity
     ↓
-P2  research-intelligence-data-model-foundation
-    + symbol-knowledge-memory
+P2  research-intelligence-data-model-foundation (completed; archived 2026-07-13)
+    ↓
+    symbol-knowledge-memory
     + prod-c-research-automation
     + remaining research-intelligence contracts
     ↓

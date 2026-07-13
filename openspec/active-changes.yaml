@@ -19,19 +19,12 @@ changes:
       - prod-c-research-automation
     summary: "Bounded repair, validation, promotion, rejection, and rollback for sandbox/research artifacts only."
     evidence: "Closed-loop service, CLI/TUI bridges, focused security suite, and validation.md are implemented; repository-wide lint/test residuals remain in pre-existing prod-c research-automation work and PR evidence is not attached."
-  research-intelligence-data-model-foundation:
-    status: partial
-    priority: P2
-    blocked_by: []
-    summary: "Durable data contracts for reusable research-intelligence artifacts."
-    evidence: "Market/sector snapshots and research answer audit exist; the remaining proposed persisted models do not."
   symbol-knowledge-memory:
     status: planned
     priority: P2
-    blocked_by:
-      - research-intelligence-data-model-foundation
+    blocked_by: []
     summary: "Per-symbol Markdown knowledge cards backed by structured claims, continuous validated updates, auditable correction, compaction, and bounded temporal retrieval."
-    evidence: "OpenSpec draft only; no runtime implementation yet."
+    evidence: "All declared prerequisites are complete; OpenSpec draft has no runtime implementation yet."
   deep-symbol-analysis-engine:
     status: partial
     priority: P2
