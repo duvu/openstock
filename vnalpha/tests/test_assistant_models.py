@@ -93,11 +93,17 @@ def test_supported_intents_include_persisted_context_reviews():
         "generate_shortlist",
         "generate_research_scenario",
         "review_setup_evidence",
+        "create_indicator_experiment",
+        "create_feature",
+        "validate_feature",
+        "test_hypothesis",
+        "scan_pattern",
+        "run_offline_event_study",
         "sandbox_research_calculation",
         "unsupported_or_unsafe",
     }
     assert SUPPORTED_INTENTS == expected
-    assert len(SUPPORTED_INTENTS) == 20
+    assert len(SUPPORTED_INTENTS) == 26
 
 
 # ---------------------------------------------------------------------------
