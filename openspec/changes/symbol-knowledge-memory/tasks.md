@@ -27,8 +27,8 @@
 - [x] 2.4 Add repository APIs for append-only memory events. [depends: 2.1] [evidence: `vnalpha/tests/test_symbol_memory_repository.py`]
 - [x] 2.5 Add repository APIs for claim creation, transition, lookup, conflict, and supersession. [depends: 2.2] [evidence: `vnalpha/tests/test_symbol_memory_repository.py`]
 - [x] 2.6 Add repository APIs for document metadata and compaction runs. [depends: 2.3] [evidence: `vnalpha/tests/test_symbol_memory_repository.py`]
-- [ ] 2.7 Ensure memory schema failure degrades to a structured unavailable state without crashing the TUI or unrelated research commands. [evidence: legacy database and failure-injection tests]
-- [ ] 2.8 Make the index rebuildable from canonical events, claims, and valid document manifests. [evidence: rebuild integration test]
+- [x] 2.7 Ensure memory schema failure degrades to a structured unavailable state without crashing the TUI or unrelated research commands. [evidence: `vnalpha/tests/test_symbol_memory_availability.py`]
+- [x] 2.8 Make the index rebuildable from canonical events, claims, and valid document manifests. [evidence: `vnalpha/tests/test_symbol_memory_availability.py`]
 
 ## 3. Canonical filesystem and Markdown documents
 

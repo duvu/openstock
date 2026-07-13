@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import duckdb
+
 from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.models import CommandResult, ParsedCommand, ResultPanel
 from vnalpha.symbol_memory.compaction import SymbolMemoryCompactionService
@@ -26,7 +28,15 @@ def handle_memory(
         )
     if not parsed.positional:
         raise CommandValidationError(_usage())
-    run_migrations(conn)
+    try:
+        run_migrations(conn)
+    except duckdb.Error:
+        return CommandResult(
+            status="PARTIAL",
+            title="/memory unavailable",
+            summary="Memory schema is unavailable; run warehouse migrations then retry.",
+            metadata={"availability": "unavailable"},
+        )
     repository = SymbolMemoryRepository(conn)
     ingestion = SymbolMemoryIngestionService(repository)
     compaction = SymbolMemoryCompactionService(repository, root)
