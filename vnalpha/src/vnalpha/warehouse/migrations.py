@@ -10,6 +10,7 @@ import duckdb
 from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.research_answer_schema import ALL_DDL_RESEARCH_ANSWER_AUDIT
+from vnalpha.warehouse.research_models_schema import ALL_DDL_RESEARCH_MODELS
 from vnalpha.warehouse.sandbox_migrations import (
     SANDBOX_DDL,
     migrate_sandbox_contract_columns,
@@ -58,6 +59,9 @@ def run_migrations(
         conn.execute(ddl)
     for ddl in ALL_DDL_RESEARCH_ANSWER_AUDIT:
         conn.execute(ddl)
+    for ddl in ALL_DDL_RESEARCH_MODELS:
+        conn.execute(ddl)
+    _migrate_research_answer_audit_columns(conn)
     _migrate_research_artifact_columns(conn)
     for ddl in ALL_DDL_PHASE6:
         conn.execute(ddl)
@@ -111,6 +115,16 @@ def _migrate_assistant_prompt_columns(conn: duckdb.DuckDBPyConnection) -> None:
     ):
         conn.execute(
             f"ALTER TABLE assistant_session ADD COLUMN IF NOT EXISTS {column} {column_type}"
+        )
+
+
+def _migrate_research_answer_audit_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    for column, column_type in (
+        ("research_session_id", "VARCHAR"),
+        ("missing_data_json", "VARCHAR"),
+    ):
+        conn.execute(
+            f"ALTER TABLE research_answer_audit ADD COLUMN IF NOT EXISTS {column} {column_type}"
         )
 
 
