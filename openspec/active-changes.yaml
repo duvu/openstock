@@ -12,24 +12,12 @@ changes:
     blocked_by: []
     summary: "Repository, workspace, assistant lifecycle, runtime, CI, evaluation, and packaging hardening."
     evidence: "Implementation and prior CI evidence exist; strengthened completion verification now requires all required gates on one exact new final SHA."
-  prod-b-sandbox-mvp:
-    status: complete
-    priority: P1
-    blocked_by: []
-    summary: "Approval-gated, no-network generated research compute; models/repository skeleton exists, runner and isolation do not."
-    evidence: "PR #62 merged approval-gated Docker-only execution; 83/83 tasks and strict validation pass."
   tui-terminal-rendering-integrity:
     status: planned
     priority: P1
     blocked_by: []
     summary: "Surface-aware file-backed TUI logging plus bounded non-overlapping Textual regions for transcript, composer, TODO rail, footer, and LogScreen."
     evidence: "GitHub issue #60 and OpenSpec draft identify direct stderr terminal writes, height/overflow gaps, and missing geometry regressions; no runtime implementation yet."
-  prod-c-research-automation:
-    status: in_progress
-    priority: P2
-    blocked_by: []
-    summary: "Domain-shaped experiments, features, pattern scans, hypotheses, and offline event studies."
-    evidence: "Dependency gates are complete; research-automation models, repository, validators, and artifact layout are present for continued implementation."
   prod-d-closed-loop-repair:
     status: partial
     priority: P3
@@ -56,12 +44,6 @@ changes:
     blocked_by: []
     summary: "Consolidated warehouse-grounded deep symbol analysis."
     evidence: "`analysis.deep_symbol`, assistant intent/template, grounding, and tests exist; command/persistence/full contract remain."
-  watchlist-synthesis-and-shortlist:
-    status: partial
-    priority: P2
-    blocked_by: []
-    summary: "Watchlist synthesis and narrower research shortlist artifacts."
-    evidence: "Deep watchlist summary and shortlist tools/intents exist; command, persistence, and richer grouping contracts remain."
   research-scenario-plan-engine:
     status: partial
     priority: P2
@@ -75,17 +57,6 @@ changes:
     blocked_by: []
     summary: "Setup-cohort historical evidence with sample-size and regime caveats."
     evidence: "Setup-history tool/intent/template exist; richer distributions, FAE/AAE, regime split, command, and persistence remain."
-  tui-research-workflow-polish:
-    status: partial
-    priority: P3
-    blocked_by:
-      - tui-terminal-rendering-integrity
-      - deep-symbol-analysis-engine
-      - watchlist-synthesis-and-shortlist
-      - research-scenario-plan-engine
-      - setup-historical-evidence-engine
-    summary: "Composer-first rendering and drill-down for completed research-intelligence contracts."
-    evidence: "Rendering integrity is implemented and validated as this change's prerequisite: surface-aware logging is file-only during TUI ownership and workspace geometry is covered at supported viewports. Composer-first TUI now renders `/analyze`, `/watchlist-summary`, `/shortlist`, `/research-plan`, and `/setup-evidence` with artifact-aware status/warnings plus detail/back/id/note/assistant helpers; focused pytest coverage and headless manual QA confirm transcript restoration and read-only workflow navigation while upstream research engines remain partial."
   tui-slash-command-on-typing-search:
     status: in_progress
     priority: P3

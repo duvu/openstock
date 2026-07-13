@@ -1,7 +1,9 @@
 # Specification: Natural-Language Research Assistant
 
-## ADDED Requirements
+## Purpose
 
+Define the warehouse-grounded natural-language research assistant for CLI and TUI use.
+## Requirements
 ### Requirement: Assistant shall accept natural-language research prompts
 
 `vnalpha` SHALL provide a natural-language assistant surface for research questions.
@@ -61,6 +63,10 @@ clarification_question
 safety_flags
 ```
 
+Classifier responses SHALL be parsed through a shared JSON parser utility that attempts all supported extraction strategies (markdown fence strip, embedded JSON extraction, strict json.loads).
+If the parser still cannot produce a valid payload, it SHALL return a clear invalid-response error and this classification path SHALL retry once with stronger model profile settings.
+If the second attempt also fails to parse, the assistant SHALL surface a classifier failure and SHALL NOT continue to planner or synthesis.
+
 #### Scenario: Classify explain intent
 
 - **GIVEN** the prompt `Why is FPT in the watchlist today?`
@@ -82,7 +88,20 @@ safety_flags
 - **THEN** it SHALL classify the prompt as `unsupported_or_unsafe`
 - **AND** the assistant SHALL refuse the request
 
----
+#### Scenario: Recover parser from malformed but recoverable classifier JSON
+
+- **GIVEN** the first classifier response is not clean JSON but contains a JSON object in text
+- **WHEN** the parser runs
+- **THEN** it SHALL extract and parse the JSON object and continue classification if valid
+
+#### Scenario: Retry when classifier JSON is invalid
+
+- **GIVEN** the first classifier response is not parseable as JSON
+- **WHEN** classifier parse fails
+- **THEN** the assistant SHALL retry classification once with stronger profile settings
+- **AND** if the second response still fails to parse
+- **THEN** it SHALL return an explicit invalid-response classifier error
+- **AND** no plan SHALL be executed for that turn
 
 ### Requirement: Assistant shall build explicit tool plans
 
