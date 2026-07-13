@@ -27,8 +27,10 @@ dev = [
     "pytest>=8",
     "pytest-asyncio",
     "ruff>=0.4",
+    "setuptools>=68",
     "respx>=0.21",
     "build>=1.2",
+    "wheel>=0.43",
 ]
 
 [project.scripts]
