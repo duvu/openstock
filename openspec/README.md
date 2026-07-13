@@ -22,7 +22,7 @@ Archiving preserves the complete proposal/design/task/validation history. Implem
 ## Active execution order
 
 ```text
-P0  openstock-four-phase-hardening
+P0  openstock-four-phase-hardening (completed; archived 2026-07-13)
     ↓
 P1  prod-b-sandbox-mvp
     + tui-terminal-rendering-integrity

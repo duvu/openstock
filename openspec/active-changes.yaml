@@ -3,15 +3,9 @@ reviewed_at: 2026-07-13
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
-  p0_change: openstock-four-phase-hardening
+  p0_change: null
   research_only_boundary: true
 changes:
-  openstock-four-phase-hardening:
-    status: partial
-    priority: P0
-    blocked_by: []
-    summary: "Repository, workspace, assistant lifecycle, runtime, CI, evaluation, and packaging hardening."
-    evidence: "Implementation and prior CI evidence exist; strengthened completion verification now requires all required gates on one exact new final SHA."
   tui-terminal-rendering-integrity:
     status: planned
     priority: P1
