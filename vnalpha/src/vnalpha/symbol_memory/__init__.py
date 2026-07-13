@@ -1,3 +1,10 @@
+from vnalpha.symbol_memory.ingestion import (
+    MemoryEvidence,
+    MemoryIngestionError,
+    MemoryIngestionResult,
+    SymbolMemoryIngestionService,
+)
+from vnalpha.symbol_memory.lifecycle import SymbolMemoryLifecycleService
 from vnalpha.symbol_memory.markdown import (
     MemoryCardError,
     ParsedSymbolCard,
@@ -23,6 +30,9 @@ __all__ = [
     "ClaimStatus",
     "MemoryClaim",
     "MemoryCardError",
+    "MemoryEvidence",
+    "MemoryIngestionError",
+    "MemoryIngestionResult",
     "MemoryCompactionRun",
     "MemoryDocument",
     "MemoryEvent",
@@ -31,6 +41,8 @@ __all__ = [
     "ParsedSymbolCard",
     "SymbolPathError",
     "SymbolMemoryRepository",
+    "SymbolMemoryIngestionService",
+    "SymbolMemoryLifecycleService",
     "SymbolCardInspection",
     "normalize_symbol",
     "parse_symbol_card",

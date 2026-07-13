@@ -44,25 +44,25 @@
 
 ## 4. Memory ingestion and eligibility
 
-- [ ] 4.1 Add an ingestion service that accepts persisted evidence references rather than raw model prose. [depends: 1.1, 2.4] [evidence: eligibility tests]
-- [ ] 4.2 Add explicit `/memory remember` user-note ingestion with unverified origin. [evidence: command and persistence tests]
+- [x] 4.1 Add an ingestion service that accepts persisted evidence references rather than raw model prose. [depends: 1.1, 2.4] [evidence: `vnalpha/tests/test_symbol_memory_ingestion.py`]
+- [x] 4.2 Add explicit `/memory remember` user-note ingestion with unverified origin. [evidence: `vnalpha/tests/test_symbol_memory_ingestion.py`]
 - [ ] 4.3 Add adapter for candidate score snapshots. [evidence: adapter tests]
 - [ ] 4.4 Add adapter for feature snapshots and data-quality caveats. [evidence: adapter tests]
 - [ ] 4.5 Add adapter for validated market/sector snapshot references when present. [evidence: adapter tests]
 - [ ] 4.6 Add adapter for validated deep-symbol analysis artifacts without coupling the memory core to unfinished engine internals. [depends: deep-symbol artifact contract] [evidence: integration tests]
 - [ ] 4.7 Add adapter for validated research automation artifacts. [evidence: artifact eligibility tests]
-- [ ] 4.8 Reject unsupported numeric claims, missing source references, invalid symbol/date metadata, and raw unvalidated assistant prose. [evidence: negative tests]
-- [ ] 4.9 Deduplicate events by stable content hash and evidence identity. [evidence: idempotent ingestion tests]
+- [x] 4.8 Reject unsupported numeric claims, missing source references, invalid symbol/date metadata, and raw unvalidated assistant prose. [evidence: `vnalpha/tests/test_symbol_memory_ingestion.py`]
+- [x] 4.9 Deduplicate events by stable content hash and evidence identity. [evidence: `vnalpha/tests/test_symbol_memory_ingestion.py`]
 
 ## 5. Claim lifecycle, correction, and conflict
 
-- [ ] 5.1 Define deterministic source-authority policy by claim type. [depends: 1.2] [evidence: policy matrix tests]
-- [ ] 5.2 Implement equivalent-claim merge without duplicate active claims. [evidence: merge tests]
-- [ ] 5.3 Implement source-grounded supersession for matching entity and predicate. [evidence: old-to-new transition tests]
-- [ ] 5.4 Implement type-specific expiry policies; do not use one global TTL. [evidence: expiry matrix tests]
+- [x] 5.1 Define deterministic source-authority policy by claim type. [depends: 1.2] [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
+- [x] 5.2 Implement equivalent-claim merge without duplicate active claims. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
+- [x] 5.3 Implement source-grounded supersession for matching entity and predicate. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
+- [x] 5.4 Implement type-specific expiry policies; do not use one global TTL. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [ ] 5.5 Preserve rejected hypotheses needed for recurrence prevention. [evidence: rejected-hypothesis retention tests]
-- [ ] 5.6 Detect unresolved same-authority conflicts and preserve both claims. [evidence: conflict tests]
-- [ ] 5.7 Add explicit user correction/rejection flow that records an event and lifecycle reason. [evidence: command and repository tests]
+- [x] 5.6 Detect unresolved same-authority conflicts and preserve both claims. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
+- [x] 5.7 Add explicit user correction/rejection flow that records an event and lifecycle reason. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [ ] 5.8 Ensure user correction cannot silently rewrite canonical warehouse evidence. [evidence: authority-boundary tests]
 - [ ] 5.9 Invalidate active claims when all supporting sources become invalid and record the transition. [evidence: source invalidation tests]
 - [ ] 5.10 Exclude superseded, expired, and rejected claims from the default active card while retaining audit access. [evidence: rendering/retrieval tests]
