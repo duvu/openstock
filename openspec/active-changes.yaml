@@ -1,5 +1,5 @@
 # Authoritative registry for non-archived OpenSpec changes.
-reviewed_at: 2026-07-12
+reviewed_at: 2026-07-13
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
@@ -19,6 +19,13 @@ changes:
       - openstock-four-phase-hardening
     summary: "Approval-gated, no-network generated research compute; models/repository skeleton exists, runner and isolation do not."
     evidence: "Sandbox model/storage modules and initial tests exist on main."
+  tui-terminal-rendering-integrity:
+    status: planned
+    priority: P1
+    blocked_by:
+      - openstock-four-phase-hardening
+    summary: "Surface-aware file-backed TUI logging plus bounded non-overlapping Textual regions for transcript, composer, TODO rail, footer, and LogScreen."
+    evidence: "GitHub issue #60 and OpenSpec draft identify direct stderr terminal writes, height/overflow gaps, and missing geometry regressions; no runtime implementation yet."
   prod-c-research-automation:
     status: planned
     priority: P2
@@ -85,6 +92,7 @@ changes:
     priority: P3
     blocked_by:
       - openstock-four-phase-hardening
+      - tui-terminal-rendering-integrity
       - deep-symbol-analysis-engine
       - watchlist-synthesis-and-shortlist
       - research-scenario-plan-engine
