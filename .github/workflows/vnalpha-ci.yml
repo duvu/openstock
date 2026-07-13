@@ -22,6 +22,10 @@ concurrency:
   group: vnalpha-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  NO_COLOR: "1"
+  _TYPER_FORCE_DISABLE_TERMINAL: "1"
+
 jobs:
   validate:
     runs-on: ubuntu-latest

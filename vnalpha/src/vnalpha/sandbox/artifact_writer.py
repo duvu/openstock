@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import TypedDict, final, override
+from typing import TypedDict, final
+
+from typing_extensions import override
 
 from vnalpha.sandbox.artifact_finalization import SandboxArtifactManifestFinalizer
 from vnalpha.sandbox.artifact_manifest import (

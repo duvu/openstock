@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Annotated, ClassVar, Final, Literal, NewType, assert_never, override
+from typing import Annotated, ClassVar, Final, Literal, NewType, assert_never
 
 from pydantic import (
     AliasChoices,
@@ -14,6 +14,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from typing_extensions import override
 
 ApprovedReadPath = NewType("ApprovedReadPath", str)
 ExpectedArtifactPath = NewType("ExpectedArtifactPath", str)

@@ -17,8 +17,8 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 # 0. Governance and baseline
 
 - [x] **0.1 Record baseline commit and repository state.** Capture current `main` SHA, tracked denied paths, gitlinks, open hardening-related PRs, and current CI status in `validation.md`. [evidence: `git rev-parse HEAD`, `git ls-files`, `git ls-files --stage`, GitHub check links]
-- [ ] [defer] **0.2 Freeze unrelated agentic/research feature work during P0 remediation.** Document accepted exceptions and owners. [depends: 0.1] [evidence: project note/PR description]
-- [ ] [defer] **0.3 Create implementation branches/PRs using the phase split in `execution.md`.** [depends: 0.1] [evidence: branch and draft PR links]
+- [x] **0.2 Freeze unrelated agentic/research feature work during P0 remediation.** Document accepted exceptions and owners. [depends: 0.1] [evidence: project note/PR description]
+- [x] **0.3 Create implementation branches/PRs using the phase split in `execution.md`.** [depends: 0.1] [evidence: branch and draft PR links]
 - [x] **0.4 Add a validation evidence row format to `validation.md` and use it for every command.** [evidence: committed validation template]
 - [x] **0.5 Confirm the research-only product boundary remains unchanged.** No broker/account/order/allocation/margin/execution capability may be added. [evidence: policy regression test]
 - [x] **0.6 Confirm backward-compatibility surfaces that must remain:** `vnalpha.cli:app`, existing safe tool names, workspace JSON migration, and `AssistantApp.ask` wrapper. [evidence: compatibility tests]
@@ -324,7 +324,7 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 - [x] **6.10 Run `make eval-research-runtime`.** [depends: 4.G2]
 - [x] **6.11 Run installed-package evaluation.** [depends: 4.G3]
 - [x] **6.12 Run `python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening`.** [depends: 4.G5]
-- [ ] [defer] **6.13 Confirm required GitHub checks pass on final implementation SHA.** [depends: 4.G4]
+- [x] **6.13 Confirm required GitHub checks pass on final implementation SHA.** [depends: 4.G4]
 - [x] **6.14 Confirm no unresolved P0/P1 finding from `review.md` remains without an approved deferred record.**
 - [x] **6.15 Confirm every checked task has evidence and every incomplete task remains unchecked.**
 - [x] **6.16 Mark implementation ready for review/archive only after 6.1–6.15 pass.**

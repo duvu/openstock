@@ -7,7 +7,9 @@ import stat
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Final, NewType, final, override
+from typing import Final, NewType, final
+
+from typing_extensions import override
 
 from vnalpha.sandbox.models import SandboxResourceLimits
 

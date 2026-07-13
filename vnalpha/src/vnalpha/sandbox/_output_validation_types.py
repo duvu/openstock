@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import ClassVar, Literal, TypeAlias, final, override
+from typing import ClassVar, Literal, TypeAlias, final
 
 from pydantic import (
     BaseModel,
@@ -14,6 +14,7 @@ from pydantic import (
     ValidationError,
     field_validator,
 )
+from typing_extensions import override
 
 from vnalpha.sandbox.artifact_manifest import SandboxArtifactManifestEntry
 from vnalpha.sandbox.contracts import MAX_OUTPUT_ARTIFACTS, ExpectedArtifactPath

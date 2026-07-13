@@ -7,91 +7,78 @@ policy:
   research_only_boundary: true
 changes:
   openstock-four-phase-hardening:
-    status: in_progress
+    status: complete
     priority: P0
     blocked_by: []
     summary: "Repository, workspace, assistant lifecycle, runtime, CI, evaluation, and packaging hardening."
-    evidence: "Draft implementation PR #48."
+    evidence: "PR #62 merged; PR #63 final implementation SHA c5e3688 passed vnalpha-ci run 29218144573 and source export run 29218144547."
   prod-b-sandbox-mvp:
-    status: partial
+    status: complete
     priority: P1
-    blocked_by:
-      - openstock-four-phase-hardening
+    blocked_by: []
     summary: "Approval-gated, no-network generated research compute; models/repository skeleton exists, runner and isolation do not."
-    evidence: "Sandbox model/storage modules and initial tests exist on main."
+    evidence: "PR #62 merged approval-gated Docker-only execution; 83/83 tasks and strict validation pass."
   tui-terminal-rendering-integrity:
     status: planned
     priority: P1
-    blocked_by:
-      - openstock-four-phase-hardening
+    blocked_by: []
     summary: "Surface-aware file-backed TUI logging plus bounded non-overlapping Textual regions for transcript, composer, TODO rail, footer, and LogScreen."
     evidence: "GitHub issue #60 and OpenSpec draft identify direct stderr terminal writes, height/overflow gaps, and missing geometry regressions; no runtime implementation yet."
   prod-c-research-automation:
-    status: planned
+    status: in_progress
     priority: P2
-    blocked_by:
-      - openstock-four-phase-hardening
-      - prod-b-sandbox-mvp
+    blocked_by: []
     summary: "Domain-shaped experiments, features, pattern scans, hypotheses, and offline event studies."
-    evidence: "Specification only; no production automation engine yet."
+    evidence: "Dependency gates are complete; research-automation models, repository, validators, and artifact layout are present for continued implementation."
   prod-d-closed-loop-repair:
     status: partial
     priority: P3
     blocked_by:
-      - openstock-four-phase-hardening
-      - prod-b-sandbox-mvp
       - prod-c-research-automation
     summary: "Bounded repair, validation, promotion, rejection, and rollback for sandbox/research artifacts only."
     evidence: "Closed-loop service, CLI/TUI bridges, focused security suite, and validation.md are implemented; repository-wide lint/test residuals remain in pre-existing prod-c research-automation work and PR evidence is not attached."
   research-intelligence-data-model-foundation:
     status: partial
     priority: P2
-    blocked_by:
-      - openstock-four-phase-hardening
+    blocked_by: []
     summary: "Durable data contracts for reusable research-intelligence artifacts."
     evidence: "Market/sector snapshots and research answer audit exist; the remaining proposed persisted models do not."
   symbol-knowledge-memory:
     status: planned
     priority: P2
     blocked_by:
-      - openstock-four-phase-hardening
       - research-intelligence-data-model-foundation
     summary: "Per-symbol Markdown knowledge cards backed by structured claims, continuous validated updates, auditable correction, compaction, and bounded temporal retrieval."
     evidence: "OpenSpec draft only; no runtime implementation yet."
   deep-symbol-analysis-engine:
     status: partial
     priority: P2
-    blocked_by:
-      - openstock-four-phase-hardening
+    blocked_by: []
     summary: "Consolidated warehouse-grounded deep symbol analysis."
     evidence: "`analysis.deep_symbol`, assistant intent/template, grounding, and tests exist; command/persistence/full contract remain."
   watchlist-synthesis-and-shortlist:
     status: partial
     priority: P2
-    blocked_by:
-      - openstock-four-phase-hardening
+    blocked_by: []
     summary: "Watchlist synthesis and narrower research shortlist artifacts."
     evidence: "Deep watchlist summary and shortlist tools/intents exist; command, persistence, and richer grouping contracts remain."
   research-scenario-plan-engine:
     status: partial
     priority: P2
     blocked_by:
-      - openstock-four-phase-hardening
       - deep-symbol-analysis-engine
     summary: "Conditional, caveated research scenario plans without trading instructions."
     evidence: "Scenario generation tool/intent/template exist; command, persistence, and dedicated validators remain."
   setup-historical-evidence-engine:
     status: partial
     priority: P2
-    blocked_by:
-      - openstock-four-phase-hardening
+    blocked_by: []
     summary: "Setup-cohort historical evidence with sample-size and regime caveats."
     evidence: "Setup-history tool/intent/template exist; richer distributions, FAE/AAE, regime split, command, and persistence remain."
   tui-research-workflow-polish:
     status: partial
     priority: P3
     blocked_by:
-      - openstock-four-phase-hardening
       - tui-terminal-rendering-integrity
       - deep-symbol-analysis-engine
       - watchlist-synthesis-and-shortlist
@@ -102,7 +89,6 @@ changes:
   tui-slash-command-on-typing-search:
     status: in_progress
     priority: P3
-    blocked_by:
-      - openstock-four-phase-hardening
+    blocked_by: []
     summary: "Show slash-command suggestion list in the TUI composer on typing '/' with on-typing prefix filtering."
     evidence: "ComposerInput renders filtered command suggestions from CommandRegistry.names(); AUTO_FOCUS + non-focusable output log keep the Input focused; headless pilot tests cover visibility, filtering, focus, and clipping."
