@@ -14,6 +14,7 @@ from vnalpha.symbol_memory.models import (
     MemoryRetrievalResult,
 )
 from vnalpha.symbol_memory.paths import SymbolPathError, normalize_symbol
+from vnalpha.symbol_memory.recovery import SymbolCardInspection, inspect_symbol_card
 from vnalpha.symbol_memory.repository import SymbolMemoryRepository
 from vnalpha.symbol_memory.validators import MemoryValidationError, validate_claim
 
@@ -30,8 +31,10 @@ __all__ = [
     "ParsedSymbolCard",
     "SymbolPathError",
     "SymbolMemoryRepository",
+    "SymbolCardInspection",
     "normalize_symbol",
     "parse_symbol_card",
+    "inspect_symbol_card",
     "validate_claim",
     "write_symbol_card",
 ]

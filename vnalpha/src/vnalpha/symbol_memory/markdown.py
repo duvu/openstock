@@ -72,7 +72,9 @@ def write_symbol_card(
     )
 
 
-def parse_symbol_card(content: str) -> ParsedSymbolCard:
+def parse_symbol_card(
+    content: str, *, validate_hashes: bool = True
+) -> ParsedSymbolCard:
     frontmatter, body = _split_frontmatter(content)
     values = _parse_frontmatter(frontmatter)
     try:
@@ -88,9 +90,9 @@ def parse_symbol_card(content: str) -> ParsedSymbolCard:
         raise MemoryCardError("Unsupported symbol-card schema.")
     managed_content = _extract_region(body, _MANAGED_START, _MANAGED_END)
     user_content = _extract_region(body, _USER_START, _USER_END)
-    if _hash(managed_content) != managed_hash:
+    if validate_hashes and _hash(managed_content) != managed_hash:
         raise MemoryCardError("Managed symbol-card content hash does not match.")
-    if _hash(_without_document_hash(content)) != document_hash:
+    if validate_hashes and document_hash_for_content(content) != document_hash:
         raise MemoryCardError("Symbol-card document hash does not match.")
     return ParsedSymbolCard(
         symbol=symbol,
@@ -179,6 +181,10 @@ def _without_document_hash(content: str) -> str:
     return _DOCUMENT_HASH_PATTERN.sub(r"\1\2", content, count=1)
 
 
+def document_hash_for_content(content: str) -> str:
+    return _hash(_without_document_hash(content))
+
+
 def _hash(content: str) -> str:
     return "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
 
@@ -212,6 +218,7 @@ def _atomic_write_text(path: Path, content: str) -> None:
 __all__ = [
     "MemoryCardError",
     "ParsedSymbolCard",
+    "document_hash_for_content",
     "parse_symbol_card",
     "write_symbol_card",
 ]

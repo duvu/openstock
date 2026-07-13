@@ -39,8 +39,8 @@
 - [x] 3.5 Implement user-region preservation without automated rewriting. [evidence: `vnalpha/tests/test_symbol_memory_markdown.py`]
 - [x] 3.6 Add managed-content and full-document hashes with generation tracking. [evidence: `vnalpha/tests/test_symbol_memory_markdown.py`]
 - [x] 3.7 Write symbol cards through same-directory temporary files, flush, validation, atomic replace, and directory synchronization. [evidence: `vnalpha/tests/test_symbol_memory_markdown.py`]
-- [ ] 3.8 Detect external edits and record `DOCUMENT_EXTERNALLY_MODIFIED`. [evidence: edit-detection test]
-- [ ] 3.9 Quarantine malformed or unrecoverable documents rather than silently overwriting them. [evidence: quarantine tests]
+- [x] 3.8 Detect external edits and record `DOCUMENT_EXTERNALLY_MODIFIED`. [evidence: `vnalpha/tests/test_symbol_memory_recovery.py`]
+- [x] 3.9 Quarantine malformed or unrecoverable documents rather than silently overwriting them. [evidence: `vnalpha/tests/test_symbol_memory_recovery.py`]
 
 ## 4. Memory ingestion and eligibility
 
