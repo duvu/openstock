@@ -13,6 +13,12 @@ RESEARCH_INTELLIGENCE_INTENTS: Final[frozenset[str]] = frozenset(
         "generate_shortlist",
         "generate_research_scenario",
         "review_setup_evidence",
+        "create_indicator_experiment",
+        "create_feature",
+        "validate_feature",
+        "test_hypothesis",
+        "scan_pattern",
+        "run_offline_event_study",
     }
 )
 
@@ -27,7 +33,16 @@ DEEP_RESEARCH_INTENTS: Final[frozenset[str]] = frozenset(
 )
 
 POLICY_SENSITIVE_RESEARCH_INTENTS: Final[frozenset[str]] = frozenset(
-    {"generate_shortlist", "generate_research_scenario"}
+    {
+        "generate_shortlist",
+        "generate_research_scenario",
+        "create_indicator_experiment",
+        "create_feature",
+        "validate_feature",
+        "test_hypothesis",
+        "scan_pattern",
+        "run_offline_event_study",
+    }
 )
 
 INTENT_DESCRIPTIONS: Final[dict[str, str]] = {
@@ -49,6 +64,12 @@ INTENT_DESCRIPTIONS: Final[dict[str, str]] = {
     "review_setup_evidence": (
         "historical persisted outcome evidence for a setup type and horizon"
     ),
+    "create_indicator_experiment": "reproducible indicator experiment on persisted Vietnamese equity data",
+    "create_feature": "persist a research feature definition such as rs_20 = rs_20d_vs_vnindex",
+    "validate_feature": "validate a research feature's schema, coverage, lineage, and quality",
+    "test_hypothesis": "bounded historical hypothesis test with assumptions, metrics, and caveats",
+    "scan_pattern": "scan persisted historical features for a supported research pattern",
+    "run_offline_event_study": "offline research event study; never broker or live trading execution",
 }
 
 INTENT_EXAMPLES: Final[dict[str, str]] = {
@@ -59,6 +80,12 @@ INTENT_EXAMPLES: Final[dict[str, str]] = {
     "generate_shortlist": "Create a research shortlist from today's watchlist.",
     "generate_research_scenario": "Build a conditional research scenario for FPT.",
     "review_setup_evidence": "Show historical evidence for ACCUMULATION_BASE.",
+    "create_indicator_experiment": "Test 20-session relative strength versus VNINDEX on VN30.",
+    "create_feature": "Create feature rs_20 = rs_20d_vs_vnindex.",
+    "validate_feature": "Validate the rs_20 research feature.",
+    "test_hypothesis": "Test whether positive rs_20 has better 20-session returns.",
+    "scan_pattern": "Scan VN30 for accumulation bases with volatility contraction.",
+    "run_offline_event_study": "Run an offline event study for FPT accumulation breakouts.",
 }
 
 

@@ -113,6 +113,55 @@ def test_repository_persists_rejection_and_failure_reasons() -> None:
     assert failed.failure_reason == "runner unavailable"
 
 
+def test_repository_claims_queued_job_for_validation_once() -> None:
+    # Given: one queued sandbox job
+    from vnalpha.sandbox.repository import SandboxJobRepository
+
+    request = SandboxJobRequest.model_validate(
+        {
+            "purpose": "mean of 1, 2, 3",
+            "code": "result = 2",
+            "correlation_id": "claim-once",
+            "resource_limits": {
+                "cpu_millis": 500,
+                "memory_mb": 128,
+                "timeout_seconds": 10,
+            },
+        }
+    )
+    job = request.into_job(
+        job_id=SandboxJobId("job-claim"), run_id=SandboxRunId("run-claim")
+    )
+    with in_memory_connection() as conn:
+        run_migrations(conn=conn)
+        repository = SandboxJobRepository(conn)
+        repository.create(job)
+
+        # When: the same job is claimed twice
+        repository.claim_for_validation(job.job_id)
+
+        # Then: the first claim is durable and the second loses atomically
+        stored = repository.get(job.job_id)
+        assert stored is not None
+        assert stored.status is SandboxJobStatus.VALIDATING
+        with pytest.raises(ValueError, match="cannot transition from validating"):
+            repository.claim_for_validation(job.job_id)
+
+
+def test_repository_claim_rejects_missing_job() -> None:
+    # Given: an empty migrated warehouse
+    from vnalpha.sandbox.repository import SandboxJobRepository
+
+    with in_memory_connection() as conn:
+        run_migrations(conn=conn)
+
+        # When / Then: claiming an unknown job reports not-found
+        with pytest.raises(ValueError, match="not found"):
+            SandboxJobRepository(conn).claim_for_validation(
+                SandboxJobId("missing-claim")
+            )
+
+
 @pytest.mark.parametrize(
     ("status", "cpu_millis", "memory_mb", "timeout_seconds"),
     (

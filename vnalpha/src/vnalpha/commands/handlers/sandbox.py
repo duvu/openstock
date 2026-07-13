@@ -48,35 +48,35 @@ def _run_preview(parsed: ParsedCommand, *, conn, surface: str) -> CommandResult:
         raise CommandValidationError("/sandbox run requires a purpose.")
     from vnalpha.sandbox.execution_service import SandboxExecutionService
 
-    preview = SandboxExecutionService(conn, surface=surface).prepare_job(purpose)
+    prepared = SandboxExecutionService(conn, surface=surface).prepare_turn(
+        purpose, raw_request=parsed.raw_text
+    )
+    arguments = prepared.plan.steps[0].arguments
     return CommandResult(
         status="SUCCESS",
         title="/sandbox run",
         summary=(
-            f"Sandbox job {preview.job.job_id} is queued and awaiting approval; "
+            f"Sandbox job {arguments['job_id']} is queued and awaiting approval; "
             "execution has not started."
         ),
         panels=[
             ResultPanel(
                 title="Sandbox Job",
                 content={
-                    "job_id": str(preview.job.job_id),
-                    "run_id": str(preview.job.run_id),
-                    "correlation_id": str(preview.job.correlation_id),
-                    "purpose": preview.job.purpose,
-                    "status": preview.job.status.value,
-                    "code_digest": preview.job.code_digest,
-                    "code_summary": preview.code_summary,
-                    "input_references": list(preview.job.filesystem_policy.approved_read_paths),
-                    "resource_limits": {
-                        "cpu_millis": preview.job.resource_limits.cpu_millis,
-                        "memory_mb": preview.job.resource_limits.memory_mb,
-                        "timeout_seconds": preview.job.resource_limits.timeout_seconds,
-                    },
-                    "image_digest": str(preview.image).split("@", 1)[1],
+                    "job_id": arguments["job_id"],
+                    "run_id": arguments["run_id"],
+                    "correlation_id": arguments["correlation_id"],
+                    "purpose": arguments["purpose"],
+                    "status": "queued",
+                    "code_digest": arguments["code_digest"],
+                    "code_summary": arguments["code_summary"],
+                    "input_references": arguments["input_references"],
+                    "resource_limits": arguments["resource_limits"],
+                    "image_digest": arguments["image_digest"],
                 },
             )
         ],
+        pending_prepared_turn=prepared,
     )
 
 

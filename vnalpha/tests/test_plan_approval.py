@@ -78,6 +78,23 @@ def _make_controller(
     return ctrl, messages
 
 
+def test_prepare_turn_routes_with_chat_session_identity() -> None:
+    controller, _messages = _make_controller()
+    controller._chat_session_id = "chat-session"
+    app = MagicMock()
+
+    with (
+        patch("vnalpha.assistant.app.AssistantApp", return_value=app),
+        patch("vnalpha.warehouse.connection.get_connection") as get_connection,
+        patch("vnalpha.warehouse.migrations.run_migrations"),
+    ):
+        get_connection.return_value.close = MagicMock()
+        controller._prepare_turn("show candidates", None)
+
+    request = app.prepare.call_args.args[0]
+    assert request.routing_session_id == "chat-session"
+
+
 # ---------------------------------------------------------------------------
 # ExecutionMode enum
 # ---------------------------------------------------------------------------
@@ -399,6 +416,7 @@ class TestPreparedSandboxApproval:
         plan = _make_plan(["sandbox.run_research_code"])
         prepared = _make_prepared_turn(plan)
         prepared_turns: list[PreparedAssistantTurn] = []
+        approved_turns: list[PreparedAssistantTurn] = []
         executed_turns: list[PreparedAssistantTurn] = []
 
         def fake_prepare_turn(
@@ -421,7 +439,11 @@ class TestPreparedSandboxApproval:
                 plan,
             )
 
+        def fake_approve_prepared_turn(turn: PreparedAssistantTurn) -> None:
+            approved_turns.append(turn)
+
         ctrl._prepare_turn = fake_prepare_turn
+        ctrl._approve_prepared_turn = fake_approve_prepared_turn
         ctrl._execute_prepared_turn = fake_execute_prepared_turn
 
         # When: the user approves the previewed plan
@@ -430,6 +452,7 @@ class TestPreparedSandboxApproval:
 
         # Then: execution receives the identical retained turn without a second prepare
         assert prepared_turns == [prepared]
+        assert approved_turns == [prepared]
         assert executed_turns == [prepared]
 
 

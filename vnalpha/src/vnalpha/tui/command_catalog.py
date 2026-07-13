@@ -36,6 +36,42 @@ def _static_catalog() -> list[UiCommand]:
             examples=("/scan", "/scan VN30", "/scan --date 2026-07-06"),
         ),
         UiCommand(
+            name="experiment",
+            description="Run indicator experiments or offline research event studies.",
+            usage="/experiment indicator DESCRIPTION | /experiment backtest DESCRIPTION",
+            category="Research Automation",
+            examples=(
+                "/experiment indicator relative strength 20 sessions vs VNINDEX --universe VN30",
+                "/experiment backtest FPT accumulation breakout --horizon 10",
+            ),
+        ),
+        UiCommand(
+            name="feature",
+            description="Create or validate a reproducible research feature.",
+            usage="/feature create NAME = EXPRESSION | /feature validate NAME",
+            category="Research Automation",
+            examples=(
+                "/feature create rs_20 = rs_20d_vs_vnindex --universe VN30",
+                "/feature validate rs_20",
+            ),
+        ),
+        UiCommand(
+            name="hypothesis",
+            description="Test a bounded historical research hypothesis.",
+            usage="/hypothesis test HYPOTHESIS",
+            category="Research Automation",
+            examples=("/hypothesis test positive rs_20 has better 20-session return",),
+        ),
+        UiCommand(
+            name="pattern",
+            description="Scan persisted features for supported historical patterns.",
+            usage="/pattern scan DESCRIPTION [--universe VN30] [--date YYYY-MM-DD]",
+            category="Research Automation",
+            examples=(
+                "/pattern scan accumulation base with volatility contraction and volume dry-up --universe VN30",
+            ),
+        ),
+        UiCommand(
             name="analyze",
             description="Return deep persisted research analysis for one symbol.",
             usage="/analyze SYMBOL [--date YYYY-MM-DD]",
@@ -186,7 +222,11 @@ def _static_catalog() -> list[UiCommand]:
             description="Prepare and inspect sandbox execution plans.",
             usage="/sandbox run | status | artifact | list",
             category="Application",
-            examples=("/sandbox run compare", "/sandbox status job-1", "/sandbox list"),
+            examples=(
+                "/sandbox run mean of 1, 2, 3",
+                "/sandbox status job-1",
+                "/sandbox list",
+            ),
         ),
         UiCommand(
             name="plan",

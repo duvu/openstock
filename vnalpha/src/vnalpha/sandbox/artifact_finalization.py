@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import final, override
+from typing import final
+
+from typing_extensions import override
 
 from vnalpha.sandbox.artifact_manifest import (
     SandboxArtifactManifest,

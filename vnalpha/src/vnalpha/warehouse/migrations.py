@@ -124,9 +124,7 @@ def _migrate_research_artifact_columns(conn: duckdb.DuckDBPyConnection) -> None:
         "ALTER TABLE research_artifact ADD COLUMN IF NOT EXISTS lineage_path VARCHAR"
     )
     conn.execute(
-        "UPDATE research_artifact "
-        "SET lineage_path = '' "
-        "WHERE lineage_path IS NULL"
+        "UPDATE research_artifact SET lineage_path = '' WHERE lineage_path IS NULL"
     )
     if "status" in _table_columns(conn, "research_artifact"):
         conn.execute(

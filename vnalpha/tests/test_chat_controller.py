@@ -200,6 +200,65 @@ def test_handle_slash_command_surface_passed(in_memory_conn):
     assert call_kwargs["surface"] == "tui-chat"
 
 
+def test_sandbox_slash_command_installs_exact_prepared_turn(in_memory_conn):
+    # Given: a successful sandbox command carrying its immutable prepared turn
+    from vnalpha.assistant.models import (
+        AssistantPlan,
+        AssistantRequest,
+        IntentResult,
+        PreparedAssistantTurn,
+        ToolPlanStep,
+        plan_hash,
+    )
+    from vnalpha.chat.controller import ChatController
+    from vnalpha.commands.models import CommandResult
+
+    plan = AssistantPlan(
+        intent="sandbox_research_calculation",
+        steps=[
+            ToolPlanStep(
+                step_id="sandbox-step",
+                tool_name="sandbox.run_research_code",
+                arguments={"job_id": "job-command"},
+                purpose="numeric research",
+                required_permission="SANDBOX_APPROVAL",
+            )
+        ],
+    )
+    prepared = PreparedAssistantTurn(
+        prepared_turn_id="prepared-command",
+        assistant_session_id="assistant-command",
+        request=AssistantRequest(current_user_prompt="/sandbox run mean of 1, 2, 3"),
+        intent_result=IntentResult(
+            intent="sandbox_research_calculation", confidence=1.0, entities={}
+        ),
+        plan=plan,
+        plan_hash=plan_hash(plan),
+        policy_status="PASS",
+        created_at="2026-07-13T00:00:00+00:00",
+    )
+    result = CommandResult(
+        status="SUCCESS",
+        title="/sandbox run",
+        summary="awaiting approval",
+        pending_prepared_turn=prepared,
+    )
+    controller = ChatController(
+        connection_factory=_make_conn_factory(in_memory_conn),
+        surface="tui-chat",
+        on_message=lambda _style, _text: None,
+    )
+
+    # When: the command is routed through the chat controller
+    with patch("vnalpha.chat.controller.CommandExecutor") as executor_type:
+        executor_type.return_value.execute.return_value = result
+        controller.handle_slash_command("/sandbox run mean of 1, 2, 3")
+
+    # Then: approval retains the exact object rather than reconstructing metadata
+    assert controller._pending_prepared_turn is prepared
+    assert controller._pending_plan is prepared.plan
+
+
 # ---------------------------------------------------------------------------
 # Section 2 — Task 2.4: handle_natural_language calls AssistantApp.ask
 # ---------------------------------------------------------------------------

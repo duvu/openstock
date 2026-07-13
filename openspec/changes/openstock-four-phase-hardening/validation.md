@@ -102,6 +102,14 @@ This file is the evidence ledger. Do not replace `pending` with `pass` without a
 | 2026-07-12T06:45:00Z | 8060ae062b33867c7365041258d511d5ac4ba988 | 4.27, 6.6 | make test-vnalpha | 0 | 100% passed; full test suite green | local command transcript |
 | 2026-07-12T06:45:00Z | 8060ae062b33867c7365041258d511d5ac4ba988 | 4.G4, 6.12, 4.G5 | python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening | 0 | OpenSpec completion validation is PASS for this change | local command transcript |
 | 2026-07-12T06:45:10Z | 8060ae062b33867c7365041258d511d5ac4ba988 | 6.13 | workflow/branch-policy review (`gh api repos/duvu/openstock/branches/main/protection`) | 1 | Confirmatory check remains external for required repo policy evidence | external workflow review record |
+| 2026-07-13T01:04:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 0.4, 1.G2, 1.G4, 1.G5, 2.G1, 2.G2, 2.G3, 2.G4, 2.G5, 3.32, 4.30, 4.31, 4.32, 4.33, 4.41, 4.G1, 4.G2, 4.G6, 6.2, 6.3, 6.4, 6.5, 6.11, 6.14, 6.15, 6.16 | `PIP_INDEX_URL=https://pypi.org/simple make verify-hardening` | 0 | Final local hardening matrix passed after dependency-closure fixes; external final-SHA check remains task 6.13. | `openspec/changes/openstock-four-phase-hardening/evidence/dependency-closure.md` |
+| 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 0.2 | clean-branch scope audit against the original dirty worktree | 0 | Dependency work was isolated in `agent/dependency-closure`; unrelated classifier JSON-parser files remained outside PR #62/#63. | https://github.com/duvu/openstock/pull/62 |
+| 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 0.3 | `gh pr view 62 --json state,mergedAt,url && gh pr view 63 --json state,url,headRefOid` | 0 | Dependency implementation was split across merged PR #62 and compatibility follow-up PR #63. | https://github.com/duvu/openstock/pull/63 |
+| 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 6.13 | `gh run view 29218144573 --json conclusion,headSha,url && gh run view 29218144547 --json conclusion,headSha,url` | 0 | Final implementation SHA passed vnalpha-ci and generic source-export checks. | https://github.com/duvu/openstock/actions/runs/29218144573 |
+| 2026-07-13T03:45:31Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 4.35–4.40 | `python -m pytest -q scripts/tests/test_check_openspec_completion.py` | 0 | 12 verifier tests pass, including rejection of abbreviated final SHAs and working-tree evidence for required completion commands. | local command transcript |
+| 2026-07-13T04:05:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 4.35–4.40 | `pytest -q scripts/tests/test_check_openspec_completion.py` | 0 | 15 verifier tests pass; completion now requires real repository commits for the final SHA and every successful evidence row, plus exact required-command matching. | local command transcript |
+| 2026-07-13T04:05:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 6.5, 6.7, 6.8 | `make lint-vnalpha`; `make verify-r4`; `packaging/scripts/openstock-verify --ci` | 0 | Lint passed for 534 files, all 81 R4 tests passed, and deployment verification passed with 16 OK, 1 non-blocking warning, 0 FAIL. | local command transcript |
+| 2026-07-13T04:05:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | OpenSpec | `openspec validate openstock-four-phase-hardening --strict` | 0 | Strict validation passed; exact final-SHA gates remain intentionally pending. | local command transcript |
 ## Evidence row format
 
 Every executed command must add one row:
@@ -229,12 +237,7 @@ Exact commands may be adjusted to the repository packaging interface, but equiva
 
 ## Deferred work register
 
-Task ID: 0.2, 0.3, 6.13
-Reason: Governance/process completion is controlled outside this implementation slice
-Owner: Program/branch/release owners
-Dependency: 0.2 (freeze plan), 0.3 (phase-split branch alignment), 6.13 (GitHub check evidence)
-Risk accepted until: external release control and governance close
-Approval reference: local OpenSpec execution notes + reviewer acknowledgement
+No tasks are deferred.
 
 Required defer format:
 
@@ -251,18 +254,37 @@ A deferred task does not count as complete. The final gate may pass with a defer
 
 ## Blockers
 
-- Task 0.2 and 0.3: deferred for external governance and phase-split branch process decisions.
-- Task 6.13: deferred because GitHub check evidence capture is external to this local runtime pass.
+None.
 
 ## Next executable task
 
-None for this implementation slice; remaining work is external governance/process closure (`6.13`, `0.2`, `0.3`).
+Commit the strengthened verifier and current dependency repairs, rerun every
+required gate at that exact SHA, and only then restore completion/archive
+readiness.
 
 ## Completion record
 
 ```text
-Final implementation SHA: 8060ae062b33867c7365041258d511d5ac4ba988
-Final CI run: 2026-07-12T06:45:00Z
-OpenSpec verifier result: PASS
-Ready to archive: Deferred (6.13 awaiting external confirmation)
+Previous implementation SHA: c5e3688186ce9c8a26ddfa3a40edd3b98563e23f
+Final implementation SHA: pending
+Final CI run: pending
+OpenSpec verifier result: INCOMPLETE until required commands pass at the final SHA
+Ready to archive: pending
 ```
+
+## Dependency-closure addendum — 2026-07-13
+
+| Timestamp (UTC) | Tasks | Command | Exit | Evidence |
+|---|---|---|---:|---|
+| 2026-07-13T00:10:00Z | 4.23–4.24 | GitHub Actions run `29213731779` log inspection | 0 | Root cause: hygiene gate ran before dependency installation and `openstock-secret-scan` required unavailable `rg`; seeded-secret fixture correctly failed the false PASS. |
+| 2026-07-13T00:11:00Z | 1.11, 4.24 | `bash packaging/tests/test_repo_secret_scan.sh` with a PATH excluding `rg` | 0 | Scanner uses a portable grep/awk fallback and still rejects the seeded secret. |
+| 2026-07-13T00:27:00Z | 6.1 | `make repo-hygiene`; scanner and recurrence fixtures | 0 | Hygiene, current-tree secret scan, hygiene fixture, and no-rg secret fixture passed. |
+| 2026-07-13T00:15:00Z | 6.5 | `make lint-vnalpha` | 0 | Ruff check and format gate passed for 507 files. |
+| 2026-07-13T00:28:00Z | 6.6 | writable-state `make test-vnalpha` | 0 | Full suite completed at 100% with no failures. |
+| 2026-07-13T00:29:00Z | 6.7 | writable-state `make verify-r4` | 0 | R4 acceptance suite completed at 100% with no failures. |
+| 2026-07-13T00:13:00Z | 6.8 | `VNALPHA_LOG_ROOT=/tmp/openstock-verify-logs packaging/scripts/openstock-verify --ci` | 0 | 16 OK, 1 non-blocking systemd warning, 0 FAIL; status PASS. |
+| 2026-07-13T00:32:00Z | 6.12 | `openspec validate openstock-four-phase-hardening --strict`; completion verifier | 0 | Strict OpenSpec validation and completion evidence verification passed on the current tree. |
+
+The user explicitly authorized dependency closure before resuming research feature
+work. PR #62 merged the dependency implementation; PR #63 contains the Python
+compatibility and CI follow-up and is green on the final implementation SHA.

@@ -137,7 +137,9 @@ def handle_watchlist_summary(
             )
         )
 
-    strongest = [item.get("symbol", "") for item in top_candidates[:3] if item.get("symbol")]
+    strongest = [
+        item.get("symbol", "") for item in top_candidates[:3] if item.get("symbol")
+    ]
     near_confirmation = [
         item.get("symbol", "")
         for item in top_candidates

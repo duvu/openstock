@@ -113,6 +113,7 @@ class SandboxDockerOrchestrator:
             evidence = SandboxExecutionEvidence.from_result(
                 SandboxExecutionStatus.FAILED,
                 execution,
+                docker_request,
                 SandboxExecutionFailureCode.INVALID_RUNNER_RESULT,
             )
             if not self._persist_evidence(evidence):
@@ -137,7 +138,9 @@ class SandboxDockerOrchestrator:
                 execution=execution,
             )
         status, failure_code = classification
-        evidence = SandboxExecutionEvidence.from_result(status, execution)
+        evidence = SandboxExecutionEvidence.from_result(
+            status, execution, docker_request
+        )
         if not self._persist_evidence(evidence):
             self._record_failure(
                 request,

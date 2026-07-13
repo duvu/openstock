@@ -118,14 +118,18 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
             encoding="utf-8",
         )
     except Exception as exc:
-        raise ResearchArtifactWriterError(f"failed to write json {path}: {exc}") from exc
+        raise ResearchArtifactWriterError(
+            f"failed to write json {path}: {exc}"
+        ) from exc
 
 
 def _write_text(path: Path, text: str) -> None:
     try:
         path.write_text(text, encoding="utf-8")
     except Exception as exc:
-        raise ResearchArtifactWriterError(f"failed to write text {path}: {exc}") from exc
+        raise ResearchArtifactWriterError(
+            f"failed to write text {path}: {exc}"
+        ) from exc
 
 
 def _write_bytes(path: Path, value: str | bytes) -> None:
@@ -133,7 +137,9 @@ def _write_bytes(path: Path, value: str | bytes) -> None:
     try:
         path.write_bytes(payload)
     except Exception as exc:
-        raise ResearchArtifactWriterError(f"failed to write bytes {path}: {exc}") from exc
+        raise ResearchArtifactWriterError(
+            f"failed to write bytes {path}: {exc}"
+        ) from exc
 
 
 def _safe_chart_name(name: str) -> str:
@@ -142,4 +148,3 @@ def _safe_chart_name(name: str) -> str:
         return "chart"
     cleaned = "".join(ch for ch in value if ch.isalnum() or ch in "-_")
     return cleaned or "chart"
-

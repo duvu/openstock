@@ -179,7 +179,10 @@ class AssistantApp:
                 input_summary={"prompt_chars": len(prompt)},
             )
             try:
-                intent_result = self._classifier.classify(prompt, session_id=session_id)
+                intent_result = self._classifier.classify(
+                    prompt,
+                    session_id=request.routing_session_id or session_id,
+                )
                 finish_llm_trace(
                     self._conn,
                     classify_trace_id,
@@ -286,7 +289,9 @@ class AssistantApp:
                 plan=prepared.plan.to_dict(),
                 answer=answer.to_dict(),
             )
-            finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="EXECUTED")
+            finish_prepared_turn(
+                self._conn, prepared.prepared_turn_id, status="EXECUTED"
+            )
             try:
                 from vnalpha.observability.trace import log_trace
 
@@ -315,7 +320,9 @@ class AssistantApp:
                 prepared.plan,
                 tool_outputs,
                 request=prepared.request,
-                session_id=prepared.assistant_session_id,
+                session_id=(
+                    prepared.request.routing_session_id or prepared.assistant_session_id
+                ),
             )
             finish_llm_trace(
                 self._conn,

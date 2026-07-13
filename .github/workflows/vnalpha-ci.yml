@@ -22,6 +22,10 @@ concurrency:
   group: vnalpha-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  NO_COLOR: "1"
+  _TYPER_FORCE_DISABLE_TERMINAL: "1"
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -70,7 +74,7 @@ jobs:
         with:
           name: focused-tests-log
           path: focused-tests.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Lint and format check
@@ -121,7 +125,7 @@ jobs:
         with:
           name: eval-research-answers-log
           path: eval-research-answers.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Runtime-replay evaluation
@@ -136,7 +140,7 @@ jobs:
         with:
           name: eval-research-runtime-log
           path: eval-research-runtime.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Installed wheel and sdist evaluations

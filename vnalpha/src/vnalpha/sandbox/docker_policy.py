@@ -7,7 +7,9 @@ import stat
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Final, NewType, final, override
+from typing import Final, NewType, final
+
+from typing_extensions import override
 
 from vnalpha.sandbox.models import SandboxResourceLimits
 
@@ -54,6 +56,50 @@ class DockerExecutionRequest:
 
     def __post_init__(self) -> None:
         _ = parse_docker_image_reference(self.image)
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class DockerSecurityProfile:
+    image_digest: str
+    cpu_millis: int
+    memory_mb: int
+    timeout_seconds: int
+    pids_limit: int
+    network: str
+    root_read_only: bool
+    code_read_only: bool
+    inputs_read_only: bool
+    output_read_write: bool
+    input_mount_count: int
+    user_id: int
+    capabilities_dropped: str
+    no_new_privileges: bool
+    pull_policy: str
+    environment_forwarded: bool
+
+
+def effective_security_profile(
+    request: DockerExecutionRequest,
+) -> DockerSecurityProfile:
+    return DockerSecurityProfile(
+        image_digest=str(request.image).split("@", 1)[1],
+        cpu_millis=request.resource_limits.cpu_millis,
+        memory_mb=request.resource_limits.memory_mb,
+        timeout_seconds=request.resource_limits.timeout_seconds,
+        pids_limit=_DOCKER_PIDS_LIMIT,
+        network="none",
+        root_read_only=True,
+        code_read_only=True,
+        inputs_read_only=True,
+        output_read_write=True,
+        input_mount_count=len(request.input_paths),
+        user_id=_DOCKER_UID,
+        capabilities_dropped="ALL",
+        no_new_privileges=True,
+        pull_policy="never",
+        environment_forwarded=bool(request.environment),
+    )
 
 
 def parse_docker_image_reference(raw_image: str) -> DockerImageReference:

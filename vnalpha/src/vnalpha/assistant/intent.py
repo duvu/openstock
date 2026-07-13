@@ -13,7 +13,7 @@ from vnalpha.assistant.research_intelligence_intents import (
     INTENT_DESCRIPTIONS,
     INTENT_EXAMPLES,
 )
-from vnalpha.assistant.response_parser import parse_intent_response
+from vnalpha.assistant.response_json import parse_classifier_response
 from vnalpha.model_routing.models import ModelProfile, ModelTaskType
 
 _log = structlog.get_logger("assistant.intent")
@@ -153,7 +153,7 @@ class IntentClassifier:
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
 
         try:
-            result = parse_intent_response(response_text, user_prompt)
+            result = parse_classifier_response(response_text, user_prompt)
         except IntentClassificationError:
             try:
                 response_text, usage = self._client.chat(
@@ -164,10 +164,12 @@ class IntentClassifier:
                     model_profile=ModelProfile.DEFAULT,
                     route_metadata=route_metadata,
                 )
-                result = parse_intent_response(response_text, user_prompt)
+                result = parse_classifier_response(response_text, user_prompt)
+            except IntentClassificationError as retry_exc:
+                raise IntentClassificationError(
+                    f"Invalid JSON from classifier after retry: {retry_exc}"
+                ) from retry_exc
             except Exception as exc:
-                if isinstance(exc, IntentClassificationError):
-                    raise
                 raise IntentClassificationError(
                     f"LLM classifier retry failed: {exc}"
                 ) from exc

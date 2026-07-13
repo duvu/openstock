@@ -8,6 +8,7 @@ from typing import Never
 import duckdb
 import pytest
 
+from vnalpha.assistant.models import PreparedAssistantTurn
 from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.models import CommandResult, CommandStatus
 from vnalpha.commands.parser import parse
@@ -102,7 +103,7 @@ def test_sandbox_run_requires_explicit_approval_without_starting_execution(
         0
     ]
 
-    result = _execute("/sandbox run compare persisted datasets", sandbox_connection)
+    result = _execute("/sandbox run mean of 1, 2, 3", sandbox_connection)
     after = sandbox_connection.execute("SELECT count(*) FROM sandbox_job").fetchone()[0]
 
     assert result.status is CommandStatus.SUCCESS
@@ -114,6 +115,7 @@ def test_sandbox_run_requires_explicit_approval_without_starting_execution(
     rendered = str(result.panels[0].content)
     assert "job_id" in rendered
     assert "code_summary" in rendered
+    assert isinstance(result.pending_prepared_turn, PreparedAssistantTurn)
 
 
 def test_sandbox_run_rejects_missing_purpose(

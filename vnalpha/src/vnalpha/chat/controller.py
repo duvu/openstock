@@ -163,6 +163,12 @@ class ChatController:
             else:
                 result = executor.execute(raw)
             self._render_command_result(result)
+            if result.pending_prepared_turn is not None:
+                self._pending_prepared_turn = result.pending_prepared_turn
+                self._pending_plan = result.pending_prepared_turn.plan
+                self._pending_plan_turn_context = {
+                    "prepared_turn_id": result.pending_prepared_turn.prepared_turn_id
+                }
             research_session_id = None
             metadata = getattr(result, "metadata", None)
             if metadata and isinstance(metadata, dict):
@@ -429,6 +435,7 @@ class ChatController:
             self._pending_plan_turn_context = None
             self._persist_message("user", "Approved.", "plan_approval")
             try:
+                self._approve_prepared_turn(prepared)
                 answer, _plan = self._execute_prepared_turn(prepared)
                 self._render_prepared_answer(answer)
             except Exception as exc:
@@ -788,6 +795,7 @@ class ChatController:
                     current_user_prompt=question,
                     workspace_context=workspace_context,
                     date=self._target_date,
+                    routing_session_id=self._chat_session_id,
                 )
             )
         finally:
@@ -803,6 +811,20 @@ class ChatController:
             run_migrations(conn=conn)
             return AssistantApp(conn, surface=self._surface).execute_prepared(
                 prepared, on_trace_event=self._on_trace
+            )
+        finally:
+            conn.close()
+
+    def _approve_prepared_turn(self, prepared: "PreparedAssistantTurn") -> None:
+        from vnalpha.sandbox.execution_service import SandboxExecutionService
+        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.migrations import run_migrations
+
+        conn = get_connection()
+        try:
+            run_migrations(conn=conn)
+            SandboxExecutionService(conn, surface=self._surface).approve_prepared_turn(
+                prepared
             )
         finally:
             conn.close()

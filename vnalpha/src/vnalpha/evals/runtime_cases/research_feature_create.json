@@ -1,0 +1,8 @@
+{
+  "case_id": "research_feature_create",
+  "request": {"current_user_prompt": "Create feature rs_20 = rs_20d_vs_vnindex.", "workspace_context": null, "date": null},
+  "classifier_response": {"intent": "create_feature", "confidence": 0.99, "entities": {"definition": "rs_20 = rs_20d_vs_vnindex", "universe": "VN30"}, "needs_clarification": false, "clarification_question": null, "safety_flags": []},
+  "synthesis_response": {"summary": "The feature definition was persisted without generated-code execution.", "basis": "The deterministic feature artifact records the definition and lineage.", "risks_caveats": "Research-only definition; validate coverage before interpretation.", "tool_trace_summary": "research.feature.create completed.", "missing_data": [], "grounded_source_refs": ["fixture://runtime/research_feature_create"], "research_metadata": {}},
+  "tool_outputs": [{"tool_name": "research.feature.create", "arguments": {"definition": "rs_20 = rs_20d_vs_vnindex", "universe": "VN30"}, "data": {"artifact_id": "feature-1", "artifact_type": "feature", "status": "created", "metrics": {}, "caveats": ["research-only"], "dataset_refs": [{"snapshot_id": "feature-snapshot-1"}], "research_only": true}, "artifact_refs": ["fixture://runtime/research_feature_create"], "summary": "Seeded feature creation.", "warnings": []}],
+  "expected": {"outcome": "answer", "intent": "create_feature", "plan": [{"tool_name": "research.feature.create", "arguments": {"definition": "rs_20 = rs_20d_vs_vnindex", "universe": "VN30"}}], "successful_trace_tools": ["research.feature.create"], "groundedness_status": "PASS", "policy_status": "PASS", "fallback_used": false, "audit_status": "persisted", "required_missing_data": [], "forbidden_source_refs": [], "claim_source_refs": {}}
+}

@@ -120,6 +120,20 @@ class SandboxJobRepository:
         ).fetchall()
         return tuple(_record_from_row(row) for row in rows)
 
+    def claim_for_validation(self, job_id: SandboxJobId) -> None:
+        """Atomically consume a queued job before guard or Docker work begins."""
+
+        row = self._conn.execute(
+            _CLAIM_FOR_VALIDATION_SQL,
+            [SandboxJobStatus.VALIDATING.value, job_id],
+        ).fetchone()
+        if row is not None:
+            return
+        current = self.get(job_id)
+        if current is None:
+            raise SandboxJobNotFoundError(job_id)
+        raise SandboxJobTransitionError(job_id, current.status)
+
     def mark_succeeded(self, job_id: SandboxJobId, result_summary: str) -> None:
         """Persist a bounded successful result summary."""
 
@@ -183,6 +197,11 @@ FROM sandbox_job
 """
 
 _TERMINAL_SOURCE_STATE_SQL = "status IN ('queued', 'validating', 'running')"
+_CLAIM_FOR_VALIDATION_SQL = """
+UPDATE sandbox_job SET status = ?, updated_at = current_timestamp
+WHERE job_id = ? AND status = 'queued'
+RETURNING job_id
+"""
 _SUCCEEDED_UPDATE_SQL = f"""
 UPDATE sandbox_job SET status = ?, result_summary = ?, updated_at = current_timestamp
 WHERE job_id = ? AND {_TERMINAL_SOURCE_STATE_SQL}

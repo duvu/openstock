@@ -7,8 +7,10 @@ from vnalpha.sandbox.docker_policy import (
     DockerExecutionRequest,
     DockerImageReference,
     DockerPolicyError,
+    DockerSecurityProfile,
     build_docker_run_argv,
     docker_container_name,
+    effective_security_profile,
     parse_docker_image_reference,
 )
 from vnalpha.sandbox.docker_runtime import (
@@ -33,9 +35,11 @@ __all__ = (
     "DockerPolicyError",
     "DockerPreflightResult",
     "DockerRunner",
+    "DockerSecurityProfile",
     "MAX_DOCKER_CAPTURE_BYTES",
     "SubprocessDockerCommand",
     "build_docker_run_argv",
     "docker_container_name",
+    "effective_security_profile",
     "parse_docker_image_reference",
 )

@@ -111,9 +111,7 @@ def test_execution_service_prepares_container_accessible_code_and_output_permiss
         docker_runner=runner,
     )
 
-    plan = service.materialize_assistant_plan(
-        _sandbox_plan("compare persisted datasets")
-    )
+    plan = service.materialize_assistant_plan(_sandbox_plan("mean of 1, 2, 3"))
     prepared = _prepared_turn(plan)
     service.approve_prepared_turn(prepared)
     _ = service.execute_prepared_turn(prepared)

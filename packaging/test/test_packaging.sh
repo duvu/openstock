@@ -335,19 +335,30 @@ if [[ -n "${DEB_FILE}" ]]; then
     VNALPHA_WHEEL="$(find "${DEB_ROOT}/opt/vnalpha/wheels" -maxdepth 1 -name 'vnalpha-*.whl' -print -quit)"
     if [[ -n "${VNALPHA_WHEEL}" ]]; then
       ok ".deb bundles the vnalpha application wheel"
+      if find "${DEB_ROOT}/opt/vnalpha/wheels" -maxdepth 1 -name 'duckdb-*.whl' -print -quit | grep -q .; then
+        ok ".deb bundles runtime dependency wheels"
+      else
+        fail ".deb is missing runtime dependency wheels"
+      fi
       if unzip -Z1 "${VNALPHA_WHEEL}" | grep -F "vnalpha/evals/runtime_cases/invalid_explicit_date.json" >/dev/null; then
         ok ".deb application wheel bundles runtime eval resources"
       else
         fail ".deb application wheel is missing runtime eval resources"
       fi
       DEB_EVAL_ROOT="$(mktemp -d /tmp/vnalpha-deb-eval.XXXXXX)"
-      if python3 -m pip install --quiet --no-deps --target "${DEB_EVAL_ROOT}" "${VNALPHA_WHEEL}"; then
-        if PYTHONPATH="${DEB_EVAL_ROOT}" python3 -c 'from vnalpha.cli import app; app()' eval research-answers --ci >/dev/null; then
+      DEB_LOG_ROOT="$(mktemp -d /tmp/vnalpha-deb-logs.XXXXXX)"
+      python3 -m venv "${DEB_EVAL_ROOT}/venv"
+      if "${DEB_EVAL_ROOT}/venv/bin/pip" install \
+        --quiet \
+        --no-index \
+        --find-links "${DEB_ROOT}/opt/vnalpha/wheels" \
+        vnalpha; then
+        if VNALPHA_LOG_ROOT="${DEB_LOG_ROOT}" VNALPHA_LOG_PATH="${DEB_LOG_ROOT}/vnalpha.log" "${DEB_EVAL_ROOT}/venv/bin/python" -c 'from vnalpha.cli import app; app()' eval research-answers --ci >/dev/null; then
           ok ".deb application wheel runs fixture-contract eval"
         else
           fail ".deb application wheel fixture-contract eval failed"
         fi
-        if PYTHONPATH="${DEB_EVAL_ROOT}" python3 -c 'from vnalpha.cli import app; app()' eval research-runtime --ci >/dev/null; then
+        if VNALPHA_LOG_ROOT="${DEB_LOG_ROOT}" VNALPHA_LOG_PATH="${DEB_LOG_ROOT}/vnalpha.log" "${DEB_EVAL_ROOT}/venv/bin/python" -c 'from vnalpha.cli import app; app()' eval research-runtime --ci >/dev/null; then
           ok ".deb application wheel runs runtime-replay eval"
         else
           fail ".deb application wheel runtime-replay eval failed"
@@ -355,7 +366,7 @@ if [[ -n "${DEB_FILE}" ]]; then
       else
         fail ".deb application wheel could not be installed into an isolated target"
       fi
-      rm -rf "${DEB_EVAL_ROOT}"
+      rm -rf "${DEB_EVAL_ROOT}" "${DEB_LOG_ROOT}"
     else
       fail ".deb is missing the vnalpha application wheel"
     fi

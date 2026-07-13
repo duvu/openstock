@@ -42,6 +42,12 @@ Sandbox jobs SHALL execute only through Docker Engine on a supported Linux host.
 
 Docker OS isolation SHALL be the primary generated-code execution boundary. Policy checks, static guards, output validation, and artifact validation SHALL be defense-in-depth controls and SHALL NOT be treated as substitutes for Docker isolation.
 
+#### Scenario: Static guard passes but Docker boundary is unavailable
+
+- **WHEN** generated code passes policy and static guard checks but Docker preflight cannot establish the required isolation boundary
+- **THEN** the job is rejected without execution
+- **AND** no local-process or alternate-runtime fallback is used
+
 ### Requirement: Sandbox code shall pass static guard before execution
 
 Generated code SHALL be rejected before execution if it contains dangerous imports, dangerous patterns, or trading-execution references.

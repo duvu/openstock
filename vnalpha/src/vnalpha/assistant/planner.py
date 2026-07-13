@@ -7,6 +7,9 @@ from typing import Any
 
 from vnalpha.assistant.errors import PlanBuildError, PlanValidationError
 from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
+from vnalpha.assistant.research_automation_plans import (
+    RESEARCH_AUTOMATION_PLAN_BUILDERS,
+)
 
 
 def _resolve_symbol(entities: dict) -> str:
@@ -443,6 +446,7 @@ _PLAN_BUILDERS = {
     "fetch_data": _build_fetch_plan,
     "sandbox_research_calculation": _build_sandbox_plan,
     "unsupported_or_unsafe": _build_refusal_plan,
+    **RESEARCH_AUTOMATION_PLAN_BUILDERS,
 }
 
 
@@ -479,4 +483,6 @@ class PlanBuilder:
             )
         if plan.assumptions:
             lines.append(f"Assumptions: {', '.join(plan.assumptions)}")
+        if plan.required_artifacts:
+            lines.append(f"Expected artifacts: {', '.join(plan.required_artifacts)}")
         return "\n".join(lines)

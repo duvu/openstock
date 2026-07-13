@@ -16,6 +16,14 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
     from vnalpha.tools.lineage import get_symbol_lineage
     from vnalpha.tools.notes import create_note, list_sessions
     from vnalpha.tools.quality import get_many_quality_status, get_quality_status
+    from vnalpha.tools.research_automation import (
+        create_feature,
+        run_event_study,
+        run_indicator,
+        scan_pattern,
+        test_hypothesis,
+        validate_feature,
+    )
     from vnalpha.tools.research_context import (
         get_market_regime,
         get_sector_strength,
@@ -32,6 +40,50 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
     from vnalpha.tools.watchlist import filter_watchlist, scan_watchlist
 
     registry = LocalToolRegistry()
+
+    research_tools = (
+        (
+            "research.indicator.run",
+            "Run a deterministic indicator experiment",
+            run_indicator,
+        ),
+        (
+            "research.feature.create",
+            "Persist a research feature definition",
+            create_feature,
+        ),
+        (
+            "research.feature.validate",
+            "Validate a persisted research feature",
+            validate_feature,
+        ),
+        (
+            "research.hypothesis.test",
+            "Test a bounded historical hypothesis",
+            test_hypothesis,
+        ),
+        (
+            "research.pattern.scan",
+            "Scan persisted features for a research pattern",
+            scan_pattern,
+        ),
+        (
+            "research.event_study.run",
+            "Run an offline research event study",
+            run_event_study,
+        ),
+    )
+    for name, description, implementation in research_tools:
+        registry.register(
+            ToolSpec(
+                name=name,
+                description=description,
+                permission=ToolPermission.WRITE_DATA,
+            ),
+            lambda implementation=implementation, **kwargs: implementation(
+                conn, **kwargs
+            ),
+        )
 
     registry.register(
         ToolSpec(
