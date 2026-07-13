@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
+
+import duckdb
 
 if TYPE_CHECKING:
     from vnalpha.chat.context import ChatContext
@@ -96,6 +99,10 @@ def _refusal_result(exc: RefusalError) -> tuple[RefusalMessage, AssistantPlan]:
             refusal_reason=reason,
         ),
     )
+
+
+def _request_as_of_date(value: str | None) -> date:
+    return date.fromisoformat(normalize_optional_date(value))
 
 
 class AssistantApp:
@@ -212,6 +219,7 @@ class AssistantApp:
                 intent_result.entities["date"] = request.date
             check_intent_policy(intent_result)
             plan = self._planner.build(intent_result)
+            request = self._with_symbol_memory_context(request, intent_result.entities)
             if is_approval_required_plan(plan):
                 from vnalpha.sandbox.execution_service import SandboxExecutionService
 
@@ -261,6 +269,41 @@ class AssistantApp:
                 error={"error_type": type(exc).__name__, "message": str(exc)},
             )
             raise
+
+    def _with_symbol_memory_context(
+        self, request: AssistantRequest, entities: dict[str, Any]
+    ) -> AssistantRequest:
+        raw_symbols = entities.get("symbols", ())
+        symbols = (
+            (raw_symbols,)
+            if isinstance(raw_symbols, str)
+            else tuple(symbol for symbol in raw_symbols if isinstance(symbol, str))
+            if isinstance(raw_symbols, list | tuple)
+            else ()
+        )
+        if not symbols:
+            return request
+        as_of_date = _request_as_of_date(request.date)
+        try:
+            from vnalpha.symbol_memory.repository import SymbolMemoryRepository
+            from vnalpha.symbol_memory.retrieval import SymbolMemoryRetrievalService
+
+            retrieval = SymbolMemoryRetrievalService(SymbolMemoryRepository(self._conn))
+            rendered = tuple(
+                retrieval.render_context(
+                    retrieval.retrieve(symbol, as_of_date=as_of_date)
+                )
+                for symbol in symbols
+            )
+        except (duckdb.Error, ValueError):
+            return request
+        memory_context = "\n\n".join(rendered)
+        if not memory_context:
+            return request
+        workspace_context = "\n\n".join(
+            value for value in (request.workspace_context, memory_context) if value
+        )
+        return replace(request, workspace_context=workspace_context)
 
     def execute_prepared(
         self,

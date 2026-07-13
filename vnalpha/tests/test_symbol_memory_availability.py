@@ -38,9 +38,24 @@ def test_rebuild_index_restores_card_from_structured_claims(tmp_path) -> None:
         "source_refs_json, correlation_id, created_at, supersedes_claim_id, lifecycle_reason) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            "rebuild-claim", "FPT", "durable_fact", "sector", '{"value":"Technology"}',
-            "active", False, None, None, "2026-07-13", "2026-07-13", None,
-            "validated_evidence", '["profile:FPT"]', "rebuild-test", "2026-07-13T00:00:00+00:00", None, None,
+            "rebuild-claim",
+            "FPT",
+            "durable_fact",
+            "sector",
+            '{"value":"Technology"}',
+            "active",
+            False,
+            None,
+            None,
+            "2026-07-13",
+            "2026-07-13",
+            None,
+            "validated_evidence",
+            '["profile:FPT"]',
+            "rebuild-test",
+            "2026-07-13T00:00:00+00:00",
+            None,
+            None,
         ],
     )
 

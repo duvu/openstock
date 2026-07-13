@@ -30,7 +30,8 @@ ALL_DDL_SYMBOL_MEMORY = (
     "correlation_id VARCHAR NOT NULL, "
     "created_at TIMESTAMPTZ NOT NULL, "
     "supersedes_claim_id VARCHAR, "
-    "lifecycle_reason VARCHAR)",
+    "lifecycle_reason VARCHAR, "
+    "source_published_at DATE)",
     "CREATE INDEX IF NOT EXISTS memory_claim_symbol_status_idx "
     "ON memory_claim(symbol, status, as_of_date)",
     "CREATE TABLE IF NOT EXISTS memory_document ("

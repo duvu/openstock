@@ -18,6 +18,10 @@ class KnowledgePaths:
     exports_dir: Path
 
 
+class KnowledgePathError(ValueError):
+    pass
+
+
 def resolve_knowledge_root(root: Path | None = None) -> Path:
     if root is not None:
         return Path(root).expanduser() / "knowledge"
@@ -35,13 +39,19 @@ def ensure_knowledge_layout(root: Path | None = None) -> KnowledgePaths:
     manifests_dir = knowledge_root / "manifests"
     exports_dir = knowledge_root / "exports"
     for path in (
+        knowledge_root,
         symbols_dir,
+        archive_dir,
         archive_dir / "events",
         quarantine_dir,
         manifests_dir,
         exports_dir,
     ):
         path.mkdir(parents=True, exist_ok=True)
+        if path.is_symlink():
+            raise KnowledgePathError(
+                f"Knowledge storage directory must not be a symlink: {path.name}"
+            )
     return KnowledgePaths(
         root=knowledge_root,
         symbols_dir=symbols_dir,
@@ -56,8 +66,25 @@ def symbol_card_path(root: Path | None, symbol: str) -> Path:
     return ensure_knowledge_layout(root).symbols_dir / f"{normalize_symbol(symbol)}.md"
 
 
+def assert_knowledge_path(root: Path | None, path: Path) -> None:
+    layout = ensure_knowledge_layout(root)
+    try:
+        relative = path.relative_to(layout.root)
+    except ValueError as exc:
+        raise KnowledgePathError("Knowledge path escapes the storage root.") from exc
+    current = layout.root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise KnowledgePathError(
+                f"Knowledge storage path must not be a symlink: {current.name}"
+            )
+
+
 __all__ = [
     "KnowledgePaths",
+    "KnowledgePathError",
+    "assert_knowledge_path",
     "ensure_knowledge_layout",
     "resolve_knowledge_root",
     "symbol_card_path",

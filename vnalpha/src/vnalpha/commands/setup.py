@@ -47,10 +47,10 @@ def build_default_registry() -> CommandRegistry:
         CommandMeta(
             name="memory",
             description="Inspect and maintain bounded symbol research memory.",
-            usage="/memory <status|show|remember|correct|pin|unpin|conflicts|sources|compact|repair|rebuild-index> ...",
+            usage="/memory <status|show|remember|correct|pin|unpin|conflicts|sources|compact|repair|rebuild-index|maintain> ...",
             examples=[
                 "/memory status",
-                "/memory remember FPT \"watch source coverage\"",
+                '/memory remember FPT "watch source coverage"',
                 "/memory compact FPT --dry-run",
             ],
             permissions=permission_names("memory"),

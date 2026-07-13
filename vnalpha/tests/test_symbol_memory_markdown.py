@@ -6,17 +6,24 @@ import pytest
 
 import vnalpha.symbol_memory.markdown as markdown_module
 from vnalpha.symbol_memory.markdown import (
+    MemoryCardError,
     parse_symbol_card,
     write_symbol_card,
 )
-from vnalpha.symbol_memory.storage import ensure_knowledge_layout, symbol_card_path
+from vnalpha.symbol_memory.storage import (
+    KnowledgePathError,
+    ensure_knowledge_layout,
+    symbol_card_path,
+)
 
 
 def _time() -> datetime:
     return datetime(2026, 7, 13, 10, 0, tzinfo=timezone.utc)
 
 
-def test_knowledge_layout_and_card_path_are_canonical_and_symbol_scoped(tmp_path) -> None:
+def test_knowledge_layout_and_card_path_are_canonical_and_symbol_scoped(
+    tmp_path,
+) -> None:
     layout = ensure_knowledge_layout(tmp_path)
 
     assert layout.root == tmp_path / "knowledge"
@@ -28,7 +35,9 @@ def test_knowledge_layout_and_card_path_are_canonical_and_symbol_scoped(tmp_path
     assert symbol_card_path(tmp_path, " fpt ") == layout.symbols_dir / "FPT.md"
 
 
-def test_symbol_card_round_trips_versioned_frontmatter_and_user_region(tmp_path) -> None:
+def test_symbol_card_round_trips_versioned_frontmatter_and_user_region(
+    tmp_path,
+) -> None:
     user_content = "Watch the next reporting period.\nDo not turn this into a fact."
     document = write_symbol_card(
         tmp_path,
@@ -73,7 +82,46 @@ def test_card_update_preserves_existing_user_region_byte_for_byte_and_bumps_gene
     assert parsed.user_content == user_content
 
 
-def test_failed_atomic_replace_keeps_existing_card_intact(tmp_path, monkeypatch) -> None:
+def test_write_symbol_card_rejects_reserved_region_markers_in_user_content(
+    tmp_path,
+) -> None:
+    with pytest.raises(MemoryCardError, match="reserved region marker"):
+        write_symbol_card(
+            tmp_path,
+            "FPT",
+            managed_content="- Current evidence\n",
+            user_content="first\n<!-- openstock:user:end -->\nsecond\n",
+        )
+
+
+def test_write_symbol_card_rejects_a_symlinked_symbols_directory(tmp_path) -> None:
+    knowledge_root = tmp_path / "knowledge"
+    knowledge_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (knowledge_root / "symbols").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(KnowledgePathError, match="symlink"):
+        write_symbol_card(tmp_path, "FPT", managed_content="- Current evidence\n")
+
+    assert not (outside / "FPT.md").exists()
+
+
+def test_write_symbol_card_rejects_a_symlinked_card_file(tmp_path) -> None:
+    layout = ensure_knowledge_layout(tmp_path)
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside", encoding="utf-8")
+    (layout.symbols_dir / "FPT.md").symlink_to(outside)
+
+    with pytest.raises(KnowledgePathError, match="symlink"):
+        write_symbol_card(tmp_path, "FPT", managed_content="- Current evidence\n")
+
+    assert outside.read_text(encoding="utf-8") == "outside"
+
+
+def test_failed_atomic_replace_keeps_existing_card_intact(
+    tmp_path, monkeypatch
+) -> None:
     first = write_symbol_card(
         tmp_path,
         "FPT",

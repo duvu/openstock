@@ -64,6 +64,7 @@ def run_migrations(
         conn.execute(ddl)
     for ddl in ALL_DDL_SYMBOL_MEMORY:
         conn.execute(ddl)
+    _migrate_symbol_memory_columns(conn)
     _migrate_research_answer_audit_columns(conn)
     _migrate_research_artifact_columns(conn)
     for ddl in ALL_DDL_PHASE6:
@@ -119,6 +120,12 @@ def _migrate_assistant_prompt_columns(conn: duckdb.DuckDBPyConnection) -> None:
         conn.execute(
             f"ALTER TABLE assistant_session ADD COLUMN IF NOT EXISTS {column} {column_type}"
         )
+
+
+def _migrate_symbol_memory_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    conn.execute(
+        "ALTER TABLE memory_claim ADD COLUMN IF NOT EXISTS source_published_at DATE"
+    )
 
 
 def _migrate_research_answer_audit_columns(conn: duckdb.DuckDBPyConnection) -> None:

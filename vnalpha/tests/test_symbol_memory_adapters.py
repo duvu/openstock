@@ -1,7 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
+from pathlib import Path
 
+import pytest
+
+from vnalpha.research_automation.models import (
+    ArtifactOutputs,
+    DatasetRef,
+    ResearchArtifact,
+    ResearchArtifactStatus,
+    ResearchArtifactType,
+)
 from vnalpha.research_models.models import (
     MarketRegimeSnapshot,
     SetupAnalysis,
@@ -114,3 +125,52 @@ def test_validated_research_models_map_to_symbol_grounded_evidence() -> None:
     assert regime.symbol == "FPT"
     assert levels.source_ref == "research_symbol_level_snapshot:levels-001"
     assert setup.claim_type == "technical_observation"
+
+
+def test_research_automation_adapter_accepts_validated_artifacts_only() -> None:
+    timestamp = datetime(2026, 7, 13, tzinfo=timezone.utc)
+    artifact = ResearchArtifact(
+        artifact_id="artifact-001",
+        artifact_type=ResearchArtifactType.HYPOTHESIS_TEST,
+        name="hypothesis-test",
+        purpose="Validate a research hypothesis.",
+        created_at=timestamp,
+        created_by="test",
+        correlation_id="artifact-correlation",
+        status=ResearchArtifactStatus.VALIDATED,
+        input_datasets=(
+            DatasetRef(
+                dataset_name="daily_bars",
+                snapshot_id="snapshot-001",
+                symbols=("FPT",),
+                end_date=date(2026, 7, 13),
+            ),
+        ),
+        sandbox_job_id=None,
+        parameters={},
+        metrics={},
+        lineage={"computation": "approved_deterministic_tool"},
+        quality_status={"state": "validated"},
+        caveats=("Sample size is limited.",),
+        outputs=ArtifactOutputs(
+            manifest=Path("manifest.json"),
+            result_json=Path("result.json"),
+            summary_md=Path("summary.md"),
+            lineage_json=Path("lineage.json"),
+            validation_json=Path("validation.json"),
+        ),
+    )
+
+    from vnalpha.symbol_memory.adapters import research_automation_evidence
+
+    evidence = research_automation_evidence("FPT", artifact)
+
+    assert evidence.source_ref == "research_automation:artifact-001"
+    assert evidence.as_of_date == date(2026, 7, 13)
+    assert evidence.value["validation_status"] == "validated"
+
+    with pytest.raises(ValueError, match="validated"):
+        research_automation_evidence(
+            "FPT",
+            replace(artifact, status=ResearchArtifactStatus.SUCCEEDED),
+        )

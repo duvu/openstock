@@ -10,13 +10,14 @@ from tempfile import NamedTemporaryFile
 
 from vnalpha.symbol_memory.models import MemoryDocument
 from vnalpha.symbol_memory.paths import normalize_symbol
-from vnalpha.symbol_memory.storage import symbol_card_path
+from vnalpha.symbol_memory.storage import assert_knowledge_path, symbol_card_path
 
 _MANAGED_START = "<!-- openstock:managed:start current-snapshot -->"
 _MANAGED_END = "<!-- openstock:managed:end current-snapshot -->"
 _USER_START = "<!-- openstock:user:start -->"
 _USER_END = "<!-- openstock:user:end -->"
 _DOCUMENT_HASH_PATTERN = re.compile(r'(document_hash: ")[^"]*(")')
+_RESERVED_REGION_MARKERS = (_MANAGED_START, _MANAGED_END, _USER_START, _USER_END)
 
 
 class MemoryCardError(ValueError):
@@ -45,9 +46,12 @@ def write_symbol_card(
 ) -> MemoryDocument:
     canonical_symbol = normalize_symbol(symbol)
     path = symbol_card_path(root, canonical_symbol)
+    assert_knowledge_path(root, path)
     previous = _load_existing(path)
     preserved_user_content = (
-        previous.user_content if user_content is None and previous else user_content or ""
+        previous.user_content
+        if user_content is None and previous
+        else user_content or ""
     )
     generation = 1 if previous is None else previous.generation + 1
     timestamp = updated_at or datetime.now(UTC)
@@ -58,7 +62,7 @@ def write_symbol_card(
         preserved_user_content,
         timestamp,
     )
-    _atomic_write_text(path, content)
+    atomic_write_text(path, content)
     return MemoryDocument(
         symbol=canonical_symbol,
         path=str(Path("knowledge") / "symbols" / f"{canonical_symbol}.md"),
@@ -119,6 +123,8 @@ def _render_card(
     user_content: str,
     updated_at: datetime,
 ) -> tuple[str, str, str]:
+    validate_symbol_card_content(managed_content)
+    validate_symbol_card_content(user_content)
     managed_hash = _hash(managed_content)
     provisional = (
         "---\n"
@@ -167,6 +173,8 @@ def _parse_frontmatter(frontmatter: str) -> dict[str, str]:
 
 
 def _extract_region(content: str, start: str, end: str) -> str:
+    if content.count(start) != 1 or content.count(end) != 1:
+        raise MemoryCardError("Symbol card has duplicated reserved region markers.")
     start_index = content.find(start)
     end_index = content.find(end)
     if start_index < 0 or end_index < 0 or end_index < start_index:
@@ -193,7 +201,13 @@ def _estimate_tokens(content: str) -> int:
     return max(0, (len(content) + 3) // 4)
 
 
-def _atomic_write_text(path: Path, content: str) -> None:
+def validate_symbol_card_content(content: str) -> None:
+    if any(marker in content for marker in _RESERVED_REGION_MARKERS):
+        raise MemoryCardError("Symbol-card content contains a reserved region marker.")
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    _assert_non_symlink_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path: Path | None = None
     try:
@@ -215,10 +229,20 @@ def _atomic_write_text(path: Path, content: str) -> None:
             temp_path.unlink()
 
 
+def _assert_non_symlink_path(path: Path) -> None:
+    for candidate in (path, *path.parents):
+        if candidate.is_symlink():
+            raise MemoryCardError(
+                f"Symbol-card path must not contain a symlink: {candidate.name}"
+            )
+
+
 __all__ = [
     "MemoryCardError",
     "ParsedSymbolCard",
+    "atomic_write_text",
     "document_hash_for_content",
     "parse_symbol_card",
+    "validate_symbol_card_content",
     "write_symbol_card",
 ]

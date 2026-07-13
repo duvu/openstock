@@ -9,6 +9,9 @@ Design:
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
+from datetime import date as DateType
+from pathlib import Path
 from typing import List, Optional
 
 import duckdb
@@ -33,6 +36,8 @@ def score_universe(
     conn: duckdb.DuckDBPyConnection,
     date: str,
     universe: Optional[List[str]] = None,
+    *,
+    memory_root: Path | None = None,
 ) -> int:
     """Score all symbols for a given date using feature_snapshot.
 
@@ -109,10 +114,60 @@ def score_universe(
             )
         # Persist to candidate_score table — single authoritative record
         save_candidate_score(conn, symbol, str(date_val), scored)
+        _project_candidate_score_to_memory(
+            conn, symbol, date_val, scored, memory_root=memory_root
+        )
         scored_count += 1
 
     logger.info("Scored and persisted %d symbols for %s", scored_count, date)
     return scored_count
+
+
+def _project_candidate_score_to_memory(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    as_of_date: object,
+    scored: dict,
+    *,
+    memory_root: Path | None,
+) -> None:
+    from vnalpha.symbol_memory.adapters import (
+        CandidateScoreSnapshot,
+        candidate_score_evidence,
+    )
+    from vnalpha.symbol_memory.compaction import SymbolMemoryCompactionService
+    from vnalpha.symbol_memory.ingestion import (
+        MemoryIngestionError,
+        SymbolMemoryIngestionService,
+    )
+    from vnalpha.symbol_memory.repository import SymbolMemoryRepository
+
+    try:
+        resolved_date = DateType.fromisoformat(str(as_of_date))
+        snapshot = CandidateScoreSnapshot(
+            symbol=symbol,
+            as_of_date=resolved_date,
+            score=float(scored["score"]),
+            candidate_class=str(scored["candidate_class"]),
+            setup_type=(
+                None if scored.get("setup_type") is None else str(scored["setup_type"])
+            ),
+            correlation_id=f"candidate-score:{symbol}:{resolved_date.isoformat()}",
+            persisted_at=datetime.now(UTC),
+        )
+        repository = SymbolMemoryRepository(conn)
+        ingestion = SymbolMemoryIngestionService(repository)
+        SymbolMemoryCompactionService(repository, memory_root).mutate_and_compact(
+            symbol,
+            lambda: ingestion.ingest_evidence(candidate_score_evidence(snapshot)),
+        )
+    except (MemoryIngestionError, ValueError, duckdb.Error) as exc:
+        logger.warning(
+            "Symbol memory projection failed for symbol=%s date=%s: %s",
+            symbol,
+            as_of_date,
+            exc,
+        )
 
 
 def save_watchlist(

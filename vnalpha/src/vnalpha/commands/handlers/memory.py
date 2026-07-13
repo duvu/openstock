@@ -1,16 +1,27 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
 
 from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.models import CommandResult, ParsedCommand, ResultPanel
-from vnalpha.symbol_memory.compaction import SymbolMemoryCompactionService
+from vnalpha.symbol_memory.compaction import (
+    MemoryCompactionPolicy,
+    SymbolMemoryCompactionService,
+)
 from vnalpha.symbol_memory.ingestion import SymbolMemoryIngestionService
-from vnalpha.symbol_memory.recovery import inspect_symbol_card
+from vnalpha.symbol_memory.locking import root_maintenance_lock
+from vnalpha.symbol_memory.maintenance import SymbolMemoryMaintenanceService
+from vnalpha.symbol_memory.models import ClaimOrigin, ClaimStatus, MemoryEvent
+from vnalpha.symbol_memory.recovery import inspect_symbol_card, repair_symbol_card
 from vnalpha.symbol_memory.repository import SymbolMemoryRepository
-from vnalpha.symbol_memory.retrieval import SymbolMemoryRetrievalService
+from vnalpha.symbol_memory.retrieval import (
+    MemoryContextBudget,
+    SymbolMemoryRetrievalService,
+)
+from vnalpha.symbol_memory.storage import ensure_knowledge_layout
 from vnalpha.warehouse.migrations import run_migrations
 
 
@@ -42,7 +53,7 @@ def handle_memory(
     compaction = SymbolMemoryCompactionService(repository, root)
     subcommand = parsed.positional[0]
     if subcommand == "status":
-        return _status(repository)
+        return _status(repository, root)
     if subcommand == "show":
         return _show(parsed, repository, root)
     if subcommand == "remember":
@@ -50,7 +61,7 @@ def handle_memory(
     if subcommand == "correct":
         return _correct(parsed, ingestion, compaction)
     if subcommand in {"pin", "unpin"}:
-        return _pin(parsed, repository, subcommand == "pin")
+        return _pin(parsed, repository, compaction, subcommand == "pin")
     if subcommand == "conflicts":
         return _conflicts(parsed, repository)
     if subcommand == "sources":
@@ -61,16 +72,34 @@ def handle_memory(
         return _repair(parsed, repository, root)
     if subcommand == "rebuild-index":
         return _rebuild(repository, compaction)
+    if subcommand == "maintain":
+        return _maintain(parsed, repository, root)
     raise CommandValidationError(_usage())
 
 
-def _status(repository: SymbolMemoryRepository) -> CommandResult:
+def _status(repository: SymbolMemoryRepository, root: Path | None) -> CommandResult:
     rows = repository.connection.execute(
         "SELECT status, COUNT(*) FROM memory_claim GROUP BY status ORDER BY status"
     ).fetchall()
     document_count = repository.connection.execute(
         "SELECT COUNT(*) FROM memory_document"
     ).fetchone()[0]
+    conflicts = sum(count for status, count in rows if status == "conflicted")
+    stale_or_expired = sum(
+        count for status, count in rows if status in {"expired", "superseded"}
+    )
+    latest_as_of = repository.connection.execute(
+        "SELECT MAX(as_of_date) FROM memory_claim"
+    ).fetchone()[0]
+    last_compaction = repository.connection.execute(
+        "SELECT MAX(created_at) FROM memory_compaction_run"
+    ).fetchone()[0]
+    layout = ensure_knowledge_layout(root)
+    archive_bytes = sum(
+        path.stat().st_size for path in layout.archive_dir.rglob("*") if path.is_file()
+    )
+    compaction_policy = MemoryCompactionPolicy()
+    context_budget = MemoryContextBudget()
     return CommandResult(
         status="SUCCESS",
         title="/memory status",
@@ -78,7 +107,29 @@ def _status(repository: SymbolMemoryRepository) -> CommandResult:
         panels=[
             ResultPanel(
                 title="Memory Status",
-                content={"documents": document_count, "claim_counts": dict(rows)},
+                content={
+                    "availability": "available",
+                    "migration": {"status": "current", "schema_version": 1},
+                    "documents": document_count,
+                    "claim_counts": dict(rows),
+                    "conflicts": conflicts,
+                    "stale_or_expired": stale_or_expired,
+                    "freshness": None
+                    if latest_as_of is None
+                    else latest_as_of.isoformat(),
+                    "archive_bytes": archive_bytes,
+                    "token_budgets": {
+                        "symbol_card": compaction_policy.symbol_card_token_budget,
+                        "total_context": context_budget.total_tokens,
+                        "sections": dict(context_budget.section_token_budgets),
+                    },
+                    "compaction": {
+                        "last_completed_at": None
+                        if last_compaction is None
+                        else last_compaction.isoformat(),
+                        "uncompacted_event_threshold": compaction_policy.uncompacted_event_threshold,
+                    },
+                },
             )
         ],
     )
@@ -99,7 +150,9 @@ def _show(
         panels=[
             ResultPanel(
                 title="Memory Context",
-                content=SymbolMemoryRetrievalService(repository).render_context(retrieval),
+                content=SymbolMemoryRetrievalService(repository).render_context(
+                    retrieval
+                ),
             )
         ],
     )
@@ -116,17 +169,16 @@ def _remember(
         raise CommandValidationError(_usage())
     symbol = parsed.positional[1]
     note = " ".join(parsed.positional[2:])
-    result = ingestion.remember(
+    result, _preview = compaction.mutate_and_compact(
         symbol,
-        note,
-        correlation_id=session_id or "memory-command",
-    )
-    current = inspect_symbol_card(root, symbol, ingestion.repository)
-    previous_note = "" if current.card is None else current.card.user_content
-    separator = "" if not previous_note or previous_note.endswith("\n") else "\n"
-    compaction.compact(
-        symbol,
-        user_content=f"{previous_note}{separator}- {note}\n",
+        lambda: ingestion.remember(
+            symbol,
+            note,
+            correlation_id=session_id or "memory-command",
+        ),
+        user_content_factory=lambda previous_note: _append_user_note(
+            previous_note, note
+        ),
     )
     return CommandResult(
         status="SUCCESS",
@@ -144,8 +196,13 @@ def _correct(
     if len(parsed.positional) < 4:
         raise CommandValidationError(_usage())
     symbol, claim_id = parsed.positional[1:3]
-    ingestion.lifecycle.correct(claim_id, " ".join(parsed.positional[3:]))
-    compaction.compact(symbol)
+    claim = ingestion.repository.get_claim(claim_id)
+    if claim is None or claim.symbol != symbol.upper():
+        raise CommandValidationError("Claim does not belong to the requested symbol.")
+    compaction.mutate_and_compact(
+        symbol,
+        lambda: ingestion.lifecycle.correct(claim_id, " ".join(parsed.positional[3:])),
+    )
     return CommandResult(
         status="SUCCESS",
         title=f"/memory correct {symbol.upper()}",
@@ -154,24 +211,38 @@ def _correct(
 
 
 def _pin(
-    parsed: ParsedCommand, repository: SymbolMemoryRepository, pinned: bool
+    parsed: ParsedCommand,
+    repository: SymbolMemoryRepository,
+    compaction: SymbolMemoryCompactionService,
+    pinned: bool,
 ) -> CommandResult:
     if len(parsed.positional) != 2:
         raise CommandValidationError(_usage())
-    repository.set_claim_pinned(parsed.positional[1], pinned)
+    claim_id = parsed.positional[1]
+    claim = repository.get_claim(claim_id)
+    if claim is None:
+        raise CommandValidationError(f"Unknown memory claim: {claim_id}")
+    compaction.mutate_and_compact(
+        claim.symbol,
+        lambda: _set_pinned_with_event(repository, claim, pinned),
+    )
     action = "Pinned" if pinned else "Unpinned"
     return CommandResult(
         status="SUCCESS",
         title=f"/memory {action.lower()}",
-        summary=f"{action} claim {parsed.positional[1]}.",
+        summary=f"{action} claim {claim_id}.",
     )
 
 
-def _conflicts(parsed: ParsedCommand, repository: SymbolMemoryRepository) -> CommandResult:
+def _conflicts(
+    parsed: ParsedCommand, repository: SymbolMemoryRepository
+) -> CommandResult:
     if len(parsed.positional) != 2:
         raise CommandValidationError(_usage())
     claims = repository.list_claims(parsed.positional[1])
-    conflicts = [claim.claim_id for claim in claims if claim.status.value == "conflicted"]
+    conflicts = [
+        claim.claim_id for claim in claims if claim.status.value == "conflicted"
+    ]
     return CommandResult(
         status="SUCCESS",
         title=f"/memory conflicts {parsed.positional[1].upper()}",
@@ -180,15 +251,35 @@ def _conflicts(parsed: ParsedCommand, repository: SymbolMemoryRepository) -> Com
     )
 
 
-def _sources(parsed: ParsedCommand, repository: SymbolMemoryRepository) -> CommandResult:
+def _sources(
+    parsed: ParsedCommand, repository: SymbolMemoryRepository
+) -> CommandResult:
     if len(parsed.positional) != 2:
         raise CommandValidationError(_usage())
     sources = sorted(
-        {
-            source
-            for claim in repository.list_claims(parsed.positional[1])
+        (
+            {
+                "claim_id": claim.claim_id,
+                "source_ref": source,
+                "as_of_date": None
+                if claim.as_of_date is None
+                else claim.as_of_date.isoformat(),
+                "source_published_at": None
+                if claim.source_published_at is None
+                else claim.source_published_at.isoformat(),
+                "status": claim.status.value,
+                "confidence": claim.confidence,
+                "lineage": {
+                    "correlation_id": claim.correlation_id,
+                    "origin": claim.origin.value,
+                },
+            }
+            for claim in repository.list_claims(
+                parsed.positional[1], statuses=(ClaimStatus.ACTIVE,)
+            )
             for source in claim.source_refs
-        }
+        ),
+        key=lambda item: (item["source_ref"], item["claim_id"]),
     )
     return CommandResult(
         status="SUCCESS",
@@ -217,7 +308,12 @@ def _compact(
             "changed": preview.changed,
             "retained_claim_count": preview.retained_claim_count,
             "archived_claim_count": preview.archived_claim_count,
+            "conflicted_claim_count": preview.conflicted_claim_count,
+            "before_token_estimate": preview.before_token_estimate,
+            "after_token_estimate": preview.after_token_estimate,
             "source_coverage": preview.source_coverage,
+            "proposed_change": "update" if preview.changed else "no_change",
+            "proposed_managed_content": preview.managed_content,
         },
     )
 
@@ -227,7 +323,7 @@ def _repair(
 ) -> CommandResult:
     if len(parsed.positional) != 2:
         raise CommandValidationError(_usage())
-    result = inspect_symbol_card(root, parsed.positional[1], repository)
+    result = repair_symbol_card(root, parsed.positional[1], repository)
     return CommandResult(
         status="SUCCESS",
         title=f"/memory repair {parsed.positional[1].upper()}",
@@ -238,9 +334,15 @@ def _repair(
 def _rebuild(
     repository: SymbolMemoryRepository, compaction: SymbolMemoryCompactionService
 ) -> CommandResult:
-    symbols = [row[0] for row in repository.connection.execute("SELECT DISTINCT symbol FROM memory_claim").fetchall()]
-    for symbol in symbols:
-        compaction.compact(symbol)
+    symbols = [
+        row[0]
+        for row in repository.connection.execute(
+            "SELECT DISTINCT symbol FROM memory_claim"
+        ).fetchall()
+    ]
+    with root_maintenance_lock(compaction.root):
+        for symbol in symbols:
+            compaction.compact(symbol)
     return CommandResult(
         status="SUCCESS",
         title="/memory rebuild-index",
@@ -248,9 +350,60 @@ def _rebuild(
     )
 
 
+def _maintain(
+    parsed: ParsedCommand, repository: SymbolMemoryRepository, root: Path | None
+) -> CommandResult:
+    if len(parsed.positional) > 2:
+        raise CommandValidationError(_usage())
+    try:
+        as_of_date = (
+            datetime.now(UTC).date()
+            if len(parsed.positional) == 1
+            else datetime.fromisoformat(parsed.positional[1]).date()
+        )
+    except ValueError as exc:
+        raise CommandValidationError("Maintenance date must be YYYY-MM-DD.") from exc
+    result = SymbolMemoryMaintenanceService(repository, root).run(as_of_date=as_of_date)
+    return CommandResult(
+        status="SUCCESS" if not result.failed_symbols else "PARTIAL",
+        title="/memory maintain",
+        summary=f"Maintained {len(result.processed_symbols)} symbol(s).",
+        metadata={
+            "processed_symbols": list(result.processed_symbols),
+            "failed_symbols": list(result.failed_symbols),
+        },
+    )
+
+
 def _usage() -> str:
     return (
         "Usage: /memory <status|show SYMBOL|remember SYMBOL NOTE|correct SYMBOL CLAIM_ID NOTE|"
         "pin CLAIM_ID|unpin CLAIM_ID|conflicts SYMBOL|sources SYMBOL|compact SYMBOL [--dry-run]|"
-        "repair SYMBOL|rebuild-index>"
+        "repair SYMBOL|rebuild-index|maintain [YYYY-MM-DD]>"
+    )
+
+
+def _append_user_note(previous_note: str, note: str) -> str:
+    separator = "" if not previous_note or previous_note.endswith("\n") else "\n"
+    return f"{previous_note}{separator}- {note}\n"
+
+
+def _set_pinned_with_event(
+    repository: SymbolMemoryRepository, claim, pinned: bool
+) -> None:
+    repository.set_claim_pinned(claim.claim_id, pinned)
+    timestamp = datetime.now(UTC)
+    repository.append_event(
+        MemoryEvent(
+            event_id=f"memory-claim-{'pinned' if pinned else 'unpinned'}-{claim.claim_id}",
+            symbol=claim.symbol,
+            event_type="CLAIM_PINNED" if pinned else "CLAIM_UNPINNED",
+            evidence_ref=claim.claim_id,
+            content_hash=f"sha256:{'pinned' if pinned else 'unpinned'}:{claim.claim_id}",
+            observed_at=timestamp,
+            as_of_date=timestamp.date(),
+            origin=ClaimOrigin.USER_CORRECTION,
+            correlation_id=claim.correlation_id,
+            created_at=timestamp,
+        )
     )

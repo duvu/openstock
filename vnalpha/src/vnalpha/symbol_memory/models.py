@@ -54,6 +54,7 @@ class MemoryClaim:
     created_at: datetime
     supersedes_claim_id: str | None = None
     lifecycle_reason: str | None = None
+    source_published_at: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +96,10 @@ class MemoryRetrievalResult:
     token_estimate: int
     as_of_date: date | None
     source_coverage: float
+    conflict_claim_ids: tuple[str, ...] = ()
+    risk_claim_ids: tuple[str, ...] = ()
+    caveat_claim_ids: tuple[str, ...] = ()
+    missing_data_claim_ids: tuple[str, ...] = ()
 
 
 __all__ = [

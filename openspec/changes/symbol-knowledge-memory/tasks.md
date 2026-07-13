@@ -2,12 +2,12 @@
 
 ## 0. Governance and boundaries
 
-- [ ] 0.1 Preserve the read-only research boundary; do not add broker, order, account, portfolio, allocation, margin, transfer, or trading-execution behavior. [evidence: policy regression tests]
-- [ ] 0.2 Treat Markdown memory as untrusted historical reference data, never as executable instruction or policy. [evidence: prompt-injection tests]
-- [ ] 0.3 Do not store full chat transcripts or raw assistant prose as durable factual memory. [evidence: persistence tests]
+- [x] 0.1 Preserve the read-only research boundary; do not add broker, order, account, portfolio, allocation, margin, transfer, or trading-execution behavior. [evidence: `vnalpha/tests/test_safety_boundary.py`]
+- [x] 0.2 Treat Markdown memory as untrusted historical reference data, never as executable instruction or policy. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`, `vnalpha/src/vnalpha/evals/runtime_cases/symbol_memory_context_injection.json`]
+- [x] 0.3 Do not store full chat transcripts or raw assistant prose as durable factual memory. [evidence: `vnalpha/tests/test_symbol_memory_boundaries.py`]
 - [x] 0.4 Require source references and temporal metadata for factual and numeric claims. [evidence: `vnalpha/tests/test_symbol_memory_models.py`]
-- [ ] 0.5 Preserve audit history when active information is corrected, expired, superseded, or rejected. [evidence: lifecycle tests]
-- [ ] 0.6 Document accepted dependencies and implementation slices before runtime work begins. [evidence: PR description and design review]
+- [x] 0.5 Preserve audit history when active information is corrected, expired, superseded, or rejected. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
+- [x] 0.6 Document accepted dependencies and implementation slices before runtime work begins. [evidence: `openspec/changes/symbol-knowledge-memory/design.md`]
 
 ## 1. Domain contracts
 
@@ -50,7 +50,7 @@
 - [x] 4.4 Add adapter for feature snapshots and data-quality caveats. [evidence: `vnalpha/tests/test_symbol_memory_adapters.py`]
 - [x] 4.5 Add adapter for validated market/sector snapshot references when present. [evidence: `vnalpha/tests/test_symbol_memory_adapters.py`]
 - [x] 4.6 Add adapter for validated deep-symbol analysis artifacts without coupling the memory core to unfinished engine internals. [depends: deep-symbol artifact contract] [evidence: `vnalpha/tests/test_symbol_memory_adapters.py`]
-- [ ] 4.7 Add adapter for validated research automation artifacts. [evidence: artifact eligibility tests]
+- [x] 4.7 Add adapter for validated research automation artifacts. [evidence: `vnalpha/tests/test_symbol_memory_adapters.py`]
 - [x] 4.8 Reject unsupported numeric claims, missing source references, invalid symbol/date metadata, and raw unvalidated assistant prose. [evidence: `vnalpha/tests/test_symbol_memory_ingestion.py`]
 - [x] 4.9 Deduplicate events by stable content hash and evidence identity. [evidence: `vnalpha/tests/test_symbol_memory_ingestion.py`]
 
@@ -63,34 +63,34 @@
 - [x] 5.5 Preserve rejected hypotheses needed for recurrence prevention. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [x] 5.6 Detect unresolved same-authority conflicts and preserve both claims. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [x] 5.7 Add explicit user correction/rejection flow that records an event and lifecycle reason. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
-- [ ] 5.8 Ensure user correction cannot silently rewrite canonical warehouse evidence. [evidence: authority-boundary tests]
+- [x] 5.8 Ensure user correction cannot silently rewrite canonical warehouse evidence. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [x] 5.9 Invalidate active claims when all supporting sources become invalid and record the transition. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [x] 5.10 Exclude superseded, expired, and rejected claims from the default active card while retaining audit access. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`, `vnalpha/tests/test_symbol_memory_compaction.py`]
 
 ## 6. Compaction
 
-- [ ] 6.1 Add configurable symbol-card token budget and uncompacted-event thresholds. [evidence: config tests]
-- [ ] 6.2 Implement micro-compaction for deduplication, supersession, expiry, and recent-change maintenance. [depends: 5.2–5.5] [evidence: focused compaction tests]
+- [x] 6.1 Add configurable symbol-card token budget and uncompacted-event thresholds. [evidence: `vnalpha/tests/test_symbol_memory_maintenance.py`]
+- [x] 6.2 Implement micro-compaction for deduplication, supersession, expiry, and recent-change maintenance. [depends: 5.2–5.5] [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
 - [x] 6.3 Implement macro-compaction from canonical structured claims, not prior summary text alone. [depends: 3.4, 5.1–5.10] [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
 - [x] 6.4 Preserve pinned claims, user regions, active risks, conflicts, open questions, and important rejected hypotheses. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
 - [x] 6.5 Produce dry-run retained/archive/conflict counts, source coverage, token estimates, and proposed diff. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
 - [x] 6.6 Ensure dry-run performs no mutation. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
 - [x] 6.7 Persist compaction manifests with before/after generations and hashes. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
-- [ ] 6.8 Rotate and compress eligible archive events without deleting referenced evidence. [evidence: archive and reference-retention tests]
+- [x] 6.8 Rotate and compress eligible archive events without deleting referenced evidence. [evidence: `vnalpha/tests/test_symbol_memory_maintenance.py`]
 - [x] 6.9 Prove repeated compaction without new input is idempotent and creates no duplicate archive entries. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
-- [ ] 6.10 Add scheduled maintenance entry point with bounded work and failure isolation per symbol. [evidence: scheduler/service tests]
+- [x] 6.10 Add scheduled maintenance entry point with bounded work and failure isolation per symbol. [evidence: `vnalpha/tests/test_symbol_memory_maintenance.py`]
 
 ## 7. Retrieval and context construction
 
 - [x] 7.1 Implement exact symbol retrieval before optional lexical or semantic ranking. [depends: 2.5] [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
 - [x] 7.2 Enforce as-of filtering using claim date, source publication date when known, and validity window. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
 - [x] 7.3 Exclude expired, superseded, and rejected claims by default. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
-- [ ] 7.4 Include conflict metadata, risks, caveats, and missing data when relevant. [evidence: retrieval tests]
-- [ ] 7.5 Add configurable total memory context budget and per-section allocation. [evidence: budget tests]
+- [x] 7.4 Include conflict metadata, risks, caveats, and missing data when relevant. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
+- [x] 7.5 Add configurable total memory context budget and per-section allocation. [evidence: `vnalpha/tests/test_symbol_memory_maintenance.py`]
 - [x] 7.6 Select claims atomically as whole units; do not truncate claims mid-record. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
 - [x] 7.7 Mark memory context as untrusted and subordinate to current policy and validated tool output. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
 - [x] 7.8 Add retrieval metadata for selected and omitted claims, token estimate, freshness, and source coverage. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
-- [ ] 7.9 Prove archive growth does not increase configured prompt budget. [evidence: scale test]
+- [x] 7.9 Prove archive growth does not increase configured prompt budget. [evidence: `vnalpha/tests/test_symbol_memory_maintenance.py`]
 
 ## 8. Command and TUI surface
 
@@ -98,50 +98,50 @@
 - [x] 8.2 Implement `/memory status`. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
 - [x] 8.3 Implement `/memory show SYMBOL`. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
 - [x] 8.4 Implement `/memory remember SYMBOL "note"`. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
-- [ ] 8.5 Implement `/memory correct SYMBOL <claim-id> "correction"`. [evidence: command tests]
-- [ ] 8.6 Implement pin/unpin behavior. [evidence: command tests]
-- [ ] 8.7 Implement conflict and source inspection. [evidence: command tests]
-- [ ] 8.8 Implement compact dry-run and execute modes. [evidence: mutation-boundary tests]
-- [ ] 8.9 Implement repair and rebuild-index commands. [evidence: recovery tests]
-- [ ] 8.10 Render memory availability, conflicts, freshness, and compaction state without exposing raw sensitive note bodies in status or logs. [evidence: TUI snapshot/redaction tests]
+- [x] 8.5 Implement `/memory correct SYMBOL <claim-id> "correction"`. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
+- [x] 8.6 Implement pin/unpin behavior. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
+- [x] 8.7 Implement conflict and source inspection. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
+- [x] 8.8 Implement compact dry-run and execute modes. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
+- [x] 8.9 Implement repair and rebuild-index commands. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
+- [x] 8.10 Render memory availability, conflicts, freshness, and compaction state without exposing raw sensitive note bodies in status or logs. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`, `vnalpha/tests/test_symbol_memory_observability.py`]
 
 ## 9. Concurrency, recovery, and observability
 
-- [ ] 9.1 Add symbol-scoped locking so independent symbols can update concurrently. [evidence: multi-process tests]
-- [ ] 9.2 Add root maintenance lock for bulk compaction and index rebuild. [evidence: contention tests]
-- [ ] 9.3 Ensure event/claim transaction and Markdown generation cannot produce an unindexed or partially written active document. [evidence: crash/failure injection tests]
-- [ ] 9.4 Add repair flow for hash, marker, frontmatter, index, and claim-reference inconsistencies. [evidence: repair tests]
-- [ ] 9.5 Emit bounded, redacted memory lifecycle events with correlation IDs. [evidence: observability tests]
-- [ ] 9.6 Record claim counts, statuses, hashes, token estimates, source coverage, and durations without logging raw note content. [evidence: redaction tests]
+- [x] 9.1 Add symbol-scoped locking so independent symbols can update concurrently. [evidence: `vnalpha/tests/test_symbol_memory_locking.py`]
+- [x] 9.2 Add root maintenance lock for bulk compaction and index rebuild. [evidence: `vnalpha/tests/test_symbol_memory_locking.py`]
+- [x] 9.3 Ensure event/claim transaction and Markdown generation cannot produce an unindexed or partially written active document. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
+- [x] 9.4 Add repair flow for hash, marker, frontmatter, index, and claim-reference inconsistencies. [evidence: `vnalpha/tests/test_symbol_memory_recovery.py`]
+- [x] 9.5 Emit bounded, redacted memory lifecycle events with correlation IDs. [evidence: `vnalpha/tests/test_symbol_memory_observability.py`]
+- [x] 9.6 Record claim counts, statuses, hashes, token estimates, source coverage, and durations without logging raw note content. [evidence: `vnalpha/tests/test_symbol_memory_observability.py`]
 
 ## 10. Evaluation and regression tests
 
-- [ ] 10.1 Test newer authoritative evidence removes a stale claim from the active card while preserving history.
-- [ ] 10.2 Test unsupported numeric information is rejected.
-- [ ] 10.3 Test same-authority conflict remains unresolved and visible.
-- [ ] 10.4 Test future evidence is excluded from historical retrieval.
-- [ ] 10.5 Test user note is not promoted as verified fact.
-- [ ] 10.6 Test user block survives compaction byte-for-byte.
-- [ ] 10.7 Test prompt injection inside Markdown cannot alter classification, planning, policy, or tool selection.
-- [ ] 10.8 Test corrupt Markdown is quarantined and the application remains usable.
-- [ ] 10.9 Test two concurrent writers do not lose events or corrupt the symbol card.
-- [ ] 10.10 Test 10,000 archived events do not increase retrieval beyond the configured budget.
-- [ ] 10.11 Test migration from every supported prior warehouse schema.
-- [ ] 10.12 Add runtime evaluation corpus for correction, conflict, compaction, temporal filtering, and source grounding.
+- [x] 10.1 Test newer authoritative evidence removes a stale claim from the active card while preserving history. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
+- [x] 10.2 Test unsupported numeric information is rejected. [evidence: `vnalpha/tests/test_symbol_memory_ingestion.py`]
+- [x] 10.3 Test same-authority conflict remains unresolved and visible. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`, `vnalpha/tests/test_symbol_memory_retrieval.py`]
+- [x] 10.4 Test future evidence is excluded from historical retrieval. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`]
+- [x] 10.5 Test user note is not promoted as verified fact. [evidence: `vnalpha/tests/test_symbol_memory_ingestion.py`]
+- [x] 10.6 Test user block survives compaction byte-for-byte. [evidence: `vnalpha/tests/test_symbol_memory_compaction.py`]
+- [x] 10.7 Test prompt injection inside Markdown cannot alter classification, planning, policy, or tool selection. [evidence: `vnalpha/src/vnalpha/evals/runtime_cases/symbol_memory_context_injection.json`]
+- [x] 10.8 Test corrupt Markdown is quarantined and the application remains usable. [evidence: `vnalpha/tests/test_symbol_memory_recovery.py`]
+- [x] 10.9 Test two concurrent writers do not lose events or corrupt the symbol card. [evidence: `vnalpha/tests/test_symbol_memory_locking.py`, `vnalpha/tests/test_symbol_memory_compaction.py`]
+- [x] 10.10 Test 10,000 archived events do not increase retrieval beyond the configured budget. [evidence: `vnalpha/tests/test_symbol_memory_maintenance.py`]
+- [x] 10.11 Test migration from every supported prior warehouse schema. [evidence: `vnalpha/tests/test_symbol_memory_repository.py`]
+- [x] 10.12 Add runtime evaluation corpus for correction, conflict, compaction, temporal filtering, and source grounding. [evidence: `vnalpha/src/vnalpha/evals/runtime_cases/symbol_memory_{correction,conflict,compaction,temporal_filtering,source_grounding}.json`, runtime replay corpus]
 
 ## 11. Documentation and validation
 
-- [ ] 11.1 Document storage layout, Markdown schema, managed/user regions, and manual-edit policy.
-- [ ] 11.2 Document claim types, lifecycle states, source authority, expiry, correction, and conflict semantics.
-- [ ] 11.3 Document compaction triggers, dry-run behavior, archive retention, and recovery.
-- [ ] 11.4 Document context budgets and no-lookahead guarantees.
-- [ ] 11.5 Document operator migration, repair, and index rebuild procedures.
-- [ ] 11.6 Run `make repo-hygiene`. [evidence: command log]
-- [ ] 11.7 Run `make lint-vnalpha`. [evidence: command log]
-- [ ] 11.8 Run focused symbol-memory tests. [evidence: test log]
-- [ ] 11.9 Run `make test-vnalpha`. [evidence: command log]
-- [ ] 11.10 Run `make verify-r4`. [evidence: command log]
-- [ ] 11.11 Run `packaging/scripts/openstock-verify --ci`. [evidence: command log]
+- [x] 11.1 Document storage layout, Markdown schema, managed/user regions, and manual-edit policy. [evidence: `vnalpha/docs/symbol-memory.md`]
+- [x] 11.2 Document claim types, lifecycle states, source authority, expiry, correction, and conflict semantics. [evidence: `vnalpha/docs/symbol-memory.md`]
+- [x] 11.3 Document compaction triggers, dry-run behavior, archive retention, and recovery. [evidence: `vnalpha/docs/symbol-memory.md`]
+- [x] 11.4 Document context budgets and no-lookahead guarantees. [evidence: `vnalpha/docs/symbol-memory.md`]
+- [x] 11.5 Document operator migration, repair, and index rebuild procedures. [evidence: `vnalpha/docs/symbol-memory.md`]
+- [x] 11.6 Run `make repo-hygiene`. [evidence: command log, 2026-07-13]
+- [x] 11.7 Run `make lint-vnalpha`. [evidence: command log, 2026-07-13]
+- [x] 11.8 Run focused symbol-memory tests. [evidence: test log, 2026-07-13]
+- [x] 11.9 Run `make test-vnalpha`. [evidence: command log, 2026-07-13]
+- [x] 11.10 Run `make verify-r4`. [evidence: command log, 2026-07-13]
+- [x] 11.11 Run `packaging/scripts/openstock-verify --ci`. [evidence: command log, 2026-07-13]
 - [ ] 11.12 Attach exact validation evidence to the implementation PR before checking phase gates.
 
 ## Phase gates

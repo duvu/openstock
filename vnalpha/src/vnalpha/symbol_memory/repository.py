@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from datetime import date, datetime
-from typing import Iterable
+from typing import Any, Iterable, Mapping
 
 import duckdb
 
@@ -21,6 +22,25 @@ from vnalpha.symbol_memory.validators import validate_claim
 class SymbolMemoryRepository:
     def __init__(self, connection: duckdb.DuckDBPyConnection) -> None:
         self.connection = connection
+        self._transaction_depth = 0
+
+    @contextmanager
+    def transaction(self):
+        outermost = self._transaction_depth == 0
+        if outermost:
+            self.connection.execute("BEGIN TRANSACTION")
+        self._transaction_depth += 1
+        try:
+            yield
+        except BaseException:
+            self._transaction_depth -= 1
+            if outermost:
+                self.connection.execute("ROLLBACK")
+            raise
+        else:
+            self._transaction_depth -= 1
+            if outermost:
+                self.connection.execute("COMMIT")
 
     def append_event(self, event: MemoryEvent) -> bool:
         symbol = normalize_symbol(event.symbol)
@@ -57,9 +77,165 @@ class SymbolMemoryRepository:
             "SELECT event_id, symbol, event_type, evidence_ref, content_hash, observed_at, "
             "as_of_date, origin, correlation_id, created_at FROM memory_event "
             "WHERE symbol = ? ORDER BY created_at, event_id LIMIT ?",
-            [normalize_symbol(symbol), _limit(limit)],
+            [normalize_symbol(symbol), _event_limit(limit)],
         ).fetchall()
         return [_event_from_row(row) for row in rows]
+
+    def list_events_after(
+        self,
+        symbol: str,
+        *,
+        after: tuple[datetime, str] | None,
+        limit: int = 10_000,
+    ) -> list[MemoryEvent]:
+        values: list[object] = [normalize_symbol(symbol)]
+        query = (
+            "SELECT event_id, symbol, event_type, evidence_ref, content_hash, observed_at, "
+            "as_of_date, origin, correlation_id, created_at FROM memory_event "
+            "WHERE symbol = ?"
+        )
+        if after is not None:
+            query += " AND (created_at > ? OR (created_at = ? AND event_id > ?))"
+            values.extend((after[0], after[0], after[1]))
+        query += " ORDER BY created_at, event_id LIMIT ?"
+        values.append(_event_limit(limit))
+        rows = self.connection.execute(query, values).fetchall()
+        return [_event_from_row(row) for row in rows]
+
+    def count_events(self, symbol: str) -> int:
+        row = self.connection.execute(
+            "SELECT COUNT(*) FROM memory_event WHERE symbol = ?",
+            [normalize_symbol(symbol)],
+        ).fetchone()
+        return int(row[0])
+
+    def has_persisted_evidence(
+        self,
+        source_ref: str,
+        symbol: str,
+        as_of_date: date,
+        claim_type: str,
+        predicate: str,
+        value: Mapping[str, Any],
+    ) -> bool:
+        source_kind, _, identifier = source_ref.partition(":")
+        canonical_symbol = normalize_symbol(symbol)
+        if source_kind in {"candidate_score", "feature_snapshot"}:
+            parts = identifier.split(":")
+            if len(parts) != 2 or normalize_symbol(parts[0]) != canonical_symbol:
+                return False
+            try:
+                reference_date = date.fromisoformat(parts[1])
+            except ValueError:
+                return False
+            if reference_date != as_of_date:
+                return False
+            if source_kind == "candidate_score":
+                row = self.connection.execute(
+                    "SELECT score, candidate_class, setup_type FROM candidate_score WHERE symbol = ? AND date = ?",
+                    [canonical_symbol, reference_date],
+                ).fetchone()
+                return (
+                    row is not None
+                    and claim_type == "candidate_score"
+                    and predicate == "composite_score"
+                    and value.get("value") == row[0]
+                    and value.get("unit") == "score"
+                    and value.get("meaning") == "persisted composite candidate score"
+                    and set(value).issubset(
+                        {"value", "unit", "meaning", "candidate_class", "setup_type"}
+                    )
+                    and (
+                        "candidate_class" not in value
+                        or value["candidate_class"] == row[1]
+                    )
+                    and ("setup_type" not in value or value["setup_type"] == row[2])
+                )
+            row = self.connection.execute(
+                "SELECT feature_data_status FROM feature_snapshot WHERE symbol = ? AND date = ?",
+                [canonical_symbol, reference_date],
+            ).fetchone()
+            return (
+                row is not None
+                and claim_type == "data_quality_caveat"
+                and predicate == "feature_data_quality"
+                and value == {"status": row[0]}
+            )
+        references = {
+            "research_market_regime_snapshot": (
+                "research_market_regime_snapshot",
+                "market_regime_snapshot_id",
+            ),
+            "research_symbol_level_snapshot": (
+                "research_symbol_level_snapshot",
+                "symbol_level_snapshot_id",
+            ),
+            "research_setup_analysis": (
+                "research_setup_analysis",
+                "setup_analysis_id",
+            ),
+        }
+        if source_kind in references:
+            table, identifier_column = references[source_kind]
+            row = self.connection.execute(
+                f"SELECT as_of_date, symbol, payload_json FROM {table} WHERE {identifier_column} = ?",
+                [identifier],
+            ).fetchone()
+            return (
+                row is not None
+                and row[0] == as_of_date
+                and (
+                    row[1] is None or normalize_symbol(str(row[1])) == canonical_symbol
+                )
+                and _claim_shape_matches_source(source_kind, claim_type, predicate)
+                and _source_payload_matches(source_kind, value, row[2])
+            )
+        if source_kind == "research_automation":
+            row = self.connection.execute(
+                "SELECT status, input_datasets_json, artifact_type, caveats_json FROM research_artifact WHERE artifact_id = ?",
+                [identifier],
+            ).fetchone()
+            if (
+                row is None
+                or row[0] not in {"validated", "promoted"}
+                or not _claim_shape_matches_source(source_kind, claim_type, predicate)
+            ):
+                return False
+            try:
+                caveats = json.loads(str(row[3]))
+            except (TypeError, json.JSONDecodeError):
+                return False
+            if value != {
+                "artifact_id": identifier,
+                "artifact_type": row[2],
+                "validation_status": row[0],
+                "caveats": caveats,
+            }:
+                return False
+            try:
+                datasets = json.loads(str(row[1]))
+            except (TypeError, json.JSONDecodeError):
+                return False
+            return any(
+                canonical_symbol
+                in {normalize_symbol(item) for item in dataset["symbols"]}
+                and date.fromisoformat(
+                    str(dataset.get("end_date") or dataset.get("start_date"))
+                )
+                == as_of_date
+                for dataset in datasets
+                if isinstance(dataset, dict)
+                and isinstance(dataset.get("symbols"), list)
+                and (dataset.get("end_date") or dataset.get("start_date"))
+            )
+        return False
+
+    def list_symbols(self, *, limit: int = 1_000) -> tuple[str, ...]:
+        rows = self.connection.execute(
+            "SELECT DISTINCT symbol FROM memory_claim ORDER BY symbol LIMIT ?",
+            [_event_limit(limit)],
+        ).fetchall()
+        return tuple(str(row[0]) for row in rows)
 
     def create_claim(self, claim: MemoryClaim) -> None:
         validate_claim(claim)
@@ -68,7 +244,7 @@ class SymbolMemoryRepository:
             "claim_id, symbol, claim_type, predicate, value_json, status, pinned, "
             "confidence, observed_at, as_of_date, valid_from, valid_until, origin, "
             "source_refs_json, correlation_id, created_at, supersedes_claim_id, "
-            "lifecycle_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "lifecycle_reason, source_published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             _claim_values(claim),
         )
 
@@ -148,6 +324,11 @@ class SymbolMemoryRepository:
             ],
         )
 
+    def delete_document(self, symbol: str) -> None:
+        self.connection.execute(
+            "DELETE FROM memory_document WHERE symbol = ?", [normalize_symbol(symbol)]
+        )
+
     def get_document(self, symbol: str) -> MemoryDocument | None:
         row = self.connection.execute(
             "SELECT symbol, path, schema_version, generation, managed_hash, document_hash, "
@@ -199,13 +380,89 @@ class SymbolMemoryRepository:
 _CLAIM_SELECT = (
     "SELECT claim_id, symbol, claim_type, predicate, value_json, status, pinned, "
     "confidence, observed_at, as_of_date, valid_from, valid_until, origin, "
-    "source_refs_json, correlation_id, created_at, supersedes_claim_id, lifecycle_reason "
+    "source_refs_json, correlation_id, created_at, supersedes_claim_id, lifecycle_reason, "
+    "source_published_at "
     "FROM memory_claim"
 )
 
 
 def _limit(limit: int) -> int:
     return max(1, min(limit, 500))
+
+
+def _event_limit(limit: int) -> int:
+    return max(1, min(limit, 10_000))
+
+
+def _claim_shape_matches_source(
+    source_kind: str, claim_type: str, predicate: str
+) -> bool:
+    return {
+        "research_market_regime_snapshot": (
+            "market_or_sector_context",
+            "market_regime",
+        ),
+        "research_symbol_level_snapshot": ("technical_observation", "symbol_levels"),
+        "research_setup_analysis": ("technical_observation", "setup_analysis"),
+        "research_automation": (
+            "research_automation_artifact",
+            "validated_research_artifact",
+        ),
+    }.get(source_kind) == (claim_type, predicate)
+
+
+def _source_payload_matches(
+    source_kind: str, value: Mapping[str, Any], payload_json: object
+) -> bool:
+    try:
+        payload = json.loads(str(payload_json))
+    except (TypeError, json.JSONDecodeError):
+        return False
+    fields = {
+        "research_market_regime_snapshot": (
+            "regime_state",
+            "index_trend",
+            "index_volatility",
+        ),
+        "research_symbol_level_snapshot": (
+            "support_levels",
+            "resistance_levels",
+            "pivot_levels",
+            "unit",
+            "meaning",
+        ),
+        "research_setup_analysis": (
+            "setup_type",
+            "setup_quality",
+            "trend_context",
+            "confidence",
+            "unit",
+            "meaning",
+        ),
+    }.get(source_kind, ())
+    return (
+        set(value) == set(fields)
+        and all(
+            value[key] == payload.get(key)
+            for key in fields
+            if key not in {"meaning", "unit"}
+        )
+        and (
+            source_kind != "research_symbol_level_snapshot"
+            or (
+                value.get("unit") == "price"
+                and value.get("meaning") == "persisted symbol levels"
+            )
+        )
+        and (
+            source_kind != "research_setup_analysis"
+            or (
+                value.get("unit") == "probability"
+                and value.get("meaning")
+                == "validated persisted setup analysis confidence"
+            )
+        )
+    )
 
 
 def _claim_values(claim: MemoryClaim) -> list[object]:
@@ -228,6 +485,7 @@ def _claim_values(claim: MemoryClaim) -> list[object]:
         claim.created_at,
         claim.supersedes_claim_id,
         claim.lifecycle_reason,
+        claim.source_published_at,
     ]
 
 
@@ -266,6 +524,7 @@ def _claim_from_row(row: tuple[object, ...]) -> MemoryClaim:
         created_at=_datetime(row[15]),
         supersedes_claim_id=_optional_string(row[16]),
         lifecycle_reason=_optional_string(row[17]),
+        source_published_at=_optional_date(row[18]),
     )
 
 

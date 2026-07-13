@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 import duckdb
+import pytest
 
 from vnalpha.symbol_memory.compaction import SymbolMemoryCompactionService
 from vnalpha.symbol_memory.markdown import parse_symbol_card
@@ -54,7 +55,9 @@ def test_compaction_preview_is_non_mutating_and_reports_omissions(tmp_path) -> N
     assert not (tmp_path / "knowledge/symbols/FPT.md").exists()
 
 
-def test_compaction_renders_from_claims_preserves_user_region_and_is_idempotent(tmp_path) -> None:
+def test_compaction_renders_from_claims_preserves_user_region_and_is_idempotent(
+    tmp_path,
+) -> None:
     repository = _repository()
     repository.create_claim(_claim("pinned"))
     service = SymbolMemoryCompactionService(repository, tmp_path)
@@ -69,3 +72,36 @@ def test_compaction_renders_from_claims_preserves_user_region_and_is_idempotent(
     assert parsed.user_content == "Keep this note.\n"
     assert "pinned" in parsed.managed_content
     assert len(repository.list_compaction_runs("FPT")) == 1
+
+
+def test_micro_compaction_expires_due_claims_and_refreshes_only_that_symbol(
+    tmp_path,
+) -> None:
+    repository = _repository()
+    repository.create_claim(_claim("expiring"))
+    service = SymbolMemoryCompactionService(repository, tmp_path)
+
+    result = service.micro_compact("FPT", as_of_date=date(2026, 7, 15))
+
+    assert result.expired_claim_ids == ("expiring",)
+    assert repository.get_claim("expiring").status is ClaimStatus.EXPIRED
+    assert (tmp_path / "knowledge/symbols/FPT.md").exists()
+
+
+def test_compaction_rolls_back_the_card_when_document_indexing_fails(
+    tmp_path, monkeypatch
+) -> None:
+    repository = _repository()
+    repository.create_claim(_claim("active"))
+    service = SymbolMemoryCompactionService(repository, tmp_path)
+
+    def fail_indexing(_document) -> None:
+        raise duckdb.Error("index write failed")
+
+    monkeypatch.setattr(repository, "upsert_document", fail_indexing)
+
+    with pytest.raises(duckdb.Error, match="index write failed"):
+        service.compact("FPT")
+
+    assert repository.get_document("FPT") is None
+    assert not (tmp_path / "knowledge/symbols/FPT.md").exists()

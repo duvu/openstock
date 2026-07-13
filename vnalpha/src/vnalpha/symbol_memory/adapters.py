@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from vnalpha.research_automation.models import (
+    ResearchArtifact,
+    ResearchArtifactStatus,
+)
 from vnalpha.research_models.models import (
     MarketRegimeSnapshot,
     SetupAnalysis,
@@ -51,6 +55,7 @@ def candidate_score_evidence(snapshot: CandidateScoreSnapshot) -> MemoryEvidence
         as_of_date=snapshot.as_of_date,
         confidence=snapshot.score,
         correlation_id=snapshot.correlation_id,
+        source_published_at=snapshot.as_of_date,
     )
 
 
@@ -65,6 +70,7 @@ def feature_snapshot_evidence(snapshot: FeatureSnapshot) -> MemoryEvidence:
         as_of_date=snapshot.as_of_date,
         confidence=None,
         correlation_id=snapshot.correlation_id,
+        source_published_at=snapshot.as_of_date,
     )
 
 
@@ -81,13 +87,13 @@ def market_regime_evidence(
             "index_volatility": snapshot.index_volatility,
         },
         source_ref=(
-            "research_market_regime_snapshot:"
-            f"{snapshot.market_regime_snapshot_id}"
+            f"research_market_regime_snapshot:{snapshot.market_regime_snapshot_id}"
         ),
         observed_at=snapshot.created_at,
         as_of_date=snapshot.as_of_date,
         confidence=None,
         correlation_id=snapshot.correlation_id,
+        source_published_at=snapshot.as_of_date,
     )
 
 
@@ -100,16 +106,17 @@ def symbol_level_evidence(snapshot: SymbolLevelSnapshot) -> MemoryEvidence:
             "support_levels": snapshot.support_levels,
             "resistance_levels": snapshot.resistance_levels,
             "pivot_levels": snapshot.pivot_levels,
+            "unit": "price",
             "meaning": "persisted symbol levels",
         },
         source_ref=(
-            "research_symbol_level_snapshot:"
-            f"{snapshot.symbol_level_snapshot_id}"
+            f"research_symbol_level_snapshot:{snapshot.symbol_level_snapshot_id}"
         ),
         observed_at=snapshot.created_at,
         as_of_date=snapshot.as_of_date,
         confidence=None,
         correlation_id=snapshot.correlation_id,
+        source_published_at=snapshot.as_of_date,
     )
 
 
@@ -131,6 +138,50 @@ def setup_analysis_evidence(snapshot: SetupAnalysis) -> MemoryEvidence:
         as_of_date=snapshot.as_of_date,
         confidence=snapshot.confidence,
         correlation_id=snapshot.correlation_id,
+        source_published_at=snapshot.as_of_date,
+    )
+
+
+def research_automation_evidence(
+    symbol: str, artifact: ResearchArtifact
+) -> MemoryEvidence:
+    canonical_symbol = normalize_symbol(symbol)
+    if artifact.status not in {
+        ResearchArtifactStatus.VALIDATED,
+        ResearchArtifactStatus.PROMOTED,
+    }:
+        raise ValueError(
+            "Research automation artifacts must be validated to enter memory."
+        )
+    if not any(
+        canonical_symbol in dataset.symbols for dataset in artifact.input_datasets
+    ):
+        raise ValueError(
+            "Research automation artifact does not contain the requested symbol."
+        )
+    as_of_date = max(
+        (
+            dataset.end_date or dataset.start_date or artifact.created_at.date()
+            for dataset in artifact.input_datasets
+        ),
+        default=artifact.created_at.date(),
+    )
+    return MemoryEvidence(
+        symbol=canonical_symbol,
+        claim_type="research_automation_artifact",
+        predicate="validated_research_artifact",
+        value={
+            "artifact_id": artifact.artifact_id,
+            "artifact_type": artifact.artifact_type.value,
+            "validation_status": artifact.status.value,
+            "caveats": artifact.caveats,
+        },
+        source_ref=f"research_automation:{artifact.artifact_id}",
+        observed_at=artifact.created_at,
+        as_of_date=as_of_date,
+        confidence=None,
+        correlation_id=artifact.correlation_id,
+        source_published_at=as_of_date,
     )
 
 
@@ -140,6 +191,7 @@ __all__ = [
     "candidate_score_evidence",
     "feature_snapshot_evidence",
     "market_regime_evidence",
+    "research_automation_evidence",
     "setup_analysis_evidence",
     "symbol_level_evidence",
 ]

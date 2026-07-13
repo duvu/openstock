@@ -65,11 +65,11 @@ def test_all_tables_created(conn):
         "research_setup_analysis",
         "research_shortlist_candidate",
         "research_scenario_plan",
-            "research_setup_evidence_snapshot",
-            "memory_event",
-            "memory_claim",
-            "memory_document",
-            "memory_compaction_run",
+        "research_setup_evidence_snapshot",
+        "memory_event",
+        "memory_claim",
+        "memory_document",
+        "memory_compaction_run",
     }
     assert expected == names
 
