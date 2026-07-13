@@ -103,6 +103,9 @@ This file is the evidence ledger. Do not replace `pending` with `pass` without a
 | 2026-07-12T06:45:00Z | 8060ae062b33867c7365041258d511d5ac4ba988 | 4.G4, 6.12, 4.G5 | python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening | 0 | OpenSpec completion validation is PASS for this change | local command transcript |
 | 2026-07-12T06:45:10Z | 8060ae062b33867c7365041258d511d5ac4ba988 | 6.13 | workflow/branch-policy review (`gh api repos/duvu/openstock/branches/main/protection`) | 1 | Confirmatory check remains external for required repo policy evidence | external workflow review record |
 | 2026-07-13T01:04:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 0.4, 1.G2, 1.G4, 1.G5, 2.G1, 2.G2, 2.G3, 2.G4, 2.G5, 3.32, 4.30, 4.31, 4.32, 4.33, 4.41, 4.G1, 4.G2, 4.G6, 6.2, 6.3, 6.4, 6.5, 6.11, 6.14, 6.15, 6.16 | `PIP_INDEX_URL=https://pypi.org/simple make verify-hardening` | 0 | Final local hardening matrix passed after dependency-closure fixes; external final-SHA check remains task 6.13. | `openspec/changes/openstock-four-phase-hardening/evidence/dependency-closure.md` |
+| 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 0.2 | clean-branch scope audit against the original dirty worktree | 0 | Dependency work was isolated in `agent/dependency-closure`; unrelated classifier JSON-parser files remained outside PR #62/#63. | https://github.com/duvu/openstock/pull/62 |
+| 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 0.3 | `gh pr view 62 --json state,mergedAt,url && gh pr view 63 --json state,url,headRefOid` | 0 | Dependency implementation was split across merged PR #62 and compatibility follow-up PR #63. | https://github.com/duvu/openstock/pull/63 |
+| 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 6.13 | `gh run view 29218144573 --json conclusion,headSha,url && gh run view 29218144547 --json conclusion,headSha,url` | 0 | Final implementation SHA passed vnalpha-ci and generic source-export checks. | https://github.com/duvu/openstock/actions/runs/29218144573 |
 ## Evidence row format
 
 Every executed command must add one row:
@@ -230,12 +233,7 @@ Exact commands may be adjusted to the repository packaging interface, but equiva
 
 ## Deferred work register
 
-Task ID: 0.2, 0.3, 6.13
-Reason: Governance/process completion is controlled outside this implementation slice
-Owner: Program/branch/release owners
-Dependency: 0.2 (freeze plan), 0.3 (phase-split branch alignment), 6.13 (GitHub check evidence)
-Risk accepted until: external release control and governance close
-Approval reference: local OpenSpec execution notes + reviewer acknowledgement
+No tasks are deferred.
 
 Required defer format:
 
@@ -252,20 +250,19 @@ A deferred task does not count as complete. The final gate may pass with a defer
 
 ## Blockers
 
-- Task 0.2 and 0.3: deferred for external governance and phase-split branch process decisions.
-- Task 6.13: deferred because GitHub check evidence capture is external to this local runtime pass.
+None.
 
 ## Next executable task
 
-None for this implementation slice; remaining work is external governance/process closure (`6.13`, `0.2`, `0.3`).
+Archive the completed P0 change after PR #63 is integrated.
 
 ## Completion record
 
 ```text
-Final implementation SHA: 8060ae062b33867c7365041258d511d5ac4ba988
-Final CI run: 2026-07-12T06:45:00Z
+Final implementation SHA: c5e3688186ce9c8a26ddfa3a40edd3b98563e23f
+Final CI run: https://github.com/duvu/openstock/actions/runs/29218144573
 OpenSpec verifier result: PASS
-Ready to archive: Deferred (6.13 awaiting external confirmation)
+Ready to archive: Yes
 ```
 
 ## Dependency-closure addendum — 2026-07-13
@@ -282,5 +279,5 @@ Ready to archive: Deferred (6.13 awaiting external confirmation)
 | 2026-07-13T00:32:00Z | 6.12 | `openspec validate openstock-four-phase-hardening --strict`; completion verifier | 0 | Strict OpenSpec validation and completion evidence verification passed on the current tree. |
 
 The user explicitly authorized dependency closure before resuming research feature
-work. Final GitHub check evidence still requires publishing this worktree as a new
-implementation SHA; task 6.13 remains unchecked until that external run is green.
+work. PR #62 merged the dependency implementation; PR #63 contains the Python
+compatibility and CI follow-up and is green on the final implementation SHA.
