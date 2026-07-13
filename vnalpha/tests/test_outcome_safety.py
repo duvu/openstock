@@ -5,7 +5,8 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
-OUTCOMES_SRC = Path("/home/beou/IdeaProjects/openstock/vnalpha/src/vnalpha/outcomes")
+VNALPHA_SRC = Path(__file__).parents[1] / "src" / "vnalpha"
+OUTCOMES_SRC = VNALPHA_SRC / "outcomes"
 FORBIDDEN_EXECUTION_TERMS = [
     "buy signal",
     "sell signal",
@@ -81,7 +82,7 @@ class TestOutcomeScoringIsolation:
 
     def test_outcome_commands_cannot_call_generate_watchlist(self):
         """CLI outcome commands must not call generate_watchlist (would recompute)."""
-        cli_path = Path("/home/beou/IdeaProjects/openstock/vnalpha/src/vnalpha/cli.py")
+        cli_path = VNALPHA_SRC / "cli.py"
         cli_src = cli_path.read_text()
         # Find the outcome section only
         outcome_section_start = cli_src.find("outcome_app")
