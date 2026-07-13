@@ -6,7 +6,8 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import override
+
+from typing_extensions import override
 
 
 @dataclass(frozen=True, slots=True)

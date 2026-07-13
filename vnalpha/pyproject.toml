@@ -18,6 +18,7 @@ dependencies = [
     "pandas>=2",
     "numpy>=1.26",
     "structlog>=24",
+    "typing-extensions>=4.12",
 ]
 
 [project.optional-dependencies]

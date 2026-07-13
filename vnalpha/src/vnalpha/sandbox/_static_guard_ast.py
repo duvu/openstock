@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import ast
-from typing import Final, final, override
+from typing import Final, final
+
+from typing_extensions import override
 
 from vnalpha.policy.safety_policy import FORBIDDEN_TOOL_PREFIXES
 from vnalpha.sandbox._static_guard_models import SandboxGuardRule, SandboxGuardViolation

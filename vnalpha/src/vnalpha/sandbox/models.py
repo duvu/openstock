@@ -13,10 +13,10 @@ from typing import (
     NewType,
     assert_never,
     final,
-    override,
 )
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing_extensions import override
 
 from vnalpha.sandbox.contracts import (
     ApprovedReadPath as ApprovedInputPath,

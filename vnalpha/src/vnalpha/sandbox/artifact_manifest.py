@@ -6,7 +6,9 @@ import json
 import string
 from dataclasses import dataclass
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Final, TypedDict, final, override
+from typing import Final, TypedDict, final
+
+from typing_extensions import override
 
 _SHA256_HEX_DIGITS: Final = frozenset(string.hexdigits)
 _MANIFEST_PATH: Final = "manifest.json"
