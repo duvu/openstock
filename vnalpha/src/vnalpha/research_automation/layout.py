@@ -116,5 +116,3 @@ class ResearchArtifactLayout:
         self.root.mkdir(parents=True, exist_ok=True)
         self.charts_dir.mkdir(parents=True, exist_ok=True)
         return self.root
-
-

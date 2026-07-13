@@ -110,7 +110,11 @@ class DatasetRef:
     quality_status: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "dataset_name", _normalize_identifier(self.dataset_name, "dataset_name"))
+        object.__setattr__(
+            self,
+            "dataset_name",
+            _normalize_identifier(self.dataset_name, "dataset_name"),
+        )
         object.__setattr__(
             self,
             "symbols",
@@ -124,8 +128,12 @@ class DatasetRef:
                 raise ValueError("start_date must be before or equal to end_date")
         if self.row_count is not None and self.row_count < 0:
             raise ValueError("row_count must be non-negative")
-        object.__setattr__(self, "interval", _normalize_identifier(self.interval, "interval"))
-        object.__setattr__(self, "quality_status", _normalize_mapping(self.quality_status))
+        object.__setattr__(
+            self, "interval", _normalize_identifier(self.interval, "interval")
+        )
+        object.__setattr__(
+            self, "quality_status", _normalize_mapping(self.quality_status)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,7 +220,6 @@ class ResearchArtifact:
     correlation_id: str
     status: ResearchArtifactStatus
     input_datasets: tuple[DatasetRef, ...]
-    lifecycle_state: ResearchArtifactLifecycleState = ResearchArtifactLifecycleState.RUN
     sandbox_job_id: str | None
     parameters: Mapping[str, Any]
     metrics: Mapping[str, Any]
@@ -220,6 +227,7 @@ class ResearchArtifact:
     quality_status: Mapping[str, Any]
     caveats: tuple[str, ...]
     outputs: ArtifactOutputs
+    lifecycle_state: ResearchArtifactLifecycleState = ResearchArtifactLifecycleState.RUN
     run_id: str | None = None
     related_experiment_id: str | None = None
     related_feature_id: str | None = None
@@ -237,20 +245,32 @@ class ResearchArtifact:
             "lifecycle_state",
             _coerce_lifecycle_state(self.lifecycle_state, status),
         )
-        object.__setattr__(self, "artifact_id", _normalize_identifier(self.artifact_id, "artifact_id"))
+        object.__setattr__(
+            self, "artifact_id", _normalize_identifier(self.artifact_id, "artifact_id")
+        )
         object.__setattr__(self, "name", _normalize_identifier(self.name, "name"))
         object.__setattr__(self, "purpose", self.purpose.strip())
         if not self.purpose:
             raise ValueError("purpose must be non-empty")
-        object.__setattr__(self, "created_by", _normalize_identifier(self.created_by, "created_by"))
-        object.__setattr__(self, "correlation_id", _normalize_identifier(self.correlation_id, "correlation_id"))
+        object.__setattr__(
+            self, "created_by", _normalize_identifier(self.created_by, "created_by")
+        )
+        object.__setattr__(
+            self,
+            "correlation_id",
+            _normalize_identifier(self.correlation_id, "correlation_id"),
+        )
         if self.created_at.tzinfo is None:
-            object.__setattr__(self, "created_at", self.created_at.replace(tzinfo=timezone.utc))
+            object.__setattr__(
+                self, "created_at", self.created_at.replace(tzinfo=timezone.utc)
+            )
         object.__setattr__(self, "input_datasets", tuple(self.input_datasets))
         object.__setattr__(self, "parameters", _normalize_mapping(self.parameters))
         object.__setattr__(self, "metrics", _normalize_mapping(self.metrics))
         object.__setattr__(self, "lineage", _normalize_mapping(self.lineage))
-        object.__setattr__(self, "quality_status", _normalize_mapping(self.quality_status))
+        object.__setattr__(
+            self, "quality_status", _normalize_mapping(self.quality_status)
+        )
         object.__setattr__(self, "caveats", _normalize_tuple(self.caveats))
         if self.sandbox_job_id is not None:
             object.__setattr__(
@@ -262,7 +282,9 @@ class ResearchArtifact:
             object.__setattr__(
                 self,
                 "related_experiment_id",
-                _normalize_identifier(self.related_experiment_id, "related_experiment_id"),
+                _normalize_identifier(
+                    self.related_experiment_id, "related_experiment_id"
+                ),
             )
         if self.related_feature_id is not None:
             object.__setattr__(
@@ -274,7 +296,9 @@ class ResearchArtifact:
             object.__setattr__(
                 self,
                 "related_hypothesis_id",
-                _normalize_identifier(self.related_hypothesis_id, "related_hypothesis_id"),
+                _normalize_identifier(
+                    self.related_hypothesis_id, "related_hypothesis_id"
+                ),
             )
         if self.related_pattern_id is not None:
             object.__setattr__(
@@ -292,7 +316,9 @@ class ResearchArtifact:
                 ),
             )
         if self.run_id is not None:
-            object.__setattr__(self, "run_id", _normalize_identifier(self.run_id, "run_id"))
+            object.__setattr__(
+                self, "run_id", _normalize_identifier(self.run_id, "run_id")
+            )
         if self.created_by == "":
             raise ValueError("created_by must be non-empty")
 
@@ -316,10 +342,14 @@ class ResearchExperiment:
             raise ValueError("horizon_sessions must be positive")
         object.__setattr__(self, "definition", definition)
         if self.universe is not None:
-            object.__setattr__(self, "universe", _normalize_identifier(self.universe, "universe"))
+            object.__setattr__(
+                self, "universe", _normalize_identifier(self.universe, "universe")
+            )
         if self.end_date is not None and self.start_date is not None:
             if self.end_date < self.start_date:
-                raise ValueError("experiment start_date must be before or equal end_date")
+                raise ValueError(
+                    "experiment start_date must be before or equal end_date"
+                )
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,7 +371,9 @@ class ResearchFeature:
         object.__setattr__(self, "feature_name", feature_name)
         object.__setattr__(self, "feature_expression", expression)
         if self.universe is not None:
-            object.__setattr__(self, "universe", _normalize_identifier(self.universe, "universe"))
+            object.__setattr__(
+                self, "universe", _normalize_identifier(self.universe, "universe")
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -382,7 +414,9 @@ class PatternScan:
             raise ValueError("pattern_description must be non-empty")
         object.__setattr__(self, "pattern_description", description)
         if self.universe is not None:
-            object.__setattr__(self, "universe", _normalize_identifier(self.universe, "universe"))
+            object.__setattr__(
+                self, "universe", _normalize_identifier(self.universe, "universe")
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,7 +446,9 @@ class OfflineEventStudy:
         if self.exit_condition is not None:
             object.__setattr__(self, "exit_condition", self.exit_condition.strip())
         if self.universe is not None:
-            object.__setattr__(self, "universe", _normalize_identifier(self.universe, "universe"))
+            object.__setattr__(
+                self, "universe", _normalize_identifier(self.universe, "universe")
+            )
         if self.end_date is not None and self.start_date is not None:
             if self.end_date < self.start_date:
                 raise ValueError("start_date must be before or equal end_date")

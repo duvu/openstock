@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, Mapping
 
 from vnalpha.research_automation.models import (
     ArtifactOutputs,
@@ -22,7 +22,9 @@ _RECOMMENDATION_PATTERNS: Final[tuple[str, ...]] = (
     r"\btake\s+profit\b",
     r"\bplace\s+order\b",
 )
-_RECOMMENDATION_RE = tuple(re.compile(item, re.IGNORECASE) for item in _RECOMMENDATION_PATTERNS)
+_RECOMMENDATION_RE = tuple(
+    re.compile(item, re.IGNORECASE) for item in _RECOMMENDATION_PATTERNS
+)
 
 _EXPERIMENT_METRICS: Final[tuple[str, str]] = ("sample_size", "period_coverage")
 
@@ -37,7 +39,9 @@ class ResearchArtifactValidationFinding:
 
 @dataclass(frozen=True, slots=True)
 class ResearchArtifactValidationReport:
-    findings: tuple[ResearchArtifactValidationFinding, ...] = field(default_factory=tuple)
+    findings: tuple[ResearchArtifactValidationFinding, ...] = field(
+        default_factory=tuple
+    )
 
     @property
     def is_ok(self) -> bool:
@@ -64,7 +68,9 @@ def validate_research_artifact(
         _warn_if_missing_lineage_and_quality(findings, {}, None)
         _warn_if_missing_caveats(findings, ())
     else:
-        _warn_if_missing_lineage_and_quality(findings, artifact.quality_status, artifact.lineage)
+        _warn_if_missing_lineage_and_quality(
+            findings, artifact.quality_status, artifact.lineage
+        )
         _warn_if_missing_caveats(findings, artifact.caveats)
         _validate_sample_coverage(
             findings,
@@ -95,7 +101,9 @@ def generate_research_caveats(
     caveats: list[str] = []
 
     if sample_size is None:
-        caveats.append("Sample size was not recorded; interpretation should be cautious.")
+        caveats.append(
+            "Sample size was not recorded; interpretation should be cautious."
+        )
     elif sample_size < 30:
         caveats.append(
             f"Small sample size ({sample_size}) increases estimate variance."
@@ -129,13 +137,15 @@ def generate_research_caveats(
         caveats.append("Transaction costs are excluded from these computed metrics.")
     if research_only:
         caveats.append(
-            "This is research-only output and should not be interpreted as personalized investment advice."
+            "This is research-only output, not personalized financial guidance."
         )
 
     return tuple(dict.fromkeys(c for c in caveats if c))
 
 
-def _require_file(findings: list[ResearchArtifactValidationFinding], label: str, path: Path) -> None:
+def _require_file(
+    findings: list[ResearchArtifactValidationFinding], label: str, path: Path
+) -> None:
     if not path.exists():
         findings.append(
             ResearchArtifactValidationFinding(
@@ -312,4 +322,3 @@ def _contains_prohibited_recommendation(
             )
             return True
     return False
-

@@ -298,4 +298,6 @@ def test_composer_input_falls_back_to_known_command_names_when_registry_fails(
     composer.query_one = lambda selector, _type=None: panel
     composer._render_suggestions("/")
     assert panel.display is True
-    assert panel.text.startswith("/chat")
+    assert panel.text.splitlines() == [
+        f"/{name}" for name in composer._FALLBACK_COMMAND_NAMES[:10]
+    ]

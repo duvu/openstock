@@ -42,6 +42,7 @@ from vnalpha.sandbox.models import (
     SandboxJobId,
     SandboxJobRequest,
     SandboxJobStatus,
+    SandboxJobTransitionError,
     SandboxResourceLimits,
     SandboxRunId,
 )
@@ -328,7 +329,9 @@ class SandboxExecutionService:
                 continue
             if approval.correlation_id != job.correlation_id:
                 continue
-            if approval.input_references != tuple(job.filesystem_policy.approved_read_paths):
+            if approval.input_references != tuple(
+                job.filesystem_policy.approved_read_paths
+            ):
                 continue
             return approval
         return None
@@ -395,6 +398,8 @@ class SandboxExecutionService:
         record = repository.get(job_id)
         if record is None:
             raise ValueError(f"sandbox job not found: {job_id}")
+        if record.status is not SandboxJobStatus.QUEUED:
+            raise SandboxJobTransitionError(job_id, record.status)
         with SandboxArtifactStorage(storage_context, job_id) as storage:
             request_payload = json.loads(
                 storage.read_bounded_regular_file(

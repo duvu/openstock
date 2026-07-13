@@ -56,7 +56,10 @@ def format_plan_preview(plan: "AssistantPlan") -> str:
     else:
         lines = ["Plan:"]
         for i, step in enumerate(plan.steps, start=1):
-            if step.tool_name == "sandbox.run_research_code" and "job_id" in step.arguments:
+            if (
+                step.tool_name == "sandbox.run_research_code"
+                and "job_id" in step.arguments
+            ):
                 lines.append(
                     "  "
                     + f"{i}. sandbox.run_research_code(purpose={step.arguments.get('purpose')!r})"

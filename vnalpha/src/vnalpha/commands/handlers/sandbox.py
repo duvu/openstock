@@ -67,7 +67,9 @@ def _run_preview(parsed: ParsedCommand, *, conn, surface: str) -> CommandResult:
                     "status": preview.job.status.value,
                     "code_digest": preview.job.code_digest,
                     "code_summary": preview.code_summary,
-                    "input_references": list(preview.job.filesystem_policy.approved_read_paths),
+                    "input_references": list(
+                        preview.job.filesystem_policy.approved_read_paths
+                    ),
                     "resource_limits": {
                         "cpu_millis": preview.job.resource_limits.cpu_millis,
                         "memory_mb": preview.job.resource_limits.memory_mb,

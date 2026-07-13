@@ -74,6 +74,33 @@ def test_prepare_classifies_current_prompt_only_and_execute_does_not_replan() ->
     conn.close()
 
 
+def test_request_routing_session_is_used_for_classification_and_synthesis() -> None:
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn)
+    llm = _llm()
+    app = AssistantApp(conn, llm_client=llm)
+    prepared = app.prepare(
+        AssistantRequest(
+            current_user_prompt="show candidates",
+            routing_session_id="chat-session",
+        )
+    )
+
+    assert not isinstance(prepared, tuple)
+    assert llm.call_metadata[0]["route_metadata"]["session_id"] == "chat-session"
+
+    prepared_for_execution = replace(
+        prepared, plan=AssistantPlan("scan_candidates", [])
+    )
+    prepared_for_execution = replace(
+        prepared_for_execution, plan_hash=plan_hash(prepared_for_execution.plan)
+    )
+    app.execute_prepared(prepared_for_execution)
+
+    assert llm.call_metadata[1]["route_metadata"]["session_id"] == "chat-session"
+    conn.close()
+
+
 def test_prompt_projection_does_not_store_raw_or_historical_context_by_default() -> (
     None
 ):
@@ -209,7 +236,9 @@ def test_prepare_materializes_sandbox_plan_with_exact_preview_metadata(
     conn.close()
 
 
-def test_ask_on_approval_required_plan_is_preview_even_when_auto_execute_requested() -> None:
+def test_ask_on_approval_required_plan_is_preview_even_when_auto_execute_requested() -> (
+    None
+):
     conn = duckdb.connect(":memory:")
     run_migrations(conn=conn)
     app = AssistantApp(

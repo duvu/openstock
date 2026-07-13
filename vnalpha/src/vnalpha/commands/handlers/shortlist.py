@@ -61,7 +61,9 @@ def handle_shortlist(
         )
 
     candidates = list(data.get("shortlist") or [])
-    method = data.get("methodology") if isinstance(data.get("methodology"), dict) else {}
+    method = (
+        data.get("methodology") if isinstance(data.get("methodology"), dict) else {}
+    )
     warnings = list(output.warnings or [])
 
     candidates, filter_applied = _filter_candidates(
@@ -118,7 +120,9 @@ def handle_shortlist(
 
     panel_lines = {
         "methodology_version": method.get("version", "shortlist-v1"),
-        "formula": method.get("formula", "0.75*candidate_score + 0.15*sector_score + ..."),
+        "formula": method.get(
+            "formula", "0.75*candidate_score + 0.15*sector_score + ..."
+        ),
         "min_score": method.get("min_score", 0.0),
         "considered_count": data.get("considered_count", len(candidates)),
         "method_focus": (

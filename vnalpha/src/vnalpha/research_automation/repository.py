@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 import duckdb
 
@@ -15,9 +14,8 @@ from vnalpha.research_automation.models import (
     OfflineEventStudy,
     PatternScan,
     ResearchArtifact,
-    ResearchArtifactStatus,
     ResearchArtifactLifecycleState,
-    ResearchArtifactType,
+    ResearchArtifactStatus,
     ResearchExperiment,
     ResearchFeature,
     ResearchHypothesis,
@@ -55,12 +53,8 @@ class ResearchAutomationRepository:
             ).fetchall()
         return tuple(_artifact_payload(row) for row in rows)
 
-    def list_by_correlation(
-        self, correlation_id: str
-    ) -> tuple[dict[str, Any], ...]:
-        rows = self._conn.execute(
-            _LIST_BY_CORRELATION_SQL, [correlation_id]
-        ).fetchall()
+    def list_by_correlation(self, correlation_id: str) -> tuple[dict[str, Any], ...]:
+        rows = self._conn.execute(_LIST_BY_CORRELATION_SQL, [correlation_id]).fetchall()
         return tuple(_artifact_payload(row) for row in rows)
 
     def list_by_type(self, artifact_type: str) -> tuple[dict[str, Any], ...]:
@@ -71,9 +65,7 @@ class ResearchAutomationRepository:
         self, lifecycle_state: ResearchArtifactLifecycleState | str
     ) -> tuple[dict[str, Any], ...]:
         state = _coerce_lifecycle_state(lifecycle_state)
-        rows = self._conn.execute(
-            _LIST_BY_LIFECYCLE_SQL, [state.value]
-        ).fetchall()
+        rows = self._conn.execute(_LIST_BY_LIFECYCLE_SQL, [state.value]).fetchall()
         return tuple(_artifact_payload(row) for row in rows)
 
     def save_experiment(self, experiment: ResearchExperiment) -> None:
@@ -91,8 +83,12 @@ class ResearchAutomationRepository:
                     {
                         "definition": experiment.definition,
                         "universe": experiment.universe,
-                        "start_date": str(experiment.start_date) if experiment.start_date else None,
-                        "end_date": str(experiment.end_date) if experiment.end_date else None,
+                        "start_date": str(experiment.start_date)
+                        if experiment.start_date
+                        else None,
+                        "end_date": str(experiment.end_date)
+                        if experiment.end_date
+                        else None,
                         "horizon_sessions": experiment.horizon_sessions,
                     }
                 ),
@@ -186,7 +182,9 @@ class ResearchAutomationRepository:
                         "exit_condition": study.exit_condition,
                         "horizon_sessions": study.horizon_sessions,
                         "universe": study.universe,
-                        "start_date": str(study.start_date) if study.start_date else None,
+                        "start_date": str(study.start_date)
+                        if study.start_date
+                        else None,
                         "end_date": str(study.end_date) if study.end_date else None,
                     }
                 ),

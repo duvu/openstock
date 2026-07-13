@@ -115,7 +115,12 @@ if _TEXTUAL_AVAILABLE:
             Binding("ctrl+b", "artifact_back", "Artifact back", show=False),
             Binding("ctrl+y", "copy_artifact_id", "Artifact id", show=False),
             Binding("ctrl+s", "save_artifact_note", "Artifact note", show=False),
-            Binding("ctrl+r", "route_artifact_to_assistant", "Artifact assistant", show=False),
+            Binding(
+                "ctrl+r",
+                "route_artifact_to_assistant",
+                "Artifact assistant",
+                show=False,
+            ),
             Binding("escape", "cancel_pending_plan", "Cancel plan", show=False),
             Binding("f12", "toggle_log_viewer", "Log Viewer", show=False),
         ]
@@ -224,7 +229,9 @@ if _TEXTUAL_AVAILABLE:
                 output = self.query_one("#output-stream", OutputStream)
                 artifact_id = output.current_artifact_id()
                 if artifact_id:
-                    output.show_assistant_message(f"Artifact ID: {artifact_id}", style="dim")
+                    output.show_assistant_message(
+                        f"Artifact ID: {artifact_id}", style="dim"
+                    )
             except Exception:
                 pass
 

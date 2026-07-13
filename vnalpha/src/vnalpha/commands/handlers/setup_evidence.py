@@ -62,9 +62,7 @@ def handle_setup_evidence(parsed: ParsedCommand, conn=None, **kwargs):
         date=date,
     )
     data = output.data if isinstance(output.data, dict) else None
-    artifact_id = (
-        f"evidence.get_setup_history:{setup_type}:{(data or {}).get('horizon_sessions') or horizon or 20}:{(data or {}).get('as_of_date') or date or 'latest'}"
-    )
+    artifact_id = f"evidence.get_setup_history:{setup_type}:{(data or {}).get('horizon_sessions') or horizon or 20}:{(data or {}).get('as_of_date') or date or 'latest'}"
     return workflow_result(
         title=f"/setup-evidence — {setup_type}",
         subject=setup_type,

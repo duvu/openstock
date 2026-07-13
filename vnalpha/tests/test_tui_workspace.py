@@ -251,7 +251,11 @@ def test_9_10b_no_execution_controls_in_bindings() -> None:
     action_names = {binding.action for binding in VnAlphaApp.BINDINGS}
     forbidden_terms = {"trade", "order", "broker", "account", "portfolio"}
 
-    assert {"open_artifact_detail", "artifact_back", "save_artifact_note"} <= action_names
+    assert {
+        "open_artifact_detail",
+        "artifact_back",
+        "save_artifact_note",
+    } <= action_names
     for action_name in action_names:
         for term in forbidden_terms:
             assert term not in action_name

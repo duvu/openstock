@@ -44,9 +44,7 @@ def handle_research_plan(parsed: ParsedCommand, conn=None, **kwargs):
         date=date,
     )
     data = output.data if isinstance(output.data, dict) else None
-    artifact_id = (
-        f"scenario.generate_research_plan:{symbol}:{(data or {}).get('as_of_date') or date or 'latest'}"
-    )
+    artifact_id = f"scenario.generate_research_plan:{symbol}:{(data or {}).get('as_of_date') or date or 'latest'}"
     return workflow_result(
         title=f"/research-plan — {symbol}",
         subject=symbol,
