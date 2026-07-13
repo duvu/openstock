@@ -75,10 +75,10 @@ verify-r4: ## Run R4 chat-workspace acceptance tests (no network required)
 		tests/test_r4_persistence.py \
 		tests/test_r4_controller_persistence.py
 
-verify-vnalpha-package: ## Build and exercise an offline Debian packaging fixture
+verify-vnalpha-package: ## Build and exercise a standalone Debian package
 	rm -rf /tmp/openstock-hardening-deb
 	mkdir -p /tmp/openstock-hardening-deb
-	./packaging/build-deb.sh --offline --output-dir /tmp/openstock-hardening-deb
+	./packaging/build-deb.sh --output-dir /tmp/openstock-hardening-deb
 	./packaging/test/test_packaging.sh /tmp/openstock-hardening-deb/vnalpha_*.deb
 
 eval-research-answers: ## Evaluate offline golden fixtures

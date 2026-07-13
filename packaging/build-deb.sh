@@ -7,7 +7,7 @@
 # Options:
 #   --version VERSION   Override package version (default: read from vnalpha/pyproject.toml)
 #   --output-dir DIR    Directory to write the .deb file (default: packaging/dist/)
-#   --offline           Skip pre-downloading wheels (assume they are already present)
+#   --offline           Build an application-wheel-only structural fixture
 #   --help              Show this help message
 #
 # What this script does:
@@ -24,8 +24,9 @@
 #   - python3 and python3-pip (to download wheels)
 #   - The vnalpha source tree at ./vnalpha/ relative to the repo root
 #
-# The output .deb is standalone: postinst installs the bundled wheels
-# offline so no network access is needed on the target host.
+# Normal output is standalone: postinst installs the bundled wheels offline so
+# no network access is needed on the target host. The --offline structural
+# fixture is intentionally not installable on a clean host.
 
 set -euo pipefail
 
