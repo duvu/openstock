@@ -227,16 +227,12 @@ class AnswerSynthesizer:
                 task_type=task_type,
                 route_metadata=route_metadata,
             )
-            self.last_raw_responses = [
-                dict(response) for response in self._client.last_raw_responses
-            ]
+            self._capture_gateway_raw_responses()
             self.last_usage = usage
             answer = parse_synthesis_response(response_text)
         except Exception as exc:
             if not self.last_raw_responses:
-                self.last_raw_responses = [
-                    dict(response) for response in self._client.last_raw_responses
-                ]
+                self._capture_gateway_raw_responses()
             if not research_intent:
                 if isinstance(exc, SynthesisError):
                     raise
@@ -334,6 +330,10 @@ class AnswerSynthesizer:
             "fallback_used": fallback_used,
         }
         return answer
+
+    def _capture_gateway_raw_responses(self) -> None:
+        raw_responses = getattr(self._client, "last_raw_responses", ())
+        self.last_raw_responses = [dict(response) for response in raw_responses]
 
 
 def _validate_context_answer(

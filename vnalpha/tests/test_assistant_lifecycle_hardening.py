@@ -212,14 +212,14 @@ def test_prepare_materializes_sandbox_plan_with_exact_preview_metadata(
             responses=[
                 (
                     '{"intent":"sandbox_research_calculation","confidence":1,'
-                    '"entities":{"purpose":"compare persisted datasets"}}',
+                    '"entities":{"purpose":"mean of 1, 2, 3"}}',
                     {},
                 )
             ]
         ),
     )
 
-    prepared = app.prepare(AssistantRequest("compare persisted datasets"))
+    prepared = app.prepare(AssistantRequest("mean of 1, 2, 3"))
 
     assert not isinstance(prepared, tuple)
     step = prepared.plan.steps[0]
@@ -248,14 +248,14 @@ def test_ask_on_approval_required_plan_is_preview_even_when_auto_execute_request
             responses=[
                 (
                     '{"intent":"sandbox_research_calculation","confidence":1,'
-                    '"entities":{"purpose":"compare persisted datasets"}}',
+                    '"entities":{"purpose":"mean of 1, 2, 3"}}',
                     {},
                 ),
             ]
         ),
     )
 
-    answer, plan = app.ask("compare persisted datasets")
+    answer, plan = app.ask("mean of 1, 2, 3")
 
     assert "[Plan preview" in answer.summary
     assert plan.steps[0].tool_name == "sandbox.run_research_code"

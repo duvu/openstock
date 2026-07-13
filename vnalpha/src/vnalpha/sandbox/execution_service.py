@@ -41,7 +41,6 @@ from vnalpha.sandbox.models import (
     SandboxJobId,
     SandboxJobRequest,
     SandboxJobStatus,
-    SandboxJobTransitionError,
     SandboxResourceLimits,
     SandboxRunId,
 )
@@ -180,120 +179,6 @@ class SandboxExecutionService:
         step = prepared.plan.steps[0]
         if step.tool_name != "sandbox.run_research_code":
             raise ValueError("prepared plan is not a sandbox execution request")
-        job = self._load_retained_job(step.arguments)
-        approval = self._build_approval(
-            prepared=prepared,
-            job=job,
-            approver=approver,
-            approved_at=approved_at,
-        )
-        SandboxApprovalRepository(self._conn).create(approval)
-        return approval
-
-    def _require_approval(
-        self,
-        *,
-        prepared: PreparedAssistantTurn,
-        job: SandboxJob,
-    ) -> SandboxApproval:
-        approval = self._find_matching_approval(prepared=prepared, job=job)
-        if approval is None:
-            raise ValueError(
-                "sandbox execution requires explicit approval before running"
-            )
-        return approval
-
-    def _find_matching_approval(
-        self,
-        *,
-        prepared: PreparedAssistantTurn,
-        job: SandboxJob,
-    ) -> SandboxApproval | None:
-        repository = SandboxApprovalRepository(self._conn)
-        for approval in repository.list_for_job(job.job_id):
-            if approval.plan_digest != prepared.plan_hash:
-                continue
-            if approval.code_digest != job.code_digest:
-                continue
-            if approval.correlation_id != job.correlation_id:
-                continue
-            if approval.input_references != tuple(
-                job.filesystem_policy.approved_read_paths
-            ):
-                continue
-            return approval
-        return None
-
-    def _build_approval(
-        self,
-        *,
-        prepared: PreparedAssistantTurn,
-        job: SandboxJob,
-        approver: str,
-        approved_at: datetime | None,
-    ) -> SandboxApproval:
-        return SandboxApproval.create(
-            job_id=job.job_id,
-            plan_digest=prepared.plan_hash,
-            code_digest=job.code_digest,
-            input_references=tuple(job.filesystem_policy.approved_read_paths),
-            correlation_id=job.correlation_id,
-            approver=approver,
-            approved_at=approved_at or datetime.now(UTC),
-        )
-
-    def _runner(self):
-        if self._docker_runner is not None:
-            return self._docker_runner
-        return DockerRunner(SubprocessDockerCommand(), platform.system())
-
-    def _resolve_run_context(self) -> RunContext:
-        if self._run_context is not None:
-            return self._run_context
-        current = get_run_context()
-        if current is not None:
-            self._run_context = current
-            return current
-        self._run_context = init_run_context(
-            surface=self._surface,
-            actor=self._surface,
-            log_root=Path(os.environ.get("VNALPHA_LOG_ROOT", "/tmp/openstock-logs")),
-        )
-        return self._run_context
-
-    def _run_context_for(self, run_id: SandboxRunId) -> RunContext:
-        current = self._resolve_run_context()
-        if current.run_id == str(run_id):
-            return current
-        return RunContext(
-            run_id=str(run_id),
-            surface=current.surface,
-            actor=current.actor,
-            log_root=current.log_root,
-        )
-
-    def _ensure_correlation_id(self) -> SandboxCorrelationId:
-        correlation_id = get_correlation_id()
-        if correlation_id in {"", "unset"}:
-            correlation_id = set_correlation_id()
-        return SandboxCorrelationId(correlation_id)
-
-    def _load_retained_job(self, arguments: dict[str, object]) -> SandboxJob:
-        job_id = SandboxJobId(str(arguments["job_id"]))
-        run_id = SandboxRunId(str(arguments["run_id"]))
-        storage_context = self._run_context_for(run_id)
-        repository = SandboxJobRepository(self._conn)
-        record = repository.get(job_id)
-        if record is None:
-            raise ValueError(f"sandbox job not found: {job_id}")
-        if record.status is not SandboxJobStatus.QUEUED:
-            raise SandboxJobTransitionError(job_id, record.status)
-        with SandboxArtifactStorage(storage_context, job_id) as storage:
-            request_payload = json.loads(
-                storage.read_bounded_regular_file(
-                    "request.json", max_bytes=_MAX_REQUEST_BYTES
-                )
-            )
         retained = load_retained_sandbox_job(
             RetainedBindingRequest(
                 conn=self._conn,

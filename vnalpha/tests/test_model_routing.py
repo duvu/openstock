@@ -94,7 +94,16 @@ def test_config_loads_profiles_and_fallbacks(monkeypatch) -> None:
 
 
 def test_config_retains_legacy_default_model(monkeypatch) -> None:
-    monkeypatch.delenv("VNALPHA_MODEL_DEFAULT", raising=False)
+    for variable in (
+        "VNALPHA_MODEL_DEFAULT",
+        "VNALPHA_MODEL_SMALL",
+        "VNALPHA_LLM_MODEL_SMALL",
+        "VNALPHA_MODEL_REASONING",
+        "VNALPHA_LLM_MODEL_REASONING",
+        "VNALPHA_MODEL_LONG_CONTEXT",
+        "VNALPHA_LLM_MODEL_LONG_CONTEXT",
+    ):
+        monkeypatch.delenv(variable, raising=False)
     monkeypatch.setenv("VNALPHA_LLM_MODEL", "legacy-model")
     config = ModelRoutingConfig.from_env()
     assert config.model_for(ModelProfile.DEFAULT) == "legacy-model"

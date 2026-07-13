@@ -63,22 +63,16 @@ def _run_preview(parsed: ParsedCommand, *, conn, surface: str) -> CommandResult:
             ResultPanel(
                 title="Sandbox Job",
                 content={
-                    "job_id": str(preview.job.job_id),
-                    "run_id": str(preview.job.run_id),
-                    "correlation_id": str(preview.job.correlation_id),
-                    "purpose": preview.job.purpose,
-                    "status": preview.job.status.value,
-                    "code_digest": preview.job.code_digest,
-                    "code_summary": preview.code_summary,
-                    "input_references": list(
-                        preview.job.filesystem_policy.approved_read_paths
-                    ),
-                    "resource_limits": {
-                        "cpu_millis": preview.job.resource_limits.cpu_millis,
-                        "memory_mb": preview.job.resource_limits.memory_mb,
-                        "timeout_seconds": preview.job.resource_limits.timeout_seconds,
-                    },
-                    "image_digest": str(preview.image).split("@", 1)[1],
+                    "job_id": arguments["job_id"],
+                    "run_id": arguments["run_id"],
+                    "correlation_id": arguments["correlation_id"],
+                    "purpose": arguments["purpose"],
+                    "status": "queued",
+                    "code_digest": arguments["code_digest"],
+                    "code_summary": arguments["code_summary"],
+                    "input_references": arguments["input_references"],
+                    "resource_limits": arguments["resource_limits"],
+                    "image_digest": arguments["image_digest"],
                 },
             )
         ],
