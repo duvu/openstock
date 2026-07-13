@@ -196,4 +196,4 @@
 - [x] 15.8 Run `make verify-r4`.
 - [x] 15.9 Run `openstock-verify --ci`.
 - [x] 15.10 Run `pytest vnalpha/tests -k "experiment or feature or hypothesis or pattern or research_automation"`.
-- [ ] 15.11 Attach validation evidence to PR.
+- [x] 15.11 Attach validation evidence to PR.

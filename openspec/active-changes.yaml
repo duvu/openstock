@@ -25,16 +25,15 @@ changes:
     summary: "Surface-aware file-backed TUI logging plus bounded non-overlapping Textual regions for transcript, composer, TODO rail, footer, and LogScreen."
     evidence: "GitHub issue #60 and OpenSpec draft identify direct stderr terminal writes, height/overflow gaps, and missing geometry regressions; no runtime implementation yet."
   prod-c-research-automation:
-    status: in_progress
+    status: complete
     priority: P2
     blocked_by: []
     summary: "Domain-shaped experiments, features, pattern scans, hypotheses, and offline event studies."
-    evidence: "Dependency gates are complete; research-automation models, repository, validators, and artifact layout are present for continued implementation."
+    evidence: "All 150 OpenSpec tasks are implemented and evidence-backed; full suite, lint, R4, package/runtime evals, strict validation, and openstock-verify pass. Draft PR #64 contains the sliced implementation."
   prod-d-closed-loop-repair:
     status: partial
     priority: P3
-    blocked_by:
-      - prod-c-research-automation
+    blocked_by: []
     summary: "Bounded repair, validation, promotion, rejection, and rollback for sandbox/research artifacts only."
     evidence: "Closed-loop service, CLI/TUI bridges, focused security suite, and validation.md are implemented; repository-wide lint/test residuals remain in pre-existing prod-c research-automation work and PR evidence is not attached."
   research-intelligence-data-model-foundation:
