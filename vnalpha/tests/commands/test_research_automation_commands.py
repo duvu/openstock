@@ -1,0 +1,278 @@
+from __future__ import annotations
+
+import json
+from collections.abc import Iterator
+from pathlib import Path
+
+import duckdb
+import pytest
+
+from vnalpha.commands.errors import CommandValidationError
+from vnalpha.commands.models import CommandStatus
+from vnalpha.commands.parser import parse
+from vnalpha.commands.setup import build_default_registry
+from vnalpha.observability.context import init_run_context, reset_run_context
+from vnalpha.warehouse.connection import in_memory_connection
+from vnalpha.warehouse.migrations import run_migrations
+
+
+@pytest.fixture
+def research_connection(tmp_path: Path) -> Iterator[duckdb.DuckDBPyConnection]:
+    reset_run_context()
+    _ = init_run_context(surface="test", actor="pytest", log_root=tmp_path)
+    with in_memory_connection() as conn:
+        run_migrations(conn=conn)
+        conn.execute(
+            "INSERT INTO feature_snapshot "
+            "(symbol, date, return_20d, rs_20d_vs_vnindex, base_range_30d, "
+            "volatility_20d, volume_ratio, feature_data_status, "
+            "feature_build_version, lineage_json) VALUES "
+            "('FPT', DATE '2026-07-01', 0.12, 0.04, 0.10, 0.02, 0.60, 'good', 'v1', '{}'), "
+            "('VNM', DATE '2026-07-01', 0.08, 0.01, 0.20, 0.05, 1.10, 'good', 'v1', '{}')"
+        )
+        yield conn
+    reset_run_context()
+
+
+def _execute(text: str, conn: duckdb.DuckDBPyConnection):
+    return build_default_registry().execute(
+        parse(text), conn=conn, session_id="session-123"
+    )
+
+
+def test_feature_create_persists_definition_and_reproducibility_artifacts(
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    result = _execute(
+        "/feature create rs_20 = rs_20d_vs_vnindex --universe VN30",
+        research_connection,
+    )
+
+    assert result.status is CommandStatus.SUCCESS
+    row = research_connection.execute(
+        "SELECT feature_name, feature_expression, universe FROM research_feature"
+    ).fetchone()
+    assert row == ("RS_20", "rs_20d_vs_vnindex", "VN30")
+
+    artifact = research_connection.execute(
+        "SELECT status, lineage_json, caveats_json, outputs_json FROM research_artifact"
+    ).fetchone()
+    assert artifact is not None
+    assert artifact[0] == "created"
+    assert json.loads(artifact[1])["definition_source"] == "slash_command"
+    assert json.loads(artifact[2])
+    outputs = json.loads(artifact[3])
+    for key in (
+        "manifest",
+        "result_json",
+        "summary_md",
+        "lineage_json",
+        "validation_json",
+    ):
+        assert Path(outputs[key]).is_file()
+    assert (
+        "research-only"
+        in Path(outputs["summary_md"]).read_text(encoding="utf-8").lower()
+    )
+
+
+def test_feature_validate_reports_schema_and_dataset_coverage(
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    created = _execute(
+        "/feature create rs_20 = rs_20d_vs_vnindex --universe VN30",
+        research_connection,
+    )
+    assert created.status is CommandStatus.SUCCESS
+
+    result = _execute("/feature validate rs_20", research_connection)
+
+    assert result.status is CommandStatus.SUCCESS
+    assert result.panels
+    content = result.panels[0].content
+    assert isinstance(content, dict)
+    assert content["schema_valid"] is True
+    assert content["symbol_count"] == 2
+    assert content["row_count"] == 2
+    assert content["period_start"] == "2026-07-01"
+    assert content["period_end"] == "2026-07-01"
+    assert content["quality_status"] == "good"
+    status = research_connection.execute(
+        "SELECT status FROM research_artifact"
+    ).fetchone()
+    assert status == ("validated",)
+
+
+@pytest.mark.parametrize(
+    "definition",
+    (
+        "leak = future_return_10d",
+        "trade_signal = place_order(close)",
+        "next_close = lead(close, 1)",
+    ),
+)
+def test_feature_create_rejects_future_data_and_execution_actions(
+    definition: str,
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    with pytest.raises(CommandValidationError):
+        _ = _execute(f"/feature create {definition}", research_connection)
+
+    assert research_connection.execute(
+        "SELECT count(*) FROM research_feature"
+    ).fetchone() == (0,)
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "/feature",
+        "/feature unsupported x",
+        "/feature create",
+        "/feature create invalid-expression",
+        "/feature validate",
+        "/feature validate missing",
+    ),
+)
+def test_feature_rejects_unsupported_or_invalid_commands(
+    text: str,
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    with pytest.raises(CommandValidationError):
+        _ = _execute(text, research_connection)
+
+
+def test_feature_help_uses_vietnamese_market_example() -> None:
+    meta = build_default_registry().get("feature")
+
+    assert "FPT" in " ".join(meta.examples) or "VN30" in " ".join(meta.examples)
+    assert "/feature create" in meta.usage
+    assert "/feature validate" in meta.usage
+
+
+@pytest.mark.parametrize(
+    ("command", "artifact_type", "event_type"),
+    (
+        (
+            "/experiment indicator relative strength 20 sessions vs VNINDEX --universe VN30",
+            "indicator_experiment",
+            "RESEARCH_EXPERIMENT_SUCCEEDED",
+        ),
+        (
+            "/pattern scan accumulation base with volatility contraction and volume dry-up --universe VN30 --date 2026-07-01",
+            "pattern_scan",
+            "PATTERN_SCAN_COMPLETED",
+        ),
+        (
+            "/hypothesis test symbols with rs_20 > 0 have better 20-session return",
+            "hypothesis_test",
+            "RESEARCH_HYPOTHESIS_TESTED",
+        ),
+        (
+            "/experiment backtest breakout after accumulation base --horizon 10",
+            "offline_event_study",
+            "OFFLINE_EVENT_STUDY_COMPLETED",
+        ),
+    ),
+)
+def test_research_workflows_persist_validated_research_only_artifacts(
+    command: str,
+    artifact_type: str,
+    event_type: str,
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    result = _execute(command, research_connection)
+
+    assert result.status is CommandStatus.SUCCESS
+    row = research_connection.execute(
+        "SELECT artifact_type, status, lineage_json, caveats_json, outputs_json, "
+        "sandbox_job_id, generated_code_path FROM research_artifact "
+        "ORDER BY created_at_ts DESC LIMIT 1"
+    ).fetchone()
+    assert row is not None
+    assert row[0] == artifact_type
+    assert row[1] in {"succeeded", "validated"}
+    assert json.loads(row[2])["computation"] == "approved_deterministic_tool"
+    assert json.loads(row[3])
+    assert row[5] is None
+    assert row[6] is None
+    outputs = json.loads(row[4])
+    assert Path(outputs["manifest"]).is_file()
+    summary = Path(outputs["summary_md"]).read_text(encoding="utf-8").lower()
+    assert "research-only" in summary
+    audit = init_run_context(surface="test").audit_path.read_text(encoding="utf-8")
+    assert event_type in audit
+
+
+def test_pattern_scan_persists_candidate_table(
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    result = _execute(
+        "/pattern scan accumulation base with volatility contraction and volume dry-up --universe VN30",
+        research_connection,
+    )
+
+    assert result.status is CommandStatus.SUCCESS
+    assert result.tables[0].rows == [["FPT", 0.1, 0.02, 0.6]]
+    outputs = json.loads(
+        research_connection.execute(
+            "SELECT outputs_json FROM research_artifact ORDER BY created_at_ts DESC LIMIT 1"
+        ).fetchone()[0]
+    )
+    assert Path(outputs["candidates_csv"]).is_file()
+
+
+def test_offline_event_study_is_labeled_and_refuses_live_execution(
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    result = _execute(
+        "/experiment backtest breakout after accumulation base --horizon 10",
+        research_connection,
+    )
+    assert "offline research event study" in str(result).lower()
+    assert "transaction costs" in str(result).lower()
+
+    with pytest.raises(CommandValidationError):
+        _ = _execute(
+            "/experiment backtest deploy live trades through broker",
+            research_connection,
+        )
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "/experiment",
+        "/experiment unknown x",
+        "/pattern",
+        "/pattern unknown x",
+        "/hypothesis",
+        "/hypothesis unknown x",
+    ),
+)
+def test_research_workflows_render_unsupported_subcommands_inline(
+    text: str,
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    with pytest.raises(CommandValidationError):
+        _ = _execute(text, research_connection)
+
+
+def test_insufficient_dataset_coverage_warns_without_claiming_success(
+    tmp_path: Path,
+) -> None:
+    reset_run_context()
+    _ = init_run_context(surface="test", actor="pytest", log_root=tmp_path)
+    with in_memory_connection() as conn:
+        run_migrations(conn=conn)
+        result = _execute(
+            "/experiment indicator relative strength 20 sessions vs VNINDEX",
+            conn,
+        )
+
+        assert result.status is CommandStatus.PARTIAL
+        assert any("insufficient" in warning.lower() for warning in result.warnings)
+        assert conn.execute("SELECT status FROM research_artifact").fetchone() == (
+            "rejected",
+        )
+    reset_run_context()

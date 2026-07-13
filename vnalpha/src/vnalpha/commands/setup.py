@@ -11,13 +11,17 @@ from vnalpha.commands.handlers.closed_loop import (
 )
 from vnalpha.commands.handlers.compare import handle_compare
 from vnalpha.commands.handlers.context import handle_context
+from vnalpha.commands.handlers.experiment import handle_experiment
 from vnalpha.commands.handlers.explain import handle_explain
+from vnalpha.commands.handlers.feature import handle_feature
 from vnalpha.commands.handlers.filter import handle_filter
 from vnalpha.commands.handlers.help import handle_help
 from vnalpha.commands.handlers.history import handle_history
+from vnalpha.commands.handlers.hypothesis import handle_hypothesis
 from vnalpha.commands.handlers.lineage import handle_lineage
 from vnalpha.commands.handlers.model import handle_model
 from vnalpha.commands.handlers.note import handle_note
+from vnalpha.commands.handlers.pattern import handle_pattern
 from vnalpha.commands.handlers.quality import handle_quality
 from vnalpha.commands.handlers.research_context import (
     handle_market_regime,
@@ -37,6 +41,58 @@ from vnalpha.policy.command_policy import permission_names
 def build_default_registry() -> CommandRegistry:
     """Return a registry populated with capability-approved research commands."""
     reg = CommandRegistry()
+
+    reg.register(
+        CommandMeta(
+            name="experiment",
+            description="Run indicator experiments or offline research event studies.",
+            usage="/experiment indicator <description> [--universe VN30] [--start YYYY-MM-DD] [--end YYYY-MM-DD] | /experiment backtest <event-study-description> [--horizon N]",
+            examples=[
+                "/experiment indicator relative strength 20 sessions vs VNINDEX --universe VN30",
+                "/experiment backtest FPT accumulation breakout --horizon 10",
+            ],
+            permissions=permission_names("experiment"),
+            handler=handle_experiment,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="hypothesis",
+            description="Test a bounded historical research hypothesis.",
+            usage="/hypothesis test <hypothesis-text>",
+            examples=[
+                "/hypothesis test VN30 symbols with positive rs_20 have better 20-session return"
+            ],
+            permissions=permission_names("hypothesis"),
+            handler=handle_hypothesis,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="pattern",
+            description="Scan persisted Vietnamese equity research features for supported patterns.",
+            usage="/pattern scan <pattern-description> [--universe VN30] [--date YYYY-MM-DD]",
+            examples=[
+                "/pattern scan accumulation base with volatility contraction and volume dry-up --universe VN30"
+            ],
+            permissions=permission_names("pattern"),
+            handler=handle_pattern,
+        )
+    )
+
+    reg.register(
+        CommandMeta(
+            name="feature",
+            description="Create and validate reproducible research-only features.",
+            usage="/feature create <name = expression> [--universe UNIVERSE] | /feature validate <feature-id-or-name>",
+            examples=[
+                "/feature create rs_20 = rs_20d_vs_vnindex --universe VN30",
+                "/feature validate rs_20",
+            ],
+            permissions=permission_names("feature"),
+            handler=handle_feature,
+        )
+    )
 
     reg.register(
         CommandMeta(
