@@ -29,7 +29,7 @@ Fresh warehouse and tool output is authoritative over workspace summaries and mo
 - `openspec/specs/` contains accepted implemented capability contracts.
 - Search all three locations before creating a new change. Update overlapping active work instead of adding another remediation/closure spec.
 - Never mark tasks complete from prose alone; use the evidence required by each task.
-- `openstock-four-phase-hardening` is the current P0 prerequisite for later sandbox, automation, persistence, and TUI expansion.
+- `openstock-four-phase-hardening` is completed and archived; its accepted hardening contract remains the prerequisite baseline for later sandbox, automation, persistence, and TUI expansion.
 
 Relevant slash workflows when explicitly requested:
 

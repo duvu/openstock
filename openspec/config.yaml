@@ -8,8 +8,9 @@ context: |
   portfolio allocation, margin, transfer, personalized trade execution, unrestricted SQL,
   unrestricted filesystem/shell access, or autonomous assistant data.fetch.
   Fresh warehouse/tool evidence is authoritative over workspace summaries and LLM prose.
-  openstock-four-phase-hardening is the P0 prerequisite for later sandbox, automation,
-  research-intelligence persistence, and TUI expansion.
+  The completed and archived openstock-four-phase-hardening change established the P0
+  prerequisite for later sandbox, automation, research-intelligence persistence, and
+  TUI expansion.
 
 rules:
   proposal:

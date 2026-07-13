@@ -91,9 +91,21 @@ def test_no_execute_creates_no_tool_trace(conn):
 
 
 def test_raw_classifier_response_is_stored_in_llm_trace_when_enabled(
-    conn, monkeypatch
+    conn, monkeypatch, tmp_path
 ) -> None:
     monkeypatch.setenv("VNALPHA_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
+    for variable in (
+        "VNALPHA_MODEL_DEFAULT",
+        "VNALPHA_LLM_MODEL",
+        "VNALPHA_MODEL_SMALL",
+        "VNALPHA_LLM_MODEL_SMALL",
+        "VNALPHA_MODEL_REASONING",
+        "VNALPHA_LLM_MODEL_REASONING",
+        "VNALPHA_MODEL_LONG_CONTEXT",
+        "VNALPHA_LLM_MODEL_LONG_CONTEXT",
+    ):
+        monkeypatch.delenv(variable, raising=False)
     raw_body = json.dumps(
         {
             "choices": [

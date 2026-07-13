@@ -98,6 +98,54 @@ def test_complete_change_returns_zero(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
+def test_historical_worktree_annotation_preserves_commit_evidence(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    validation = _validation().replace(
+        "## Baseline",
+        "## Baseline\n\n| Field | Value |\n|---|---|\n"
+        "| Baseline commit | `" + _FINAL_SHA + "` |",
+    ).replace(
+        "## Phase 1 validation matrix",
+        "| 2026-07-12T00:00:00Z | "
+        + "`"
+        + _FINAL_SHA
+        + "` + working tree | 0.1 | historical command | 0 | passed | local transcript |\n\n"
+        + "## Phase 1 validation matrix",
+    )
+    change = _write_change(
+        tmp_path,
+        "- [x] **1.1 Do the thing.**\n",
+        validation,
+    )
+
+    assert module.verify_change(change).exit_code == 0
+
+
+def test_baseline_worktree_annotation_uses_recorded_baseline_commit(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    validation = _validation().replace(
+        "## Baseline",
+        "## Baseline\n\n| Field | Value |\n|---|---|\n"
+        "| Baseline commit | `" + _FINAL_SHA + "` |",
+    ).replace(
+        "## Phase 1 validation matrix",
+        "| 2026-07-12T00:00:00Z | baseline + working tree | 0.1 | "
+        "historical command | 0 | passed | local transcript |\n\n"
+        "## Phase 1 validation matrix",
+    )
+    change = _write_change(
+        tmp_path,
+        "- [x] **1.1 Do the thing.**\n",
+        validation,
+    )
+
+    assert module.verify_change(change).exit_code == 0
+
+
 def test_plain_task_format_is_supported(tmp_path: Path) -> None:
     module = _module()
     change = _write_change(

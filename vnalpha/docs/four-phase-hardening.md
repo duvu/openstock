@@ -106,8 +106,8 @@ The runtime CLI also supports `--json` for machine-readable reports.
 
 ## Validation and rollback
 
-The validation ledger is
-`openspec/changes/openstock-four-phase-hardening/validation.md`. Each evidence
+The archived validation ledger is
+`openspec/changes/archive/2026-07-13-openstock-four-phase-hardening/validation.md`. Each evidence
 row identifies the tested tree, exact command, exit code, result summary, and
 artifact. `scripts/check-openspec-completion.py` rejects malformed evidence,
 pending gates, missing required commands, and unchecked completion-ready tasks.

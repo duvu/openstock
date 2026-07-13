@@ -101,7 +101,7 @@ verify-hardening: ## Run hardening verification gates in dependency order
 	$(MAKE) eval-research-runtime
 	python -m pytest -q scripts/tests/test_check_openspec_completion.py
 	python scripts/check-openspec-completion.py \
-		openspec/changes/openstock-four-phase-hardening
+		openspec/changes/archive/2026-07-13-openstock-four-phase-hardening
 
 repo-hygiene: ## Verify tracked paths and gitlinks against repository policy
 	packaging/scripts/openstock-repo-hygiene

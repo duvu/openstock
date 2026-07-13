@@ -6,15 +6,18 @@ Recorded 2026-07-12 against the shared working tree.
 
 | Location | Changes | With validation ledger | Decision |
 |---|---:|---:|---|
-| `openspec/changes/` active | 11 | 1 | Keep active changes and statuses from `active-changes.yaml`; only the P0 hardening change is being validated in this worktree. |
+| `openspec/changes/` active | 9 | 0 | Keep active changes and statuses from `active-changes.yaml`; P0 hardening and the research-intelligence data-model foundation were completed and archived on 2026-07-13. |
 | `openspec/changes/archive/` historical | 51 | 3 | Preserve historical task state; do not fabricate validation ledgers after archival. |
 
 ## Reconciliation decisions
 
-- `openstock-four-phase-hardening` is the authoritative P0 prerequisite. Its
-  task and validation ledgers are being reconciled together; the completion
-  verifier currently reports it incomplete because real tasks and final gates
-  remain open.
+- `openstock-four-phase-hardening` was the authoritative P0 prerequisite. Its
+  226 tasks and 85 validation rows now pass the completion verifier and its
+  accepted capability contract is synchronized under `openspec/specs/`.
+- `research-intelligence-data-model-foundation` is completed and archived. Its
+  40 tasks and five evidence rows pass the completion verifier; the accepted
+  contract is synchronized under `openspec/specs/`, unblocking
+  `symbol-knowledge-memory`.
 - Other active changes remain `partial`, `planned`, or `in_progress` as listed
   in `openspec/active-changes.yaml`. They are not completion-ready and are not
   marked complete by this report.

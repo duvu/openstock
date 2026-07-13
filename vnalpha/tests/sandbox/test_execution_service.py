@@ -266,7 +266,7 @@ def test_execute_prepared_turn_rejects_reusing_approval_after_terminal_result(
     run_migrations(conn=conn)
     runner = _WritingRunner()
     service = _service(tmp_path, conn, docker_runner=runner)
-    plan = service.materialize_assistant_plan(_sandbox_plan("single execution"))
+    plan = service.materialize_assistant_plan(_sandbox_plan("mean of 1, 2, 3"))
     prepared = _prepared_turn(plan)
     service.approve_prepared_turn(prepared)
     _ = service.execute_prepared_turn(prepared)

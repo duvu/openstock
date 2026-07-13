@@ -14,6 +14,12 @@ from pathlib import Path
 TASK_RE = re.compile(r"^\s*-\s+\[([ xX])\]\s+(?:\*\*)?([0-9]+(?:\.[0-9A-Z]+)?)\b")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+EVIDENCE_COMMIT_RE = re.compile(
+    r"^`?(?P<sha>[0-9a-f]{40})`?(?:\s+\+\s+working tree)?$"
+)
+BASELINE_COMMIT_RE = re.compile(
+    r"^\|\s*Baseline commit\s*\|\s*`?([0-9a-f]{40})`?", re.MULTILINE
+)
 FINAL_SHA_RE = re.compile(
     r"^Final implementation SHA:\s*`?([^`\s]+)`?\s*$", re.MULTILINE
 )
@@ -173,8 +179,21 @@ def _final_implementation_sha(text: str) -> str | None:
     return match.group(1)
 
 
-def _evidence_commit(value: str) -> str:
-    return value.strip().strip("`")
+def _baseline_commit(text: str) -> str | None:
+    match = BASELINE_COMMIT_RE.search(text)
+    return match.group(1) if match is not None else None
+
+
+def _evidence_commit(value: str, *, baseline_commit: str | None = None) -> str:
+    raw = value.strip()
+    if raw == "baseline + working tree":
+        return baseline_commit or ""
+    match = EVIDENCE_COMMIT_RE.fullmatch(raw.strip("`"))
+    return match.group("sha") if match is not None else ""
+
+
+def _is_exact_evidence_commit(value: str) -> bool:
+    return FULL_SHA_RE.fullmatch(value.strip().strip("`")) is not None
 
 
 def _normalized_command(value: str) -> str:
@@ -285,6 +304,7 @@ def verify_change(change_dir: Path) -> VerificationResult:
         )
 
     commands = _required_commands(validation_text)
+    baseline_commit = _baseline_commit(validation_text)
     completion_candidate = all(task.checked or task.deferred for task in tasks)
     final_sha = (
         _final_implementation_sha(validation_text) if completion_candidate else None
@@ -301,10 +321,11 @@ def verify_change(change_dir: Path) -> VerificationResult:
         for row in rows:
             if row.exit_code != "0":
                 continue
-            commit = _evidence_commit(row.commit)
-            if FULL_SHA_RE.fullmatch(commit) is None:
+            commit = _evidence_commit(row.commit, baseline_commit=baseline_commit)
+            if not commit:
                 messages.append(
-                    f"successful evidence row requires an exact commit SHA: {row.task}"
+                    "successful evidence row requires an exact commit SHA or "
+                    f"a SHA + working tree annotation: {row.task}"
                 )
             elif not _commit_exists(change_dir, commit):
                 messages.append(
@@ -323,7 +344,9 @@ def verify_change(change_dir: Path) -> VerificationResult:
                 f"required command has no successful evidence row: {command}"
             )
         elif final_sha is not None and not any(
-            _evidence_commit(row.commit) == final_sha for row in matching_rows
+            _is_exact_evidence_commit(row.commit)
+            and _evidence_commit(row.commit) == final_sha
+            for row in matching_rows
         ):
             messages.append(
                 "required command has no evidence at the exact final implementation SHA: "

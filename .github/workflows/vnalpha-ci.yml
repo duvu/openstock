@@ -178,4 +178,4 @@ jobs:
         run: python -m pytest -q scripts/tests/test_check_openspec_completion.py
 
       - name: OpenSpec completion verifier
-        run: python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening
+        run: python scripts/check-openspec-completion.py openspec/changes/archive/2026-07-13-openstock-four-phase-hardening
