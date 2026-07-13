@@ -4,9 +4,9 @@
 
 The machine-readable source of truth is [`active-changes.yaml`](active-changes.yaml).
 
-## Review result (2026-07-12)
+## Review result (2026-07-13)
 
-The 2026-07-11 reconciliation reduced the active set from 14 changes to 10. The `symbol-knowledge-memory` change was added on 2026-07-12, bringing the active set to 11.
+The 2026-07-11 reconciliation established the active execution set. Subsequent focused changes include `symbol-knowledge-memory` and `tui-terminal-rendering-integrity`.
 
 ### Archived during reconciliation
 
@@ -25,6 +25,7 @@ Archiving preserves the complete proposal/design/task/validation history. Implem
 P0  openstock-four-phase-hardening
     ↓
 P1  prod-b-sandbox-mvp
+    + tui-terminal-rendering-integrity
     ↓
 P2  research-intelligence-data-model-foundation
     + symbol-knowledge-memory
@@ -33,6 +34,8 @@ P2  research-intelligence-data-model-foundation
     ↓
 P3  prod-d-closed-loop-repair + tui-research-workflow-polish
 ```
+
+`tui-terminal-rendering-integrity` addresses GitHub issue #60. It defines surface-aware file-backed TUI logging, terminal-frame ownership, non-overlapping Textual regions, height-aware composer suggestions, bounded TODO content, and a fully contained LogScreen. It is intentionally separate from research artifact presentation and acts as a prerequisite for further `tui-research-workflow-polish` expansion.
 
 `symbol-knowledge-memory` depends on the hardening and research-intelligence data-model contracts. Its core event/claim store, per-symbol Markdown card, explicit user-note workflow, compaction, and temporal retrieval may proceed independently of unfinished deep-symbol UI work; automatic ingestion adapters must consume only validated persisted artifacts.
 

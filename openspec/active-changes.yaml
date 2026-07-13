@@ -1,5 +1,5 @@
 # Authoritative registry for non-archived OpenSpec changes.
-reviewed_at: 2026-07-12
+reviewed_at: 2026-07-13
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
@@ -18,6 +18,12 @@ changes:
     blocked_by: []
     summary: "Approval-gated, no-network generated research compute; models/repository skeleton exists, runner and isolation do not."
     evidence: "PR #62 merged approval-gated Docker-only execution; 83/83 tasks and strict validation pass."
+  tui-terminal-rendering-integrity:
+    status: planned
+    priority: P1
+    blocked_by: []
+    summary: "Surface-aware file-backed TUI logging plus bounded non-overlapping Textual regions for transcript, composer, TODO rail, footer, and LogScreen."
+    evidence: "GitHub issue #60 and OpenSpec draft identify direct stderr terminal writes, height/overflow gaps, and missing geometry regressions; no runtime implementation yet."
   prod-c-research-automation:
     status: in_progress
     priority: P2
@@ -41,7 +47,6 @@ changes:
     status: planned
     priority: P2
     blocked_by:
-      - openstock-four-phase-hardening
       - research-intelligence-data-model-foundation
     summary: "Per-symbol Markdown knowledge cards backed by structured claims, continuous validated updates, auditable correction, compaction, and bounded temporal retrieval."
     evidence: "OpenSpec draft only; no runtime implementation yet."
@@ -74,6 +79,7 @@ changes:
     status: partial
     priority: P3
     blocked_by:
+      - tui-terminal-rendering-integrity
       - deep-symbol-analysis-engine
       - watchlist-synthesis-and-shortlist
       - research-scenario-plan-engine
