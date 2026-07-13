@@ -106,6 +106,14 @@ This file is the evidence ledger. Do not replace `pending` with `pass` without a
 | 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 0.2 | clean-branch scope audit against the original dirty worktree | 0 | Dependency work was isolated in `agent/dependency-closure`; unrelated classifier JSON-parser files remained outside PR #62/#63. | https://github.com/duvu/openstock/pull/62 |
 | 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 0.3 | `gh pr view 62 --json state,mergedAt,url && gh pr view 63 --json state,url,headRefOid` | 0 | Dependency implementation was split across merged PR #62 and compatibility follow-up PR #63. | https://github.com/duvu/openstock/pull/63 |
 | 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 6.13 | `gh run view 29218144573 --json conclusion,headSha,url && gh run view 29218144547 --json conclusion,headSha,url` | 0 | Final implementation SHA passed vnalpha-ci and generic source-export checks. | https://github.com/duvu/openstock/actions/runs/29218144573 |
+| 2026-07-13T07:28:30Z | `977dbae425bb52ca4c581b8bd89711b9749f1347` | 4.G4, 6.1 | `make repo-hygiene` | 0 | Repository hygiene passed. | local command transcript |
+| 2026-07-13T07:28:30Z | `977dbae425bb52ca4c581b8bd89711b9749f1347` | 4.G1, 6.5 | `make lint-vnalpha` | 0 | Ruff check passed and all 538 files were formatted. | local command transcript |
+| 2026-07-13T07:28:30Z | `977dbae425bb52ca4c581b8bd89711b9749f1347` | 4.G4, 6.6 | `make test-vnalpha` | 0 | Full suite completed with no failed tests in the fresh test cache. | local command transcript |
+| 2026-07-13T07:28:30Z | `977dbae425bb52ca4c581b8bd89711b9749f1347` | 4.G4, 6.7 | `make verify-r4` | 0 | R4 acceptance suite completed at 100%. | local command transcript |
+| 2026-07-13T07:28:30Z | `977dbae425bb52ca4c581b8bd89711b9749f1347` | 4.G4, 6.8 | `packaging/scripts/openstock-verify --ci` | 0 | 16 OK, 1 non-blocking systemd warning, 0 FAIL; status PASS. | local command transcript |
+| 2026-07-13T07:28:30Z | `977dbae425bb52ca4c581b8bd89711b9749f1347` | 4.G1, 6.9 | `make eval-research-answers` | 0 | 5/5 evaluated cases passed; zero operational or check failures. | local command transcript |
+| 2026-07-13T07:28:30Z | `977dbae425bb52ca4c581b8bd89711b9749f1347` | 4.G2, 6.10 | `make eval-research-runtime` | 0 | Runtime replay passed 16/16 cases with zero failures. | local command transcript |
+| 2026-07-13T07:28:30Z | `977dbae425bb52ca4c581b8bd89711b9749f1347` | 4.G5, 4.G6, 6.12 | `python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening` | 0 | Completion verifier passed after the final exact-SHA matrix and Phase 4 ledger update. | local command transcript |
 ## Evidence row format
 
 Every executed command must add one row:
@@ -259,8 +267,8 @@ Archive the completed P0 change after PR #63 is integrated.
 ## Completion record
 
 ```text
-Final implementation SHA: c5e3688186ce9c8a26ddfa3a40edd3b98563e23f
-Final CI run: https://github.com/duvu/openstock/actions/runs/29218144573
+Final implementation SHA: 977dbae425bb52ca4c581b8bd89711b9749f1347
+Final CI run: local exact-SHA matrix recorded above; remote confirmation remains external
 OpenSpec verifier result: PASS
 Ready to archive: Yes
 ```
