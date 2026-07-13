@@ -129,6 +129,22 @@ class SymbolMemoryLifecycleService:
         for claim in self.repository.list_claims(symbol, statuses=(ClaimStatus.ACTIVE,)):
             if claim.source_refs and set(claim.source_refs).issubset(source_refs):
                 self._transition(claim, ClaimStatus.REJECTED, reason)
+                timestamp = datetime.now(UTC)
+                identity = _event_identity(claim, reason)
+                self.repository.append_event(
+                    MemoryEvent(
+                        event_id=f"memory-invalidation-{identity}",
+                        symbol=claim.symbol,
+                        event_type="SOURCE_INVALIDATED",
+                        evidence_ref=claim.claim_id,
+                        content_hash=f"sha256:{identity}",
+                        observed_at=timestamp,
+                        as_of_date=timestamp.date(),
+                        origin=ClaimOrigin.VALIDATED_EVIDENCE,
+                        correlation_id=claim.correlation_id,
+                        created_at=timestamp,
+                    )
+                )
                 invalidated.append(claim.claim_id)
         return tuple(invalidated)
 

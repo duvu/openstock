@@ -60,12 +60,12 @@
 - [x] 5.2 Implement equivalent-claim merge without duplicate active claims. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [x] 5.3 Implement source-grounded supersession for matching entity and predicate. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [x] 5.4 Implement type-specific expiry policies; do not use one global TTL. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
-- [ ] 5.5 Preserve rejected hypotheses needed for recurrence prevention. [evidence: rejected-hypothesis retention tests]
+- [x] 5.5 Preserve rejected hypotheses needed for recurrence prevention. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [x] 5.6 Detect unresolved same-authority conflicts and preserve both claims. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [x] 5.7 Add explicit user correction/rejection flow that records an event and lifecycle reason. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
 - [ ] 5.8 Ensure user correction cannot silently rewrite canonical warehouse evidence. [evidence: authority-boundary tests]
-- [ ] 5.9 Invalidate active claims when all supporting sources become invalid and record the transition. [evidence: source invalidation tests]
-- [ ] 5.10 Exclude superseded, expired, and rejected claims from the default active card while retaining audit access. [evidence: rendering/retrieval tests]
+- [x] 5.9 Invalidate active claims when all supporting sources become invalid and record the transition. [evidence: `vnalpha/tests/test_symbol_memory_lifecycle.py`]
+- [x] 5.10 Exclude superseded, expired, and rejected claims from the default active card while retaining audit access. [evidence: `vnalpha/tests/test_symbol_memory_retrieval.py`, `vnalpha/tests/test_symbol_memory_compaction.py`]
 
 ## 6. Compaction
 

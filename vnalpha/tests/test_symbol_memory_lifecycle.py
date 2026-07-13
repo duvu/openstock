@@ -110,3 +110,30 @@ def test_claim_expiry_uses_claim_type_specific_policy_and_keeps_user_notes_activ
     assert expired == (score.claim_id,)
     assert repository.get_claim(score.claim_id).status is ClaimStatus.EXPIRED
     assert repository.get_claim(note.claim_id).status is ClaimStatus.ACTIVE
+
+
+def test_source_invalidation_rejects_active_claim_and_preserves_rejected_hypothesis() -> None:
+    repository = _repository()
+    service = SymbolMemoryLifecycleService(repository)
+    supported = _claim("claim-supported")
+    hypothesis = replace(
+        _claim("claim-rejected-hypothesis"),
+        claim_type="rejected_hypothesis",
+        predicate="rejected_thesis",
+        status=ClaimStatus.REJECTED,
+    )
+
+    repository.create_claim(supported)
+    repository.create_claim(hypothesis)
+    invalidated = service.invalidate_sources(
+        "FPT",
+        set(supported.source_refs),
+        reason="All supporting sources were invalidated.",
+    )
+
+    assert invalidated == (supported.claim_id,)
+    assert repository.get_claim(supported.claim_id).status is ClaimStatus.REJECTED
+    assert repository.get_claim(hypothesis.claim_id) == hypothesis
+    assert [event.event_type for event in repository.list_events("FPT")] == [
+        "SOURCE_INVALIDATED"
+    ]
