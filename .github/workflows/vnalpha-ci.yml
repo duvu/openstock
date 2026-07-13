@@ -24,6 +24,7 @@ concurrency:
 
 env:
   NO_COLOR: "1"
+  _TYPER_FORCE_DISABLE_TERMINAL: "1"
 
 jobs:
   validate:
