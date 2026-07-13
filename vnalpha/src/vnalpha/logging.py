@@ -8,6 +8,7 @@ Re-exports the full logging API from vnalpha.core.logging so callers can use eit
 from __future__ import annotations
 
 from vnalpha.core.logging import (
+    LogSurface,
     configure_logging,
     get_correlation_id,
     get_logger,
@@ -16,6 +17,7 @@ from vnalpha.core.logging import (
 
 __all__ = [
     "configure_logging",
+    "LogSurface",
     "get_correlation_id",
     "get_logger",
     "set_correlation_id",

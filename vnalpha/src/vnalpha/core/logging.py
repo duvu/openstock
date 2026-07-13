@@ -18,8 +18,10 @@ import logging
 import logging.handlers
 import os
 import queue
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_never
 
 import structlog
 from structlog.types import EventDict, WrappedLogger
@@ -76,6 +78,22 @@ def _inject_correlation_id(
 
 _CONFIGURED = False
 _QUEUE_LISTENER: logging.handlers.QueueListener | None = None
+_OWNED_HANDLER_NAMES = frozenset({"vnalpha-queue", "vnalpha-file", "vnalpha-console"})
+
+
+class LogSurface(str, Enum):
+    CLI = "cli"
+    TUI = "tui"
+    TEST = "test"
+
+
+@dataclass(frozen=True, slots=True)
+class LoggingConfigurationResult:
+    surface: LogSurface
+    file_enabled: bool
+    console_enabled: bool
+    error_id: str | None = None
+
 
 _DEFAULT_LOG_PATH = (
     Path.home() / ".local" / "share" / "openstock" / "logs" / "vnalpha.log"
@@ -91,8 +109,10 @@ _DEFAULT_LEVEL = "INFO"
 def configure_logging(
     level: str | None = None,
     log_path: Path | str | None = None,
-) -> None:
-    """Configure the vnalpha logging subsystem.  Idempotent: safe to call multiple times.
+    *,
+    surface: LogSurface | str = LogSurface.CLI,
+) -> LoggingConfigurationResult:
+    """Configure OpenStock-owned handlers for an execution surface.
 
     Architecture:
     - Root logger → QueueHandler (async)
@@ -109,8 +129,8 @@ def configure_logging(
     """
     global _CONFIGURED, _QUEUE_LISTENER  # noqa: PLW0603
 
-    if _CONFIGURED:
-        return
+    resolved_surface = LogSurface(surface)
+    _remove_owned_handlers()
 
     resolved_level_str = (
         level or os.environ.get("VNALPHA_LOG_LEVEL", _DEFAULT_LEVEL)
@@ -120,23 +140,41 @@ def configure_logging(
     resolved_path = Path(
         log_path or os.environ.get("VNALPHA_LOG_PATH", str(_DEFAULT_LOG_PATH))
     )
-    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return LoggingConfigurationResult(
+            surface=resolved_surface,
+            file_enabled=False,
+            console_enabled=False,
+            error_id="TUI_LOGGING_INIT_FAILED",
+        )
 
     pre_chain = _shared_pre_chain()
 
     # --- File handler: plain %(message)s — JSON string was rendered by QueueHandler ---
-    file_handler = logging.handlers.RotatingFileHandler(
-        resolved_path,
-        maxBytes=10 * 1024 * 1024,  # 10 MB
-        backupCount=5,
-        encoding="utf-8",
-    )
+    try:
+        file_handler = logging.handlers.RotatingFileHandler(
+            resolved_path,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        )
+    except OSError:
+        return LoggingConfigurationResult(
+            surface=resolved_surface,
+            file_enabled=False,
+            console_enabled=False,
+            error_id="TUI_LOGGING_INIT_FAILED",
+        )
+    file_handler.name = "vnalpha-file"
     file_handler.setLevel(resolved_level)
     file_handler.setFormatter(logging.Formatter("%(message)s"))
 
     # --- QueueHandler with JSON formatter so prepare() stores JSON in record.msg ---
     log_queue: queue.Queue[Any] = queue.Queue(maxsize=0)  # unbounded
     queue_handler = logging.handlers.QueueHandler(log_queue)
+    queue_handler.name = "vnalpha-queue"
     queue_handler.setLevel(resolved_level)
     queue_handler.setFormatter(
         structlog.stdlib.ProcessorFormatter(
@@ -153,30 +191,26 @@ def configure_logging(
     )
     _QUEUE_LISTENER.start()
 
-    # --- Stderr handler: colored console, direct (separate LogRecord copy) ---
-    stderr_handler = logging.StreamHandler()
-    stderr_handler.setLevel(resolved_level)
-    stderr_handler.setFormatter(
-        structlog.stdlib.ProcessorFormatter(
-            processors=[
-                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                structlog.dev.ConsoleRenderer(colors=True),
-            ],
-            foreign_pre_chain=pre_chain,
+    console_enabled = _surface_has_console(resolved_surface)
+    stderr_handler: logging.StreamHandler[None] | None = None
+    if console_enabled:
+        stderr_handler = logging.StreamHandler()
+        stderr_handler.name = "vnalpha-console"
+        stderr_handler.setLevel(resolved_level)
+        stderr_handler.setFormatter(
+            structlog.stdlib.ProcessorFormatter(
+                processors=[
+                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                    structlog.dev.ConsoleRenderer(colors=True),
+                ],
+                foreign_pre_chain=pre_chain,
+            )
         )
-    )
 
     # --- Root logger ---
     root_logger = logging.getLogger()
-    existing_types = {type(h) for h in root_logger.handlers}
-    if logging.handlers.QueueHandler not in existing_types:
-        root_logger.addHandler(queue_handler)
-    has_stream = any(
-        isinstance(h, logging.StreamHandler)
-        and not isinstance(h, (logging.FileHandler, logging.handlers.QueueHandler))
-        for h in root_logger.handlers
-    )
-    if not has_stream:
+    root_logger.addHandler(queue_handler)
+    if stderr_handler is not None:
         root_logger.addHandler(stderr_handler)
     root_logger.setLevel(resolved_level)
 
@@ -199,6 +233,37 @@ def configure_logging(
     )
 
     _CONFIGURED = True
+    return LoggingConfigurationResult(
+        surface=resolved_surface,
+        file_enabled=True,
+        console_enabled=console_enabled,
+    )
+
+
+def _surface_has_console(surface: LogSurface) -> bool:
+    match surface:
+        case LogSurface.CLI:
+            return True
+        case LogSurface.TUI | LogSurface.TEST:
+            return False
+        case unreachable:
+            assert_never(unreachable)
+
+
+def _remove_owned_handlers() -> None:
+    global _QUEUE_LISTENER  # noqa: PLW0603
+
+    if _QUEUE_LISTENER is not None:
+        if getattr(_QUEUE_LISTENER, "_thread", None) is not None:
+            _QUEUE_LISTENER.stop()
+        _QUEUE_LISTENER = None
+
+    root_logger = logging.getLogger()
+    for handler in list(root_logger.handlers):
+        if handler.name not in _OWNED_HANDLER_NAMES:
+            continue
+        root_logger.removeHandler(handler)
+        handler.close()
 
 
 def _shared_pre_chain() -> list[Any]:
