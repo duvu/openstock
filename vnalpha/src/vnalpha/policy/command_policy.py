@@ -27,6 +27,7 @@ COMMAND_PERMISSIONS: Final[Mapping[str, tuple[ToolPermission, ...]]] = MappingPr
         "quality": (ToolPermission.READ_QUALITY,),
         "lineage": (ToolPermission.READ_LINEAGE,),
         "note": (ToolPermission.WRITE_NOTE,),
+        "memory": (),
         "history": (ToolPermission.READ_HISTORY,),
         "context": (),
         "todo": (),

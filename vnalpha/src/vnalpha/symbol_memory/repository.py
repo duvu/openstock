@@ -114,6 +114,15 @@ class SymbolMemoryRepository:
             if existing is None:
                 raise KeyError(f"Unknown memory claim: {claim_id}")
 
+    def set_claim_pinned(self, claim_id: str, pinned: bool) -> None:
+        existing = self.get_claim(claim_id)
+        if existing is None:
+            raise KeyError(f"Unknown memory claim: {claim_id}")
+        self.connection.execute(
+            "UPDATE memory_claim SET pinned = ? WHERE claim_id = ?",
+            [pinned, claim_id],
+        )
+
     def upsert_document(self, document: MemoryDocument) -> None:
         symbol = normalize_symbol(document.symbol)
         self.connection.execute(

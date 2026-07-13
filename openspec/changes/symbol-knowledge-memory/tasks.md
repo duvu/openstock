@@ -94,10 +94,10 @@
 
 ## 8. Command and TUI surface
 
-- [ ] 8.1 Register `/memory` in the unified command catalog. [evidence: registry/help tests]
-- [ ] 8.2 Implement `/memory status`. [evidence: command tests]
-- [ ] 8.3 Implement `/memory show SYMBOL`. [evidence: command tests]
-- [ ] 8.4 Implement `/memory remember SYMBOL "note"`. [evidence: command tests]
+- [x] 8.1 Register `/memory` in the unified command catalog. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
+- [x] 8.2 Implement `/memory status`. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
+- [x] 8.3 Implement `/memory show SYMBOL`. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
+- [x] 8.4 Implement `/memory remember SYMBOL "note"`. [evidence: `vnalpha/tests/test_symbol_memory_commands.py`]
 - [ ] 8.5 Implement `/memory correct SYMBOL <claim-id> "correction"`. [evidence: command tests]
 - [ ] 8.6 Implement pin/unpin behavior. [evidence: command tests]
 - [ ] 8.7 Implement conflict and source inspection. [evidence: command tests]
