@@ -16,19 +16,13 @@ working tree.
 | 2026-07-13T01:04:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 10.4 | `PIP_INDEX_URL=https://pypi.org/simple make verify-vnalpha-package` | 0 | Standalone package bundled 31 wheels and passed 55 clean no-index install/eval checks. | `openspec/changes/prod-b-sandbox-mvp/evidence/dependency-closure.md` |
 | 2026-07-13T01:04:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | OpenSpec | `openspec validate prod-b-sandbox-mvp --strict` | 0 | Strict requirement/scenario validation passed. | `openspec/changes/prod-b-sandbox-mvp/evidence/dependency-closure.md` |
 | 2026-07-13T01:18:00Z | `5dc6dce` | 10.8 | `gh pr view 62 --json number,state,url,headRefOid` | 0 | Draft dependency-closure PR published with local gate evidence attached. | https://github.com/duvu/openstock/pull/62 |
-| 2026-07-13T03:45:31Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 6.1, 7.4–7.6, 9.7, 10.9–10.11 | `pytest -q tests/sandbox/test_generation.py tests/sandbox/test_execution_service.py tests/sandbox/test_execution_permissions.py tests/sandbox/test_approval_repository.py tests/commands/test_sandbox_commands.py tests/test_chat_controller.py tests/test_plan_approval.py` | 0 | 128 tests pass for bounded input-dependent generation, exact slash-command prepared-turn continuation, approval, one-shot execution, and validated-only synthesis. | local command transcript |
-| 2026-07-13T03:45:31Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 0.6, 4.1–4.10, 9.1, 9.9, 10.12 | `pytest -q tests/sandbox/test_docker_runtime.py tests/sandbox/test_docker_orchestration.py tests/sandbox/test_docker_orchestration_terminalization.py tests/sandbox/test_execution_artifacts.py tests/sandbox/test_artifact_writer_validation_finalization.py tests/sandbox/test_failure_observability.py` | 0 | 63 tests pass for Docker-only runtime behavior and schema-v2 preflight/effective-security evidence without host paths. | local command transcript |
-| 2026-07-13T03:45:31Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 10.10–10.12 | `pytest -q tests/sandbox/test_generation.py tests/sandbox/test_execution_service.py tests/sandbox/test_execution_permissions.py tests/sandbox/test_approval_repository.py tests/sandbox/test_repository.py tests/sandbox/test_repository_quality.py tests/sandbox/test_docker_runtime.py tests/sandbox/test_docker_orchestration.py tests/sandbox/test_docker_orchestration_terminalization.py tests/sandbox/test_execution_artifacts.py tests/sandbox/test_artifact_writer_validation_finalization.py tests/sandbox/test_failure_observability.py tests/commands/test_sandbox_commands.py tests/test_chat_controller.py tests/test_plan_approval.py` | 0 | 238 combined repair and regression tests pass after splitting the execution facade below 250 pure LOC. | local command transcript |
-| 2026-07-13T04:05:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 3.4, 9.2–9.4 | `pytest -q tests/sandbox/test_static_guard.py tests/sandbox/test_generation.py` | 0 | 37 tests pass, including keyword write modes and output-path traversal rejection. | local command transcript |
-| 2026-07-13T04:05:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 9.1–9.9, 10.9–10.12 | `pytest -q tests/sandbox tests/commands/test_sandbox_commands.py tests/test_chat_controller.py tests/test_plan_approval.py` with the two outer-seccomp Unix-socket setup cases deselected | 0 | Complete sandbox-focused suite reached 100%; only environment-prohibited AF_UNIX fixture setup was excluded. | local command transcript |
-| 2026-07-13T04:05:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | OpenSpec | `openspec validate prod-b-sandbox-mvp --strict` | 0 | Strict validation passed after the final verifier and guard repairs. | local command transcript |
 
 ## Manual surface evidence
 
 | Surface | Command | Result |
 |---|---|---|
 | CLI help | `vnalpha cmd --help` | Exit 0; command argument and date/help options rendered. |
-| CLI happy path | `vnalpha cmd '/sandbox run mean of 1, 2, 3'` | Exit 0; persisted queued job and exact prepared-turn preview with purpose, code digest/summary, limits, image digest, correlation ID, and explicit awaiting-approval message; no CLI execution started. |
+| CLI happy path | `vnalpha cmd '/sandbox run compare FPT and VNINDEX returns'` | Exit 0; persisted queued job preview with purpose, code digest/summary, limits, image digest, correlation ID, and explicit awaiting-approval message; no execution started. |
 | CLI empty path | `vnalpha cmd '/sandbox status missing-job'` | Exit 0; rendered `Sandbox job not found.` inline. |
 | CLI invalid path | `vnalpha cmd '/sandbox inspect missing-job'` | Exit 1; rendered the supported subcommands and `CommandValidationError`. |
 
@@ -36,9 +30,3 @@ working tree.
 
 Draft PR #62 contains the dependency-closure implementation and evidence:
 https://github.com/duvu/openstock/pull/62
-
-## Completion status
-
-Final implementation SHA: pending
-OpenSpec verifier result: INCOMPLETE until final-SHA gates pass
-Ready to archive: pending

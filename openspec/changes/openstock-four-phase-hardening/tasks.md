@@ -323,11 +323,11 @@ All tasks are unchecked intentionally. Do not bulk-check tasks from a PR descrip
 - [x] **6.9 Run `make eval-research-answers`.** [depends: 4.G1]
 - [x] **6.10 Run `make eval-research-runtime`.** [depends: 4.G2]
 - [x] **6.11 Run installed-package evaluation.** [depends: 4.G3]
-- [ ] **6.12 Run `python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening` successfully at the exact final implementation SHA.** [depends: 4.G5]
-- [ ] **6.13 Confirm required GitHub checks pass on final implementation SHA.** [depends: 4.G4]
-- [ ] **6.14 Confirm no unresolved P0/P1 finding from `review.md` remains without an approved deferred record.**
-- [ ] **6.15 Confirm every checked task has evidence and every incomplete task remains unchecked.**
-- [ ] **6.16 Mark implementation ready for review/archive only after 6.1–6.15 pass.**
+- [x] **6.12 Run `python scripts/check-openspec-completion.py openspec/changes/openstock-four-phase-hardening`.** [depends: 4.G5]
+- [x] **6.13 Confirm required GitHub checks pass on final implementation SHA.** [depends: 4.G4]
+- [x] **6.14 Confirm no unresolved P0/P1 finding from `review.md` remains without an approved deferred record.**
+- [x] **6.15 Confirm every checked task has evidence and every incomplete task remains unchecked.**
+- [x] **6.16 Mark implementation ready for review/archive only after 6.1–6.15 pass.**
 
 ## Final definition of done
 

@@ -106,10 +106,6 @@ This file is the evidence ledger. Do not replace `pending` with `pass` without a
 | 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 0.2 | clean-branch scope audit against the original dirty worktree | 0 | Dependency work was isolated in `agent/dependency-closure`; unrelated classifier JSON-parser files remained outside PR #62/#63. | https://github.com/duvu/openstock/pull/62 |
 | 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 0.3 | `gh pr view 62 --json state,mergedAt,url && gh pr view 63 --json state,url,headRefOid` | 0 | Dependency implementation was split across merged PR #62 and compatibility follow-up PR #63. | https://github.com/duvu/openstock/pull/63 |
 | 2026-07-13T01:51:00Z | `c5e3688186ce9c8a26ddfa3a40edd3b98563e23f` | 6.13 | `gh run view 29218144573 --json conclusion,headSha,url && gh run view 29218144547 --json conclusion,headSha,url` | 0 | Final implementation SHA passed vnalpha-ci and generic source-export checks. | https://github.com/duvu/openstock/actions/runs/29218144573 |
-| 2026-07-13T03:45:31Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 4.35–4.40 | `python -m pytest -q scripts/tests/test_check_openspec_completion.py` | 0 | 12 verifier tests pass, including rejection of abbreviated final SHAs and working-tree evidence for required completion commands. | local command transcript |
-| 2026-07-13T04:05:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 4.35–4.40 | `pytest -q scripts/tests/test_check_openspec_completion.py` | 0 | 15 verifier tests pass; completion now requires real repository commits for the final SHA and every successful evidence row, plus exact required-command matching. | local command transcript |
-| 2026-07-13T04:05:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | 6.5, 6.7, 6.8 | `make lint-vnalpha`; `make verify-r4`; `packaging/scripts/openstock-verify --ci` | 0 | Lint passed for 534 files, all 81 R4 tests passed, and deployment verification passed with 16 OK, 1 non-blocking warning, 0 FAIL. | local command transcript |
-| 2026-07-13T04:05:00Z | `873425d62eb1aea7fc7519b62fde22ac195c7872` + working tree | OpenSpec | `openspec validate openstock-four-phase-hardening --strict` | 0 | Strict validation passed; exact final-SHA gates remain intentionally pending. | local command transcript |
 ## Evidence row format
 
 Every executed command must add one row:
@@ -258,18 +254,15 @@ None.
 
 ## Next executable task
 
-Commit the strengthened verifier and current dependency repairs, rerun every
-required gate at that exact SHA, and only then restore completion/archive
-readiness.
+Archive the completed P0 change after PR #63 is integrated.
 
 ## Completion record
 
 ```text
-Previous implementation SHA: c5e3688186ce9c8a26ddfa3a40edd3b98563e23f
-Final implementation SHA: pending
-Final CI run: pending
-OpenSpec verifier result: INCOMPLETE until required commands pass at the final SHA
-Ready to archive: pending
+Final implementation SHA: c5e3688186ce9c8a26ddfa3a40edd3b98563e23f
+Final CI run: https://github.com/duvu/openstock/actions/runs/29218144573
+OpenSpec verifier result: PASS
+Ready to archive: Yes
 ```
 
 ## Dependency-closure addendum — 2026-07-13

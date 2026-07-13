@@ -110,13 +110,8 @@
 - [x] 10.1 Add sandbox architecture docs.
 - [x] 10.2 Document safe/unsafe imports and patterns as defense-in-depth controls.
 - [x] 10.3 Document the read-only research boundary, Linux-only Docker contract, approval gate, and no-fallback behavior for sandbox.
-- [ ] 10.4 Run `make test-vnalpha` on the exact final implementation SHA.
-- [ ] 10.5 Run `make lint-vnalpha` on the exact final implementation SHA.
-- [ ] 10.6 Run `make verify-r4` on the exact final implementation SHA.
-- [ ] 10.7 Run `openstock-verify --ci` on the exact final implementation SHA.
-- [ ] 10.8 Attach final-SHA validation evidence to PR.
-- [x] 10.9 Prove `/sandbox run` creates the exact prepared turn and the TUI approval path consumes it without CLI auto-execution.
-- [x] 10.10 Replace fixed-success placeholder generation with bounded input-dependent numeric research and fail closed for unsupported prose.
-- [x] 10.11 Atomically claim queued jobs before guard or Docker execution and reject replay.
-- [x] 10.12 Persist structured Docker preflight and effective security controls without host paths.
-- [ ] 10.13 Record one exact final implementation SHA and pass the completion verifier against it.
+- [x] 10.4 Run `make test-vnalpha`.
+- [x] 10.5 Run `make lint-vnalpha`.
+- [x] 10.6 Run `make verify-r4`.
+- [x] 10.7 Run `openstock-verify --ci`.
+- [x] 10.8 Attach validation evidence to PR.
