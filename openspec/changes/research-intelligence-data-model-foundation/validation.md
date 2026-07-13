@@ -13,6 +13,7 @@ and local command gates PASS. Runtime engines remain deliberately out of scope.
 | 2026-07-13T07:57:03Z | `fdbc4030afef2474db71eb7bcbf4632a59ca19c3` | 6.2 | `make lint-vnalpha` | 0 | Ruff check passed and 545 files were formatted. | local command transcript |
 | 2026-07-13T07:57:03Z | `fdbc4030afef2474db71eb7bcbf4632a59ca19c3` | 6.3 | `make verify-r4` | 0 | R4 acceptance suite passed at 100%. | local command transcript |
 | 2026-07-13T07:57:03Z | `fdbc4030afef2474db71eb7bcbf4632a59ca19c3` | 6.4 | `packaging/scripts/openstock-verify --ci` | 0 | 16 checks passed, 1 non-blocking systemd warning, 0 failed; status PASS. | local command transcript |
+| 2026-07-13T07:57:03Z | `b71659b8d991839dc4ab2ecac040c902200ff8f8` | 6.5 | `gh pr view 70 --json url,state,headRefOid` | 0 | Implementation validation is attached to open PR #70. | https://github.com/duvu/openstock/pull/70 |
 
 ## Final command matrix
 
