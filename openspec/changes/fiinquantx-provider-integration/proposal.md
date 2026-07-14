@@ -1,26 +1,27 @@
-# Proposal: FiinQuantX Provider Integration
+# Proposal: FiinQuantX Data Provider Integration
 
 ## Summary
 
-Add FiinQuantX as the first prioritized commercial, authenticated data provider in the `vnstock` data platform.
+Integrate the licensed FiinQuantX SDK into `vnstock` as the prioritized commercial Vietnamese market-data provider.
 
-The provider must integrate through the existing plugin/runtime architecture and must remain data-only. It may supply licensed Vietnamese market, reference, foreign-flow, valuation, and fundamental datasets, but it must not expose broker, account, order, portfolio, margin, transfer, or execution capabilities.
+The integration SHALL use the existing `ProviderPlugin` / `PluginRegistry` / `PluginRouter` / `PluginRuntime` architecture and SHALL remain strictly data-only. It may expose documented reference, market, flow, valuation and structured fundamental data. It SHALL NOT expose any FiinQuantX broker, account, financing, order, position, portfolio or execution functionality.
 
-Because the official public repository distributes wheels without public source or API contracts, implementation begins with a mandatory licensed SDK contract-discovery gate. No method, schema, capability, or entitlement may be guessed.
+## Evidence basis
 
-## Motivation
+This proposal is based on two sources:
 
-The existing provider set gives OpenStock useful public-market redundancy, but important research datasets remain incomplete or weakly authoritative:
+```text
+Official package repository:
+  fiinquant/fiinquantx @ abb1e038
+  latest indexed wheel: fiinquantx 0.1.64
 
-- publication-aware financial statements and ratios;
-- historical foreign trading flows;
-- index constituent and free-float history;
-- outstanding-share and market-cap history;
-- valuation history;
-- market breadth and sector/reference metadata;
-- commercial-quality intraday data where licensed.
+Detailed documentation mirror committed to OpenStock:
+  docs commit: 30b684d48911a3e0cf6e7c98fac6a2aa2b790f24
+  merged PR: #103
+  canonical API reference: docs/fiinquant/site/
+```
 
-FiinQuantX is maintained by FiinQuant and distributed as a Python wheel through the official `fiinquant/fiinquantx` repository. At the reviewed commit, the package index lists version `0.1.64`. The repository does not expose source code, method signatures, schemas, or license terms, so a production adapter requires licensed documentation and runtime discovery before coding.
+The detailed mirror documents real SDK classes, methods, parameters and sample schemas. A licensed runtime probe is still required before enabling capabilities because the package is binary-only, account entitlements vary, and the documentation contains several version/type inconsistencies.
 
 ## Priority
 
@@ -28,144 +29,298 @@ FiinQuantX is maintained by FiinQuant and distributed as a Python wheel through 
 Priority: P0
 ```
 
-This is the highest-priority new provider integration because the user has chosen to pay for a commercial source and intends to use it as an authoritative research-data input.
+FiinQuantX is the first commercial provider to prioritize because it fills material gaps in OpenStock:
 
-## Scope
+- historical foreign flow and ownership/room;
+- domestic individual, institutional and proprietary trading flow;
+- current index/sector membership and ICB reference;
+- market-cap and free-float series;
+- stock, sector and index valuation history;
+- market-breadth snapshots;
+- structured financial statements and ratios;
+- commercial intraday and order-book data for a later streaming phase.
 
-### Provider foundation
+## Verified documented API surface
 
-- optional FiinQuantX SDK dependency;
-- lazy import and installation diagnostics;
-- authenticated credential/session integration;
-- entitlement-aware capability declarations;
-- provider-specific quota, connection, and cooldown diagnostics;
-- `ProviderPlugin` implementation;
+### Authentication
+
+```python
+from FiinQuantX import FiinSession
+client = FiinSession(username=username, password=password).login()
+```
+
+Credentials SHALL be sourced from the existing local credential/auth layer, not from data method parameters or service requests.
+
+### Synchronous APIs in scope
+
+| SDK surface | Documented purpose | Proposed canonical use |
+|---|---|---|
+| `TickerList(ticker=...)` | Current index or ICB-sector members | `reference.index_membership_snapshot`, `reference.sector_membership_snapshot` |
+| `BasicInfor(...).get()` | Company, exchange and ICB levels | `reference.company_info` |
+| `Fetch_Trading_Data(realtime=False, ...).get_data()` | Historical EOD/intraday OHLCV, value, aggressive and foreign flow | `equity.ohlcv`, `index.ohlcv`, optional flow contracts |
+| `PriceStatistics().get_overview(...)` | Market-cap and trading statistics by period | `market.market_cap_history`, optional market statistics |
+| `PriceStatistics().get_foreign(...)` | Foreign flow, ownership and room | `foreign_flow.daily`, `foreign_ownership.daily` |
+| `PriceStatistics().get_freefloat(...)` | Free-float series | `reference.free_float_history` after unit verification |
+| `PriceStatistics().get_ceilingfloor(...)` | Daily floor/ceiling prices | `market.price_limits.daily` |
+| `PriceStatistics().get_value_by_investor(...)` | Domestic/foreign/proprietary investor flow | `investor_flow.daily` |
+| `MarketDepth().get_*_valuation(...)` | Stock, sector and index P/E/P/B | separate valuation contracts by entity scope |
+| `MarketBreadth().get(...)` | Current breadth snapshot | `market.breadth_snapshot` |
+| `FundamentalAnalysis().get_financial_statement(...)` | Nested annual/quarterly statements | existing fundamental statement contracts |
+| `FundamentalAnalysis().get_ratios(...)` | Financial ratios by period and consolidation scope | `fundamental.financial_ratio` |
+| `StockScreening().get(...)` | Vendor screening query with dynamic fields | later `screening.vendor` capability |
+| `MoneyFlow().get_contribution(...)` | Vendor index-contribution analytics | later `analytics.vendor_index_contribution` |
+
+### Streaming APIs documented but deferred
+
+```text
+Trading_Data_Stream
+Fetch_Trading_Data(realtime=True)
+BidAsk
+```
+
+The current `PluginRuntime.fetch()` and local REST service are synchronous and do not define subscription lifecycle, callback backpressure, reconnection, sequence or WebSocket contracts. Streaming SHALL be delivered through a separate architecture slice/change rather than disguised as synchronous fetch.
+
+## Revised scope
+
+### Slice FQ-0A — Documentation contract inventory
+
+Completed by this OpenSpec update:
+
+- verified installation and login syntax;
+- verified documented synchronous and streaming SDK surfaces;
+- recorded documented parameters and field families;
+- recorded documentation inconsistencies and unresolved runtime questions;
+- identified and excluded all trading/account methods.
+
+### Slice FQ-0B — Licensed runtime and commercial-policy verification
+
+Required before enabling the provider:
+
+- install and probe the approved SDK version;
+- verify Python compatibility, return object types, fields and dtypes;
+- verify auth/session failure behavior;
+- verify entitlements and package-specific field availability;
+- verify limits, connection counts and quotas;
+- verify timestamps, timezone, adjustment and unit conventions;
+- verify commercial permissions for cache, persistence, derived data and local service exposure.
+
+### Slice FQ-1 — Optional provider foundation
+
+- lazy SDK loading;
+- secure version compatibility policy;
+- `FiinQuantXProviderPlugin`;
+- local credential/session adapter;
+- implemented-capability and runtime-entitlement checks;
+- typed, sanitized provider errors;
+- safe diagnostics;
 - registration in the built-in plugin registry;
-- routing through `PluginRuntime` only;
-- stable `DataResult` metadata and redaction.
+- synchronous fetches through `PluginRuntime` only.
 
-### Initial dataset families
+### Slice FQ-2 — Reference and historical market data
 
-The implementation shall prioritize verified FiinQuantX capabilities in this order:
-
-1. existing canonical market/reference contracts:
-   - `reference.symbols`;
-   - `equity.ohlcv`;
-   - `index.ohlcv`;
-   - `equity.quote` where verified;
-2. market-structure and ownership datasets:
-   - `foreign_flow.daily`;
-   - index constituents;
-   - free-float history;
-   - outstanding-share history;
-   - foreign ownership/room history;
-   - market-cap history;
-   - market breadth;
-   - valuation history;
-3. structured fundamentals:
-   - `fundamental.balance_sheet`;
-   - `fundamental.income_statement`;
-   - `fundamental.cash_flow`;
-   - `fundamental.financial_ratio`;
-4. optional later datasets:
-   - intraday bars;
-   - order-book snapshots;
-   - aggressor/buy-sell flow;
-   - vendor-derived indicators.
-
-A dataset enters the provider capability matrix only after its licensed SDK method, entitlement, parameters, raw schema, canonical mapping, and contract tests are verified.
-
-## Capabilities
-
-### New capability
-
-- `fiinquantx-provider-integration`: licensed FiinQuantX SDK integration through the `vnstock` provider platform.
-
-### Modified platform capabilities
-
-- provider plugin registry;
-- auth-aware routing;
-- dataset contracts;
-- provider diagnostics and capability matrix;
-- rate/quota controls;
-- service runtime response metadata;
-- provider fixture, contract, and live-smoke testing.
-
-## Non-goals
-
-- No reverse engineering or direct undocumented HTTP endpoint integration.
-- No web scraping of FiinQuant or FiinQuantX pages.
-- No redistribution of the FiinQuantX wheel, licensed documentation, or raw licensed records.
-- No public SaaS exposure of licensed datasets without explicit commercial permission.
-- No broker login, account, order, portfolio, allocation, margin, transfer, execution, or automated trading behavior.
-- No automatic replacement of existing providers before comparison and fallback policy is validated.
-- No silent use of vendor-derived indicators as canonical OpenStock scoring logic.
-
-## Source authority and fallback stance
-
-FiinQuantX may become the preferred provider for dataset families where its licensed feed is more authoritative or complete, especially fundamentals, foreign flows, index structure, and valuation.
-
-KBS, VCI, DNSE, TCBS, MSN, FMP, and FMARKET remain available according to their actual capabilities. Existing providers shall not be removed by this change.
-
-For overlapping datasets, routing policy must be explicit:
+Initial synchronous contracts:
 
 ```text
-explicit source=FIINQUANTX
-  -> use FiinQuantX or return a typed installation/auth/entitlement failure
+equity.ohlcv
+index.ohlcv
+reference.company_info
+reference.index_membership_snapshot
+reference.sector_membership_snapshot
+```
 
+Optional after runtime verification:
+
+```text
+reference.symbols
+market.price_limits.daily
+```
+
+`reference.symbols` SHALL NOT be advertised merely by unioning a few documented index lists. A complete universe and asset classification must be verified.
+
+A synchronous `equity.quote` capability is not included in this slice because only realtime streaming is documented.
+
+### Slice FQ-3 — Flow, ownership and market structure
+
+```text
+foreign_flow.daily
+foreign_ownership.daily
+investor_flow.daily
+market.market_cap_history
+reference.free_float_history
+market.breadth_snapshot
+valuation.stock.daily
+valuation.sector.daily
+valuation.index.daily
+```
+
+Each contract SHALL define unit, sign, timestamp, entity scope, uniqueness, aggregation frequency and revision semantics independently.
+
+Direct historical outstanding-share data is not documented. It SHALL remain unsupported until verified through an SDK method or an approved raw field.
+
+### Slice FQ-4 — Period-aware structured fundamentals
+
+```text
+fundamental.balance_sheet
+fundamental.income_statement
+fundamental.cash_flow
+fundamental.financial_ratio
+```
+
+The adapter SHALL preserve:
+
+```text
+ticker
+year
+quarter
+statement type
+consolidated/separate scope
+audited flag
+company type
+nested vendor field path
+currency/unit when verified
+```
+
+The FiinQuantX documentation does not expose a publication timestamp or restatement identity. Therefore this slice is **period-aware**, not publication-aware.
+
+Every normalized record SHALL include:
+
+```text
+publication_time_status=unknown|verified
+historical_as_of_eligible=false unless a defensible available-from timestamp exists
+```
+
+FiinQuantX fundamentals alone SHALL NOT satisfy publication-aware issue #87 or historical no-lookahead requirements. Those require source enrichment or another authoritative publication-date source.
+
+### Slice FQ-5 — Namespaced vendor analytics
+
+Potential capabilities:
+
+```text
+screening.vendor
+indicator.vendor_derived
+analytics.vendor_index_contribution
+```
+
+These outputs SHALL remain explicitly vendor-derived and SHALL NOT silently replace OpenStock deterministic formulas, screens, ranking or scoring.
+
+The documented `Rebalance` function is excluded from the initial scope because it calculates share quantities for a budget and creates allocation/execution ambiguity.
+
+### Slice FQ-6 — Separate streaming architecture
+
+A later change may integrate:
+
+```text
+Trading_Data_Stream
+Fetch_Trading_Data(realtime=True)
+BidAsk
+OrderBook change analytics where demonstrably data-only
+```
+
+That change must define:
+
+- subscription lifecycle;
+- callback/event envelope;
+- async boundary;
+- reconnection and resubscription;
+- ordering and sequence semantics;
+- backpressure and bounded buffers;
+- market-session behavior;
+- licensed retention;
+- shutdown and resource cleanup;
+- service WebSocket policy if exposed.
+
+## Explicit exclusions
+
+The following documented SDK areas SHALL NOT enter the `vnstock` provider:
+
+```text
+broker login
+account information
+loan/funding information
+cash or buying power
+order book used for order placement
+create/update/cancel order
+order list
+positions
+close derivative deal
+portfolio allocation or execution
+```
+
+The provider implementation SHALL use a positive allowlist of approved data classes and methods. Architecture tests SHALL fail if section-7 trading/account SDK members are imported or called.
+
+This exclusion preserves the **read-only research boundary**.
+
+## Contract and normalization policy
+
+The mirror documents several inconsistencies that must fail closed until probed:
+
+- documentation release `0.1.60` versus indexed package `0.1.64`;
+- timestamp represented as both string and integer;
+- PascalCase, camelCase and snake_case field names;
+- conflicting descriptions for `fb` and `fs` on one page;
+- direct DataFrame returns versus `.get_data()` examples;
+- unclear `freefloat` unit;
+- no documented publication timestamp for fundamentals.
+
+The provider SHALL use a versioned normalizer and contract fixtures for each approved SDK version. Unknown shape or unit drift must produce a typed schema failure; it must not be guessed.
+
+## Source authority and routing
+
+For explicit source selection:
+
+```text
+source=FIINQUANTX
+→ use FiinQuantX or return a typed sanitized failure
+→ never silently fall back
+```
+
+For auto selection:
+
+```text
 source=auto
-  -> choose according to dataset capability, configured priority, entitlement,
-     provider health, quota budget, freshness, and fallback policy
+→ consider implemented capability, auth, entitlement, health, cooldown,
+  commercial priority, quota budget, freshness and deployment policy
 ```
 
-## Commercial and deployment boundary
+FiinQuantX may become preferred for fundamentals, foreign flow, investor flow, valuation and commercial market structure after validation. Existing KBS, VCI, DNSE, TCBS, MSN, FMP and FMARKET providers remain intact.
 
-The integration must include a documented license-decision matrix before enabling persistence or service exposure.
+## Commercial and security boundary
 
-Default safeguards:
-
-- credentials supplied only through the existing credential system or environment references;
-- no credentials in logs, exceptions, diagnostics, fixtures, DataFrame attributes, API responses, notebooks, or MCP inputs;
-- local-only service exposure unless the agreement permits redistribution;
-- synthetic offline fixtures;
-- opt-in live tests;
-- raw archive and bulk export disabled unless explicitly permitted.
-
-## Dependencies
-
-Depends on the implemented `vnstock` plugin foundation:
-
-- `ProviderPlugin`;
-- `PluginRegistry`;
-- `PluginRouter`;
-- `PluginRuntime`;
-- `DataResult`;
-- dataset contracts;
-- auth-aware provider selection;
-- provider diagnostics and contract tests.
-
-The provider can be implemented independently from unfinished `vnalpha` intelligence tickets. Downstream fundamental, corporate-action, foreign-flow, regime, and sector work may consume the new datasets after the provider contracts are accepted.
-
-## Delivery slices
+Before normalized persistence or service exposure is enabled, a reviewed decision record SHALL cover:
 
 ```text
-FQ-0  licensed SDK and license contract discovery
-FQ-1  provider/auth/entitlement/runtime foundation
-FQ-2  reference and EOD market datasets
-FQ-3  foreign flow, index structure, breadth, and valuation
-FQ-4  publication-aware fundamentals
-FQ-5  optional intraday/order-book/vendor indicators
+in-memory cache
+SQLite cache
+raw payload storage
+normalized local persistence
+DuckDB/Postgres sinks
+local REST responses
+multi-user/public exposure
+bulk export
+synthetic fixtures
+derived analytics
 ```
 
-FQ-0 is a hard gate. FQ-1 must not advertise unverified datasets. Each later slice may be delivered and validated independently.
+Defaults until permission is confirmed:
+
+- no raw payload archive;
+- no licensed production rows in Git;
+- no bulk export;
+- no public or multi-user service exposure;
+- local credentials only;
+- synthetic offline fixtures;
+- live tests opt-in and bounded.
 
 ## Success criteria
 
-- FiinQuantX is installable as an optional provider without breaking base `vnstock` installation.
-- Missing SDK, invalid credentials, expired entitlement, quota exhaustion, unsupported datasets, and provider errors produce typed, sanitized outcomes.
-- All service fetches use `PluginRuntime`.
-- Capability declarations match the licensed SDK and tested entitlement.
-- Canonical datasets preserve provider, fetch time, source period/date, quality, and diagnostic lineage.
-- Offline tests use synthetic fixtures; live tests are explicitly gated.
+- Base `vnstock` installs, imports and builds without FiinQuantX.
+- Approved SDK version is pinned/verified without vendoring the wheel.
+- `FiinSession` credentials remain outside data requests and outputs.
+- Every enabled synchronous capability has documented method evidence, live shape verification, a canonical contract, versioned normalizer, synthetic fixture and contract test.
+- Section-7 trading/account APIs are unreachable from provider code.
+- FiinQuantX fetches use `PluginRuntime` only.
+- Explicit-source behavior never silently falls back.
+- Fundamentals expose their publication-time limitation honestly.
+- Streaming remains deferred until a real streaming platform contract exists.
 - Existing providers remain backward compatible.
 - The **read-only research boundary** remains intact.
