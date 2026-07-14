@@ -127,6 +127,20 @@ def _requirement(value) -> ContextRequirement:
     return ContextRequirement.NOT_REQUESTED
 
 
+def _normalize_tool_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Normalize typed requirement arguments before invoking a local tool."""
+    normalized: dict[str, Any] = {}
+    for key, value in arguments.items():
+        if key.endswith("_requirement"):
+            requirement = _requirement(value)
+            if requirement is not ContextRequirement.NOT_REQUESTED:
+                normalized[key] = requirement
+            continue
+        if value is not ContextRequirement.NOT_REQUESTED:
+            normalized[key] = value
+    return normalized
+
+
 class AssistantExecutor:
     """Execute an AssistantPlan against the local tool registry."""
 
@@ -164,13 +178,10 @@ class AssistantExecutor:
     def _execute_step(self, step: ToolPlanStep) -> Any:
         try:
             permission = _TOOL_PERMISSIONS[step.tool_name]
-            arguments = {
-                key: value
-                for key, value in step.arguments.items()
-                if value is not ContextRequirement.NOT_REQUESTED
-            }
             output = self._tool_executor.call(
-                step.tool_name, {permission}, **arguments
+                step.tool_name,
+                {permission},
+                **_normalize_tool_arguments(step.arguments),
             )
             if dataclasses.is_dataclass(output):
                 return dataclasses.asdict(output)
