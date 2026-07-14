@@ -4,8 +4,12 @@ from typing import Optional
 
 import typer
 
-from vnalpha.core.dates import resolve_date
 from vnalpha.core.logging import set_correlation_id
+from vnalpha.data_provisioning.service import (
+    DataProvisioningRequest,
+    DataProvisioningService,
+    ProvisioningStatus,
+)
 from vnalpha.observability.commands import command_lifecycle
 
 app = typer.Typer(help="Build derived datasets from raw warehouse data.")
@@ -19,13 +23,21 @@ def build_canonical_cmd(
     """Build canonical OHLCV from raw data."""
     set_correlation_id()
     with command_lifecycle("build canonical"):
-        from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
         from vnalpha.warehouse.connection import get_connection
 
         conn = get_connection()
-        result = build_canonical_ohlcv(conn, symbol=symbol, interval=interval)
+        result = _execute(
+            conn,
+            DataProvisioningRequest(
+                "build",
+                "canonical",
+                symbol=symbol,
+                interval=interval,
+                allow_all_symbols=symbol is None,
+            ),
+        )
         typer.echo(
-            f"Canonical build complete: {result['upserted']} rows, {result.get('rejected', 0)} symbols rejected"
+            f"Canonical build complete: {result.counts['upserted']} rows, {result.counts['rejected']} symbols rejected"
         )
 
 
@@ -44,18 +56,22 @@ def build_features_cmd(
     """Compute technical features for all symbols on the given date."""
     set_correlation_id()
     with command_lifecycle("build features"):
-        from vnalpha.features.build_features import build_features
         from vnalpha.warehouse.connection import get_connection
 
         conn = get_connection()
-        target_date = resolve_date(date, conn=conn)
-        universe = symbols.split(",") if symbols else None
-
-        result = build_features(
-            conn, target_date=target_date, universe=universe, benchmark_symbol=benchmark
+        result = _execute(
+            conn,
+            DataProvisioningRequest(
+                "build",
+                "features",
+                symbols=tuple(symbols.split(",")) if symbols else None,
+                allow_all_symbols=symbols is None,
+                date=date,
+                benchmark=benchmark,
+            ),
         )
         typer.echo(
-            f"Features built: {result['built']} symbols, skipped: {result['skipped']}"
+            f"Features built: {result.counts['built']} symbols, skipped: {result.counts['skipped']}"
         )
 
 
@@ -66,14 +82,14 @@ def build_market_regime_cmd(
     """Build one bounded persisted market-regime snapshot."""
     set_correlation_id()
     with command_lifecycle("build market-regime"):
-        from vnalpha.research_intelligence.regime import build_market_regime
         from vnalpha.warehouse.connection import get_connection
 
         conn = get_connection()
-        snapshot = build_market_regime(conn, resolve_date(date, conn=conn))
+        result = _execute(
+            conn, DataProvisioningRequest("build", "market-regime", date=date)
+        )
         typer.echo(
-            "Market regime built: "
-            f"{snapshot.as_of_date.isoformat()} {snapshot.regime} ({snapshot.quality})"
+            f"Market regime built: {result.resolved_date} ({result.status.value})"
         )
 
 
@@ -84,11 +100,20 @@ def build_sector_strength_cmd(
     """Build bounded persisted sector-strength snapshots for one date."""
     set_correlation_id()
     with command_lifecycle("build sector-strength"):
-        from vnalpha.research_intelligence.sector import build_sector_strength
         from vnalpha.warehouse.connection import get_connection
 
         conn = get_connection()
-        result = build_sector_strength(conn, resolve_date(date, conn=conn))
-        typer.echo(
-            f"Sector strength built: {len(result.snapshots)} sectors ({result.quality})"
+        result = _execute(
+            conn, DataProvisioningRequest("build", "sector-strength", date=date)
         )
+        typer.echo(
+            f"Sector strength built: {result.counts['sectors']} sectors ({result.status.value})"
+        )
+
+
+def _execute(conn, request: DataProvisioningRequest):
+    result = DataProvisioningService(conn).execute(request)
+    if result.status is ProvisioningStatus.FAILED:
+        typer.echo(result.error or "Data provisioning did not complete.", err=True)
+        raise typer.Exit(code=1)
+    return result

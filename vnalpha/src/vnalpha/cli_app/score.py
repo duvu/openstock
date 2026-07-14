@@ -4,8 +4,12 @@ from typing import Optional
 
 import typer
 
-from vnalpha.core.dates import resolve_date
 from vnalpha.core.logging import set_correlation_id
+from vnalpha.data_provisioning.service import (
+    DataProvisioningRequest,
+    DataProvisioningService,
+    ProvisioningStatus,
+)
 from vnalpha.observability.commands import command_lifecycle
 
 
@@ -24,22 +28,25 @@ def score(
     """Score candidate research setups for the given date and generate the watchlist."""
     set_correlation_id()
     with command_lifecycle("score"):
-        from vnalpha.scoring.generate_watchlist import generate_watchlist
         from vnalpha.warehouse.connection import get_connection
 
         conn = get_connection()
-        target_date = resolve_date(date, conn=conn)
-        universe = symbols.split(",") if symbols else None
-
-        result = generate_watchlist(
-            conn,
-            date=target_date,
-            universe=universe,
-            top_n=top_n,
-            min_score=min_score,
+        result = DataProvisioningService(conn).execute(
+            DataProvisioningRequest(
+                "build",
+                "score",
+                symbols=tuple(symbols.split(",")) if symbols else None,
+                allow_all_symbols=symbols is None,
+                date=date,
+                top_n=top_n,
+                min_score=min_score,
+            )
         )
+        if result.status is ProvisioningStatus.FAILED:
+            typer.echo(result.error or "Data provisioning did not complete.", err=True)
+            raise typer.Exit(code=1)
         typer.echo(
-            f"Scored {result['scored']} symbols — {result['saved']} candidates in watchlist for {target_date}"
+            f"Scored {result.counts['scored']} symbols — {result.counts['saved']} candidates in watchlist for {result.resolved_date}"
         )
 
 

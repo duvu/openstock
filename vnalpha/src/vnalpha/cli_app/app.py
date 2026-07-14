@@ -1,6 +1,6 @@
 import typer
 
-from vnalpha.cli_app import ask, cmd, eval, init, log, score, tui, watchlist
+from vnalpha.cli_app import ask, cmd, data, eval, init, log, score, tui, watchlist
 from vnalpha.cli_app.build import app as build_app
 from vnalpha.cli_app.common import configure_app
 from vnalpha.cli_app.outcome import app as outcome_app
@@ -13,6 +13,7 @@ app = typer.Typer(name="vnalpha", help="Alpha discovery research CLI.")
 configure_app(app)
 app.add_typer(sync_app, name="sync")
 app.add_typer(build_app, name="build")
+app.add_typer(data.app, name="data")
 init.register(app)
 score.register(app)
 watchlist.register(app)

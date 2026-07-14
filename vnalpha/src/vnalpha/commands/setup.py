@@ -11,6 +11,7 @@ from vnalpha.commands.handlers.closed_loop import (
 )
 from vnalpha.commands.handlers.compare import handle_compare
 from vnalpha.commands.handlers.context import handle_context
+from vnalpha.commands.handlers.data import handle_data
 from vnalpha.commands.handlers.experiment import handle_experiment
 from vnalpha.commands.handlers.explain import handle_explain
 from vnalpha.commands.handlers.feature import handle_feature
@@ -43,6 +44,24 @@ def build_default_registry() -> CommandRegistry:
     """Return a registry populated with capability-approved research commands."""
     reg = CommandRegistry()
 
+    reg.register(
+        CommandMeta(
+            name="data",
+            description="Download approved data or build deterministic research artifacts.",
+            usage=(
+                "/data download <symbols|ohlcv SYMBOL|index [SYMBOL]> | "
+                "/data build <canonical SYMBOL|features SYMBOL --date DATE|score SYMBOL --date DATE|"
+                "market-regime --date DATE|sector-strength --date DATE>"
+            ),
+            examples=[
+                "/data download ohlcv FPT --start 2026-01-01",
+                "/data build features FPT --date 2026-07-10",
+                "/data build market-regime --date 2026-07-10",
+            ],
+            permissions=permission_names("data"),
+            handler=handle_data,
+        )
+    )
     reg.register(
         CommandMeta(
             name="memory",
