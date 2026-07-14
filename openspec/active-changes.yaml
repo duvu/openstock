@@ -1,58 +1,108 @@
-# Authoritative registry for non-archived OpenSpec changes.
+# Registry for non-archived OpenSpec lifecycle and evidence.
+# GitHub issue #90 owns roadmap priority and execution order.
 reviewed_at: 2026-07-14
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
-  p0_change: fiinquantx-provider-integration
+  roadmap_source: https://github.com/duvu/openstock/issues/90
+  priorities_owned_by: github_issues
+  dependencies_owned_by: github_issues
+  require_github_issue_for_scheduled_work: true
   research_only_boundary: true
+
 changes:
   fiinquantx-provider-integration:
     status: planned
-    priority: P0
-    blocked_by: []
-    summary: "Integrate documented synchronous FiinQuantX market, reference, flow, valuation and period-aware fundamental data through the existing vnstock plugin runtime; defer streaming to a separate contract and exclude all trading/account SDK surfaces."
-    evidence: "Official wheel repository reviewed at abb1e038; package index lists 0.1.64. The 125-page detailed documentation mirror committed at 30b684d and merged by PR #103 establishes the documented API inventory. G0A documentation review is complete; licensed runtime, entitlement, units, return shapes, quotas and commercial persistence verification remain required before any capability is enabled."
+    github_issues: [105, 106]
+    roadmap_state: scheduled
+    summary: >-
+      Integrate only licensed, verified synchronous FiinQuantX market and
+      reference capabilities through the vnstock plugin runtime; defer
+      streaming and exclude all trading/account SDK surfaces.
+    evidence: >-
+      Documentation inventory is complete. Issue #105 owns licensed runtime,
+      entitlement and commercial-policy verification; issue #106 owns the
+      provider MVP. The provider track is optional and does not block #79.
+
   tui-terminal-rendering-integrity:
-    status: planned
-    priority: P1
-    blocked_by: []
-    summary: "Surface-aware file-backed TUI logging plus bounded non-overlapping Textual regions for transcript, composer, TODO rail, footer, and LogScreen."
-    evidence: "GitHub issue #60 and OpenSpec draft identify direct stderr terminal writes, height/overflow gaps, and missing geometry regressions; no runtime implementation yet."
+    status: partial
+    github_issues: [60]
+    roadmap_state: review_required
+    summary: >-
+      Surface-aware file-backed TUI logging and bounded non-overlapping
+      Textual regions.
+    evidence: >-
+      Issue #60 is closed while this change remains non-archived. Reconcile the
+      accepted implementation and validation evidence, then archive the change
+      or create a focused follow-up issue for verified remaining scope.
+
   prod-d-closed-loop-repair:
     status: partial
-    priority: P3
-    blocked_by:
-      - prod-c-research-automation
-    summary: "Bounded repair, validation, promotion, rejection, and rollback for sandbox/research artifacts only."
-    evidence: "Closed-loop service, CLI/TUI bridges, focused security suite, and validation.md are implemented; repository-wide lint/test residuals remain in pre-existing prod-c research-automation work and PR evidence is not attached."
+    github_issues: []
+    roadmap_state: proposed_untracked
+    summary: >-
+      Bounded repair, validation, promotion, rejection and rollback for
+      sandbox/research artifacts only.
+    evidence: >-
+      Runtime slices and focused tests exist, but no open GitHub issue owns the
+      residual repository-wide validation and closure work. This change is not
+      scheduled until such an issue is created.
+
   symbol-knowledge-memory:
     status: planned
-    priority: P2
-    blocked_by: []
-    summary: "Per-symbol Markdown knowledge cards backed by structured claims, continuous validated updates, auditable correction, compaction, and bounded temporal retrieval."
-    evidence: "All declared prerequisites are complete; OpenSpec draft has no runtime implementation yet."
+    github_issues: []
+    roadmap_state: proposed_untracked
+    summary: >-
+      Per-symbol knowledge cards backed by structured claims, auditable
+      correction, compaction and bounded temporal retrieval.
+    evidence: >-
+      The design draft exists, but no open GitHub issue owns implementation.
+      It is not part of the execution queue.
+
   deep-symbol-analysis-engine:
     status: partial
-    priority: P2
-    blocked_by: []
-    summary: "Consolidated warehouse-grounded deep symbol analysis with deterministic readiness for symbol, market-regime, and sector-strength inputs plus explicit user data commands."
-    evidence: "Issues #75 and #92 provide a typed, audited fail-closed gate for symbol/benchmark/features/score across `/analyze`, `/research-plan`, symbol-backed `/setup-evidence`, and assistant deep/scenario paths. #92 records independent warehouse evidence and typed remediation, sanitizes known/unexpected failures, and resolves/audits the effective market date before ensure. Market/sector auto-build (#76) and shared `vnalpha data` provisioning surfaces (#77) remain pending. Repository-wide lint remains blocked by pre-existing formatting in `symbol_memory/safe_files.py`."
+    github_issues: [75, 76, 77, 92, 95, 99]
+    roadmap_state: review_required
+    summary: >-
+      Warehouse-grounded deep symbol analysis with deterministic readiness for
+      symbol, market-regime and sector-strength inputs plus explicit data
+      commands.
+    evidence: >-
+      Linked readiness and provisioning issues are closed. Reconcile remaining
+      OpenSpec tasks against merged evidence and archive completed scope; any
+      real residual work requires a new focused issue before scheduling.
+
   research-scenario-plan-engine:
     status: partial
-    priority: P2
-    blocked_by:
-      - deep-symbol-analysis-engine
-    summary: "Conditional, caveated research scenario plans without trading instructions."
-    evidence: "Scenario generation tool/intent/template exist; command, persistence, and dedicated validators remain."
+    github_issues: []
+    roadmap_state: proposed_untracked
+    summary: >-
+      Conditional, caveated research scenario plans without trading
+      instructions.
+    evidence: >-
+      Scenario generation tool, intent and template exist; remaining command,
+      persistence and validator work has no open GitHub issue and is not
+      scheduled.
+
   setup-historical-evidence-engine:
     status: partial
-    priority: P2
-    blocked_by: []
-    summary: "Setup-cohort historical evidence with sample-size and regime caveats."
-    evidence: "Setup-history tool/intent/template exist; richer distributions, FAE/AAE, regime split, command, and persistence remain."
+    github_issues: [85]
+    roadmap_state: scheduled
+    summary: >-
+      Setup-cohort historical evidence with sample-size, regime and sector
+      caveats.
+    evidence: >-
+      Existing setup-history slices are partial. Issue #85 owns richer
+      distributions, adverse/favorable excursion evidence, conditioning,
+      persistence and closure validation.
+
   tui-slash-command-on-typing-search:
     status: in_progress
-    priority: P3
-    blocked_by: []
-    summary: "Show slash-command suggestion list in the TUI composer on typing '/' with on-typing prefix filtering."
-    evidence: "ComposerInput renders filtered command suggestions from CommandRegistry.names(); AUTO_FOCUS + non-focusable output log keep the Input focused; headless pilot tests cover visibility, filtering, focus, and clipping."
+    github_issues: []
+    roadmap_state: proposed_untracked
+    summary: >-
+      Slash-command suggestions in the TUI composer with prefix filtering.
+    evidence: >-
+      Focused implementation and headless tests exist, but no open GitHub issue
+      owns completion. It cannot change roadmap priority until an issue is
+      created.
