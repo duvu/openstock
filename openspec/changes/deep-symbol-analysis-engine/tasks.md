@@ -54,12 +54,12 @@
 
 ## 6. Explicit data provisioning commands
 
-- [ ] 6.1 Add a shared deterministic command service that reuses existing ingestion, canonical, feature, score, regime, and sector builders.
-- [ ] 6.2 Add CLI `vnalpha data download` subcommands for `symbols`, one-symbol `ohlcv`, and `index`.
-- [ ] 6.3 Add CLI `vnalpha data build` subcommands for `canonical`, `features`, `score`, `market-regime`, and `sector-strength`.
-- [ ] 6.4 Add matching TUI `/data download` and `/data build` forms, help metadata, validation, and readiness rendering.
-- [ ] 6.5 Retain existing `sync` and `build` CLI commands without duplicating provider I/O or bypassing policy.
-- [ ] 6.6 Document data types, provider options, output, failure diagnostics, and the research-only boundary.
+- [x] 6.1 Add a shared deterministic command service that reuses existing ingestion, canonical, feature, score, regime, and sector builders. [evidence: `src/vnalpha/data_provisioning/service.py`, `tests/test_data_provisioning.py`]
+- [x] 6.2 Add CLI `vnalpha data download` subcommands for `symbols`, one-symbol `ohlcv`, and `index`. [evidence: `src/vnalpha/cli_app/data.py`, CLI manual QA]
+- [x] 6.3 Add CLI `vnalpha data build` subcommands for `canonical`, `features`, `score`, `market-regime`, and `sector-strength`. [evidence: `src/vnalpha/cli_app/data.py`, CLI manual QA]
+- [x] 6.4 Add matching TUI `/data download` and `/data build` forms, help metadata, validation, and readiness rendering. [evidence: `src/vnalpha/commands/handlers/data.py`, `tests/test_data_provisioning.py`, TUI command-executor QA]
+- [x] 6.5 Retain existing `sync` and `build` CLI commands without duplicating provider I/O or bypassing policy. [evidence: `src/vnalpha/cli_app/sync.py`, `src/vnalpha/cli_app/build.py`, `src/vnalpha/cli_app/score.py`]
+- [x] 6.6 Document data types, provider options, output, failure diagnostics, and the research-only boundary. [evidence: `docs/data-provisioning-commands.md`]
 
 ## 7. Tests
 
@@ -73,7 +73,7 @@
 - [x] 7.8 Test fresh deep inputs produce cache-hit readiness actions only. [evidence: `tests/test_deep_analysis_readiness.py`]
 - [x] 7.9 Test a failed required precondition prevents `analysis.deep_symbol` execution and returns an actionable structured status. [evidence: `tests/test_deep_analysis_readiness.py`]
 - [x] 7.10 Test optional unavailable context is explicitly disclosed and cannot render as current. [evidence: `tests/test_phase3_artifact_references.py`]
-- [ ] 7.11 Test each CLI and TUI data command parses valid input, rejects invalid input, reuses the shared service, and reports correlated status.
+- [x] 7.11 Test each CLI and TUI data command parses valid input, rejects invalid input, reuses the shared service, and reports correlated status. [evidence: `tests/test_data_provisioning.py`]
 - [x] 7.12 Test the assistant plan remains read-only and cannot directly plan or call `data.fetch`. [evidence: `tests/test_tool_policy.py`, `tests/test_executor_and_policy.py`]
 - [x] 7.13 Issue #92: test typed per-artifact evidence, ordered legacy remediation, start-before-ensure audit sequencing, shared correlation/date resolution, and unexpected ensure failure. [evidence: `tests/test_deep_analysis_readiness.py`]
 
@@ -84,5 +84,5 @@
 - [x] 8.3 Run `make verify-r4`. [evidence: `validation.md`]
 - [x] 8.4 Run `openstock-verify --ci`. [evidence: `validation.md`]
 - [x] 8.5 Run focused data-availability, assistant-executor, deep-analysis, CLI, and TUI tests, including a mocked end-to-end missing-context path. [evidence: `validation.md`]
-- [ ] 8.6 Run `uv run vnalpha data --help`, one valid manual-fixture path, and one invalid-input path as manual QA evidence.
+- [x] 8.6 Run `uv run vnalpha data --help`, one valid manual-fixture path, and one invalid-input path as manual QA evidence. [evidence: `validation.md` issue #77 section]
 - [x] 8.7 Record exact command outcomes and runtime-log references in `validation.md`; do not claim unrun checks passed. [evidence: `validation.md`]

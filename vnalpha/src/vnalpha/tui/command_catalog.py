@@ -206,6 +206,16 @@ def _static_catalog() -> list[UiCommand]:
             examples=("/help",),
         ),
         UiCommand(
+            name="data",
+            description="Download approved data or build deterministic research artifacts.",
+            usage="/data download <symbols|ohlcv SYMBOL|index [SYMBOL]> | /data build <artifact> ...",
+            category="Operations",
+            examples=(
+                "/data download ohlcv FPT --start 2026-01-01",
+                "/data build features FPT --date 2026-07-10",
+            ),
+        ),
+        UiCommand(
             name="market-regime",
             aliases=("regime",),
             description="Show market regime context.",

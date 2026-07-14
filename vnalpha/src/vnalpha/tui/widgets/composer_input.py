@@ -89,6 +89,7 @@ if _TEXTUAL_AVAILABLE:
             "chat",
             "compare",
             "context",
+            "data",
             "explain",
             "filter",
             "help",

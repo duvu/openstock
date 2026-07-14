@@ -5,6 +5,11 @@ from typing import Optional
 import typer
 
 from vnalpha.core.logging import set_correlation_id
+from vnalpha.data_provisioning.service import (
+    DataProvisioningRequest,
+    DataProvisioningService,
+    ProvisioningStatus,
+)
 from vnalpha.observability.commands import command_lifecycle
 
 app = typer.Typer(help="Sync data from vnstock-service into the warehouse.")
@@ -17,14 +22,17 @@ def sync_symbols_cmd(
     """Sync symbol master from vnstock-service."""
     set_correlation_id()
     with command_lifecycle("sync symbols"):
-        from vnalpha.ingestion.sync_symbols import sync_symbols
         from vnalpha.warehouse.connection import get_connection
         from vnalpha.warehouse.migrations import run_migrations
 
         conn = get_connection()
         run_migrations(conn=conn)
-        result = sync_symbols(conn, source=source)
-        typer.echo(f"Synced {result['synced']} symbols (errors: {result['errors']})")
+        result = _execute(
+            conn, DataProvisioningRequest("download", "symbols", source=source)
+        )
+        typer.echo(
+            f"Synced {result.counts['synced']} symbols (errors: {result.counts['errors']})"
+        )
 
 
 @app.command("ohlcv")
@@ -49,7 +57,6 @@ def sync_ohlcv_cmd(
     set_correlation_id()
     with command_lifecycle("sync ohlcv"):
         from vnalpha.core.universe import parse_symbols_or_universe
-        from vnalpha.ingestion.sync_ohlcv import sync_ohlcv
         from vnalpha.warehouse.connection import get_connection
         from vnalpha.warehouse.migrations import run_migrations
 
@@ -61,16 +68,20 @@ def sync_ohlcv_cmd(
             typer.echo(f"Error: {err}", err=True)
             raise typer.Exit(code=1) from err
 
-        result = sync_ohlcv(
+        result = _execute(
             conn,
-            universe=resolved,
-            start=start,
-            end=end,
-            interval=interval,
-            source=source,
+            DataProvisioningRequest(
+                "download",
+                "ohlcv",
+                symbols=tuple(resolved),
+                start=start,
+                end=end,
+                source=source,
+                interval=interval,
+            ),
         )
         typer.echo(
-            f"OHLCV sync complete: {result['inserted']} inserted, {result['skipped']} skipped"
+            f"OHLCV sync complete: {result.counts['inserted']} inserted, {result.counts['skipped']} skipped"
         )
 
 
@@ -90,15 +101,31 @@ def sync_index_cmd(
     """
     set_correlation_id()
     with command_lifecycle("sync index"):
-        from vnalpha.ingestion.sync_index import sync_index_ohlcv
         from vnalpha.warehouse.connection import get_connection
         from vnalpha.warehouse.migrations import run_migrations
 
         conn = get_connection()
         run_migrations(conn=conn)
-        result = sync_index_ohlcv(
-            conn, symbol=symbol, start=start, end=end, interval=interval, source=source
+        result = _execute(
+            conn,
+            DataProvisioningRequest(
+                "download",
+                "index",
+                symbol=symbol,
+                start=start,
+                end=end,
+                source=source,
+                interval=interval,
+            ),
         )
         typer.echo(
-            f"Index sync complete ({symbol}): {result['inserted']} inserted, {result['skipped']} skipped"
+            f"Index sync complete ({symbol}): {result.counts['inserted']} inserted, {result.counts['skipped']} skipped"
         )
+
+
+def _execute(conn, request: DataProvisioningRequest):
+    result = DataProvisioningService(conn).execute(request)
+    if result.status is ProvisioningStatus.FAILED:
+        typer.echo(result.error or "Data provisioning did not complete.", err=True)
+        raise typer.Exit(code=1)
+    return result
