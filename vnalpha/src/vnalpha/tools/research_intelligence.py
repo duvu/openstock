@@ -17,6 +17,7 @@ import duckdb
 
 from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.normalizers import normalize_date, normalize_symbol
+from vnalpha.data_availability.deep_readiness_models import ContextRequirement
 from vnalpha.research_models import ResearchModelsRepository
 from vnalpha.research_models.scenario_plan import ScenarioPlanBuilder
 from vnalpha.research_models.scenario_policy import validate_research_scenario_payload
@@ -42,6 +43,9 @@ def deep_symbol_analysis(
     conn: duckdb.DuckDBPyConnection,
     symbol: str,
     date: str | None = None,
+    *,
+    market_regime_requirement: ContextRequirement = ContextRequirement.NOT_REQUESTED,
+    sector_strength_requirement: ContextRequirement = ContextRequirement.NOT_REQUESTED,
 ) -> ToolOutput:
     """Return a bounded deep-symbol research payload from persisted artifacts."""
     normalized_symbol = _require_symbol(symbol)
@@ -102,8 +106,10 @@ def deep_symbol_analysis(
             "canonical_ohlcv", f"{normalized_symbol}:through:{target_date}", True
         )
 
-    caveats.extend(_tool_warnings(market))
-    caveats.extend(_tool_warnings(sector))
+    if market_regime_requirement is not ContextRequirement.NOT_REQUESTED:
+        caveats.extend(_tool_warnings(market))
+    if sector_strength_requirement is not ContextRequirement.NOT_REQUESTED:
+        caveats.extend(_tool_warnings(sector))
     market_data = _tool_data(market)
     sector_data = _tool_data(sector)
     market_date = market_data.get("as_of_date")
@@ -112,6 +118,17 @@ def deep_symbol_analysis(
         str(market_date),
         bool(market_date and market_data.get("snapshot") is not None),
     )
+    market_snapshot_present = bool(
+        market_date and market_data.get("snapshot") is not None
+    )
+    if (
+        market_regime_requirement is ContextRequirement.REQUIRED
+        and not market_snapshot_present
+    ):
+        missing_data.append("market_regime_snapshot")
+        caveats.append(
+            "Required market regime context was unavailable for the resolved date."
+        )
     sector_date = sector_data.get("as_of_date")
     sector_name = sector_data.get("sector") or normalized_symbol
     sector_snapshot_present = bool(
@@ -122,7 +139,10 @@ def deep_symbol_analysis(
         f"{sector_name}:{sector_date}",
         sector_snapshot_present,
     )
-    if not sector_snapshot_present:
+    if (
+        sector_strength_requirement is not ContextRequirement.NOT_REQUESTED
+        and not sector_snapshot_present
+    ):
         missing_data.append("sector_strength_snapshot")
         caveats.append(
             "No persisted sector strength snapshot was available for "
@@ -162,6 +182,10 @@ def deep_symbol_analysis(
             else {},
         },
         "artifact_refs": artifact_refs.build(),
+        "context_requirements": {
+            "market_regime": market_regime_requirement.value,
+            "sector_strength": sector_strength_requirement.value,
+        },
         "missing_data": missing_data,
         "caveats": list(dict.fromkeys(caveats)),
         "policy": {"mode": "research_only", "disclaimer": _RESEARCH_ONLY_CAVEAT},
@@ -407,9 +431,18 @@ def generate_research_scenario(
     conn: duckdb.DuckDBPyConnection,
     symbol: str,
     date: str | None = None,
+    *,
+    market_regime_requirement: ContextRequirement = ContextRequirement.NOT_REQUESTED,
+    sector_strength_requirement: ContextRequirement = ContextRequirement.NOT_REQUESTED,
 ) -> ToolOutput:
     """Build a conditional, research-only scenario from deep-symbol artifacts."""
-    analysis_output = deep_symbol_analysis(conn, symbol=symbol, date=date)
+    analysis_output = deep_symbol_analysis(
+        conn,
+        symbol=symbol,
+        date=date,
+        market_regime_requirement=market_regime_requirement,
+        sector_strength_requirement=sector_strength_requirement,
+    )
     analysis = _tool_data(analysis_output)
     normalized_symbol = _require_symbol(symbol)
     target_date = analysis.get("as_of_date") if isinstance(analysis, dict) else date

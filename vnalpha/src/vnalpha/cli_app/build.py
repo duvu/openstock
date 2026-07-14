@@ -57,3 +57,38 @@ def build_features_cmd(
         typer.echo(
             f"Features built: {result['built']} symbols, skipped: {result['skipped']}"
         )
+
+
+@app.command("market-regime")
+def build_market_regime_cmd(
+    date: str = typer.Option(..., "--date", help="Exact as-of date (YYYY-MM-DD)."),
+) -> None:
+    """Build one bounded persisted market-regime snapshot."""
+    set_correlation_id()
+    with command_lifecycle("build market-regime"):
+        from vnalpha.research_intelligence.regime import build_market_regime
+        from vnalpha.warehouse.connection import get_connection
+
+        conn = get_connection()
+        snapshot = build_market_regime(conn, resolve_date(date, conn=conn))
+        typer.echo(
+            "Market regime built: "
+            f"{snapshot.as_of_date.isoformat()} {snapshot.regime} ({snapshot.quality})"
+        )
+
+
+@app.command("sector-strength")
+def build_sector_strength_cmd(
+    date: str = typer.Option(..., "--date", help="Exact as-of date (YYYY-MM-DD)."),
+) -> None:
+    """Build bounded persisted sector-strength snapshots for one date."""
+    set_correlation_id()
+    with command_lifecycle("build sector-strength"):
+        from vnalpha.research_intelligence.sector import build_sector_strength
+        from vnalpha.warehouse.connection import get_connection
+
+        conn = get_connection()
+        result = build_sector_strength(conn, resolve_date(date, conn=conn))
+        typer.echo(
+            f"Sector strength built: {len(result.snapshots)} sectors ({result.quality})"
+        )

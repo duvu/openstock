@@ -88,9 +88,12 @@ def test_readiness_reports_cache_hit_for_every_required_core_artifact() -> None:
 
     # Then: each required artifact is ready without a provisioning action.
     assert result.is_ready is True
-    assert {artifact.status for artifact in result.artifacts} == {
+    assert {artifact.status for artifact in result.artifacts if artifact.blocking} == {
         ReadinessArtifactStatus.READY
     }
+    assert {
+        artifact.status for artifact in result.artifacts if not artifact.blocking
+    } == {ReadinessArtifactStatus.NOT_REQUESTED}
     assert result.actions == (EnsureDataAction.CACHE_HIT.value,)
     assert result.correlation_id
 
@@ -125,7 +128,7 @@ def test_readiness_reports_bounded_provisioning_for_every_core_artifact() -> Non
     )
 
     assert result.is_ready is True
-    assert {artifact.status for artifact in result.artifacts} == {
+    assert {artifact.status for artifact in result.artifacts if artifact.blocking} == {
         ReadinessArtifactStatus.PROVISIONED
     }
 
@@ -458,7 +461,7 @@ def test_readiness_sanitizes_raw_action_failure_details() -> None:
     ).ensure_ready(DeepAnalysisReadinessRequest(duckdb.connect(), "FPT", "2026-07-10"))
 
     assert result.is_ready is False
-    assert result.warnings == ("Canonical build failed during readiness.",)
+    assert result.warnings == ("A readiness action failed during readiness.",)
     assert "secret-token" not in result.failure_summary()
 
 
@@ -543,7 +546,7 @@ def test_assistant_error_renders_every_ordered_remediation_step(monkeypatch) -> 
     monkeypatch.setattr(
         assistant_executor,
         "ensure_deep_analysis_ready",
-        lambda _conn, _symbol, _date: readiness,
+        lambda _conn, _symbol, _date, **_kwargs: readiness,
     )
     step = ToolPlanStep(
         step_id="step_1",
@@ -584,9 +587,13 @@ def test_readiness_fails_closed_during_ensure_lock_contention() -> None:
     assert all(
         artifact.status is ReadinessArtifactStatus.FAILED
         for artifact in result.artifacts
+        if artifact.blocking
     )
-    assert all(artifact.available is False for artifact in result.artifacts)
-    assert all(artifact.freshness == "unknown" for artifact in result.artifacts)
+    assert all(
+        artifact.status is ReadinessArtifactStatus.NOT_REQUESTED
+        for artifact in result.artifacts
+        if not artifact.blocking
+    )
 
 
 def test_readiness_attributes_quality_rejection_to_candidate_score() -> None:
@@ -657,7 +664,7 @@ def test_analyze_returns_data_readiness_without_calling_deep_tool_when_blocked(
     monkeypatch.setattr(
         analyze_handler,
         "ensure_deep_analysis_ready",
-        lambda _conn, _symbol, _date: readiness,
+        lambda _conn, _symbol, _date, **_kwargs: readiness,
     )
 
     class ToolExecutor:
@@ -711,7 +718,7 @@ def test_assistant_preflight_blocks_deep_tool_after_failed_readiness(
     monkeypatch.setattr(
         assistant_executor,
         "ensure_deep_analysis_ready",
-        lambda _conn, _symbol, _date: readiness,
+        lambda _conn, _symbol, _date, **_kwargs: readiness,
     )
     step = ToolPlanStep(
         step_id="step_1",
@@ -817,7 +824,7 @@ def test_tui_command_path_renders_blocked_readiness_without_calling_tool(
     monkeypatch.setattr(
         analyze_handler,
         "ensure_deep_analysis_ready",
-        lambda _conn, _symbol, _date: readiness,
+        lambda _conn, _symbol, _date, **_kwargs: readiness,
     )
     conn = duckdb.connect()
     run_migrations(conn=conn)
@@ -851,11 +858,7 @@ def test_readiness_emits_correlated_audit_lifecycle(monkeypatch) -> None:
 
     assert [event["event_type"] for event in events] == [
         "DEEP_ANALYSIS_READINESS_STARTED",
-        "DEEP_ANALYSIS_READINESS_ARTIFACT",
-        "DEEP_ANALYSIS_READINESS_ARTIFACT",
-        "DEEP_ANALYSIS_READINESS_ARTIFACT",
-        "DEEP_ANALYSIS_READINESS_ARTIFACT",
-        "DEEP_ANALYSIS_READINESS_ARTIFACT",
+        *["DEEP_ANALYSIS_READINESS_ARTIFACT"] * 8,
         "DEEP_ANALYSIS_READINESS_CACHE_HIT",
         "DEEP_ANALYSIS_READINESS_COMPLETED",
     ]

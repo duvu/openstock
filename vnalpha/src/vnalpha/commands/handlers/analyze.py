@@ -17,7 +17,10 @@ from vnalpha.commands.models import (
     ResultPanel,
 )
 from vnalpha.commands.normalizers import normalize_symbol
-from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
+from vnalpha.data_availability.deep_readiness import (
+    ContextRequirement,
+    ensure_deep_analysis_ready,
+)
 
 
 def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
@@ -42,7 +45,15 @@ def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
 
     symbol = normalize_symbol(parsed.positional[0])
     date = optional_date(parsed)
-    readiness = ensure_deep_analysis_ready(conn, symbol, date)
+    market_regime_requirement = _requirement(parsed, "with-regime")
+    sector_strength_requirement = _requirement(parsed, "with-sector")
+    readiness = ensure_deep_analysis_ready(
+        conn,
+        symbol,
+        date,
+        market_regime_requirement=market_regime_requirement,
+        sector_strength_requirement=sector_strength_requirement,
+    )
     readiness_panel = ResultPanel(
         title="Data Readiness",
         content=readiness.to_panel_dict(),
@@ -59,7 +70,13 @@ def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
     if isinstance(tool_executor, CommandResult):
         return tool_executor
 
-    output = tool_executor.call("analysis.deep_symbol", symbol=symbol, date=date)
+    output = tool_executor.call(
+        "analysis.deep_symbol",
+        symbol=symbol,
+        date=date,
+        market_regime_requirement=market_regime_requirement,
+        sector_strength_requirement=sector_strength_requirement,
+    )
     data = output.data if isinstance(output.data, dict) else None
     if data is None:
         return workflow_result(
@@ -211,3 +228,11 @@ def _empty_tool_output(summary: str):
     from vnalpha.tools.models import ToolOutput
 
     return ToolOutput(summary=summary)
+
+
+def _requirement(parsed: ParsedCommand, option: str) -> ContextRequirement:
+    return (
+        ContextRequirement.REQUIRED
+        if parsed.options.get(option)
+        else ContextRequirement.NOT_REQUESTED
+    )

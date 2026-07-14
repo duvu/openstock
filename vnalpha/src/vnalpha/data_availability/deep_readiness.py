@@ -1,6 +1,8 @@
 """Compatibility exports for deep-analysis readiness."""
 
 from vnalpha.data_availability.deep_readiness_models import (
+    ContextIssue,
+    ContextRequirement,
     DeepAnalysisReadinessRequest,
     ReadinessArtifact,
     ReadinessArtifactStatus,
@@ -15,6 +17,8 @@ from vnalpha.data_availability.deep_readiness_service import (
 
 __all__ = [
     "DeepAnalysisReadinessRequest",
+    "ContextIssue",
+    "ContextRequirement",
     "DeepAnalysisReadinessService",
     "ReadinessArtifact",
     "ReadinessArtifactStatus",
