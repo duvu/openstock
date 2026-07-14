@@ -18,6 +18,32 @@ class ReadinessArtifactStatus(str, Enum):
     NOT_REQUESTED = "NOT_REQUESTED"
 
 
+class ContextRequirement(str, Enum):
+    """How a deep-analysis context artifact participates in the readiness gate."""
+
+    NOT_REQUESTED = "NOT_REQUESTED"
+    OPTIONAL = "OPTIONAL"
+    REQUIRED = "REQUIRED"
+
+
+class ContextIssue(str, Enum):
+    """Public, typed reasons that a persisted context cannot be used."""
+
+    MARKET_REGIME_MISSING = "MARKET_REGIME_MISSING"
+    MARKET_REGIME_STALE = "MARKET_REGIME_STALE"
+    MARKET_REGIME_INPUT_COVERAGE_INSUFFICIENT = (
+        "MARKET_REGIME_INPUT_COVERAGE_INSUFFICIENT"
+    )
+    MARKET_REGIME_QUALITY_UNACCEPTABLE = "MARKET_REGIME_QUALITY_UNACCEPTABLE"
+    SECTOR_STRENGTH_MISSING = "SECTOR_STRENGTH_MISSING"
+    SECTOR_STRENGTH_STALE = "SECTOR_STRENGTH_STALE"
+    SECTOR_INPUT_COVERAGE_INSUFFICIENT = "SECTOR_INPUT_COVERAGE_INSUFFICIENT"
+    SECTOR_METADATA_INSUFFICIENT = "SECTOR_METADATA_INSUFFICIENT"
+    SYMBOL_SECTOR_UNCLASSIFIED = "SYMBOL_SECTOR_UNCLASSIFIED"
+    SECTOR_NOT_RANKABLE = "SECTOR_NOT_RANKABLE"
+    CONTEXT_BUILD_FAILED = "CONTEXT_BUILD_FAILED"
+
+
 class RemediationAction(str, Enum):
     SYNC_SYMBOLS = "SYNC_SYMBOLS"
     SYNC_OHLCV = "SYNC_OHLCV"
@@ -25,6 +51,8 @@ class RemediationAction(str, Enum):
     SYNC_BENCHMARK = "SYNC_BENCHMARK"
     BUILD_FEATURES = "BUILD_FEATURES"
     SCORE_SYMBOL = "SCORE_SYMBOL"
+    BUILD_MARKET_REGIME = "BUILD_MARKET_REGIME"
+    BUILD_SECTOR_STRENGTH = "BUILD_SECTOR_STRENGTH"
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +95,10 @@ class ReadinessArtifact:
     symbol_metadata: tuple[tuple[str, str], ...] = ()
     error_code: str | None = None
     remediation_steps: tuple[RemediationStep, ...] = ()
+    requirement: ContextRequirement = ContextRequirement.REQUIRED
+    required: bool = True
+    blocking: bool = True
+    issues: tuple[ContextIssue, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +106,8 @@ class DeepAnalysisReadinessRequest:
     conn: duckdb.DuckDBPyConnection
     symbol: str
     requested_date: str | None
+    market_regime_requirement: ContextRequirement = ContextRequirement.NOT_REQUESTED
+    sector_strength_requirement: ContextRequirement = ContextRequirement.NOT_REQUESTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +127,7 @@ class ReadinessResult:
             artifact.status
             in {ReadinessArtifactStatus.READY, ReadinessArtifactStatus.PROVISIONED}
             for artifact in self.artifacts
+            if artifact.blocking
         )
 
     def to_panel_dict(self) -> dict[str, JsonValue]:
@@ -130,6 +165,10 @@ class ReadinessResult:
                     "error_code": artifact.error_code,
                     "error": artifact.error,
                     "remediation": artifact.remediation,
+                    "requirement": artifact.requirement.value,
+                    "required": artifact.required,
+                    "blocking": artifact.blocking,
+                    "issues": [issue.value for issue in artifact.issues],
                     "remediation_steps": [
                         {
                             "action": step.action.value,

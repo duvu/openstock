@@ -20,6 +20,7 @@ from vnalpha.assistant.models import AssistantPlan, ToolPlanStep
 from vnalpha.assistant.tool_policy import assert_safe_tool
 from vnalpha.core.logging import get_logger
 from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
+from vnalpha.data_availability.deep_readiness_models import ContextRequirement
 from vnalpha.tools.errors import ToolError
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import TOOL_PERMISSIONS, build_local_tool_registry
@@ -71,7 +72,17 @@ def _ensure_data_for_step(conn, step: ToolPlanStep) -> None:
     date = normalize_date(args.get("date"))
     for symbol in symbols:
         if step.tool_name in _FAIL_CLOSED_ANALYSIS_TOOLS:
-            readiness = ensure_deep_analysis_ready(conn, symbol, date)
+            readiness = ensure_deep_analysis_ready(
+                conn,
+                symbol,
+                date,
+                market_regime_requirement=_requirement(
+                    args.get("market_regime_requirement")
+                ),
+                sector_strength_requirement=_requirement(
+                    args.get("sector_strength_requirement")
+                ),
+            )
             if not readiness.is_ready:
                 raise ToolExecutionError(_readiness_error_message(readiness))
         else:
@@ -98,6 +109,14 @@ def _readiness_error_message(readiness) -> str:
         details.append(f"Remediation: {remediation}")
     details.append(f"correlation_id={readiness.correlation_id}")
     return ". ".join(details)
+
+
+def _requirement(value) -> ContextRequirement:
+    if isinstance(value, ContextRequirement):
+        return value
+    if isinstance(value, str):
+        return ContextRequirement(value)
+    return ContextRequirement.NOT_REQUESTED
 
 
 class AssistantExecutor:

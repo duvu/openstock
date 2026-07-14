@@ -128,7 +128,14 @@ def test_shortlist_without_sector_snapshot_discloses_defaulted_component() -> No
 def test_deep_symbol_without_sector_snapshot_discloses_missing_artifact() -> None:
     conn = _watchlist_without_sector()
 
-    output = deep_symbol_analysis(conn, "FPT", "2026-07-10")
+    from vnalpha.data_availability.deep_readiness_models import ContextRequirement
+
+    output = deep_symbol_analysis(
+        conn,
+        "FPT",
+        "2026-07-10",
+        sector_strength_requirement=ContextRequirement.REQUIRED,
+    )
 
     data = output.data
     assert isinstance(data, dict)

@@ -10,6 +10,7 @@ from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
 from vnalpha.assistant.research_automation_plans import (
     RESEARCH_AUTOMATION_PLAN_BUILDERS,
 )
+from vnalpha.data_availability.deep_readiness_models import ContextRequirement
 
 
 def _resolve_symbol(entities: dict) -> str:
@@ -141,12 +142,15 @@ def _build_deep_analysis_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities)
     if not symbol:
         return _missing_entity_plan("deep_analyze_symbol", "symbol")
+    args = _date_args(entities, symbol=symbol)
+    args["market_regime_requirement"] = ContextRequirement.NOT_REQUESTED
+    args["sector_strength_requirement"] = ContextRequirement.NOT_REQUESTED
     return AssistantPlan(
         intent="deep_analyze_symbol",
         steps=[
             _step(
                 "analysis.deep_symbol",
-                _date_args(entities, symbol=symbol),
+                args,
                 "Compose score, feature, level, market, sector, freshness, and lineage context",
                 "READ_SCORE",
             )
@@ -156,8 +160,6 @@ def _build_deep_analysis_plan(entities: dict) -> AssistantPlan:
             "candidate_score",
             "feature_snapshot",
             "canonical_ohlcv",
-            "market_regime_snapshot",
-            "sector_strength_snapshot",
         ],
     )
 
@@ -288,12 +290,15 @@ def _build_scenario_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities)
     if not symbol:
         return _missing_entity_plan("generate_research_scenario", "symbol")
+    args = _date_args(entities, symbol=symbol)
+    args["market_regime_requirement"] = ContextRequirement.NOT_REQUESTED
+    args["sector_strength_requirement"] = ContextRequirement.NOT_REQUESTED
     return AssistantPlan(
         intent="generate_research_scenario",
         steps=[
             _step(
                 "scenario.generate_research_plan",
-                _date_args(entities, symbol=symbol),
+                args,
                 "Build conditional base, confirmation, failed-confirmation, and low-quality-drift research scenarios",
                 "READ_SCORE",
             )

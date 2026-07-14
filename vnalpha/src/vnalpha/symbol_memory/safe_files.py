@@ -20,7 +20,9 @@ def _directory_identity(path: Path) -> tuple[int, int]:
 
 def _assert_path_identity(path: Path, expected_identity: tuple[int, int]) -> None:
     if _directory_identity(path) != expected_identity:
-        raise _PathIdentityChangedError("Knowledge directory identity changed during write.")
+        raise _PathIdentityChangedError(
+            "Knowledge directory identity changed during write."
+        )
 
 
 def atomic_replace(source: Path, destination: Path) -> None:
