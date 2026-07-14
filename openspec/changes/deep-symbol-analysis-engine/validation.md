@@ -17,3 +17,13 @@
 Residual risk: repository-wide formatting remains blocked by the pre-existing
 `symbol_memory/safe_files.py` formatting drift. This issue does not modify that
 file, and no green repository lint gate is claimed.
+
+## Issue #95 follow-up — 2026-07-14
+
+| Check | Outcome | Evidence |
+|---|---|---|
+| Readiness/context regressions | Passed | `cd vnalpha && uv run pytest -q tests/test_deep_analysis_readiness.py tests/test_executor_and_policy.py tests/test_assistant_research_intelligence_completion.py tests/test_textual_renderer_research.py` exited `0`. |
+| Packaged runtime replay regressions | Passed | `cd vnalpha && uv run pytest -q tests/test_evals_runtime_runner.py tests/test_evals_package_resources.py` exited `0`. |
+| Full vnalpha suite | Passed | `make test-vnalpha` completed at `100%` with exit code `0`. |
+| Targeted Ruff | Passed with pre-existing custom-noqa warnings | Modified readiness and assistant modules report `All checks passed`; warnings refer to existing `BROAD_EXCEPT_OK` annotations. |
+| Scope | Partial | This follow-up hardens typed lifecycle boundaries, parsing, evidence, optional disclosure, builder audit events, and runtime compatibility. Legacy-row fixtures, complete root-cause remediation mapping, and full GitHub Actions evidence remain outstanding. |

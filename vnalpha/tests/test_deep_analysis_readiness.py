@@ -14,6 +14,7 @@ from vnalpha.commands.handlers import research_plan as research_plan_handler
 from vnalpha.commands.handlers import setup_evidence as setup_evidence_handler
 from vnalpha.commands.models import CommandStatus, ParsedCommand
 from vnalpha.data_availability.deep_readiness import (
+    ContextRequirement,
     DeepAnalysisReadinessRequest,
     DeepAnalysisReadinessService,
     ReadinessArtifact,
@@ -502,6 +503,59 @@ def test_readiness_converts_unexpected_ensure_failure_to_sanitized_result() -> N
     # Then: deep analysis remains blocked without exposing the underlying message.
     assert result.is_ready is False
     assert result.failure_summary() == "Core data readiness could not be evaluated."
+
+
+def test_assistant_requirement_parser_normalizes_strings_and_rejects_unknown() -> None:
+    # Given: planner arguments arrive as user-shaped strings.
+    # When: the executor parses each context requirement.
+    optional = assistant_executor._requirement(" optional ")
+    required = assistant_executor._requirement("required")
+    unknown = assistant_executor._requirement("later")
+
+    # Then: valid values are normalized and unknown values become a typed outcome.
+    assert optional is ContextRequirement.OPTIONAL
+    assert required is ContextRequirement.REQUIRED
+    assert unknown is ContextRequirement.INVALID
+
+
+def test_readiness_contains_optional_missing_data_separately() -> None:
+    # Given: optional market context is unavailable while core data is ready.
+    result = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, _date: _ensure_result(
+            status=EnsureDataStatus.READY,
+            actions=[EnsureDataAction.CACHE_HIT],
+        )
+    ).ensure_ready(
+        DeepAnalysisReadinessRequest(
+            duckdb.connect(),
+            "FPT",
+            "2026-07-10",
+            market_regime_requirement=ContextRequirement.OPTIONAL,
+        )
+    )
+
+    # Then: optional data is disclosed without making the readiness gate fail.
+    assert result.is_ready is True
+    assert result.to_panel_dict()["optional_missing_data"] == [
+        "market_regime_snapshot"
+    ]
+
+
+def test_readiness_converts_date_resolution_failure_to_typed_result(monkeypatch) -> None:
+    # Given: the warehouse date resolver cannot determine an effective date.
+    monkeypatch.setattr(
+        "vnalpha.data_availability.deep_readiness_service.resolve_date",
+        lambda _value, conn: (_ for _ in ()).throw(ValueError("bad date")),
+    )
+
+    # When: readiness is evaluated.
+    result = DeepAnalysisReadinessService().ensure_ready(
+        DeepAnalysisReadinessRequest(duckdb.connect(), "FPT", None)
+    )
+
+    # Then: the failure is public and sanitized instead of escaping.
+    assert result.is_ready is False
+    assert result.failure_summary() == "Deep-analysis date could not be resolved."
 
 
 def test_assistant_error_renders_every_ordered_remediation_step(monkeypatch) -> None:

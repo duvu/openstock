@@ -50,9 +50,13 @@ def context_artifact(
     lineage: tuple[str, ...],
     remediation: RemediationStep,
     symbol_metadata: tuple[tuple[str, str], ...] = (),
+    evidence: tuple[tuple[str, str], ...] = (),
 ) -> ReadinessArtifact:
     """Build one artifact whose blocking behavior follows its requirement."""
-    blocking = requirement is ContextRequirement.REQUIRED
+    blocking = requirement in {
+        ContextRequirement.REQUIRED,
+        ContextRequirement.INVALID,
+    }
     failed = bool(issues)
     error = public_message(issues[0]) if failed and blocking else None
     return ReadinessArtifact(
@@ -77,7 +81,30 @@ def context_artifact(
         required=blocking,
         blocking=blocking,
         issues=issues,
+        breadth_active_count=_evidence_int(evidence, "breadth_active_count"),
+        breadth_eligible_count=_evidence_int(evidence, "breadth_eligible_count"),
+        breadth_excluded_count=_evidence_int(evidence, "breadth_excluded_count"),
+        breadth_coverage=_evidence_float(evidence, "breadth_coverage"),
+        classified_count=_evidence_int(evidence, "classified_count"),
+        unclassified_count=_evidence_int(evidence, "unclassified_count"),
+        rank=_evidence_int(evidence, "rank"),
+        score=_evidence_float(evidence, "score"),
+        rotation=_evidence_text(evidence, "rotation"),
     )
+
+
+def _evidence_text(evidence: tuple[tuple[str, str], ...], key: str) -> str | None:
+    return dict(evidence).get(key)
+
+
+def _evidence_int(evidence: tuple[tuple[str, str], ...], key: str) -> int | None:
+    value = _evidence_text(evidence, key)
+    return int(value) if value is not None else None
+
+
+def _evidence_float(evidence: tuple[tuple[str, str], ...], key: str) -> float | None:
+    value = _evidence_text(evidence, key)
+    return float(value) if value is not None else None
 
 
 def status(
@@ -87,7 +114,7 @@ def status(
     if failed:
         return (
             ReadinessArtifactStatus.FAILED
-            if requirement is ContextRequirement.REQUIRED
+            if requirement in {ContextRequirement.REQUIRED, ContextRequirement.INVALID}
             else ReadinessArtifactStatus.PARTIAL
         )
     return (
@@ -124,6 +151,8 @@ def public_message(issue: ContextIssue) -> str:
             return "The symbol sector is not rankable in the persisted snapshot."
         case ContextIssue.CONTEXT_BUILD_FAILED:
             return "Required context could not be built from persisted inputs."
+        case ContextIssue.INVALID_CONTEXT_REQUIREMENT:
+            return "The requested context requirement is invalid."
         case unreachable:
             assert_never(unreachable)
 

@@ -10,7 +10,6 @@ from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
 from vnalpha.assistant.research_automation_plans import (
     RESEARCH_AUTOMATION_PLAN_BUILDERS,
 )
-from vnalpha.data_availability.deep_readiness_models import ContextRequirement
 
 
 def _resolve_symbol(entities: dict) -> str:
@@ -143,8 +142,6 @@ def _build_deep_analysis_plan(entities: dict) -> AssistantPlan:
     if not symbol:
         return _missing_entity_plan("deep_analyze_symbol", "symbol")
     args = _date_args(entities, symbol=symbol)
-    args["market_regime_requirement"] = ContextRequirement.NOT_REQUESTED
-    args["sector_strength_requirement"] = ContextRequirement.NOT_REQUESTED
     return AssistantPlan(
         intent="deep_analyze_symbol",
         steps=[
@@ -291,8 +288,6 @@ def _build_scenario_plan(entities: dict) -> AssistantPlan:
     if not symbol:
         return _missing_entity_plan("generate_research_scenario", "symbol")
     args = _date_args(entities, symbol=symbol)
-    args["market_regime_requirement"] = ContextRequirement.NOT_REQUESTED
-    args["sector_strength_requirement"] = ContextRequirement.NOT_REQUESTED
     return AssistantPlan(
         intent="generate_research_scenario",
         steps=[

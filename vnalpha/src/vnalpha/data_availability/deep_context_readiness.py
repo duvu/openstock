@@ -45,6 +45,7 @@ class ContextReadinessInput:
     resolved_date: str
     market_regime_requirement: ContextRequirement
     sector_strength_requirement: ContextRequirement
+    correlation_id: str = "unset"
 
 
 def evaluate_context_readiness(
@@ -71,8 +72,11 @@ def _market_artifact(
     )
     action = ()
     if issues:
-        action = _try_build_market(context.conn, target_date)
+        action = _try_build_market(context, target_date)
         snapshot = get_market_regime_as_of(context.conn, target_date)
+        from vnalpha.data_availability.deep_readiness_audit import audit_context_build
+
+        audit_context_build("market_regime_snapshot", "REVALIDATED", context)
         issues = market_issues(
             snapshot,
             get_latest_market_regime(context.conn),
@@ -92,6 +96,20 @@ def _market_artifact(
         methodology_version=snapshot.methodology_version if snapshot else None,
         lineage=tuple(sorted(snapshot.lineage)) if snapshot else (),
         remediation=market_remediation(target_date),
+        evidence=(
+            ("breadth_active_count", str(snapshot.breadth_active_count))
+            if snapshot
+            else ("breadth_active_count", "0"),
+            ("breadth_eligible_count", str(snapshot.breadth_eligible_count))
+            if snapshot
+            else ("breadth_eligible_count", "0"),
+            ("breadth_excluded_count", str(snapshot.breadth_excluded_count))
+            if snapshot
+            else ("breadth_excluded_count", "0"),
+            ("breadth_coverage", str(snapshot.breadth_coverage))
+            if snapshot and snapshot.breadth_coverage is not None
+            else ("breadth_coverage", "0"),
+        ),
     )
 
 
@@ -114,8 +132,11 @@ def _sector_artifacts(
     )
     action = ()
     if issues:
-        action = _try_build_sector(context.conn, target_date)
+        action = _try_build_sector(context, target_date)
         snapshots = get_sector_strength_as_of(context.conn, target_date)
+        from vnalpha.data_availability.deep_readiness_audit import audit_context_build
+
+        audit_context_build("sector_strength_snapshot", "REVALIDATED", context)
         issues = sector_issues(
             snapshots,
             get_latest_sector_strength(context.conn),
@@ -135,6 +156,17 @@ def _sector_artifacts(
         methodology_version=snapshots[0].methodology_version if snapshots else None,
         lineage=tuple(sorted(snapshots[0].lineage)) if snapshots else (),
         remediation=sector_remediation(target_date),
+        evidence=(
+            ("rank", str(snapshots[0].rank)) if snapshots else ("rank", "0"),
+            ("score", str(snapshots[0].score)) if snapshots else ("score", "0"),
+            ("rotation", snapshots[0].rotation) if snapshots else ("rotation", ""),
+            ("classified_count", str(snapshots[0].eligible_count))
+            if snapshots
+            else ("classified_count", "0"),
+            ("unclassified_count", str(snapshots[0].unclassified_count))
+            if snapshots
+            else ("unclassified_count", "0"),
+        ),
     )
     alignment = get_symbol_sector_alignment(context.conn, context.symbol, target_date)
     alignment_issue_list = alignment_issues(alignment, _build_failed(action))
@@ -175,22 +207,32 @@ def _sector_artifacts(
 
 
 def _try_build_market(
-    conn: duckdb.DuckDBPyConnection, target_date: date
+    context: ContextReadinessInput, target_date: date
 ) -> tuple[str, ...]:
+    from vnalpha.data_availability.deep_readiness_audit import audit_context_build
+
+    audit_context_build("market_regime_snapshot", "STARTED", context)
     try:
-        build_market_regime(conn, target_date)
-    except Exception:  # noqa: BROAD_EXCEPT_OK
+        build_market_regime(context.conn, target_date)
+    except (duckdb.Error, ValueError):  # noqa: BROAD_EXCEPT_OK
+        audit_context_build("market_regime_snapshot", "FAILED", context)
         return (ContextIssue.CONTEXT_BUILD_FAILED.value,)
+    audit_context_build("market_regime_snapshot", "SUCCEEDED", context)
     return (RemediationAction.BUILD_MARKET_REGIME.value,)
 
 
 def _try_build_sector(
-    conn: duckdb.DuckDBPyConnection, target_date: date
+    context: ContextReadinessInput, target_date: date
 ) -> tuple[str, ...]:
+    from vnalpha.data_availability.deep_readiness_audit import audit_context_build
+
+    audit_context_build("sector_strength_snapshot", "STARTED", context)
     try:
-        build_sector_strength(conn, target_date)
-    except Exception:  # noqa: BROAD_EXCEPT_OK
+        build_sector_strength(context.conn, target_date)
+    except (duckdb.Error, ValueError):  # noqa: BROAD_EXCEPT_OK
+        audit_context_build("sector_strength_snapshot", "FAILED", context)
         return (ContextIssue.CONTEXT_BUILD_FAILED.value,)
+    audit_context_build("sector_strength_snapshot", "SUCCEEDED", context)
     return (RemediationAction.BUILD_SECTOR_STRENGTH.value,)
 
 

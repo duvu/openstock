@@ -1,9 +1,32 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from vnalpha.data_availability.deep_context_readiness import ContextReadinessInput
+
 from vnalpha.data_availability.deep_readiness_models import ReadinessResult
 from vnalpha.data_availability.models import EnsureDataAction
 from vnalpha.observability.audit import log_audit
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
+
+
+def audit_context_build(
+    name: str, phase: str, context: ContextReadinessInput
+) -> None:
+    """Record a context builder phase under the readiness correlation ID."""
+    log_audit(
+        f"DEEP_ANALYSIS_CONTEXT_BUILD_{phase}",
+        f"Context builder {phase.lower()} for {name}.",
+        status="OK" if phase != "FAILED" else "FAILED",
+        level="ERROR" if phase == "FAILED" else "INFO",
+        extra={
+            "artifact": name,
+            "symbol": context.symbol,
+            "resolved_date": context.resolved_date,
+            "correlation_id": context.correlation_id,
+        },
+    )
 
 
 def correlation_id() -> str:
