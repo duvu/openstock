@@ -5,16 +5,35 @@
 ```text
 OpenSpec authored: yes
 Detailed documentation inventory: complete
-Licensed SDK runtime verification: not started
-Commercial/license decision: not completed
-Runtime implementation: not started
-Offline runtime validation: not run
+Licensed SDK runtime verification: inconclusive; SDK and credentials unavailable
+Commercial/license decision: offline policy recorded; agreement review pending
+Runtime implementation: offline-safe foundation only; capabilities disabled
+Offline runtime validation: passed for foundation
 Licensed live validation: not run
-Strict OpenSpec validation after rewrite: not run
+Strict OpenSpec validation after rewrite: passed
 Phase gates: G0A passed; G0B-G7 pending
 ```
 
-No runtime capability, provider support or licensed behavior is claimed by this documentation-only change.
+## Offline foundation evidence
+
+Environment: OpenStock commit `64f0337`, Python 3.12.3 on Linux, with no
+`fiinquantx` package and no licensed credentials configured.
+
+```text
+cd vnstock
+PYTHONPATH=. pytest -q tests/unit/providers/test_fiinquantx_foundation.py tests/unit/providers/test_fiinquantx_bridge.py
+```
+
+Result: `passed` — 5 tests passed. The default registry constructs without the
+SDK, the bridge reports `NOT_INSTALLED`, the provider exposes no enabled
+capabilities, and explicit fetches fail closed.
+
+Licensed probes, live provider tests, and the commercial agreement review are
+`inconclusive`/`not run` in this environment. They must not be represented as
+passing evidence or used to enable a capability.
+
+No runtime capability, provider support or licensed behavior is claimed by this
+offline-safe foundation.
 
 ## Evidence rules
 

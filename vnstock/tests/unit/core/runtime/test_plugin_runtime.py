@@ -116,7 +116,16 @@ class TestDefaultPluginRegistry:
     def test_provider_names(self):
         reg = default_plugin_registry()
         names = reg.names()
-        assert set(names) == {"KBS", "VCI", "DNSE", "TCBS", "FMARKET", "MSN", "FMP"}
+        assert set(names) == {
+            "KBS",
+            "VCI",
+            "DNSE",
+            "TCBS",
+            "FMARKET",
+            "MSN",
+            "FMP",
+            "FIINQUANTX",
+        }
 
     def test_kbs_supports_equity_ohlcv(self):
         reg = default_plugin_registry()
@@ -127,7 +136,7 @@ class TestDefaultPluginRegistry:
     def test_capability_matrix_has_all_providers(self):
         reg = default_plugin_registry()
         matrix = reg.capability_matrix()
-        assert len(matrix) == 7
+        assert len(matrix) == 8
 
     def test_fresh_instances_are_independent(self):
         reg1 = default_plugin_registry()
