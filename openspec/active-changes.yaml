@@ -36,7 +36,7 @@ changes:
     priority: P2
     blocked_by: []
     summary: "Consolidated warehouse-grounded deep symbol analysis with deterministic readiness for symbol, market-regime, and sector-strength inputs plus explicit user data commands."
-    evidence: "Issues #75 and #92 provide a typed, audited fail-closed gate for symbol/benchmark/features/score. Market/sector auto-build (#76) and shared data provisioning (#77) remain pending in this registry entry."
+    evidence: "Issues #75 and #92 provide a typed, audited fail-closed gate for symbol/benchmark/features/score across `/analyze`, `/research-plan`, symbol-backed `/setup-evidence`, and assistant deep/scenario paths. #92 records independent warehouse evidence and typed remediation, sanitizes known/unexpected failures, and resolves/audits the effective market date before ensure. Market/sector auto-build (#76) and shared `vnalpha data` provisioning surfaces (#77) remain pending. Repository-wide lint remains blocked by pre-existing formatting in `symbol_memory/safe_files.py`."
   research-scenario-plan-engine:
     status: partial
     priority: P2
@@ -55,4 +55,4 @@ changes:
     priority: P3
     blocked_by: []
     summary: "Show slash-command suggestion list in the TUI composer on typing '/' with on-typing prefix filtering."
-    evidence: "ComposerInput renders filtered command suggestions from CommandRegistry.names(); headless tests cover visibility, filtering, focus, and clipping."
+    evidence: "ComposerInput renders filtered command suggestions from CommandRegistry.names(); AUTO_FOCUS + non-focusable output log keep the Input focused; headless pilot tests cover visibility, filtering, focus, and clipping."
