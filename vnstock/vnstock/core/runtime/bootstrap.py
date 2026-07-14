@@ -36,6 +36,7 @@ def default_plugin_registry() -> PluginRegistry:
     """
     # Lazy imports avoid circular imports and pay import cost only on first use.
     from vnstock.providers.dnse.plugin import DNSEProviderPlugin
+    from vnstock.providers.fiinquantx.plugin import FiinQuantXProviderPlugin
     from vnstock.providers.fmarket.plugin import FMarketProviderPlugin
     from vnstock.providers.fmp.plugin import FMPProviderPlugin
     from vnstock.providers.kbs.plugin import KBSProviderPlugin
@@ -51,4 +52,5 @@ def default_plugin_registry() -> PluginRegistry:
     registry.register(FMarketProviderPlugin())
     registry.register(MSNProviderPlugin())
     registry.register(FMPProviderPlugin())
+    registry.register(FiinQuantXProviderPlugin())
     return registry

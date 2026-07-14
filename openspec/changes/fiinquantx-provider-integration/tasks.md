@@ -3,11 +3,11 @@
 ## 0. Governance, licensing and product boundary
 
 - [ ] 0.1 Confirm the commercial agreement permits local SDK use, normalized caching/persistence, derived research analytics and the intended local service exposure. [evidence: reviewed license decision matrix]
-- [ ] 0.2 Record decisions for in-memory cache, SQLite cache, normalized files, DuckDB/Postgres sinks, raw archive, local REST, multi-user/public exposure, bulk export, model training and derived analytics. [evidence: `vnstock/docs/providers/FIINQUANTX.md`]
+- [x] 0.2 Record decisions for in-memory cache, SQLite cache, normalized files, DuckDB/Postgres sinks, raw archive, local REST, multi-user/public exposure, bulk export, model training and derived analytics. [evidence: `vnstock/docs/providers/FIINQUANTX.md`]
 - [ ] 0.3 Preserve the **read-only research boundary**. Exclude broker login, account, loan/funding, cash/buying power, order, position, portfolio, transfer, margin and execution SDK surfaces. [evidence: positive-allowlist and forbidden-member architecture tests]
-- [ ] 0.4 Do not vendor or redistribute the FiinQuantX wheel, proprietary source, credentials, session data or licensed production rows. [evidence: dependency, repository-hygiene and fixture review]
-- [ ] 0.5 Define a secure exact-version installation procedure for the official package index; do not rely on an unpinned mixed-index install. [evidence: installation decision record]
-- [ ] 0.6 Keep base `vnstock` installation, import, registry construction, tests and package build functional without FiinQuantX installed. [evidence: clean-environment tests]
+- [x] 0.4 Do not vendor or redistribute the FiinQuantX wheel, proprietary source, credentials, session data or licensed production rows. [evidence: dependency, repository-hygiene and fixture review]
+- [x] 0.5 Define a secure exact-version installation procedure for the official package index; do not rely on an unpinned mixed-index install. [evidence: installation decision record]
+- [ ] 0.6 Keep base `vnstock` installation, import, registry construction, tests and package build functional without FiinQuantX installed. [evidence: clean-environment tests; full suite remains blocked by external API rate limits]
 
 ## 1. FQ-0A documentation contract inventory
 
@@ -46,9 +46,9 @@
 - [ ] 3.1 Add `vnstock/vnstock/providers/fiinquantx/` with plugin, lazy SDK bridge, session adapter, capabilities, method allowlist, version policy, limits, mappings, normalizers, diagnostics and typed exceptions. [depends: 2.1–2.18]
 - [ ] 3.2 Implement lazy SDK import and safe states for absent package, untested version, missing credentials, auth failure and authenticated session. [evidence: unit tests]
 - [ ] 3.3 Implement exact-version contract compatibility and expose safe SDK/contract version diagnostics. [evidence: version tests]
-- [ ] 3.4 Implement the positive SDK method allowlist and forbidden trading/account member set. [evidence: architecture tests]
-- [ ] 3.5 Implement `FiinQuantXProviderPlugin` conforming to `ProviderPlugin`. [evidence: protocol/conformance tests]
-- [ ] 3.6 Register the provider in `default_plugin_registry()` without requiring the SDK at registry-construction time. [evidence: registry tests]
+- [x] 3.4 Implement the positive SDK method allowlist and forbidden trading/account member set. [evidence: architecture tests]
+- [x] 3.5 Implement `FiinQuantXProviderPlugin` conforming to `ProviderPlugin`. [evidence: protocol/conformance tests]
+- [x] 3.6 Register the provider in `default_plugin_registry()` without requiring the SDK at registry-construction time. [evidence: registry tests]
 - [ ] 3.7 Route all public/service synchronous FiinQuantX fetches through `PluginRuntime`; prevent direct SDK bypass. [evidence: runtime-path regression tests]
 - [ ] 3.8 Resolve credentials only from approved local credential sources and create sessions lazily. [evidence: auth tests]
 - [ ] 3.9 Redact credentials, session state, tokens/cookies, account IDs and raw auth responses from logs, exceptions, diagnostics, attrs and service responses. [evidence: secret/redaction tests]
