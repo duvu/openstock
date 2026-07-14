@@ -127,6 +127,11 @@ def _run(request: DataProvisioningRequest) -> None:
     set_correlation_id()
     command = f"data {request.operation} {request.artifact}"
     with command_lifecycle(command):
+        try:
+            DataProvisioningService.validate_request(request)
+        except DataProvisioningValidationError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
         from vnalpha.warehouse.connection import get_connection
         from vnalpha.warehouse.migrations import run_migrations
 
@@ -153,6 +158,10 @@ def _render(result: DataProvisioningResult) -> str:
             "start": result.start,
             "end": result.end,
             "resolved_date": result.resolved_date,
+            "requested_date": result.requested_date,
+            "freshness": result.freshness,
+            "lineage": result.lineage,
+            "follow_up": result.follow_up,
             "counts": result.counts,
             "warnings": list(result.warnings),
             "error": result.error,

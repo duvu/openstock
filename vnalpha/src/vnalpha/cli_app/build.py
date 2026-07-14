@@ -29,7 +29,8 @@ def build_canonical_cmd(
         result = _execute(
             conn,
             DataProvisioningRequest(
-                "build", "canonical", symbol=symbol, interval=interval
+                "build", "canonical", symbol=symbol, interval=interval,
+                allow_all_symbols=symbol is None,
             ),
         )
         typer.echo(
@@ -63,6 +64,7 @@ def build_features_cmd(
                 symbols=tuple(symbols.split(",")) if symbols else None,
                 allow_all_symbols=symbols is None,
                 date=date,
+                benchmark=benchmark,
             ),
         )
         typer.echo(

@@ -70,6 +70,61 @@ def test_invalid_download_is_rejected_before_any_provider_adapter_runs() -> None
     sync_ohlcv.assert_not_called()
 
 
+def test_unapproved_source_is_rejected_before_provider_adapter_runs() -> None:
+    from vnalpha.data_provisioning.service import (
+        DataProvisioningDependencies,
+        DataProvisioningRequest,
+        DataProvisioningService,
+        DataProvisioningValidationError,
+    )
+
+    sync_ohlcv = MagicMock()
+    service = DataProvisioningService(
+        MagicMock(), dependencies=DataProvisioningDependencies(sync_ohlcv=sync_ohlcv)
+    )
+    with pytest.raises(DataProvisioningValidationError, match="source"):
+        service.execute(
+            DataProvisioningRequest("download", "ohlcv", symbol="FPT", source="NOT_APPROVED")
+        )
+    sync_ohlcv.assert_not_called()
+
+
+def test_canonical_requires_symbol_before_builder_runs() -> None:
+    from vnalpha.data_provisioning.service import (
+        DataProvisioningDependencies,
+        DataProvisioningRequest,
+        DataProvisioningService,
+        DataProvisioningValidationError,
+    )
+
+    builder = MagicMock()
+    service = DataProvisioningService(
+        MagicMock(), dependencies=DataProvisioningDependencies(build_canonical=builder)
+    )
+    with pytest.raises(DataProvisioningValidationError, match="canonical requires a symbol"):
+        service.execute(DataProvisioningRequest("build", "canonical"))
+    builder.assert_not_called()
+
+
+def test_features_forwards_benchmark_symbol() -> None:
+    from vnalpha.data_provisioning.service import (
+        DataProvisioningDependencies,
+        DataProvisioningRequest,
+        DataProvisioningService,
+    )
+
+    builder = MagicMock(return_value={"built": 1, "skipped": 0})
+    service = DataProvisioningService(
+        MagicMock(), dependencies=DataProvisioningDependencies(build_features=builder)
+    )
+    service.execute(
+        DataProvisioningRequest(
+            "build", "features", symbol="FPT", date="2026-07-10", benchmark="CUSTOM"
+        )
+    )
+    assert builder.call_args.kwargs["benchmark_symbol"] == "CUSTOM"
+
+
 def test_data_cli_group_is_registered() -> None:
     result = CliRunner().invoke(app, ["data", "--help"])
 
@@ -108,6 +163,19 @@ def test_data_handler_uses_shared_service_and_renders_correlation() -> None:
     request = service.execute.call_args.args[0]
     assert request.symbol == "fpt"
     assert request.source == "vndirect"
+
+
+def test_data_cli_validates_before_opening_connection(monkeypatch) -> None:
+    from vnalpha.cli_app import data as data_cli
+
+    get_connection = MagicMock()
+    migrations = MagicMock()
+    monkeypatch.setattr("vnalpha.warehouse.connection.get_connection", get_connection)
+    monkeypatch.setattr("vnalpha.warehouse.migrations.run_migrations", migrations)
+    result = CliRunner().invoke(data_cli.app, ["build", "features", "FPT", "--date", "bad"])
+    assert result.exit_code != 0
+    get_connection.assert_not_called()
+    migrations.assert_not_called()
 
 
 def test_data_handler_rejects_unknown_options_before_service_execution() -> None:

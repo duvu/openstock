@@ -35,6 +35,8 @@ class DataProvisioningRequest:
     interval: str = "1D"
     top_n: int = 30
     min_score: float = 0.40
+    benchmark: str = "VNINDEX"
+    requested_date: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +54,9 @@ class DataProvisioningResult:
     warnings: tuple[str, ...] = ()
     error: str | None = None
     follow_up: str | None = None
+    requested_date: str | None = None
+    freshness: str = "unknown"
+    lineage: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,9 +84,13 @@ class DataProvisioningService:
     def execute(self, request: DataProvisioningRequest) -> DataProvisioningResult:
         normalized = self._validate(request)
         correlation_id = self._correlation_id()
+        _audit_provisioning("REQUESTED", normalized, "STARTED")
         try:
-            return self._execute(normalized, correlation_id)
+            result = self._execute(normalized, correlation_id)
+            _audit_provisioning(result.status.value, normalized, result.status.value)
+            return result
         except Exception:
+            _audit_provisioning("FAILED", normalized, "FAILED")
             return DataProvisioningResult(
                 status=ProvisioningStatus.FAILED,
                 operation=normalized.operation,
@@ -92,17 +101,29 @@ class DataProvisioningService:
                 symbol=normalized.symbol,
                 start=normalized.start,
                 end=normalized.end,
+                requested_date=normalized.requested_date,
+                freshness="unknown",
+                lineage={"operation": normalized.operation, "artifact": normalized.artifact},
                 error="Data provisioning did not complete. Review the correlated audit record.",
+                follow_up="Review the correlated audit record and retry after correcting the input or provider.",
             )
 
+    @classmethod
+    def validate_request(cls, request: DataProvisioningRequest) -> None:
+        cls._validate_fields(request, date_conn=None)
+
     def _validate(self, request: DataProvisioningRequest) -> DataProvisioningRequest:
+        return self._validate_fields(request, date_conn=self.conn)
+
+    @classmethod
+    def _validate_fields(cls, request: DataProvisioningRequest, *, date_conn) -> DataProvisioningRequest:
         operation = request.operation.strip().lower()
         artifact = request.artifact.strip().lower()
         symbol = _normalize_symbol(request.symbol)
         symbols = _normalize_symbols(request.symbols)
         start = _normalize_date(request.start, "--start")
         end = _normalize_date(request.end, "--end")
-        resolved_date = _resolve_request_date(request.date, self.conn)
+        resolved_date = _resolve_request_date(request.date, date_conn)
         source = _normalize_source(request.source)
         interval = _normalize_interval(request.interval)
 
@@ -139,6 +160,8 @@ class DataProvisioningService:
             interval=interval,
             top_n=request.top_n,
             min_score=request.min_score,
+            benchmark=_normalize_symbol(request.benchmark) or "VNINDEX",
+            requested_date=request.requested_date or request.date,
         )
 
     def _execute(
@@ -194,6 +217,7 @@ class DataProvisioningService:
                     self.conn,
                     target_date=_required_date(request.date),
                     universe=_requested_symbols(request),
+                    benchmark_symbol=request.benchmark,
                 )
                 return _result(
                     request,
@@ -350,7 +374,7 @@ def _validate_build(
             "--start, --end, and --source are only valid for data downloads."
         )
     if (
-        artifact in {"features", "score"}
+        artifact in {"canonical", "features", "score"}
         and symbol is None
         and not symbols
         and not allow_all_symbols
@@ -391,7 +415,13 @@ def _normalize_source(value: str | None) -> str | None:
     if value is None:
         return None
     normalized = value.strip()
-    return normalized or None
+    if not normalized:
+        return None
+    if normalized.upper() not in {"VCI", "TCBS", "VNDIRECT", "SSI", "FILI", "KBS", "MAS"}:
+        raise DataProvisioningValidationError(
+            "--source must name an approved provider (VCI, TCBS, VNDIRECT, SSI, FILI, KBS, or MAS)."
+        )
+    return normalized
 
 
 def _normalize_interval(value: str) -> str:
@@ -413,7 +443,7 @@ def _normalize_date(value: str | None, option: str) -> str | None:
 
 
 def _resolve_request_date(
-    value: str | None, conn: duckdb.DuckDBPyConnection
+    value: str | None, conn: duckdb.DuckDBPyConnection | None
 ) -> str | None:
     if value is None:
         return None
@@ -475,4 +505,29 @@ def _result(
         start=request.start,
         end=request.end,
         warnings=warnings,
+        requested_date=request.requested_date or request.date,
+        freshness=request.date or request.end or "unknown",
+        lineage={
+            "operation": request.operation,
+            "artifact": request.artifact,
+            "source": request.source or "warehouse",
+        },
+        follow_up=(
+            "Review warnings and rerun the bounded command if needed."
+            if warnings or status is not ProvisioningStatus.SUCCESS
+            else None
+        ),
+    )
+
+
+def _audit_provisioning(event_type: str, request: DataProvisioningRequest, status: str) -> None:
+    from vnalpha.observability.audit import log_audit
+
+    log_audit(
+        f"DATA_PROVISIONING_{event_type}",
+        f"{request.operation} {request.artifact}",
+        status=status,
+        extra={"artifact": request.artifact, "operation": request.operation, "symbol": request.symbol},
+        object_type="data_provisioning",
+        object_id=request.artifact,
     )
