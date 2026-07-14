@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import importlib.util
+from types import ModuleType
 
+import pandas as pd
 import pytest
 
-from vnstock.core.provider.exceptions import ProviderDisabledError
+from vnstock.core.contracts import CONTRACT_REGISTRY
 from vnstock.core.provider.plugin import ProviderPlugin
 from vnstock.core.runtime.bootstrap import default_plugin_registry
+from vnstock.providers.fiinquantx.bridge import FiinQuantXSDK, FiinQuantXState
+from vnstock.providers.fiinquantx.exceptions import (
+    FiinQuantXLicenseNotAcknowledgedError,
+    FiinQuantXNotInstalledError,
+)
+from vnstock.providers.fiinquantx.plugin import FiinQuantXProviderPlugin
 
 
 def test_default_registry_constructs_without_fiinquantx() -> None:
@@ -25,7 +33,7 @@ def test_fiinquantx_is_fail_closed_until_runtime_evidence() -> None:
     assert capabilities
     assert all(not item["supported"] for item in capabilities.values())
     assert all(item["status"] == "unsupported" for item in capabilities.values())
-    with pytest.raises(ProviderDisabledError):
+    with pytest.raises(FiinQuantXNotInstalledError):
         plugin.fetch("equity.ohlcv", {"symbol": "FPT"})
 
 
@@ -42,3 +50,149 @@ def test_fiinquantx_does_not_expose_forbidden_sdk_surfaces() -> None:
     assert "positions" in FORBIDDEN_MEMBER_NAMES
     assert "account" in FORBIDDEN_MEMBER_NAMES
     assert "Fetch_Trading_Data" not in FORBIDDEN_MEMBER_NAMES
+
+
+def test_fiinquantx_normalizes_licensed_equity_ohlcv(monkeypatch) -> None:
+    class FakeEvent:
+        def get_data(self) -> pd.DataFrame:
+            return pd.DataFrame(
+                {
+                    "ticker": ["VCB"],
+                    "timestamp": ["2026-07-14"],
+                    "open": [100.0],
+                    "high": [102.0],
+                    "low": [99.0],
+                    "close": [101.0],
+                    "volume": [200.0],
+                    "value": [20200.0],
+                }
+            )
+
+    class FakeSession:
+        def Fetch_Trading_Data(self, **_kwargs) -> FakeEvent:
+            return FakeEvent()
+
+        def TickerList(self, **_kwargs) -> list[str]:
+            return ["VCB", "VIC"]
+
+    class FakeFiinSession:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def login(self) -> FakeSession:
+            return FakeSession()
+
+    module = ModuleType("FiinQuantX")
+    module.FiinSession = FakeFiinSession
+    monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
+    monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
+        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
+    )
+
+    result = FiinQuantXProviderPlugin().fetch("equity.ohlcv", {"symbol": "VCB"})
+
+    assert list(result.columns) == [
+        "symbol",
+        "time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "value",
+    ]
+    assert result.loc[0, "symbol"] == "VCB"
+    assert pd.api.types.is_datetime64_any_dtype(result["time"])
+    assert result.attrs["provider"] == "FIINQUANTX"
+
+
+def test_fiinquantx_normalizes_current_membership_snapshot(monkeypatch) -> None:
+    class FakeSession:
+        def TickerList(self, **_kwargs) -> list[str]:
+            return ["VCB", "VIC"]
+
+    class FakeFiinSession:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def login(self) -> FakeSession:
+            return FakeSession()
+
+    module = ModuleType("FiinQuantX")
+    module.FiinSession = FakeFiinSession
+    monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
+    monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
+        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
+    )
+
+    result = FiinQuantXProviderPlugin().fetch(
+        "reference.index_membership_snapshot",
+        {"symbol": "VN30"},
+    )
+
+    assert list(result.columns) == ["entity_id", "member_symbol", "observed_at"]
+    assert result["member_symbol"].tolist() == ["VCB", "VIC"]
+    assert pd.api.types.is_datetime64_any_dtype(result["observed_at"])
+    assert result.attrs["snapshot_semantics"] == "observed_current_membership"
+
+
+def test_membership_snapshot_contracts_are_registered() -> None:
+    index_contract = CONTRACT_REGISTRY.get("reference.index_membership_snapshot")
+    sector_contract = CONTRACT_REGISTRY.get("reference.sector_membership_snapshot")
+
+    assert index_contract.required_columns == [
+        "entity_id",
+        "member_symbol",
+        "observed_at",
+    ]
+    assert sector_contract.required_columns == index_contract.required_columns
+
+
+def test_fiinquantx_rejects_unbounded_history_before_session_login(monkeypatch) -> None:
+    class FakeFiinSession:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def login(self) -> None:
+            raise AssertionError("session login must not be called")
+
+    module = ModuleType("FiinQuantX")
+    module.FiinSession = FakeFiinSession
+    monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
+    monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
+        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
+    )
+
+    with pytest.raises(ValueError, match="count_back"):
+        FiinQuantXProviderPlugin().fetch(
+            "equity.ohlcv",
+            {"symbol": "VCB", "count_back": 0},
+        )
+
+
+def test_fiinquantx_requires_license_acknowledgement_before_login(monkeypatch) -> None:
+    class FakeFiinSession:
+        def __init__(self, **_kwargs) -> None:
+            raise AssertionError("session factory must not be called")
+
+    module = ModuleType("FiinQuantX")
+    module.FiinSession = FakeFiinSession
+    monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
+    monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
+    monkeypatch.delenv("VNSTOCK_FIINQUANTX_LICENSED", raising=False)
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
+        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
+    )
+
+    with pytest.raises(FiinQuantXLicenseNotAcknowledgedError):
+        FiinQuantXProviderPlugin().fetch("equity.ohlcv", {"symbol": "VCB"})

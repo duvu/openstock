@@ -33,11 +33,20 @@ FORBIDDEN_MEMBER_NAMES = frozenset(
     }
 )
 
-ENABLED_DATASETS = frozenset(
+DOCUMENTED_DATASETS = frozenset(
     {
         "equity.ohlcv",
         "index.ohlcv",
         "reference.company_info",
+        "reference.index_membership_snapshot",
+        "reference.sector_membership_snapshot",
+    }
+)
+
+IMPLEMENTED_DATASETS = frozenset(
+    {
+        "equity.ohlcv",
+        "index.ohlcv",
         "reference.index_membership_snapshot",
         "reference.sector_membership_snapshot",
     }

@@ -23,6 +23,17 @@ def test_index_ohlcv_endpoint():
     assert path_to_dataset("/v1/index/ohlcv") == "index.ohlcv"
 
 
+def test_fiinquantx_membership_endpoints():
+    assert (
+        path_to_dataset("/v1/reference/index-membership")
+        == "reference.index_membership_snapshot"
+    )
+    assert (
+        path_to_dataset("/v1/reference/sector-membership")
+        == "reference.sector_membership_snapshot"
+    )
+
+
 def test_all_required_endpoints_exist():
     """All endpoints required by vnalpha must be mappable."""
     required = [
@@ -132,6 +143,16 @@ def test_extract_runtime_params_ignores_data_params():
 
     result = extract_runtime_params({"symbol": ["FPT"], "start": ["2024-01-01"]})
     assert result == {}
+
+
+def test_extract_data_params_parses_count_back_as_integer():
+    from vnstock.service.dataset_mapper import extract_data_params
+
+    result = extract_data_params(
+        {"symbol": ["VCB"], "count_back": ["2"], "source": ["FIINQUANTX"]}
+    )
+
+    assert result == {"symbol": "VCB", "count_back": 2}
 
 
 # ---------------------------------------------------------------------------

@@ -241,6 +241,28 @@ class TestErrorHandling:
 
         assert status == 502
 
+    def test_explicit_provider_without_dataset_support_returns_422(self):
+        from vnstock.core.provider.exceptions import UnsupportedDatasetForProviderError
+
+        fake = MagicMock()
+        fake.fetch.side_effect = UnsupportedDatasetForProviderError(
+            "FIINQUANTX", "reference.company_info"
+        )
+        runtime_dependency.override_runtime(fake)
+
+        port = _get_free_port()
+        stop = threading.Event()
+        run_server("127.0.0.1", port, _stop_event=stop)
+        time.sleep(0.15)
+        status, body = _fetch(
+            f"http://127.0.0.1:{port}/v1/company/info?symbol=VCB&source=FIINQUANTX"
+        )
+        stop.set()
+        runtime_dependency.reset_runtime()
+
+        assert status == 422
+        assert body["error"] == "unsupported_dataset_for_provider"
+
     def test_no_healthy_provider_returns_503(self):
         """When PluginRuntime raises NoHealthyProviderError, service returns 503."""
         from vnstock.core.provider.exceptions import NoHealthyProviderError

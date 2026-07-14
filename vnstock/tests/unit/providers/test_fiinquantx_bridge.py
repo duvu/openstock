@@ -24,7 +24,9 @@ def test_supported_sdk_uses_verified_import_name(monkeypatch) -> None:
         imported_names.append(name)
         return module
 
-    monkeypatch.setattr("vnstock.providers.fiinquantx.bridge.version", lambda _: "0.1.64")
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.bridge.version", lambda _: "0.1.64"
+    )
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.bridge.importlib.import_module",
         import_module,
@@ -35,3 +37,19 @@ def test_supported_sdk_uses_verified_import_name(monkeypatch) -> None:
     assert result.state is FiinQuantXState.INSTALLED_SUPPORTED
     assert result.module is module
     assert imported_names == ["FiinQuantX"]
+
+
+def test_supported_distribution_with_broken_import_is_not_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.bridge.version", lambda _: "0.1.64"
+    )
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.bridge.importlib.import_module",
+        lambda _: (_ for _ in ()).throw(ImportError("missing dependency")),
+    )
+
+    result = load_fiinquantx_sdk()
+
+    assert result.state is FiinQuantXState.UNTESTED_VERSION
+    assert result.module is None
+    assert result.version == "0.1.64"
