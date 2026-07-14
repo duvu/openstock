@@ -5,10 +5,18 @@ from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
 from math import isfinite
+from typing import assert_never
 
 import duckdb
 
 from vnalpha.core.dates import resolve_date
+from vnalpha.ingestion.models import (
+    BatchIngestionStatus,
+    JsonValue,
+    OHLCVBatchResult,
+    SymbolIngestionResult,
+    SymbolIngestionStatus,
+)
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
 
 _APPROVED_SOURCES = frozenset({"KBS", "VCI", "MSN", "DNSE", "TCBS", "FMARKET", "FMP"})
@@ -21,6 +29,10 @@ class ProvisioningStatus(str, Enum):
 
 
 class DataProvisioningValidationError(ValueError):
+    pass
+
+
+class DataProvisioningAdapterError(TypeError):
     pass
 
 
@@ -60,6 +72,8 @@ class DataProvisioningResult:
     requested_date: str | None = None
     freshness: str = "unknown"
     lineage: dict[str, str] = field(default_factory=dict)
+    symbol_results: tuple[SymbolIngestionResult, ...] = ()
+    terminal_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,7 +231,7 @@ class DataProvisioningService:
                     raw_result=raw,
                 )
             case "download", "ohlcv":
-                raw = _require_mapping(
+                batch = _require_ohlcv_batch(
                     self._sync_ohlcv()(
                         self.conn,
                         universe=_requested_symbols(request),
@@ -227,14 +241,26 @@ class DataProvisioningService:
                         interval=request.interval,
                     )
                 )
-                counts = _counts(raw, "total", "inserted", "skipped")
+                counts = {
+                    "total": batch.requested_count,
+                    "requested": batch.requested_count,
+                    "inserted": batch.rows_inserted,
+                    "success": batch.count(SymbolIngestionStatus.SUCCESS),
+                    "empty": batch.count(SymbolIngestionStatus.EMPTY),
+                    "failed": batch.count(SymbolIngestionStatus.FAILED),
+                    "invalid": batch.count(SymbolIngestionStatus.INVALID),
+                    "skipped": batch.count(SymbolIngestionStatus.SKIPPED),
+                }
                 return _result(
                     request,
                     correlation_id,
                     counts=counts,
-                    status=_partial_if_positive(counts, "skipped"),
-                    warnings=_count_warnings(counts, ("skipped", "symbols skipped")),
-                    raw_result=raw,
+                    status=_provisioning_status(batch.status),
+                    warnings=_ohlcv_warnings(batch),
+                    raw_result=batch.to_payload(),
+                    symbol_results=batch.symbol_results,
+                    terminal_reason=batch.terminal_reason,
+                    error=_ohlcv_terminal_error(batch),
                 )
             case "download", "index":
                 raw = _require_mapping(
@@ -253,7 +279,9 @@ class DataProvisioningService:
                     correlation_id,
                     counts=counts,
                     status=_partial_if_positive(counts, "skipped"),
-                    warnings=_count_warnings(counts, ("skipped", "index requests skipped")),
+                    warnings=_count_warnings(
+                        counts, ("skipped", "index requests skipped")
+                    ),
                     raw_result=raw,
                 )
             case "build", "canonical":
@@ -268,9 +296,7 @@ class DataProvisioningService:
                     correlation_id,
                     counts=counts,
                     status=_partial_if_positive(counts, "rejected"),
-                    warnings=_count_warnings(
-                        counts, ("rejected", "symbols rejected")
-                    ),
+                    warnings=_count_warnings(counts, ("rejected", "symbols rejected")),
                     raw_result=raw,
                 )
             case "build", "features":
@@ -598,6 +624,49 @@ def _require_mapping(result: object) -> Mapping[str, object]:
     return result
 
 
+def _require_ohlcv_batch(
+    result: JsonValue | OHLCVBatchResult,
+) -> OHLCVBatchResult:
+    if not isinstance(result, OHLCVBatchResult):
+        raise DataProvisioningAdapterError("OHLCV adapter returned an invalid result.")
+    return result
+
+
+def _provisioning_status(status: BatchIngestionStatus) -> ProvisioningStatus:
+    match status:
+        case BatchIngestionStatus.SUCCESS:
+            return ProvisioningStatus.SUCCESS
+        case BatchIngestionStatus.PARTIAL:
+            return ProvisioningStatus.PARTIAL
+        case BatchIngestionStatus.FAILED:
+            return ProvisioningStatus.FAILED
+        case unreachable:
+            assert_never(unreachable)
+
+
+def _ohlcv_warnings(batch: OHLCVBatchResult) -> tuple[str, ...]:
+    return tuple(
+        " - ".join(
+            part
+            for part in (
+                f"{result.symbol}: {result.status.value}",
+                result.message,
+                result.remediation,
+            )
+            if part
+        )
+        for result in batch.symbol_results
+        if result.status
+        not in {SymbolIngestionStatus.SUCCESS, SymbolIngestionStatus.SKIPPED}
+    )
+
+
+def _ohlcv_terminal_error(batch: OHLCVBatchResult) -> str | None:
+    if batch.status is BatchIngestionStatus.FAILED:
+        return "No required OHLCV symbol completed."
+    return None
+
+
 def _counts(result: Mapping[str, object], *keys: str) -> dict[str, int]:
     counts: dict[str, int] = {}
     for key in keys:
@@ -619,9 +688,7 @@ def _partial_if_positive(
     )
 
 
-def _quality_status(
-    quality: str, *, success_values: set[str]
-) -> ProvisioningStatus:
+def _quality_status(quality: str, *, success_values: set[str]) -> ProvisioningStatus:
     return (
         ProvisioningStatus.SUCCESS
         if quality.upper() in success_values
@@ -648,6 +715,9 @@ def _result(
     warnings: tuple[str, ...] = (),
     raw_result: Mapping[str, object] | None = None,
     lineage_extra: Mapping[str, str] | None = None,
+    symbol_results: tuple[SymbolIngestionResult, ...] = (),
+    terminal_reason: str | None = None,
+    error: str | None = None,
 ) -> DataProvisioningResult:
     lineage = {
         "operation": request.operation,
@@ -659,7 +729,9 @@ def _result(
         if run_id:
             lineage["ingestion_run_id"] = str(run_id)
     if lineage_extra:
-        lineage.update({key: str(value) for key, value in lineage_extra.items() if value})
+        lineage.update(
+            {key: str(value) for key, value in lineage_extra.items() if value}
+        )
     return DataProvisioningResult(
         status=status,
         operation=request.operation,
@@ -675,8 +747,18 @@ def _result(
         requested_date=request.requested_date or request.date,
         freshness=_freshness_state(request),
         lineage=lineage,
+        symbol_results=symbol_results,
+        terminal_reason=terminal_reason,
+        error=error,
         follow_up=(
-            "Review warnings and rerun the bounded command if needed."
+            next(
+                (
+                    result.remediation
+                    for result in symbol_results
+                    if result.remediation is not None
+                ),
+                "Review warnings and rerun the bounded command if needed.",
+            )
             if warnings or status is not ProvisioningStatus.SUCCESS
             else None
         ),

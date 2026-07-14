@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ResponseMeta(BaseModel):
+    request_id: Optional[str] = None
     dataset: str
     provider: str
     quality_status: Optional[str] = None
@@ -26,13 +28,13 @@ class VnstockResponse(BaseModel):
 
 class OHLCVRecord(BaseModel):
     symbol: Optional[str] = None
-    time: Optional[str] = None
-    open: Optional[float] = None
-    high: Optional[float] = None
-    low: Optional[float] = None
-    close: Optional[float] = None
+    time: datetime
+    open: float
+    high: float
+    low: float
+    close: float
     volume: Optional[float] = None
-    interval: Optional[str] = None
+    interval: str = "1D"
 
 
 class SymbolRecord(BaseModel):
@@ -65,7 +67,13 @@ class SymbolsResponse(VnstockResponse):
 
 
 class OHLCVResponse(VnstockResponse):
-    pass
+    @field_validator("data")
+    @classmethod
+    def parse_ohlcv_records(cls, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            OHLCVRecord.model_validate(record).model_dump(mode="json")
+            for record in records
+        ]
 
 
 class ProviderHealthResponse(BaseModel):

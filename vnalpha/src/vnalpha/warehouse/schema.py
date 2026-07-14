@@ -14,7 +14,19 @@ CREATE TABLE IF NOT EXISTS ingestion_run (
     source_endpoint   VARCHAR,
     universe          VARCHAR,
     params_json       VARCHAR,
-    error_json        VARCHAR
+    error_json        VARCHAR,
+    requested_count   INTEGER DEFAULT 0,
+    success_count     INTEGER DEFAULT 0,
+    empty_count       INTEGER DEFAULT 0,
+    failed_count      INTEGER DEFAULT 0,
+    invalid_count     INTEGER DEFAULT 0,
+    skipped_count     INTEGER DEFAULT 0,
+    failed_symbols_json VARCHAR,
+    symbol_results_json VARCHAR,
+    quality_report_json VARCHAR,
+    diagnostics_json  VARCHAR,
+    terminal_reason   VARCHAR,
+    correlation_id    VARCHAR
 )
 """
 

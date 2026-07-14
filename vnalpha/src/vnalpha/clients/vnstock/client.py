@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Optional
 from urllib.parse import urlencode
 
@@ -11,6 +12,7 @@ from vnalpha.clients.vnstock.errors import (
     VnstockConnectionError,
     VnstockDataError,
     VnstockHTTPError,
+    VnstockTimeoutError,
 )
 from vnalpha.clients.vnstock.schemas import (
     OHLCVResponse,
@@ -59,14 +61,14 @@ class VnstockClient:
                 f"Cannot connect to vnstock-service at {self._base_url}"
             ) from exc
         except httpx.TimeoutException as exc:
-            raise VnstockConnectionError(
+            raise VnstockTimeoutError(
                 f"Timeout connecting to vnstock-service at {self._base_url}"
             ) from exc
         if r.status_code != 200:
             raise VnstockHTTPError(r.status_code, path, r.text)
         try:
             return r.json()
-        except Exception as exc:
+        except json.JSONDecodeError as exc:
             raise VnstockDataError(f"Failed to parse JSON from {path}") from exc
 
     def health_check(self) -> dict[str, Any]:

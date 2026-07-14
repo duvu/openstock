@@ -74,7 +74,7 @@ class CommandExecutor:
         elif (
             self._default_date
             and "date" not in parsed.options
-            and parsed.command_name not in {"market-regime", "sector-strength"}
+            and _accepts_default_date(parsed)
         ):
             parsed.options["date"] = self._default_date
 
@@ -170,6 +170,17 @@ class CommandExecutor:
             summary=message,
             error=CommandError(error_type=error_type, message=message),
         )
+
+
+def _accepts_default_date(parsed: ParsedCommand) -> bool:
+    if parsed.command_name == "data":
+        return (
+            len(parsed.positional) >= 2
+            and parsed.positional[0] == "build"
+            and parsed.positional[1]
+            in {"features", "score", "market-regime", "sector-strength"}
+        )
+    return parsed.command_name not in {"market-regime", "sector-strength"}
 
 
 def _parsed_args(parsed: ParsedCommand) -> dict:

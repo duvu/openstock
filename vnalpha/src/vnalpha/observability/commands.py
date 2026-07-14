@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Generator
 from uuid import uuid4
@@ -20,6 +21,16 @@ from vnalpha.observability.jsonl import append_jsonl
 from vnalpha.observability.redaction import redact_str, redaction_status
 
 _MAX_OUTPUT_BYTES = 2048  # 2 KB tail limit
+
+
+@dataclass(slots=True)
+class CommandLifecycleState:
+    failed: bool = False
+    error_message: str = ""
+
+    def mark_failed(self, error_message: str) -> None:
+        self.failed = True
+        self.error_message = error_message
 
 
 def _now_iso() -> str:
@@ -205,7 +216,7 @@ def command_lifecycle(
     *,
     run_ctx: RunContext | None = None,
     mode: str | None = None,
-) -> Generator[None, None, None]:
+) -> Generator[CommandLifecycleState, None, None]:
     """Context manager that emits COMMAND_STARTED/SUCCEEDED/FAILED and captures exceptions.
 
     Usage::
@@ -218,8 +229,9 @@ def command_lifecycle(
     Correlation ID is generated if not already set.
     """
     ctx = run_ctx or get_run_context()
+    state = CommandLifecycleState()
     if ctx is None:
-        yield
+        yield state
         return
 
     if get_correlation_id() in ("", "unset"):
@@ -228,7 +240,7 @@ def command_lifecycle(
     log_command_start(command, args, run_ctx=ctx, mode=mode)
     t0 = time.monotonic()
     try:
-        yield
+        yield state
     except Exception as exc:
         duration_ms = (time.monotonic() - t0) * 1000
         capture_exception(exc, run_ctx=ctx, mode=mode)
@@ -244,11 +256,22 @@ def command_lifecycle(
         raise
     else:
         duration_ms = (time.monotonic() - t0) * 1000
-        log_command_success(
-            command,
-            args,
-            duration_ms=duration_ms,
-            exit_code=0,
-            run_ctx=ctx,
-            mode=mode,
-        )
+        if state.failed:
+            log_command_failure(
+                command,
+                args,
+                duration_ms=duration_ms,
+                exit_code=1,
+                error_message=state.error_message,
+                run_ctx=ctx,
+                mode=mode,
+            )
+        else:
+            log_command_success(
+                command,
+                args,
+                duration_ms=duration_ms,
+                exit_code=0,
+                run_ctx=ctx,
+                mode=mode,
+            )

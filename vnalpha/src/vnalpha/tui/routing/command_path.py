@@ -36,7 +36,7 @@ class CommandPath:
                 )
                 router._set_status_error("CommandExecutor unavailable")
                 return
-            with command_lifecycle("tui research command", raw):
+            with command_lifecycle("tui research command", raw) as lifecycle:
                 executor = router._command_executor
                 execute = executor.execute
                 session_id = getattr(router._chat_controller, "_chat_session_id", None)
@@ -46,6 +46,9 @@ class CommandPath:
                 ):
                     execute = partial(execute, session_scope_id=session_id)
                 result = await anyio.to_thread.run_sync(execute, raw)
+                result_status = getattr(result.status, "value", result.status)
+                if result_status in {"FAILED", "VALIDATION_ERROR"}:
+                    lifecycle.mark_failed(result.summary)
             router._output.show_command_result(raw, self.result_to_markup(result))
             router._output.register_command_result(raw, result)
             workspace_changed = router._refresh_workspace_after_context_command(
