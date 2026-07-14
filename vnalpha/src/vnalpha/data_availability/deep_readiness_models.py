@@ -105,6 +105,11 @@ class ReadinessArtifact:
     breadth_eligible_count: int | None = None
     breadth_excluded_count: int | None = None
     breadth_coverage: float | None = None
+    ranked_sector_count: int | None = None
+    member_count: int | None = None
+    eligible_count: int | None = None
+    excluded_count: int | None = None
+    metadata_coverage: float | None = None
     classified_count: int | None = None
     unclassified_count: int | None = None
     rank: int | None = None
@@ -190,6 +195,11 @@ class ReadinessResult:
                     "breadth_eligible_count": artifact.breadth_eligible_count,
                     "breadth_excluded_count": artifact.breadth_excluded_count,
                     "breadth_coverage": artifact.breadth_coverage,
+                    "ranked_sector_count": artifact.ranked_sector_count,
+                    "member_count": artifact.member_count,
+                    "eligible_count": artifact.eligible_count,
+                    "excluded_count": artifact.excluded_count,
+                    "metadata_coverage": artifact.metadata_coverage,
                     "classified_count": artifact.classified_count,
                     "unclassified_count": artifact.unclassified_count,
                     "rank": artifact.rank,
