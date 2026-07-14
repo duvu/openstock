@@ -294,7 +294,7 @@ def _build_scenario_plan(entities: dict) -> AssistantPlan:
             _step(
                 "scenario.generate_research_plan",
                 _date_args(entities, symbol=symbol),
-                "Build conditional confirmation, neutral, and invalidation research scenarios",
+                "Build conditional base, confirmation, failed-confirmation, and low-quality-drift research scenarios",
                 "READ_SCORE",
             )
         ],

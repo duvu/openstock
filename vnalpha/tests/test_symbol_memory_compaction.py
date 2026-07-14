@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 import duckdb
 import pytest
 
+from vnalpha.symbol_memory import safe_files
 from vnalpha.symbol_memory.compaction import SymbolMemoryCompactionService
 from vnalpha.symbol_memory.markdown import parse_symbol_card
 from vnalpha.symbol_memory.models import ClaimOrigin, ClaimStatus, MemoryClaim
@@ -105,3 +106,40 @@ def test_compaction_rolls_back_the_card_when_document_indexing_fails(
 
     assert repository.get_document("FPT") is None
     assert not (tmp_path / "knowledge/symbols/FPT.md").exists()
+
+
+def test_compaction_blocks_indexed_write_when_symbol_directory_is_detached(
+    tmp_path, monkeypatch
+) -> None:
+    repository = _repository()
+    repository.create_claim(_claim("active"))
+    service = SymbolMemoryCompactionService(repository, tmp_path)
+    original_replace = safe_files.os.replace
+
+    def replace(source: str, destination: str) -> None:
+        if str(destination).endswith("FPT.md"):
+            source_path = safe_files.Path(source)
+            symbols_dir = tmp_path / "knowledge" / "symbols"
+            detached_dir = tmp_path / "knowledge" / "symbols-detached"
+            if detached_dir.exists():
+                for item in detached_dir.iterdir():
+                    item.unlink()
+                detached_dir.rmdir()
+            symbols_dir.rename(detached_dir)
+            symbols_dir.mkdir(parents=True, exist_ok=True)
+            return original_replace(
+                detached_dir / source_path.name,
+                detached_dir / "FPT.md",
+            )
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(safe_files.os, "replace", replace)
+
+    with pytest.raises(
+        OSError, match="Knowledge directory identity changed during write."
+    ):
+        service.compact("FPT")
+
+    assert repository.get_document("FPT") is None
+    assert not (tmp_path / "knowledge/symbols/FPT.md").exists()
+    assert not (tmp_path / "knowledge/symbols-detached/FPT.md").exists()

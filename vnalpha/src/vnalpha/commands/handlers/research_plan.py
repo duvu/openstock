@@ -71,6 +71,7 @@ def _scenario_panels(data: dict[str, Any] | None) -> list[ResultPanel]:
         if isinstance(data.get("risk_reward_context"), dict)
         else {}
     )
+    risk_reward_estimate = data.get("risk_reward_estimate")
     checklist = data.get("checklist") if isinstance(data.get("checklist"), list) else []
     return [
         ResultPanel(
@@ -102,6 +103,8 @@ def _scenario_panels(data: dict[str, Any] | None) -> list[ResultPanel]:
                 "reward_distance": format_number(risk_reward.get("reward_distance")),
                 "risk_distance": format_number(risk_reward.get("risk_distance")),
                 "basis": risk_reward.get("basis"),
+                "estimate": risk_reward_estimate or "—",
+                "confidence": format_number(data.get("confidence")),
                 "checklist": "; ".join(str(item) for item in checklist) or "—",
             },
         ),
@@ -117,6 +120,9 @@ def _scenario_tables(data: dict[str, Any] | None) -> list[ResultTable]:
             item.get("name", ""),
             "; ".join(str(condition) for condition in item.get("conditions") or []),
             item.get("interpretation", ""),
+            item.get("evidence_to_watch", ""),
+            item.get("risk_context", ""),
+            item.get("caveat", ""),
         ]
         for item in scenarios
         if isinstance(item, dict)
@@ -130,6 +136,9 @@ def _scenario_tables(data: dict[str, Any] | None) -> list[ResultTable]:
                 ResultColumn("name", "Branch"),
                 ResultColumn("conditions", "Conditions"),
                 ResultColumn("interpretation", "Interpretation"),
+                ResultColumn("evidence_to_watch", "Evidence to watch"),
+                ResultColumn("risk_context", "Risk context"),
+                ResultColumn("caveat", "Caveat"),
             ],
             rows=rows,
         )

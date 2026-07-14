@@ -10,12 +10,16 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from datetime import date as calendar_date
 from typing import Any
 
 import duckdb
 
 from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.normalizers import normalize_date, normalize_symbol
+from vnalpha.research_models import ResearchModelsRepository
+from vnalpha.research_models.scenario_plan import ScenarioPlanBuilder
+from vnalpha.research_models.scenario_policy import validate_research_scenario_payload
 from vnalpha.tools.artifact_references import ArtifactReferenceBuilder
 from vnalpha.tools.errors import ToolExecutionError
 from vnalpha.tools.models import ToolOutput
@@ -30,8 +34,7 @@ from vnalpha.warehouse.repositories import (
 )
 
 _RESEARCH_ONLY_CAVEAT = (
-    "Research-only conditional context; this is not a recommendation or an "
-    "instruction to place an order."
+    "Research-only conditional context; this is not a recommendation."
 )
 
 
@@ -429,105 +432,31 @@ def generate_research_scenario(
     candidate = analysis.get("candidate") or {}
     feature = analysis.get("feature_context") or {}
     levels = analysis.get("levels") or {}
-    latest_close = levels.get("latest_close") or feature.get("close")
-    support = levels.get("support_20d")
-    resistance = levels.get("resistance_20d")
-    ma20 = feature.get("ma20")
-    ma50 = feature.get("ma50")
-    atr14 = feature.get("atr14")
-    reward_distance = (
-        float(resistance) - float(latest_close)
-        if _is_number(resistance) and _is_number(latest_close)
-        else None
+    setup_type = str(candidate.get("setup_type") or "UNCLASSIFIED")
+    evidence_output = get_setup_history(conn, setup_type=setup_type, date=target_date)
+    evidence_data = _tool_data(evidence_output)
+    as_of_date = calendar_date.fromisoformat(str(target_date))
+    build = ScenarioPlanBuilder().build(
+        symbol=normalized_symbol,
+        as_of_date=as_of_date,
+        candidate=candidate,
+        feature=feature,
+        levels=levels,
+        quality=analysis.get("quality") or {},
+        artifact_refs=analysis.get("artifact_refs") or [],
+        freshness=analysis.get("freshness") or {},
+        analysis_caveats=[*_tool_warnings(analysis_output), _RESEARCH_ONLY_CAVEAT],
+        missing_data=analysis.get("missing_data") or [],
+        setup_evidence=evidence_data,
+        setup_evidence_caveats=_tool_warnings(evidence_output),
     )
-    risk_distance = (
-        float(latest_close) - float(support)
-        if _is_number(support) and _is_number(latest_close)
-        else None
-    )
-    reward_risk = (
-        round(reward_distance / risk_distance, 4)
-        if reward_distance is not None
-        and risk_distance is not None
-        and reward_distance > 0
-        and risk_distance > 0
-        else None
-    )
-    confirmation_conditions = [
-        _condition("price_above_ma20", latest_close, ma20, operator=">="),
-        _condition("price_tests_resistance", latest_close, resistance, operator=">="),
-        "Persisted volume and market context should remain consistent with the setup evidence.",
-    ]
-    invalidation_conditions = [
-        _condition("price_below_support", latest_close, support, operator="<"),
-        _condition("price_below_ma50", latest_close, ma50, operator="<"),
-        "A material deterioration in persisted market/sector quality invalidates the research thesis.",
-    ]
-    confirmation_conditions = [item for item in confirmation_conditions if item]
-    invalidation_conditions = [item for item in invalidation_conditions if item]
-    caveats = list(
-        dict.fromkeys([*_tool_warnings(analysis_output), _RESEARCH_ONLY_CAVEAT])
-    )
-    data = {
-        "tool": "scenario.generate_research_plan",
-        "available": True,
-        "symbol": normalized_symbol,
-        "as_of_date": target_date,
-        "current_setup": {
-            "candidate_class": candidate.get("candidate_class"),
-            "setup_type": candidate.get("setup_type"),
-            "score": candidate.get("score"),
-            "risk_flags": candidate.get("risk_flags_json", []),
-        },
-        "key_levels": {
-            "latest_close": latest_close,
-            "support_20d": support,
-            "resistance_20d": resistance,
-            "ma20": ma20,
-            "ma50": ma50,
-            "atr14": atr14,
-        },
-        "scenarios": [
-            {
-                "name": "confirmation",
-                "conditions": confirmation_conditions,
-                "interpretation": "The persisted setup remains valid for further research review.",
-            },
-            {
-                "name": "neutral",
-                "conditions": [
-                    "Confirmation conditions are not met and invalidation is not triggered."
-                ],
-                "interpretation": "Maintain observation status; no execution conclusion is produced.",
-            },
-            {
-                "name": "invalidation",
-                "conditions": invalidation_conditions,
-                "interpretation": "The persisted setup thesis is no longer supported by current artifacts.",
-            },
-        ],
-        "risk_reward_context": {
-            "risk_distance": round(risk_distance, 6)
-            if risk_distance is not None
-            else None,
-            "reward_distance": round(reward_distance, 6)
-            if reward_distance is not None
-            else None,
-            "reward_risk_ratio": reward_risk,
-            "basis": "20-session persisted support/resistance distance; descriptive only",
-        },
-        "checklist": [
-            "Confirm data freshness and quality before relying on the scenario.",
-            "Review market regime and sector alignment caveats.",
-            "Re-run the scenario after material price or data changes.",
-        ],
-        "artifact_refs": analysis.get("artifact_refs", []),
-        "freshness": analysis.get("freshness", {}),
-        "lineage": analysis.get("lineage", {}),
-        "missing_data": analysis.get("missing_data", []),
-        "caveats": caveats,
-        "policy": {"mode": "research_only", "disclaimer": _RESEARCH_ONLY_CAVEAT},
-    }
+    validate_research_scenario_payload(build.payload)
+    repository = ResearchModelsRepository(conn)
+    repository.create_symbol_level_snapshot(build.level_snapshot)
+    repository.create_setup_evidence_snapshot(build.setup_evidence_snapshot)
+    repository.create_research_scenario_plan(build.scenario_plan)
+    data = build.payload
+    caveats = list(data["caveats"])
     return ToolOutput(
         data=data,
         summary=f"Generated a conditional research scenario for {normalized_symbol} as of {target_date}.",

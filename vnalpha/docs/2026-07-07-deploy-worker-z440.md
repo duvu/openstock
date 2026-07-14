@@ -84,8 +84,8 @@ $VENV/bin/pip show vnalpha
 VNSTOCK_SERVICE_URL=http://127.0.0.1:6900
 VNALPHA_WAREHOUSE_PATH=~/.local/share/vnalpha/warehouse.duckdb
 VNALPHA_UNIVERSE=VN30
-VNALPHA_LLM_ENDPOINT=https://lite.x51.vn/v1/chat/completions
-VNALPHA_LLM_MODEL=oc-gpt-5.4-mini
+VNALPHA_LLM_ENDPOINT=http://127.0.0.1:7071/v1/chat/completions
+VNALPHA_LLM_MODEL=provider/default-model
 VNALPHA_LLM_API_KEY=<redacted>
 VNALPHA_LLM_TIMEOUT=30
 VNALPHA_LLM_MAX_OUTPUT_TOKENS=16000
@@ -193,7 +193,7 @@ curl -s http://127.0.0.1:6900/v1/providers || echo "vnstock-service not reachabl
 
 ```
 Overall: SUCCESS
-LLM gateway (lite.x51.vn): ✅ reachable, responds correctly
+LLM gateway (ya-router @ http://127.0.0.1:7071/v1/chat/completions): ✅ reachable, responds correctly
 Warehouse init: ✅
 CLI commands: ✅ all 9 commands available
 Data ingestion: ⚠️ not run yet — see Issue 1

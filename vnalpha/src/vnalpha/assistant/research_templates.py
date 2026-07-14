@@ -84,8 +84,19 @@ RESEARCH_TEMPLATES: Final[dict[str, ResearchTemplate]] = {
         missing_data_rule="State when no eligible persisted candidates exist.",
     ),
     "generate_research_scenario": ResearchTemplate(
-        required_fields=("current_setup", "key_levels", "scenarios", "checklist"),
-        allowed_wording=("confirmation", "neutral", "invalidation", "conditional"),
+        required_fields=(
+            "current_setup",
+            "key_levels",
+            "scenarios",
+            "checklist",
+        ),
+        allowed_wording=(
+            "base case",
+            "confirmation",
+            "failed confirmation",
+            "low quality drift",
+            "conditional",
+        ),
         required_caveats=("not a recommendation", "data freshness", "research-only"),
         missing_data_rule=(
             "State when levels or prerequisite artifacts are unavailable."
@@ -236,8 +247,8 @@ def _summary_for_intent(intent: str, payloads: list[dict[str, Any]]) -> str:
     if intent == "generate_research_scenario":
         return (
             f"Conditional research scenario for {primary.get('symbol', 'the symbol')} "
-            f"as of {primary.get('as_of_date') or 'unknown'} includes confirmation, "
-            "neutral, and invalidation states."
+            f"as of {primary.get('as_of_date') or 'unknown'} includes base, "
+            "confirmation, failed-confirmation, and low-quality-drift branches."
         )
     if intent == "review_setup_evidence":
         evidence = primary.get("evidence") or {}

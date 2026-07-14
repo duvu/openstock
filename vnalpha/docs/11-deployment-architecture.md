@@ -157,8 +157,8 @@ Deployment form: external or internal OpenAI-compatible endpoint.
 Configuration should be provided through `/etc/vnalpha/vnalpha.env`:
 
 ```bash
-VNALPHA_LLM_ENDPOINT=http://127.0.0.1:4000/v1/chat/completions
-VNALPHA_LLM_MODEL=oc-gpt-5.4-mini
+VNALPHA_LLM_ENDPOINT=http://ya-router:7071/v1/chat/completions
+VNALPHA_LLM_MODEL=provider/default-model
 VNALPHA_LLM_API_KEY=
 VNALPHA_LLM_STORE_RAW=false
 ```
@@ -269,9 +269,9 @@ VNSTOCK_SERVICE_URL=http://127.0.0.1:6900
 VNALPHA_WAREHOUSE_PATH=/var/lib/openstock/warehouse/warehouse.duckdb
 VNALPHA_LOG_LEVEL=INFO
 
-# Optional internal LLM gateway
-VNALPHA_LLM_ENDPOINT=http://127.0.0.1:4000/v1/chat/completions
-VNALPHA_LLM_MODEL=oc-gpt-5.4-mini
+# Optional internal LLM gateway (ya-router deployed with Docker)
+VNALPHA_LLM_ENDPOINT=http://ya-router:7071/v1/chat/completions
+VNALPHA_LLM_MODEL=provider/default-model
 VNALPHA_LLM_API_KEY=
 VNALPHA_LLM_STORE_RAW=false
 
