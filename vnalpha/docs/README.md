@@ -26,6 +26,7 @@ The documentation is organized around the main engineering concerns:
 9. **Workspace service design** — service API, workspace modules, UI/API/agent boundaries.
 10. **Phased roadmap** — the end-to-end phase plan from workspace foundation to ML ranking.
 11. **Deployment architecture** — Docker data platform, DuckDB warehouse, and Debian terminal app deployment.
+12. **Implementation failure playbook** — recurring defects and the mandatory checklist for implementation and closure.
 
 ## Key documents
 
@@ -40,6 +41,7 @@ The documentation is organized around the main engineering concerns:
 - [Workspace service design](09-workspace-service-design.md)
 - [Phased roadmap](10-roadmap-phases.md)
 - [Deployment architecture](11-deployment-architecture.md)
+- [Common implementation failures and prevention checklist](common-implementation-failures.md)
 - [Sandboxed compute](sandbox-compute.md)
 - [Research automation](research-automation.md)
 - [Research answer evaluation fixtures](research-answer-evaluation.md)
