@@ -22,6 +22,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
 
+import duckdb
+
 if TYPE_CHECKING:
     import duckdb
 
@@ -36,7 +38,10 @@ def _today_vn() -> str:
 
 def _latest_research_date(conn: "duckdb.DuckDBPyConnection") -> Optional[str]:
     """Return the latest date present in daily_watchlist, or None if empty."""
-    row = conn.execute("SELECT MAX(date)::VARCHAR FROM daily_watchlist").fetchone()
+    try:
+        row = conn.execute("SELECT MAX(date)::VARCHAR FROM daily_watchlist").fetchone()
+    except duckdb.CatalogException:
+        return None
     if row and row[0]:
         return row[0]
     return None

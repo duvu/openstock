@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shlex
+
 import duckdb
 import pytest
 
@@ -17,12 +19,23 @@ from vnalpha.data_availability.deep_readiness import (
     ReadinessArtifact,
     ReadinessArtifactStatus,
     ReadinessResult,
+    RemediationAction,
+    RemediationStep,
 )
 from vnalpha.data_availability.models import (
+    ArtifactEvidence,
+    DataArtifact,
     EnsureDataAction,
     EnsureDataResult,
     EnsureDataStatus,
+    EvidenceIssue,
 )
+from vnalpha.data_availability.planner import (
+    capture_availability_snapshot,
+    compute_lookback_start,
+)
+from vnalpha.data_availability.policy import DEFAULT_POLICY
+from vnalpha.observability.context import get_correlation_id
 from vnalpha.warehouse.migrations import run_migrations
 
 
@@ -30,20 +43,28 @@ def _ensure_result(
     *,
     status: EnsureDataStatus,
     actions: list[EnsureDataAction],
+    symbol: str = "FPT",
     canonical_bars: int = 120,
+    benchmark_bars: int = 120,
     features: bool = True,
     score: bool = True,
     warnings: list[str] | None = None,
     cache_rejection_reasons: list[str] | None = None,
+    core_evidence_evaluated: bool = True,
+    failure_code: str | None = None,
 ) -> EnsureDataResult:
     return EnsureDataResult(
-        symbol="FPT",
+        symbol=symbol,
         target_date="2026-07-10",
         status=status,
         actions_taken=actions,
         canonical_bars=canonical_bars,
+        benchmark_bars=benchmark_bars,
         feature_snapshot_exists=features,
         candidate_score_exists=score,
+        symbol_known=True,
+        core_evidence_evaluated=core_evidence_evaluated,
+        failure_code=failure_code,
         freshness="cache_hit",
         warnings=warnings or [],
         cache_rejection_reasons=cache_rejection_reasons or [],
@@ -134,7 +155,409 @@ def test_readiness_identifies_missing_core_artifact_and_remediation() -> None:
     )
     assert result.is_ready is False
     assert canonical.status is ReadinessArtifactStatus.FAILED
-    assert canonical.remediation == "vnalpha data download ohlcv FPT"
+    assert canonical.remediation == (
+        "vnalpha sync ohlcv --symbols FPT "
+        f"--start {compute_lookback_start('2026-07-10', DEFAULT_POLICY.lookback_days)} "
+        "--end 2026-07-10"
+    )
+
+
+def test_readiness_reports_typed_artifact_evidence_and_ordered_legacy_repair() -> None:
+    # Given: canonical data remains missing after the bounded ensure path.
+    service = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, _date: _ensure_result(
+            status=EnsureDataStatus.PARTIAL,
+            actions=[],
+            canonical_bars=0,
+            features=False,
+            score=False,
+        )
+    )
+
+    # When: deep-analysis readiness is rendered.
+    result = service.ensure_ready(
+        DeepAnalysisReadinessRequest(duckdb.connect(), "FPT", "2026-07-10")
+    )
+
+    # Then: canonical evidence is artifact-specific and repair is executable today.
+    canonical = next(
+        artifact for artifact in result.artifacts if artifact.name == "canonical_ohlcv"
+    )
+    assert canonical.available is False
+    assert canonical.row_count == 0
+    assert [step.command for step in canonical.remediation_steps] == [
+        (
+            "vnalpha sync ohlcv --symbols FPT "
+            f"--start {compute_lookback_start('2026-07-10', DEFAULT_POLICY.lookback_days)} "
+            "--end 2026-07-10"
+        ),
+        "vnalpha build canonical --symbol FPT",
+    ]
+
+
+def test_readiness_renders_independent_typed_provenance_for_each_artifact() -> None:
+    # Given: the ensure result carries warehouse evidence, not parsed warning text.
+    result = _ensure_result(
+        status=EnsureDataStatus.PARTIAL,
+        actions=[],
+        cache_rejection_reasons=[],
+    )
+    result.artifact_evidence = (
+        ArtifactEvidence(
+            artifact=DataArtifact.CANONICAL_OHLCV,
+            available=True,
+            row_count=120,
+            observed_as_of_date="2026-07-10",
+            quality_status="pass",
+            provider="VCI",
+            ingestion_run_id="ing-canonical",
+            lineage_fields=frozenset({"source_service_run_id"}),
+        ),
+        ArtifactEvidence(
+            artifact=DataArtifact.FEATURE_SNAPSHOT,
+            available=True,
+            observed_as_of_date="2026-07-10",
+            row_count=120,
+            quality_status="complete",
+            provider="VCI",
+            ingestion_run_id="ing-feature",
+            generated_at="2026-07-10 15:30:00+07:00",
+            methodology_version="features-v1",
+            lineage_fields=frozenset({"ingestion_run_id", "selected_provider"}),
+        ),
+        ArtifactEvidence(
+            artifact=DataArtifact.CANDIDATE_SCORE,
+            available=True,
+            observed_as_of_date="2026-07-10",
+            row_count=1,
+            quality_status="pass",
+            provider="VCI",
+            ingestion_run_id="ing-score",
+            methodology_version="features-v1",
+            lineage_fields=frozenset({"scoring_version"}),
+            issues=(EvidenceIssue.QUALITY_UNACCEPTABLE,),
+        ),
+    )
+
+    readiness = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, _date: result
+    ).ensure_ready(DeepAnalysisReadinessRequest(duckdb.connect(), "FPT", "2026-07-10"))
+
+    artifacts = {artifact.name: artifact for artifact in readiness.artifacts}
+    canonical = artifacts["canonical_ohlcv"]
+    feature = artifacts["feature_snapshot"]
+    score = artifacts["candidate_score"]
+    assert canonical.provider == "VCI"
+    assert canonical.ingestion_run_id == "ing-canonical"
+    assert feature.generated_at == "2026-07-10 15:30:00+07:00"
+    assert feature.methodology_version == "features-v1"
+    assert score.status is ReadinessArtifactStatus.FAILED
+    assert score.error_code == "QUALITY_UNACCEPTABLE"
+
+
+def test_snapshot_collects_per_artifact_provenance_from_the_warehouse() -> None:
+    # Given: each core artifact is persisted with independent provenance fields.
+    conn = duckdb.connect()
+    run_migrations(conn=conn)
+    conn.execute(
+        """
+        INSERT INTO symbol_master (symbol, exchange, name, sector, industry, last_seen_at)
+        VALUES ('FPT', 'HOSE', 'FPT Corp', 'Technology', 'Software', current_timestamp)
+        """
+    )
+    for symbol, run_id in (("FPT", "ing-fpt"), ("VNINDEX", "ing-index")):
+        conn.execute(
+            """
+            INSERT INTO canonical_ohlcv (
+                symbol, time, interval, close, selected_provider,
+                quality_status, ingestion_run_id, source_service_run_id
+            )
+            SELECT ?, DATE '2026-03-13' + CAST(value AS INTEGER), '1D', 100.0,
+                   'VCI', 'pass', ?, 'service-run'
+            FROM range(120) AS days(value)
+            """,
+            [symbol, run_id],
+        )
+    lineage = (
+        '{"as_of_bar_date":"2026-07-10","scoring_version":"score-v1",'
+        '"feature_build_version":"features-v1","selected_provider":"VCI",'
+        '"ingestion_run_id":"ing-fpt"}'
+    )
+    conn.execute(
+        """
+        INSERT INTO feature_snapshot (
+            symbol, date, as_of_bar_date, benchmark_as_of_bar_date, source_row_count,
+            benchmark_row_count, feature_data_status,
+            feature_build_version, feature_generated_at, lineage_json
+        ) VALUES ('FPT', '2026-07-10', '2026-07-10', '2026-07-10', 120, 120, 'complete',
+                  'features-v1', current_timestamp, ?)
+        """,
+        [lineage],
+    )
+    conn.execute(
+        """
+        INSERT INTO candidate_score (symbol, date, score, candidate_class, lineage_json)
+        VALUES ('FPT', '2026-07-10', 1.0, 'A', ?)
+        """,
+        [lineage],
+    )
+
+    snapshot = capture_availability_snapshot(conn, "FPT", "2026-07-10", DEFAULT_POLICY)
+
+    evidence = {item.artifact: item for item in snapshot.artifact_evidence}
+    symbol = evidence[DataArtifact.SYMBOL_MASTER]
+    canonical = evidence[DataArtifact.CANONICAL_OHLCV]
+    feature = evidence[DataArtifact.FEATURE_SNAPSHOT]
+    score = evidence[DataArtifact.CANDIDATE_SCORE]
+    assert canonical.provider == "VCI"
+    assert canonical.ingestion_run_id == "ing-fpt"
+    assert canonical.required_row_count == DEFAULT_POLICY.min_required_bars
+    assert canonical.window_start_date == "2026-03-13"
+    assert symbol.source_symbol == "FPT"
+    assert dict(symbol.symbol_metadata)["exchange"] == "HOSE"
+    assert feature.generated_at is not None
+    assert feature.methodology_version == "features-v1"
+    assert feature.benchmark_as_of_date == "2026-07-10"
+    assert feature.benchmark_row_count == 120
+    assert score.provider == "VCI"
+    assert score.feature_build_version == "features-v1"
+    assert score.scoring_version == "score-v1"
+    assert score.issues == ()
+
+
+def test_missing_symbol_retains_typed_snapshot_evidence(tmp_path) -> None:
+    conn = duckdb.connect()
+    run_migrations(conn=conn)
+    from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
+
+    readiness = DeepAnalysisReadinessService(
+        ensure=lambda connection, symbol, target_date: ensure_symbol_analysis_ready(
+            connection,
+            symbol,
+            target_date,
+            policy=DEFAULT_POLICY.__class__(auto_sync=False),
+            _lock_dir=tmp_path,
+        )
+    ).ensure_ready(DeepAnalysisReadinessRequest(conn, "MISSING", "2026-07-10"))
+
+    artifacts = {artifact.name: artifact for artifact in readiness.artifacts}
+    assert artifacts["symbol_master"].available is False
+    assert artifacts["canonical_ohlcv"].row_count == 0
+    assert artifacts["benchmark_ohlcv"].available is False
+    assert artifacts["feature_snapshot"].freshness == "missing"
+    assert all(
+        artifact.error_code != "CORE_EVIDENCE_UNAVAILABLE"
+        for artifact in readiness.artifacts
+    )
+
+
+def test_stale_score_evidence_renders_stale_freshness() -> None:
+    conn = duckdb.connect()
+    run_migrations(conn=conn)
+    conn.execute(
+        """
+        INSERT INTO candidate_score (symbol, date, score, candidate_class, lineage_json)
+        VALUES ('FPT', '2026-07-10', 1.0, 'A',
+                '{"as_of_bar_date":"2026-06-01"}')
+        """
+    )
+
+    snapshot = capture_availability_snapshot(conn, "FPT", "2026-07-10", DEFAULT_POLICY)
+
+    score = next(
+        item
+        for item in snapshot.artifact_evidence
+        if item.artifact is DataArtifact.CANDIDATE_SCORE
+    )
+    assert score.freshness == "stale"
+    assert EvidenceIssue.SCORE_STALE in score.issues
+
+
+def test_readiness_audits_start_and_sets_correlation_before_ensure(monkeypatch) -> None:
+    # Given: an audit sink and an ensure function that observes its invocation.
+    events = []
+    monkeypatch.setattr(
+        "vnalpha.data_availability.deep_readiness_audit.log_audit",
+        lambda event_type, summary, **kwargs: events.append(
+            {"event_type": event_type, "summary": summary, **kwargs}
+        ),
+    )
+
+    def ensure(_conn, _symbol, _date):
+        assert events[0]["event_type"] == "DEEP_ANALYSIS_READINESS_STARTED"
+        assert get_correlation_id() == events[0]["extra"]["correlation_id"]
+        return _ensure_result(
+            status=EnsureDataStatus.READY,
+            actions=[EnsureDataAction.CACHE_HIT],
+        )
+
+    # When: readiness runs.
+    result = DeepAnalysisReadinessService(ensure=ensure).ensure_ready(
+        DeepAnalysisReadinessRequest(duckdb.connect(), "FPT", "2026-07-10")
+    )
+
+    # Then: the observed correlation is the result correlation.
+    assert result.correlation_id == events[0]["extra"]["correlation_id"]
+
+
+def test_readiness_resolves_one_effective_date_before_ensure(monkeypatch) -> None:
+    observed_dates: list[str] = []
+    monkeypatch.setattr(
+        "vnalpha.data_availability.deep_readiness_service.resolve_date",
+        lambda _value, conn: "2026-07-10",
+    )
+    service = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, date: (
+            observed_dates.append(date)
+            or _ensure_result(
+                status=EnsureDataStatus.READY,
+                actions=[EnsureDataAction.CACHE_HIT],
+            )
+        )
+    )
+
+    result = service.ensure_ready(
+        DeepAnalysisReadinessRequest(duckdb.connect(), "FPT", None)
+    )
+
+    assert observed_dates == ["2026-07-10"]
+    assert result.requested_date is None
+    assert result.resolved_date == "2026-07-10"
+
+
+def test_readiness_uses_market_date_when_the_warehouse_is_uninitialized() -> None:
+    observed_dates: list[str] = []
+    service = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, date: (
+            observed_dates.append(date)
+            or _ensure_result(
+                status=EnsureDataStatus.READY,
+                actions=[EnsureDataAction.CACHE_HIT],
+            )
+        )
+    )
+
+    result = service.ensure_ready(
+        DeepAnalysisReadinessRequest(duckdb.connect(), "FPT", None)
+    )
+
+    assert observed_dates == [result.resolved_date]
+    assert len(result.resolved_date) == 10
+
+
+def test_readiness_sanitizes_raw_action_failure_details() -> None:
+    result = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, _date: _ensure_result(
+            status=EnsureDataStatus.PARTIAL,
+            actions=[],
+            canonical_bars=0,
+            features=False,
+            score=False,
+            warnings=["Canonical build failed: provider secret-token"],
+        )
+    ).ensure_ready(DeepAnalysisReadinessRequest(duckdb.connect(), "FPT", "2026-07-10"))
+
+    assert result.is_ready is False
+    assert result.warnings == ("Canonical build failed during readiness.",)
+    assert "secret-token" not in result.failure_summary()
+
+
+def test_readiness_quotes_symbol_in_copyable_remediation_commands() -> None:
+    symbol = "FPT; touch /tmp/not-executed"
+    result = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, _date: _ensure_result(
+            status=EnsureDataStatus.PARTIAL,
+            actions=[],
+            canonical_bars=0,
+            features=False,
+            score=False,
+            symbol=symbol.upper(),
+        )
+    ).ensure_ready(DeepAnalysisReadinessRequest(duckdb.connect(), symbol, "2026-07-10"))
+
+    canonical = next(
+        artifact for artifact in result.artifacts if artifact.name == "canonical_ohlcv"
+    )
+    command = canonical.remediation_steps[0].command
+    assert shlex.split(command)[4] == symbol.upper()
+    assert "'FPT; TOUCH /TMP/NOT-EXECUTED'" in command
+
+
+def test_readiness_converts_unexpected_ensure_failure_to_sanitized_result() -> None:
+    # Given: the underlying ensure path raises an unexpected runtime error.
+    service = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, _date: (_ for _ in ()).throw(
+            RuntimeError("provider response included secret-token")
+        )
+    )
+
+    # When: readiness runs.
+    result = service.ensure_ready(
+        DeepAnalysisReadinessRequest(duckdb.connect(), "FPT", "2026-07-10")
+    )
+
+    # Then: deep analysis remains blocked without exposing the underlying message.
+    assert result.is_ready is False
+    assert result.failure_summary() == "Core data readiness could not be evaluated."
+
+
+def test_assistant_error_renders_every_ordered_remediation_step(monkeypatch) -> None:
+    readiness = ReadinessResult(
+        symbol="FPT",
+        requested_date="2026-07-10",
+        resolved_date="2026-07-10",
+        artifacts=(
+            ReadinessArtifact(
+                name="canonical_ohlcv",
+                status=ReadinessArtifactStatus.FAILED,
+                actions=(),
+                freshness="missing",
+                lineage=(),
+                error="Required canonical_ohlcv is unavailable.",
+                remediation=None,
+                remediation_steps=(
+                    RemediationStep(
+                        action=RemediationAction.SYNC_OHLCV,
+                        artifact="canonical_ohlcv",
+                        command_surface="cli",
+                        command="vnalpha sync ohlcv --symbols FPT --start 2025-05-16 --end 2026-07-10",
+                        description="Download the required symbol OHLCV window.",
+                        required=True,
+                    ),
+                    RemediationStep(
+                        action=RemediationAction.BUILD_CANONICAL,
+                        artifact="canonical_ohlcv",
+                        command_surface="cli",
+                        command="vnalpha build canonical --symbol FPT",
+                        description="Build canonical OHLCV from downloaded bars.",
+                        required=True,
+                    ),
+                ),
+            ),
+        ),
+        actions=(),
+        warnings=(),
+        errors=("Required canonical_ohlcv is unavailable.",),
+        correlation_id="test-remediation",
+    )
+    monkeypatch.setattr(
+        assistant_executor,
+        "ensure_deep_analysis_ready",
+        lambda _conn, _symbol, _date: readiness,
+    )
+    step = ToolPlanStep(
+        step_id="step_1",
+        tool_name="analysis.deep_symbol",
+        arguments={"symbol": "FPT", "date": "2026-07-10"},
+        purpose="Read deep symbol research.",
+        required_permission="READ_SCORE",
+    )
+
+    with pytest.raises(ToolExecutionError) as error:
+        assistant_executor._ensure_data_for_step(duckdb.connect(), step)
+
+    assert "Remediation: vnalpha sync ohlcv" in str(error.value)
+    assert "vnalpha build canonical --symbol FPT" in str(error.value)
 
 
 def test_readiness_fails_closed_during_ensure_lock_contention() -> None:
@@ -147,6 +570,8 @@ def test_readiness_fails_closed_during_ensure_lock_contention() -> None:
             features=False,
             score=False,
             warnings=["Another ensure flow is active for FPT/2026-07-10. Skipping."],
+            core_evidence_evaluated=False,
+            failure_code="LOCK_CONTENDED",
         )
     )
 
@@ -155,22 +580,33 @@ def test_readiness_fails_closed_during_ensure_lock_contention() -> None:
     )
 
     assert result.is_ready is False
-    assert "Another ensure flow is active" in result.failure_summary()
+    assert "lock_contended" in result.failure_summary()
     assert all(
         artifact.status is ReadinessArtifactStatus.FAILED
         for artifact in result.artifacts
     )
+    assert all(artifact.available is False for artifact in result.artifacts)
+    assert all(artifact.freshness == "unknown" for artifact in result.artifacts)
 
 
 def test_readiness_attributes_quality_rejection_to_candidate_score() -> None:
     # Given: persisted score data exists, but its quality contract rejects it.
     conn = duckdb.connect()
+    ensure_result = _ensure_result(
+        status=EnsureDataStatus.PARTIAL,
+        actions=[],
+    )
+    ensure_result.artifact_evidence = (
+        ArtifactEvidence(
+            artifact=DataArtifact.CANDIDATE_SCORE,
+            available=True,
+            observed_as_of_date="2026-07-10",
+            quality_status="fail",
+            issues=(EvidenceIssue.QUALITY_UNACCEPTABLE,),
+        ),
+    )
     service = DeepAnalysisReadinessService(
-        ensure=lambda _conn, _symbol, _date: _ensure_result(
-            status=EnsureDataStatus.PARTIAL,
-            actions=[],
-            cache_rejection_reasons=["quality_unacceptable"],
-        )
+        ensure=lambda _conn, _symbol, _date: ensure_result
     )
 
     # When: deep-analysis readiness renders its per-artifact evidence.
@@ -397,7 +833,7 @@ def test_tui_command_path_renders_blocked_readiness_without_calling_tool(
 def test_readiness_emits_correlated_audit_lifecycle(monkeypatch) -> None:
     events: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "vnalpha.data_availability.deep_readiness.log_audit",
+        "vnalpha.data_availability.deep_readiness_audit.log_audit",
         lambda event_type, summary, **kwargs: events.append(
             {"event_type": event_type, "summary": summary, **kwargs}
         ),
@@ -430,7 +866,7 @@ def test_readiness_emits_correlated_audit_lifecycle(monkeypatch) -> None:
 def test_readiness_emits_correlated_failure_audit(monkeypatch) -> None:
     events: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "vnalpha.data_availability.deep_readiness.log_audit",
+        "vnalpha.data_availability.deep_readiness_audit.log_audit",
         lambda event_type, summary, **kwargs: events.append(
             {"event_type": event_type, "summary": summary, **kwargs}
         ),

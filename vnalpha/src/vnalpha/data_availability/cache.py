@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date as DateType
 from typing import Protocol
 
-from vnalpha.data_availability.models import CacheEligibility
+from vnalpha.data_availability.models import CacheEligibility, EvidenceIssue
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
 
 
@@ -44,31 +44,32 @@ def evaluate_cache_eligibility(
         snapshot.lineage_fields
     )
 
-    reasons: list[str] = []
+    issues: list[EvidenceIssue] = []
     if not snapshot.candidate_score_exists:
-        reasons.append("score_missing")
+        issues.append(EvidenceIssue.SCORE_MISSING)
     elif not score_fresh:
-        reasons.append("score_stale")
+        issues.append(EvidenceIssue.SCORE_STALE)
     if not feature_present:
-        reasons.append("feature_snapshot_missing")
+        issues.append(EvidenceIssue.FEATURE_SNAPSHOT_MISSING)
     if not canonical_sufficient:
-        reasons.append("canonical_history_insufficient")
+        issues.append(EvidenceIssue.CANONICAL_HISTORY_INSUFFICIENT)
     if not benchmark_sufficient:
-        reasons.append("benchmark_history_insufficient")
+        issues.append(EvidenceIssue.BENCHMARK_HISTORY_INSUFFICIENT)
     if not quality_acceptable:
-        reasons.append("quality_unacceptable")
+        issues.append(EvidenceIssue.QUALITY_UNACCEPTABLE)
     if not lineage_acceptable:
-        reasons.append("lineage_incomplete")
+        issues.append(EvidenceIssue.LINEAGE_INCOMPLETE)
 
     return CacheEligibility(
-        eligible=not reasons,
-        reasons=tuple(reasons),
+        eligible=not issues,
+        reasons=tuple(issue.value for issue in issues),
         score_fresh=score_fresh,
         feature_present=feature_present,
         canonical_sufficient=canonical_sufficient,
         benchmark_sufficient=benchmark_sufficient,
         quality_acceptable=quality_acceptable,
         lineage_acceptable=lineage_acceptable,
+        issues=tuple(issues),
     )
 
 

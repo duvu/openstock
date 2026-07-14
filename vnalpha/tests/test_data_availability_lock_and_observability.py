@@ -327,3 +327,20 @@ class TestObservabilityEvents:
             )
 
         assert "DATA_ENSURE_FAILED" in events
+
+
+def test_action_failure_audit_omits_provider_error_details(monkeypatch) -> None:
+    from vnalpha.data_availability.observability import log_ensure_ohlcv_sync_failed
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "vnalpha.data_availability.observability.log_audit",
+        lambda _event_type, summary, **kwargs: captured.update(
+            {"summary": summary, **kwargs}
+        ),
+    )
+
+    log_ensure_ohlcv_sync_failed("FPT", RuntimeError("token=provider-secret"))
+
+    assert captured["summary"] == "OHLCV sync failed for FPT."
+    assert captured["extra"] == {"symbol": "FPT", "error_type": "RuntimeError"}

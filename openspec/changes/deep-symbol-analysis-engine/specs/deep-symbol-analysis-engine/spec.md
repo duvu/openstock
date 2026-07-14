@@ -84,3 +84,22 @@ correlated events.
 - **WHEN** deep-analysis readiness reaches ready, partial, or failed status
 - **THEN** the audit trail SHALL contain start, per-artifact decision/action, and terminal events with symbol, requested date, resolved as-of date, artifact type, and correlation ID
 - **AND** the command or TUI SHALL render a Data Readiness panel from the deterministic result
+
+#### Scenario: Core readiness evidence and remediation are rendered
+
+- **GIVEN** one of the five core artifacts is stale, missing, or failed
+- **WHEN** deep readiness completes
+- **THEN** its Data Readiness entry SHALL use typed artifact-specific
+  availability, freshness, quality, lineage, date, and action evidence
+- **AND** SHALL contain ordered, executable remediation steps for the currently
+  registered command surface
+- **AND** warnings or log-text matching SHALL NOT determine artifact attribution
+
+#### Scenario: Readiness starts before provisioning
+
+- **WHEN** a supported deep-analysis path begins readiness
+- **THEN** it SHALL resolve one Vietnamese-market as-of date and establish or
+  reuse one correlation ID before the underlying ensure call
+- **AND** SHALL persist its start audit event before provisioning begins
+- **AND** SHALL return a sanitized failed result if provisioning raises, without
+  executing the deep read tool

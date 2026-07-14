@@ -138,6 +138,22 @@ must not log-and-continue after a failed required precondition. It can execute
 only with an optional unavailable context explicitly represented in the result;
 the rendered analysis must disclose it.
 
+For the five core artifacts, readiness evidence is a typed record rather than
+a projection of one aggregate ensure status. It includes availability, observed
+date, row count where applicable, freshness, quality, lineage, relevant actions,
+and typed error/remediation fields. A remediation plan contains ordered steps
+so raw-data download and canonicalization are never represented as one
+incomplete command. A renderer maps those steps to currently registered legacy
+CLI commands; it can later map the same steps to `vnalpha data` and `/data`
+without changing readiness decisions.
+
+The service first resolves `requested_date` using the shared Vietnamese-market
+date resolver, establishes or reuses a correlation ID, then records
+`DEEP_ANALYSIS_READINESS_STARTED`. The ensure service and all later audit events
+run in that context. Any known or unexpected exception becomes a sanitized
+failed core result and emits terminal failure/completion events; no supported
+deep-analysis path can continue.
+
 The default one-symbol path stays minimal and does not refresh the full
 universe. A market or sector snapshot is built only when the command option or
 deep contract requests it, and only through existing bounded builders.

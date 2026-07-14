@@ -28,6 +28,70 @@ class EnsureDataAction(str, Enum):
     SCORED = "SCORED"
 
 
+class DataArtifact(str, Enum):
+    """Core persisted data required for deep-analysis readiness."""
+
+    SYMBOL_MASTER = "symbol_master"
+    CANONICAL_OHLCV = "canonical_ohlcv"
+    BENCHMARK_OHLCV = "benchmark_ohlcv"
+    FEATURE_SNAPSHOT = "feature_snapshot"
+    CANDIDATE_SCORE = "candidate_score"
+
+
+class EvidenceIssue(str, Enum):
+    SCORE_MISSING = "score_missing"
+    SCORE_STALE = "score_stale"
+    FEATURE_SNAPSHOT_MISSING = "feature_snapshot_missing"
+    CANONICAL_HISTORY_INSUFFICIENT = "canonical_history_insufficient"
+    BENCHMARK_HISTORY_INSUFFICIENT = "benchmark_history_insufficient"
+    QUALITY_UNACCEPTABLE = "quality_unacceptable"
+    LINEAGE_INCOMPLETE = "lineage_incomplete"
+
+
+def evidence_issue_artifact(issue: EvidenceIssue) -> DataArtifact:
+    """Return the persisted artifact whose readiness is affected by an issue."""
+
+    if issue in {
+        EvidenceIssue.SCORE_MISSING,
+        EvidenceIssue.SCORE_STALE,
+        EvidenceIssue.QUALITY_UNACCEPTABLE,
+        EvidenceIssue.LINEAGE_INCOMPLETE,
+    }:
+        return DataArtifact.CANDIDATE_SCORE
+    if issue is EvidenceIssue.FEATURE_SNAPSHOT_MISSING:
+        return DataArtifact.FEATURE_SNAPSHOT
+    if issue is EvidenceIssue.CANONICAL_HISTORY_INSUFFICIENT:
+        return DataArtifact.CANONICAL_OHLCV
+    return DataArtifact.BENCHMARK_OHLCV
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactEvidence:
+    """Independent, typed warehouse evidence for one core artifact."""
+
+    artifact: DataArtifact
+    available: bool
+    row_count: int | None = None
+    required_row_count: int | None = None
+    window_start_date: str | None = None
+    observed_as_of_date: str | None = None
+    freshness: str = "unknown"
+    quality_status: str = "not_applicable"
+    lineage_status: str = "not_applicable"
+    lineage_fields: frozenset[str] = frozenset()
+    provider: str | None = None
+    ingestion_run_id: str | None = None
+    generated_at: str | None = None
+    methodology_version: str | None = None
+    feature_build_version: str | None = None
+    scoring_version: str | None = None
+    benchmark_as_of_date: str | None = None
+    benchmark_row_count: int | None = None
+    source_symbol: str | None = None
+    symbol_metadata: tuple[tuple[str, str], ...] = ()
+    issues: tuple[EvidenceIssue, ...] = ()
+
+
 @dataclass(frozen=True, slots=True)
 class CacheEligibility:
     eligible: bool
@@ -38,6 +102,7 @@ class CacheEligibility:
     benchmark_sufficient: bool
     quality_acceptable: bool
     lineage_acceptable: bool
+    issues: tuple[EvidenceIssue, ...] = ()
 
 
 @dataclass
@@ -57,6 +122,14 @@ class EnsureDataResult:
     freshness: str = "unknown"
     lineage_actions: list[str] = field(default_factory=list)
     cache_rejection_reasons: list[str] = field(default_factory=list)
+    symbol_known: bool | None = None
+    benchmark_bars: int | None = None
+    candidate_score_as_of_date: str | None = None
+    quality_status: str | None = None
+    lineage_fields: frozenset[str] = frozenset()
+    core_evidence_evaluated: bool = False
+    failure_code: str | None = None
+    artifact_evidence: tuple[ArtifactEvidence, ...] = ()
     extra: dict[str, JsonValue] = field(default_factory=dict)
 
     @property

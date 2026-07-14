@@ -30,7 +30,7 @@ changes:
     priority: P2
     blocked_by: []
     summary: "Consolidated warehouse-grounded deep symbol analysis with deterministic readiness for symbol, market-regime, and sector-strength inputs plus explicit user data commands."
-    evidence: "Issue #75 adds a typed, audited fail-closed gate for symbol/benchmark/features/score across `/analyze`, `/research-plan`, symbol-backed `/setup-evidence`, and assistant deep/scenario paths; optional market/sector context remains disclosed from persisted-tool output and its auto-build is pending. Focused command, assistant, readiness, and lock-observability tests pass; repository-wide lint remains blocked by pre-existing formatting in `symbol_memory/safe_files.py`."
+    evidence: "Issues #75 and #92 provide a typed, audited fail-closed gate for symbol/benchmark/features/score across `/analyze`, `/research-plan`, symbol-backed `/setup-evidence`, and assistant deep/scenario paths. #92 records independent warehouse evidence and typed remediation, sanitizes known/unexpected failures, and resolves/audits the effective market date before ensure. Market/sector auto-build (#76) and shared `vnalpha data` provisioning surfaces (#77) remain pending. Repository-wide lint remains blocked by pre-existing formatting in `symbol_memory/safe_files.py`."
   research-scenario-plan-engine:
     status: partial
     priority: P2

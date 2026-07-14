@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import duckdb
 
@@ -10,12 +10,22 @@ from vnalpha.data_availability.cache import evaluate_cache_eligibility
 from vnalpha.data_availability.checks import (
     compute_lookback_start,
     get_benchmark_status,
+    get_candidate_score_artifact_evidence,
     get_candidate_score_evidence,
     get_canonical_ohlcv_status,
+    get_feature_snapshot_evidence,
     get_feature_snapshot_status,
+    get_ohlcv_evidence,
+    get_symbol_master_evidence,
     get_symbol_master_status,
 )
-from vnalpha.data_availability.models import EnsureDataAction
+from vnalpha.data_availability.models import (
+    ArtifactEvidence,
+    DataArtifact,
+    EnsureDataAction,
+    EvidenceIssue,
+    evidence_issue_artifact,
+)
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
 
 
@@ -32,6 +42,7 @@ class EnsureDataSnapshot:
     candidate_score_as_of_date: str | None = None
     quality_status: str | None = None
     lineage_fields: frozenset[str] = frozenset()
+    artifact_evidence: tuple[ArtifactEvidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +61,7 @@ def capture_availability_snapshot(
 
     lookback_start = compute_lookback_start(target_date, policy.lookback_days)
     score_evidence = get_candidate_score_evidence(conn, symbol, target_date)
-    return EnsureDataSnapshot(
+    snapshot = EnsureDataSnapshot(
         symbol=symbol,
         target_date=target_date,
         lookback_start=lookback_start,
@@ -66,6 +77,55 @@ def capture_availability_snapshot(
         candidate_score_as_of_date=score_evidence.as_of_bar_date,
         quality_status=score_evidence.quality_status,
         lineage_fields=score_evidence.lineage_fields,
+        artifact_evidence=(
+            get_symbol_master_evidence(conn, symbol),
+            get_ohlcv_evidence(
+                conn,
+                symbol,
+                target_date,
+                lookback_start,
+                DataArtifact.CANONICAL_OHLCV,
+            ),
+            get_ohlcv_evidence(
+                conn,
+                policy.benchmark,
+                target_date,
+                lookback_start,
+                DataArtifact.BENCHMARK_OHLCV,
+            ),
+            get_feature_snapshot_evidence(conn, symbol, target_date),
+            get_candidate_score_artifact_evidence(conn, symbol, target_date),
+        ),
+    )
+    eligibility = evaluate_cache_eligibility(snapshot, policy)
+    return replace(
+        snapshot,
+        artifact_evidence=tuple(
+            replace(
+                evidence,
+                required_row_count=(
+                    policy.min_required_bars
+                    if evidence.artifact
+                    in {DataArtifact.CANONICAL_OHLCV, DataArtifact.BENCHMARK_OHLCV}
+                    else evidence.required_row_count
+                ),
+                issues=tuple(
+                    issue
+                    for issue in eligibility.issues
+                    if evidence_issue_artifact(issue) is evidence.artifact
+                ),
+                freshness=(
+                    "stale"
+                    if any(
+                        issue is EvidenceIssue.SCORE_STALE
+                        for issue in eligibility.issues
+                        if evidence_issue_artifact(issue) is evidence.artifact
+                    )
+                    else evidence.freshness
+                ),
+            )
+            for evidence in snapshot.artifact_evidence
+        ),
     )
 
 
