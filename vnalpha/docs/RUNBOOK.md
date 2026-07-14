@@ -150,10 +150,10 @@ Legacy aliases (`STAGE1`, `STAGE2`, `BREAKOUT`, etc.) exist in code for backward
 ### Known limitations and deferred work
 
 **Phase 5 scope:**
-- VN30 universe resolved from a static list. Dynamic resolution from vnstock-service planned for Phase 5.8+.
+- VN30 universe resolved from a static list. Current symbol-universe work is tracked through GitHub Issues.
 - VNINDEX benchmark must be synced separately before feature build.
 - TUI requires `textual` to be installed (`pip install textual`).
-- No backtesting, ML ranking, or outcome tracking (planned for Phase 6+).
+- Backtest Lab is outside this legacy runbook; current scope and dependencies are tracked in issue #108.
 - No broker/order/portfolio integration (research-only, by design).
 
 | Command | Description |
@@ -229,11 +229,10 @@ If `lineage_json.scoring_version` in `candidate_score` does not match the curren
 `SCORING_VERSION` constant in `repositories.py`, re-run `vnalpha score` to refresh scores.
 Historical scores are preserved as-is; only new `(symbol, date)` pairs are overwritten.
 
-## Deferred Work (Phase 5.8 / 5.9)
+## Roadmap references
 
-The following are explicitly out of scope for Phase 5 and documented for future phases:
+This runbook documents a historical Phase 5 operating surface; it does not schedule future work.
 
-- MCP tool server exposing watchlist and scoring to LLM agents (Phase 5.8)
-- LLM narrative explanation of candidate setups (Phase 5.9)
-- Automated backtesting of historical setups (Phase 6)
-- Multi-interval feature computation (Phase 7)
+- Use [the unified roadmap](../../ROADMAP.md) and GitHub issue [#90](https://github.com/duvu/openstock/issues/90) for current priority and dependencies.
+- Backtest Lab MVP scope is tracked in [#108](https://github.com/duvu/openstock/issues/108).
+- Any remaining MCP, narrative, multi-interval or workspace work requires a focused GitHub issue before it enters the roadmap.

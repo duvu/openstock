@@ -42,6 +42,7 @@ The system should not place orders, connect to broker execution APIs, or let an 
 Start here:
 
 - [Project overview](docs/README.md)
+- [Project roadmap and governance](../ROADMAP.md)
 - [Common implementation failures and prevention checklist](docs/common-implementation-failures.md)
 - [Vision and scope](docs/01-vision-and-scope.md)
 - [System architecture](docs/02-system-architecture.md)
@@ -49,10 +50,8 @@ Start here:
 - [Pattern engine](docs/04-pattern-engine.md)
 - [Backtest and outcome tracking](docs/05-backtest-and-outcome.md)
 - [AI layer](docs/06-ai-layer.md)
-- [Implementation roadmap](docs/07-implementation-roadmap.md)
 - [Initial repository structure](docs/08-initial-repository-structure.md)
 - [Workspace service design](docs/09-workspace-service-design.md)
-- [Phased roadmap](docs/10-roadmap-phases.md)
 - [Deployment architecture](docs/11-deployment-architecture.md)
 - [Research answer evaluation fixtures](docs/research-answer-evaluation.md)
 
