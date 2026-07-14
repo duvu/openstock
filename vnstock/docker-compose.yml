@@ -17,7 +17,10 @@ version: "3.9"
 
 services:
   vnstock-service:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_FIINQUANTX: ${VNSTOCK_INSTALL_FIINQUANTX:-false}
     image: vnstock-service:latest
     container_name: vnstock-service
     # IMPORTANT: Bind to 127.0.0.1 only — never 0.0.0.0 on the host
@@ -28,7 +31,10 @@ services:
       # Run 'vnstock-auth login' separately with write access to populate
       - "${HOME}/.config/vnstock:/home/vnstock/.config/vnstock:ro"
     environment:
-      - PYTHONUNBUFFERED=1
+      PYTHONUNBUFFERED: "1"
+      FIINQUANT_USERNAME: ${FIINQUANT_USERNAME:-}
+      FIINQUANT_PASSWORD: ${FIINQUANT_PASSWORD:-}
+      VNSTOCK_FIINQUANTX_LICENSED: ${VNSTOCK_FIINQUANTX_LICENSED:-false}
     restart: unless-stopped
     healthcheck:
       test:
