@@ -432,7 +432,7 @@ def _normalize_source(value: str | None) -> str | None:
         "FMP",
     }:
         raise DataProvisioningValidationError(
-            "--source must name an approved provider (KBS, VCI, MSN, DNSE, or TCBS)."
+            "--source must name an approved provider (KBS, VCI, MSN, DNSE, TCBS, FMARKET, or FMP)."
         )
     return normalized.upper()
 
