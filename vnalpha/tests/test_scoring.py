@@ -177,7 +177,7 @@ def test_composite_score_handles_none_features():
 # --- Watchlist integration ---
 
 
-def test_generate_watchlist():
+def test_generate_watchlist(tmp_path):
     from vnalpha.scoring.generate_watchlist import save_watchlist, score_universe
     from vnalpha.warehouse.connection import in_memory_connection
     from vnalpha.warehouse.migrations import run_migrations
@@ -197,7 +197,7 @@ def test_generate_watchlist():
             row,
         )
 
-    scored_count = score_universe(conn, "2024-01-02")
+    scored_count = score_universe(conn, "2024-01-02", memory_root=tmp_path)
     assert scored_count == 2
 
     # Verify candidate_score rows were persisted
@@ -206,6 +206,8 @@ def test_generate_watchlist():
     persisted = get_candidate_scores(conn, "2024-01-02")
     assert len(persisted) == 2
     assert persisted[0]["symbol"] == "FPT"  # highest score first
+    assert conn.execute("SELECT COUNT(*) FROM memory_claim").fetchone()[0] == 2
+    assert (tmp_path / "knowledge" / "symbols" / "FPT.md").exists()
 
     saved = save_watchlist(conn, "2024-01-02", top_n=10, min_score=0.0)
     # FPT is STRONG_CANDIDATE → saved; VNM is IGNORE → excluded from watchlist

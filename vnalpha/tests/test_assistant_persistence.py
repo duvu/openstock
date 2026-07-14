@@ -30,4 +30,4 @@ def test_migrations_create_assistant_and_llm_tables(conn):
 def test_migrations_idempotent(conn):
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 40
+    assert len(tables) == 44

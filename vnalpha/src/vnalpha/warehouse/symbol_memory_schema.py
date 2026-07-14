@@ -1,0 +1,67 @@
+ALL_DDL_SYMBOL_MEMORY = (
+    "CREATE TABLE IF NOT EXISTS memory_event ("
+    "event_id VARCHAR PRIMARY KEY, "
+    "symbol VARCHAR NOT NULL, "
+    "event_type VARCHAR NOT NULL, "
+    "evidence_ref VARCHAR, "
+    "content_hash VARCHAR NOT NULL, "
+    "observed_at TIMESTAMPTZ, "
+    "as_of_date DATE, "
+    "origin VARCHAR NOT NULL, "
+    "correlation_id VARCHAR NOT NULL, "
+    "created_at TIMESTAMPTZ NOT NULL)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS memory_event_evidence_content_idx "
+    "ON memory_event(symbol, evidence_ref, content_hash)",
+    "CREATE TABLE IF NOT EXISTS memory_claim ("
+    "claim_id VARCHAR PRIMARY KEY, "
+    "symbol VARCHAR NOT NULL, "
+    "claim_type VARCHAR NOT NULL, "
+    "predicate VARCHAR NOT NULL, "
+    "value_json VARCHAR NOT NULL, "
+    "status VARCHAR NOT NULL, "
+    "pinned BOOLEAN NOT NULL, "
+    "confidence DOUBLE, "
+    "observed_at TIMESTAMPTZ, "
+    "as_of_date DATE, "
+    "valid_from DATE, "
+    "valid_until DATE, "
+    "origin VARCHAR NOT NULL, "
+    "source_refs_json VARCHAR NOT NULL, "
+    "correlation_id VARCHAR NOT NULL, "
+    "created_at TIMESTAMPTZ NOT NULL, "
+    "supersedes_claim_id VARCHAR, "
+    "lifecycle_reason VARCHAR, "
+    "source_published_at DATE)",
+    "CREATE INDEX IF NOT EXISTS memory_claim_symbol_status_idx "
+    "ON memory_claim(symbol, status, as_of_date)",
+    "CREATE TABLE IF NOT EXISTS memory_document ("
+    "symbol VARCHAR PRIMARY KEY, "
+    "path VARCHAR NOT NULL, "
+    "schema_version INTEGER NOT NULL, "
+    "generation INTEGER NOT NULL, "
+    "managed_hash VARCHAR NOT NULL, "
+    "document_hash VARCHAR NOT NULL, "
+    "token_estimate INTEGER NOT NULL, "
+    "last_compacted_at TIMESTAMPTZ, "
+    "updated_at TIMESTAMPTZ NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS memory_compaction_run ("
+    "compaction_run_id VARCHAR PRIMARY KEY, "
+    "symbol VARCHAR NOT NULL, "
+    "before_generation INTEGER NOT NULL, "
+    "after_generation INTEGER NOT NULL, "
+    "before_hash VARCHAR NOT NULL, "
+    "after_hash VARCHAR NOT NULL, "
+    "retained_claim_count INTEGER NOT NULL, "
+    "archived_claim_count INTEGER NOT NULL, "
+    "conflicted_claim_count INTEGER NOT NULL, "
+    "before_token_estimate INTEGER NOT NULL, "
+    "after_token_estimate INTEGER NOT NULL, "
+    "source_coverage DOUBLE NOT NULL, "
+    "created_at TIMESTAMPTZ NOT NULL, "
+    "correlation_id VARCHAR NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS memory_compaction_run_symbol_idx "
+    "ON memory_compaction_run(symbol, created_at)",
+)
+
+
+__all__ = ["ALL_DDL_SYMBOL_MEMORY"]

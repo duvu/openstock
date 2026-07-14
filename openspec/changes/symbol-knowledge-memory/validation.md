@@ -4,9 +4,9 @@
 
 ```text
 OpenSpec authored: yes
-Runtime implementation: not started
-Validation commands executed: OpenSpec document inspection only
-Phase gates: pending
+Runtime implementation: complete at commit 3af296419b04155e4aee16d45258f6d458fd8ba2
+Validation commands executed: complete on the exact implementation commit; see ledger below
+Phase gates: G1-G5 passed; exact evidence attached to draft implementation PR #71
 ```
 
 This file is the implementation evidence ledger. Do not mark a task or gate complete from PR prose alone. Every completed item must reference code and exact validation output for the tested commit.
@@ -15,7 +15,35 @@ This file is the implementation evidence ledger. Do not mark a task or gate comp
 
 | UTC timestamp | Commit SHA | Task/gate | Command or inspection | Exit | Result summary | Evidence artifact |
 |---|---|---|---|---:|---|---|
-| pending | pending | OpenSpec review | proposal/design/spec/tasks inspection | pending | Confirm scope, dependencies, and research-only boundary | draft PR |
+| 2026-07-13T09:56:06Z | b834c7c + working tree | Runtime replay corpus | `PYTHONPATH=src uv run python -c '…run_runtime_replay_corpus()…'` | 0 | 22 replay cases passed, including correction, conflict, compaction, temporal-filtering, source-grounding, and injection cases | terminal log |
+| 2026-07-13T09:56:06Z | b834c7c + working tree | 11.6 | `make repo-hygiene` | 0 | Repository hygiene passed | terminal log |
+| 2026-07-13T09:56:06Z | b834c7c + working tree | 11.7 | `make lint-vnalpha` | 0 | Ruff checks passed; 579 files formatted | terminal log |
+| 2026-07-13T09:56:06Z | b834c7c + working tree | 11.8 | `cd vnalpha && uv run pytest -q tests/test_symbol_memory_*.py tests/test_evals_package_resources.py` | 0 | Focused symbol-memory and runtime-resource suite passed | terminal log |
+| 2026-07-13T09:56:06Z | b834c7c + working tree | 11.9 | `make test-vnalpha` | 0 | Complete vnalpha pytest suite passed | terminal log |
+| 2026-07-13T09:56:06Z | b834c7c + working tree | 11.10 | `make verify-r4` | 0 | R4 regression suite passed | terminal log |
+| 2026-07-13T09:56:06Z | b834c7c + working tree | 11.11 | `packaging/scripts/openstock-verify --ci` | 0 | 16 OK, 1 expected systemd warning, 0 failures | terminal log |
+| 2026-07-13T09:56:06Z | b834c7c + working tree | Manual CLI QA | `vnalpha --help`; isolated `/memory status`; invalid `/memory compact` | 0 / 0 / 1 | Help and status succeeded; invalid compact showed the documented usage error | terminal log |
+| 2026-07-13T10:52:07Z | working tree | Runtime memory evaluation | `cd vnalpha && uv run vnalpha eval symbol-memory-runtime --ci` | 0 | correction, conflict, compaction, temporal filtering, and source grounding all passed | terminal log |
+| 2026-07-13T10:52:07Z | working tree | Strict OpenSpec validation | `openspec validate symbol-knowledge-memory --strict` | 0 | Change is valid | terminal log |
+| 2026-07-13T10:52:07Z | working tree | 11.6 | `make repo-hygiene` | 0 | Repository hygiene passed | terminal log |
+| 2026-07-13T10:52:07Z | working tree | 11.7 | `make lint-vnalpha` | 0 | Ruff checks passed; 582 files formatted | terminal log |
+| 2026-07-13T10:52:07Z | working tree | 11.9 | `make test-vnalpha` | 0 | Complete vnalpha pytest suite passed | terminal log |
+| 2026-07-13T10:52:07Z | working tree | 11.10 | `make verify-r4` | 0 | R4 regression suite passed | terminal log |
+| 2026-07-13T10:52:07Z | working tree | 11.11 | `packaging/scripts/openstock-verify --ci` | 0 | 16 OK, 1 expected systemd warning, 0 failures | terminal log |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | Validation environment | `cd vnalpha && UV_CACHE_DIR=/tmp/openstock-uv-cache uv sync --extra dev --frozen`; bootstrap `pip` into the isolated virtual environment for wheel tests | 0 | Locked development environment created with Python 3.13.5 and pytest 9.1.1 | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | G1 | `cd vnalpha && uv run pytest -q tests/test_symbol_memory_models.py tests/test_symbol_memory_repository.py tests/test_symbol_memory_markdown.py tests/test_symbol_memory_ingestion.py tests/test_symbol_memory_availability.py tests/test_symbol_memory_boundaries.py` | 0 | 35 focused foundation, migration, path, availability, boundary, and user-note tests passed | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | G2 | `cd vnalpha && uv run pytest -q tests/test_symbol_memory_lifecycle.py tests/test_symbol_memory_ingestion.py tests/test_symbol_memory_retrieval.py` | 0 | 21 authority, correction, conflict, numeric-grounding, and temporal-lifecycle tests passed | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | G3 | `cd vnalpha && uv run pytest -q tests/test_symbol_memory_compaction.py tests/test_symbol_memory_maintenance.py tests/test_symbol_memory_locking.py tests/test_symbol_memory_recovery.py` | 0 | 19 compaction, archive, atomicity, concurrency, and recovery tests passed | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | G4 | `cd vnalpha && uv run pytest -q tests/test_symbol_memory_retrieval.py tests/test_symbol_memory_maintenance.py tests/test_symbol_memory_assistant_context.py tests/test_symbol_memory_runtime_evaluation.py tests/test_evals_package_resources.py` | 0 | 16 retrieval-budget, no-lookahead, context-trust, runtime-corpus, and package-resource tests passed | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | G4 runtime replay | `cd vnalpha && VNALPHA_LOG_ROOT=/tmp/openstock-state/logs uv run vnalpha eval symbol-memory-runtime --ci` | 0 | correction, conflict, compaction, temporal filtering, and source grounding all passed | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | Manual command QA | isolated command-registry driver for `/memory status`, `remember`, `show`, `compact FPT --dry-run`, and missing-symbol `/memory compact`; `uv run vnalpha --help` | 0 | Happy paths created and read `FPT.md`; dry-run preview succeeded; invalid input returned the documented usage error; CLI help rendered | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | 11.6, G5 | `make repo-hygiene` | 0 | Repository hygiene passed | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | 11.7, G5 | `make lint-vnalpha` | 0 | Ruff checks passed; 582 files already formatted | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | 11.9, G5 | isolated writable `HOME`, log, knowledge, and workspace roots with `.venv/bin` first on `PATH`; `make test-vnalpha` | 0 | Complete vnalpha suite reached 100% with no failures | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | 11.10, G5 | same isolated environment; `make verify-r4` | 0 | 81 R4 tests passed | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | 11.11, G5 | same isolated environment; `packaging/scripts/openstock-verify --ci` | 0 | 16 OK, 1 expected systemd warning, 0 failures; status PASS | this ledger; command transcript |
+| 2026-07-13T12:14:15Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | OpenSpec | `openspec validate symbol-knowledge-memory --strict` | 0 | Change is valid | this ledger; command transcript |
+| 2026-07-13T12:18:00Z | 3af296419b04155e4aee16d45258f6d458fd8ba2 | 11.12 | Attach the exact-SHA evidence matrix to draft implementation PR #71 before checking G1-G5 | 0 | Evidence published at `https://github.com/duvu/openstock/pull/71`; G1-G5 then checked | PR #71 body |
 
 ## Required implementation evidence
 

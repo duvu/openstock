@@ -46,6 +46,7 @@ The documentation is organized around the main engineering concerns:
 - [Four-phase hardening guide](four-phase-hardening.md)
 - [Hardening branch protection](branch-protection.md)
 - [Closed-loop repair and validation](closed-loop-repair.md)
+- [Symbol knowledge memory](symbol-memory.md)
 
 ## Design stance
 

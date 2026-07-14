@@ -19,6 +19,7 @@ from vnalpha.commands.handlers.help import handle_help
 from vnalpha.commands.handlers.history import handle_history
 from vnalpha.commands.handlers.hypothesis import handle_hypothesis
 from vnalpha.commands.handlers.lineage import handle_lineage
+from vnalpha.commands.handlers.memory import handle_memory
 from vnalpha.commands.handlers.model import handle_model
 from vnalpha.commands.handlers.note import handle_note
 from vnalpha.commands.handlers.pattern import handle_pattern
@@ -41,6 +42,21 @@ from vnalpha.policy.command_policy import permission_names
 def build_default_registry() -> CommandRegistry:
     """Return a registry populated with capability-approved research commands."""
     reg = CommandRegistry()
+
+    reg.register(
+        CommandMeta(
+            name="memory",
+            description="Inspect and maintain bounded symbol research memory.",
+            usage="/memory <status|show|remember|correct|pin|unpin|conflicts|sources|compact|repair|rebuild-index|maintain> ...",
+            examples=[
+                "/memory status",
+                '/memory remember FPT "watch source coverage"',
+                "/memory compact FPT --dry-run",
+            ],
+            permissions=permission_names("memory"),
+            handler=handle_memory,
+        )
+    )
 
     reg.register(
         CommandMeta(

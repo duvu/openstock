@@ -28,6 +28,7 @@ UNSAFE_KEYWORDS: frozenset[str] = frozenset(
         "order",
         "place" + " order",
         "execute trade",
+        "execute a trade",
         "broker",
         "account",
         "port" + "folio",
