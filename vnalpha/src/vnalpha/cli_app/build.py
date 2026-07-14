@@ -29,7 +29,10 @@ def build_canonical_cmd(
         result = _execute(
             conn,
             DataProvisioningRequest(
-                "build", "canonical", symbol=symbol, interval=interval,
+                "build",
+                "canonical",
+                symbol=symbol,
+                interval=interval,
                 allow_all_symbols=symbol is None,
             ),
         )
