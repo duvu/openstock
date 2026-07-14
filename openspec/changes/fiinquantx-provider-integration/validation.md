@@ -5,13 +5,47 @@
 ```text
 OpenSpec authored: yes
 Detailed documentation inventory: complete
-Licensed SDK runtime verification: inconclusive; SDK and credentials unavailable
-Commercial/license decision: offline policy recorded; agreement review pending
-Runtime implementation: offline-safe foundation only; capabilities disabled
-Offline runtime validation: passed for foundation
-Licensed live validation: not run
-Strict OpenSpec validation after rewrite: passed
+Licensed SDK runtime verification: partial; bounded OHLCV and membership verified
+Commercial/license decision: runtime acknowledgement enforced; agreement review pending
+Runtime implementation: four experimental, explicit-only datasets enabled
+Offline runtime validation: passed for provider, contract and service slices
+Licensed live validation: passed for bounded equity OHLCV and index membership
+Strict OpenSpec validation after implementation: passed
 Phase gates: G0A passed; G0B-G7 pending
+```
+
+## Runtime implementation evidence
+
+Implementation commit: `0bd6a5d316bc9dea9eed7c3fda98209609a5bff7`.
+
+| Check | Environment | Result | Safe evidence |
+|---|---|---|---|
+| base package remains optional | Python 3.11 Linux container | passed | `vnstock-service:base-check` imports `vnstock`; `FiinQuantX` is absent |
+| approved package runtime | Python 3.11.15 Linux container | passed | distribution `fiinquantx==0.1.64`, import `FiinQuantX` |
+| session and positive allowlist | same licensed container | passed | `FiinSession(...).login()`, `Fetch_Trading_Data`, and `TickerList` were exercised without exposing session material |
+| bounded market data | same licensed container | passed | equity and index requests with `count_back=2` returned two canonical OHLCV rows each |
+| membership snapshots | same licensed container | passed | index and sector requests returned canonical current-snapshot rows with observation timestamps |
+| opt-in live tests | same licensed container | passed | `tests/live/providers/test_fiinquantx_live.py`: 2 passed |
+| disabled company reference | local service | passed | explicit `source=FIINQUANTX` produced `422 unsupported_dataset_for_provider`; no fallback |
+| forbidden auth route | local service | passed | `GET /v1/auth/login` produced 404 |
+
+The enabled service datasets are `equity.ohlcv`, `index.ohlcv`,
+`reference.index_membership_snapshot`, and
+`reference.sector_membership_snapshot`. `reference.company_info` remains
+disabled because the bounded `BasicInfor` probe did not establish a reliable
+canonical contract. No raw licensed rows, credentials, session data, or auth
+payloads were recorded.
+
+Commands run against the implementation commit:
+
+```text
+cd vnstock
+PYTHONPATH=. pytest -q tests/unit/providers/test_fiinquantx_foundation.py tests/unit/providers/test_fiinquantx_bridge.py tests/unit/service/test_service_contract.py tests/unit/service/test_runtime_integration.py
+ruff check vnstock/providers/fiinquantx vnstock/core/contracts vnstock/service tests/unit/providers/test_fiinquantx_foundation.py tests/unit/providers/test_fiinquantx_bridge.py tests/unit/service/test_service_contract.py tests/unit/service/test_runtime_integration.py tests/live/providers/test_fiinquantx_live.py
+ruff format --check (the same focused paths)
+docker build --build-arg INSTALL_FIINQUANTX=false -t vnstock-service:base-check .
+docker build --build-arg INSTALL_FIINQUANTX=true -t vnstock-service:latest .
+VNSTOCK_LIVE_TESTS=true VNSTOCK_LIVE_PROVIDERS=FIINQUANTX pytest -q tests/live/providers/test_fiinquantx_live.py -m live
 ```
 
 ## Offline foundation evidence

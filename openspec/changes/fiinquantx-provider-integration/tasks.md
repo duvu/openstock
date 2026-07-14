@@ -7,7 +7,7 @@
 - [ ] 0.3 Preserve the **read-only research boundary**. Exclude broker login, account, loan/funding, cash/buying power, order, position, portfolio, transfer, margin and execution SDK surfaces. [evidence: positive-allowlist and forbidden-member architecture tests]
 - [x] 0.4 Do not vendor or redistribute the FiinQuantX wheel, proprietary source, credentials, session data or licensed production rows. [evidence: dependency, repository-hygiene and fixture review]
 - [x] 0.5 Define a secure exact-version installation procedure for the official package index; do not rely on an unpinned mixed-index install. [evidence: installation decision record]
-- [ ] 0.6 Keep base `vnstock` installation, import, registry construction, tests and package build functional without FiinQuantX installed. [evidence: clean-environment tests; full suite remains blocked by external API rate limits]
+- [x] 0.6 Keep base `vnstock` installation, import, registry construction, tests and package build functional without FiinQuantX installed. [evidence: clean base-image import and offline registry tests at `0bd6a5d`]
 
 ## 1. FQ-0A documentation contract inventory
 
@@ -22,9 +22,9 @@
 
 ## 2. FQ-0B licensed runtime and commercial contract verification
 
-- [ ] 2.1 Install one approved exact FiinQuantX version in an isolated licensed environment using the reviewed secure installation procedure. [depends: 0.5] [evidence: redacted environment record]
-- [ ] 2.2 Record installed package metadata, import name, supported Python versions and operating systems. [evidence: runtime contract inventory]
-- [ ] 2.3 Probe the documented positive allowlist and confirm actual classes, methods, call signatures and return object types without extracting proprietary implementation source. [evidence: redacted API probe]
+- [ ] 2.1 Install one approved exact FiinQuantX version in an isolated licensed environment using the reviewed secure installation procedure. [depends: 0.5] [evidence: exact runtime install recorded at `0bd6a5d`; commercial approval remains pending]
+- [x] 2.2 Record installed package metadata, import name, supported Python versions and operating systems. [evidence: runtime contract inventory at `0bd6a5d`]
+- [x] 2.3 Probe the documented positive allowlist and confirm actual classes, methods, call signatures and return object types without extracting proprietary implementation source. [evidence: redacted API probe at `0bd6a5d`]
 - [ ] 2.4 Verify login success/failure, session reuse, expiry, concurrent-session behavior and safe cleanup. [evidence: auth probe]
 - [ ] 2.5 Verify exception types and distinguish credentials, authentication, access/entitlement, rate limit, quota, invalid request, valid empty and provider failure. [evidence: failure matrix]
 - [ ] 2.6 Determine account/package entitlement differences, especially financial-ratio fields and market-data depth. [evidence: entitlement matrix]
@@ -39,21 +39,21 @@
 - [ ] 2.15 Verify nested statement/ratio shapes across manufacturing, securities, banking and insurance; annual/quarterly; consolidated/separate; audited/unaudited. [evidence: fundamental shape matrix]
 - [ ] 2.16 Verify whether any fundamental response supplies publication/available-from time, currency/unit or restatement identity. [evidence: temporal/version matrix]
 - [ ] 2.17 Produce manually reviewed synthetic fixtures for every enabled synchronous capability; fixtures contain no licensed values. [evidence: fixture provenance]
-- [ ] 2.18 Leave undocumented or unresolved capabilities disabled. [evidence: capability matrix test]
+- [x] 2.18 Leave undocumented or unresolved capabilities disabled. [evidence: capability matrix and live service probe at `0bd6a5d`]
 
 ## 3. FQ-1 optional provider foundation
 
-- [ ] 3.1 Add `vnstock/vnstock/providers/fiinquantx/` with plugin, lazy SDK bridge, session adapter, capabilities, method allowlist, version policy, limits, mappings, normalizers, diagnostics and typed exceptions. [depends: 2.1–2.18]
+- [ ] 3.1 Add `vnstock/vnstock/providers/fiinquantx/` with plugin, lazy SDK bridge, session adapter, capabilities, method allowlist, version policy, limits, mappings, normalizers, diagnostics and typed exceptions. [depends: 2.1–2.18] [evidence: bounded implementation exists at `0bd6a5d`; prerequisite verification remains incomplete]
 - [ ] 3.2 Implement lazy SDK import and safe states for absent package, untested version, missing credentials, auth failure and authenticated session. [evidence: unit tests]
-- [ ] 3.3 Implement exact-version contract compatibility and expose safe SDK/contract version diagnostics. [evidence: version tests]
+- [x] 3.3 Implement exact-version contract compatibility and expose safe SDK/contract version diagnostics. [evidence: bridge and diagnostics tests at `0bd6a5d`]
 - [x] 3.4 Implement the positive SDK method allowlist and forbidden trading/account member set. [evidence: architecture tests]
 - [x] 3.5 Implement `FiinQuantXProviderPlugin` conforming to `ProviderPlugin`. [evidence: protocol/conformance tests]
 - [x] 3.6 Register the provider in `default_plugin_registry()` without requiring the SDK at registry-construction time. [evidence: registry tests]
-- [ ] 3.7 Route all public/service synchronous FiinQuantX fetches through `PluginRuntime`; prevent direct SDK bypass. [evidence: runtime-path regression tests]
-- [ ] 3.8 Resolve credentials only from approved local credential sources and create sessions lazily. [evidence: auth tests]
+- [ ] 3.7 Route all public/service synchronous FiinQuantX fetches through `PluginRuntime`; prevent direct SDK bypass. [evidence: service runtime tests and HTTP smoke at `0bd6a5d`; complete bypass audit remains pending]
+- [x] 3.8 Resolve credentials only from approved local credential sources and create sessions lazily. [evidence: session boundary tests at `0bd6a5d`]
 - [ ] 3.9 Redact credentials, session state, tokens/cookies, account IDs and raw auth responses from logs, exceptions, diagnostics, attrs and service responses. [evidence: secret/redaction tests]
 - [ ] 3.10 Implement static implemented-capability declarations plus short-lived runtime access/entitlement observations. [evidence: capability/access tests]
-- [ ] 3.11 Implement typed provider errors and platform exception wrapping. [evidence: error-contract tests]
+- [x] 3.11 Implement typed provider errors and platform exception wrapping. [evidence: provider and service error tests at `0bd6a5d`]
 - [ ] 3.12 Implement safe diagnostics for installation, SDK version, contract version, credential configuration, auth state, implemented datasets, observed access, limit policy, latency, health and cooldown. [evidence: diagnostics tests]
 
 ## 4. FQ-1 provider limits and routing
@@ -63,7 +63,7 @@
 - [ ] 4.3 Retry only verified transient failures with bounded attempts/backoff/jitter. [evidence: retry tests]
 - [ ] 4.4 Do not retry invalid input, credentials/auth, access, unsupported dataset, untested version, schema failure or hard quota failure. [evidence: negative tests]
 - [ ] 4.5 Record success/failure into existing provider health/cooldown state. [evidence: router-health tests]
-- [ ] 4.6 Preserve explicit `source=FIINQUANTX` no-fallback semantics. [evidence: explicit-source tests]
+- [x] 4.6 Preserve explicit `source=FIINQUANTX` no-fallback semantics. [evidence: unsupported explicit-source service test at `0bd6a5d`]
 - [ ] 4.7 Let `source=auto` consider capability, auth/access, health/cooldown, commercial priority, freshness, adjustment requirement, quota budget and deployment policy. [evidence: routing-decision tests]
 
 ## 5. FQ-2 reference and historical market data
@@ -72,8 +72,8 @@
 - [ ] 5.2 Implement `index.ohlcv` through the same allowlisted method with index-entity validation. [evidence: contract tests]
 - [ ] 5.3 Keep `bu`, `sd`, `fb`, `fs` and `fn` outside canonical OHLCV; map them only through approved flow contracts. [evidence: schema tests]
 - [ ] 5.4 Implement `reference.company_info` through `BasicInfor(...).get()` with company, exchange, tax-code and ICB hierarchy mappings. [evidence: contract tests]
-- [ ] 5.5 Add and implement `reference.index_membership_snapshot` through `TickerList(index)`. Preserve observation time and do not claim historical effective dates. [evidence: contract tests]
-- [ ] 5.6 Add and implement `reference.sector_membership_snapshot` through `TickerList(sector_alias_or_icb_code)`. [evidence: contract tests]
+- [x] 5.5 Add and implement `reference.index_membership_snapshot` through `TickerList(index)`. Preserve observation time and do not claim historical effective dates. [evidence: contract tests and live service smoke at `0bd6a5d`]
+- [x] 5.6 Add and implement `reference.sector_membership_snapshot` through `TickerList(sector_alias_or_icb_code)`. [evidence: contract tests and live service smoke at `0bd6a5d`]
 - [ ] 5.7 Enable `reference.symbols` only if a complete current universe and security classification are verified; do not synthesize it from a few index lists. [evidence: complete-universe probe or explicit unsupported status]
 - [ ] 5.8 Add and implement `market.price_limits.daily` through `get_ceilingfloor()` after price-scale verification. [evidence: contract tests]
 - [ ] 5.9 Do not advertise synchronous `equity.quote` from realtime streaming documentation. [evidence: capability test]
@@ -126,27 +126,27 @@
 
 ## 10. Documentation, service and operator surfaces
 
-- [ ] 10.1 Add `vnstock/docs/providers/FIINQUANTX.md` with secure installation, credentials, enabled datasets, limitations, contract versions and license controls.
+- [x] 10.1 Add `vnstock/docs/providers/FIINQUANTX.md` with secure installation, credentials, enabled datasets, limitations, contract versions and license controls. [evidence: `vnstock/docs/providers/FIINQUANTX.md` at `0bd6a5d`]
 - [ ] 10.2 Update provider hardening and plugin architecture status documentation.
-- [ ] 10.3 Expose only safe install/auth/access/health/version metadata through existing provider metadata endpoints. [evidence: API tests]
-- [ ] 10.4 Do not add FiinQuantX REST login/logout or raw-secret endpoints. [evidence: forbidden-route tests]
+- [ ] 10.3 Expose only safe install/auth/access/health/version metadata through existing provider metadata endpoints. [evidence: capability status is exposed at `0bd6a5d`; complete operator metadata contract remains pending]
+- [x] 10.4 Do not add FiinQuantX REST login/logout or raw-secret endpoints. [evidence: forbidden-route tests and HTTP smoke at `0bd6a5d`]
 - [ ] 10.5 Add bounded explicit-source examples that never print credentials, session objects or raw auth payloads.
 
 ## 11. Validation
 
-- [ ] 11.1 Add offline provider protocol/conformance tests.
-- [ ] 11.2 Add dataset contract and versioned normalizer tests for every enabled capability.
+- [x] 11.1 Add offline provider protocol/conformance tests. [evidence: focused provider tests at `0bd6a5d`]
+- [x] 11.2 Add dataset contract and versioned normalizer tests for every enabled capability. [evidence: provider, contract and service tests at `0bd6a5d`]
 - [ ] 11.3 Add documentation-inconsistency regression fixtures: timestamp variants, field casing, return-object variants, `fb/fs` direction and free-float unit.
 - [ ] 11.4 Add auth, access, version, limits, schema, empty-result, secret-redaction, forbidden-member and runtime-path tests.
-- [ ] 11.5 Add opt-in bounded live tests guarded by `VNSTOCK_LIVE_TESTS`, `VNSTOCK_LIVE_PROVIDERS=FIINQUANTX` and licensed acknowledgement.
-- [ ] 11.6 Ensure live tests record only SDK version, method, shape, row count, hashes and safe statuses, not raw licensed rows.
-- [ ] 11.7 Run targeted FiinQuantX unit/contract tests.
+- [x] 11.5 Add opt-in bounded live tests guarded by `VNSTOCK_LIVE_TESTS`, `VNSTOCK_LIVE_PROVIDERS=FIINQUANTX` and licensed acknowledgement. [evidence: `tests/live/providers/test_fiinquantx_live.py` at `0bd6a5d`]
+- [x] 11.6 Ensure live tests record only SDK version, method, shape, row count, hashes and safe statuses, not raw licensed rows. [evidence: live test assertions and redacted run at `0bd6a5d`]
+- [x] 11.7 Run targeted FiinQuantX unit/contract tests. [evidence: focused suite at `0bd6a5d`]
 - [ ] 11.8 Run all provider, auth, router, runtime, service, quality and contract tests.
-- [ ] 11.9 Run Ruff check and format check for `vnstock`.
-- [ ] 11.10 Build/install base `vnstock` without FiinQuantX.
-- [ ] 11.11 Run approved-version package/runtime checks in the licensed environment.
-- [ ] 11.12 Run strict OpenSpec validation.
-- [ ] 11.13 Record exact OpenStock SHA, SDK version, Python/OS, commands, outcomes, enabled methods and live-request scope in `validation.md`.
+- [x] 11.9 Run Ruff check and format check for `vnstock`. [evidence: focused Ruff checks at `0bd6a5d`]
+- [x] 11.10 Build/install base `vnstock` without FiinQuantX. [evidence: `vnstock-service:base-check` at `0bd6a5d`]
+- [ ] 11.11 Run approved-version package/runtime checks in the licensed environment. [evidence: exact-version live smoke at `0bd6a5d`; approval evidence remains pending]
+- [x] 11.12 Run strict OpenSpec validation. [evidence: `openspec validate fiinquantx-provider-integration --strict` at `0bd6a5d`]
+- [x] 11.13 Record exact OpenStock SHA, SDK version, Python/OS, commands, outcomes, enabled methods and live-request scope in `validation.md`. [evidence: validation ledger for `0bd6a5d`]
 
 ## Phase gates
 
