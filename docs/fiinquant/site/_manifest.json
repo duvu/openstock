@@ -1,0 +1,627 @@
+[
+  {
+    "url": "https://docs.fiinquant.vn/gioi-thieu/tong-quan-san-pham.md",
+    "rel": "gioi-thieu/tong-quan-san-pham.md",
+    "bytes": 1467
+  },
+  {
+    "url": "https://docs.fiinquant.vn/gioi-thieu/diem-noi-bat.md",
+    "rel": "gioi-thieu/diem-noi-bat.md",
+    "bytes": 2261
+  },
+  {
+    "url": "https://docs.fiinquant.vn/gioi-thieu/danh-cho-doanh-nghiep.md",
+    "rel": "gioi-thieu/danh-cho-doanh-nghiep.md",
+    "bytes": 365
+  },
+  {
+    "url": "https://docs.fiinquant.vn/gioi-thieu/danh-cho-dao-tao.md",
+    "rel": "gioi-thieu/danh-cho-dao-tao.md",
+    "bytes": 256
+  },
+  {
+    "url": "https://docs.fiinquant.vn/thong-tin-lien-he.md",
+    "rel": "thong-tin-lien-he.md",
+    "bytes": 621
+  },
+  {
+    "url": "https://docs.fiinquant.vn/tai-lieu-ki-thuat/cai-dat-va-chuan-bi.md",
+    "rel": "tai-lieu-ki-thuat/cai-dat-va-chuan-bi.md",
+    "bytes": 1096
+  },
+  {
+    "url": "https://docs.fiinquant.vn/tai-lieu-ki-thuat/dang-nhap-tai-khoan.md",
+    "rel": "tai-lieu-ki-thuat/dang-nhap-tai-khoan.md",
+    "bytes": 971
+  },
+  {
+    "url": "https://docs.fiinquant.vn/tai-lieu-ki-thuat/danh-sach-cac-phien-ban.md",
+    "rel": "tai-lieu-ki-thuat/danh-sach-cac-phien-ban.md",
+    "bytes": 2503
+  },
+  {
+    "url": "https://docs.fiinquant.vn/tai-lieu-ki-thuat/danh-sach-du-lieu-hien-co.md",
+    "rel": "tai-lieu-ki-thuat/danh-sach-du-lieu-hien-co.md",
+    "bytes": 1797
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban.md",
+    "bytes": 2341
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.1.-danh-sach-ma-theo-index.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.1.-danh-sach-ma-theo-index.md",
+    "bytes": 1274
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.2.-danh-sach-ma-theo-nganh.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.2.-danh-sach-ma-theo-nganh.md",
+    "bytes": 57097
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.3.-danh-sach-ma-theo-ty-trong.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.3.-danh-sach-ma-theo-ty-trong.md",
+    "bytes": 2123
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.4.-lay-du-lieu-von-hoa.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.4.-lay-du-lieu-von-hoa.md",
+    "bytes": 5580
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.5.-lay-du-lieu-room-ndtnn.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.5.-lay-du-lieu-room-ndtnn.md",
+    "bytes": 11659
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.6.-lay-du-lieu-freefloat.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.6.-lay-du-lieu-freefloat.md",
+    "bytes": 1762
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.7.-lay-du-lieu-gia-tran-gia-san.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.7.-lay-du-lieu-gia-tran-gia-san.md",
+    "bytes": 1773
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.8.-lay-du-lieu-giao-dich-theo-nha-dau-tu.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.8.-lay-du-lieu-giao-dich-theo-nha-dau-tu.md",
+    "bytes": 7534
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.9.-lay-du-lieu-thong-tin-co-ban-cua-co-phieu-ten-dn-san-gd-nganh.md",
+    "rel": "ham-va-cong-thuc/1.-danh-muc-and-thong-tin-co-ban/1.9.-lay-du-lieu-thong-tin-co-ban-cua-co-phieu-ten-dn-san-gd-nganh.md",
+    "bytes": 1791
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/2.-du-lieu-giao-dich.md",
+    "rel": "ham-va-cong-thuc/2.-du-lieu-giao-dich.md",
+    "bytes": 876
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/2.-du-lieu-giao-dich/2.1.-ham-du-lieu-realtime.md",
+    "rel": "ham-va-cong-thuc/2.-du-lieu-giao-dich/2.1.-ham-du-lieu-realtime.md",
+    "bytes": 5249
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/2.-du-lieu-giao-dich/2.2.-ham-du-lieu-lich-su.md",
+    "rel": "ham-va-cong-thuc/2.-du-lieu-giao-dich/2.2.-ham-du-lieu-lich-su.md",
+    "bytes": 4988
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/2.-du-lieu-giao-dich/2.3.-ham-noi-du-lieu-realtime-va-lich-su.md",
+    "rel": "ham-va-cong-thuc/2.-du-lieu-giao-dich/2.3.-ham-noi-du-lieu-realtime-va-lich-su.md",
+    "bytes": 8061
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/2.-du-lieu-giao-dich/2.4.-ham-du-lieu-so-lenh.md",
+    "rel": "ham-va-cong-thuc/2.-du-lieu-giao-dich/2.4.-ham-du-lieu-so-lenh.md",
+    "bytes": 12025
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/2.-du-lieu-giao-dich/2.5.-ham-theo-doi-huy-lenh.md",
+    "rel": "ham-va-cong-thuc/2.-du-lieu-giao-dich/2.5.-ham-theo-doi-huy-lenh.md",
+    "bytes": 3069
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia.md",
+    "rel": "ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia.md",
+    "bytes": 1187
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.1.-bao-cao-tai-chinh.md",
+    "rel": "ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.1.-bao-cao-tai-chinh.md",
+    "bytes": 13284
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.2.-ham-chi-so-bao-cao-tai-chinh.md",
+    "rel": "ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.2.-ham-chi-so-bao-cao-tai-chinh.md",
+    "bytes": 6710
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.3.-lay-du-lieu-dinh-gia-p-e-p-b-theo-ma-chung-khoan.md",
+    "rel": "ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.3.-lay-du-lieu-dinh-gia-p-e-p-b-theo-ma-chung-khoan.md",
+    "bytes": 1422
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.4.-lay-du-lieu-dinh-gia-p-e-p-b-theo-nhom-nganh.md",
+    "rel": "ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.4.-lay-du-lieu-dinh-gia-p-e-p-b-theo-nhom-nganh.md",
+    "bytes": 2198
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.5.-lay-du-lieu-dinh-gia-p-e-p-b-theo-nhom-chi-so.md",
+    "rel": "ham-va-cong-thuc/3.-phan-tich-co-ban-and-dinh-gia/3.5.-lay-du-lieu-dinh-gia-p-e-p-b-theo-nhom-chi-so.md",
+    "bytes": 1428
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/4.-thong-ke-thi-truong.md",
+    "rel": "ham-va-cong-thuc/4.-thong-ke-thi-truong.md",
+    "bytes": 750
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/4.-thong-ke-thi-truong/4.1.-lay-du-lieu-ve-do-rong-thi-truong-so-ma-san-so-ma-tran-so-ma-tang-giam-tham-chieu.md",
+    "rel": "ham-va-cong-thuc/4.-thong-ke-thi-truong/4.1.-lay-du-lieu-ve-do-rong-thi-truong-so-ma-san-so-ma-tran-so-ma-tang-giam-tham-chieu.md",
+    "bytes": 1780
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/4.-thong-ke-thi-truong/4.2.-ham-do-rong-thi-truong-chung.md",
+    "rel": "ham-va-cong-thuc/4.-thong-ke-thi-truong/4.2.-ham-do-rong-thi-truong-chung.md",
+    "bytes": 59
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/4.-thong-ke-thi-truong/4.3-ham-seasonalityprice.md",
+    "rel": "ham-va-cong-thuc/4.-thong-ke-thi-truong/4.3-ham-seasonalityprice.md",
+    "bytes": 12164
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao.md",
+    "bytes": 1905
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.1.-hieu-suat-performance.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.1.-hieu-suat-performance.md",
+    "bytes": 336
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.1.-hieu-suat-performance/5.1.1.-annualize.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.1.-hieu-suat-performance/5.1.1.-annualize.md",
+    "bytes": 4542
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.1.-hieu-suat-performance/5.1.2.-max-drawdown.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.1.-hieu-suat-performance/5.1.2.-max-drawdown.md",
+    "bytes": 3435
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.2.-rui-ro-risk.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.2.-rui-ro-risk.md",
+    "bytes": 292
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.2.-rui-ro-risk/5.2.1.-volatility.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.2.-rui-ro-risk/5.2.1.-volatility.md",
+    "bytes": 4237
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.2.-rui-ro-risk/5.2.2.-beta.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.2.-rui-ro-risk/5.2.2.-beta.md",
+    "bytes": 5800
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh.md",
+    "bytes": 912
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh/5.3.1.-correlation.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh/5.3.1.-correlation.md",
+    "bytes": 5628
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh/5.3.2.-finddatecorrelation.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh/5.3.2.-finddatecorrelation.md",
+    "bytes": 4765
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh/5.3.3.-similarchart.md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh/5.3.3.-similarchart.md",
+    "bytes": 2618
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh/5.3.4.-ham-thoi-vu-hanh-vi-seasonality-theo-su-kien-thang-ngay-ky-nghi-le....md",
+    "rel": "ham-va-cong-thuc/5.-dinh-luong-and-phan-tich-nang-cao/5.3.-tuong-quan-and-so-sanh/5.3.4.-ham-thoi-vu-hanh-vi-seasonality-theo-su-kien-thang-ngay-ky-nghi-le....md",
+    "bytes": 2235
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/6.-chien-luoc-and-cong-cu.md",
+    "rel": "ham-va-cong-thuc/6.-chien-luoc-and-cong-cu.md",
+    "bytes": 273
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/6.-chien-luoc-and-cong-cu/6.1.-rebalance.md",
+    "rel": "ham-va-cong-thuc/6.-chien-luoc-and-cong-cu/6.1.-rebalance.md",
+    "bytes": 1637
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/6.-chien-luoc-and-cong-cu/6.2.-bieu-do-suc-manh-gia-rrg.md",
+    "rel": "ham-va-cong-thuc/6.-chien-luoc-and-cong-cu/6.2.-bieu-do-suc-manh-gia-rrg.md",
+    "bytes": 7642
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh.md",
+    "bytes": 2209
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.1.-dang-nhap.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.1.-dang-nhap.md",
+    "bytes": 1972
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.2.-thong-tin-tai-khoan.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.2.-thong-tin-tai-khoan.md",
+    "bytes": 3644
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.3.-thong-tin-goi-vay-nguon-tien.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.3.-thong-tin-goi-vay-nguon-tien.md",
+    "bytes": 5599
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.4.-khoi-tao-orderbook-de-thao-tac-voi-cac-ham-dat-lenh.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.4.-khoi-tao-orderbook-de-thao-tac-voi-cac-ham-dat-lenh.md",
+    "bytes": 3409
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.5.-thong-tin-tien.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.5.-thong-tin-tien.md",
+    "bytes": 1966
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.6.-suc-mua-ban.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.6.-suc-mua-ban.md",
+    "bytes": 5146
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.7.-lenh.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.7.-lenh.md",
+    "bytes": 16903
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.8.-danh-sach-lenh.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.8.-danh-sach-lenh.md",
+    "bytes": 2744
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.9.-lay-vi-the.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.9.-lay-vi-the.md",
+    "bytes": 3661
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/7.-ham-dat-lenh/7.10.-dong-deal-doi-voi-phai-sinh.md",
+    "rel": "ham-va-cong-thuc/7.-ham-dat-lenh/7.10.-dong-deal-doi-voi-phai-sinh.md",
+    "bytes": 892
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/8.-danh-sach-chi-so-ta.md",
+    "rel": "ham-va-cong-thuc/8.-danh-sach-chi-so-ta.md",
+    "bytes": 1286
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.1.-trend-indicators-chi-bao-xu-huong.md",
+    "rel": "ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.1.-trend-indicators-chi-bao-xu-huong.md",
+    "bytes": 32904
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.2.-momentum-indicators-chi-bao-dong-luong.md",
+    "rel": "ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.2.-momentum-indicators-chi-bao-dong-luong.md",
+    "bytes": 18459
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.3.-volatility-indicators-chi-bao-bien-dong.md",
+    "rel": "ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.3.-volatility-indicators-chi-bao-bien-dong.md",
+    "bytes": 15690
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.4.-volume-indicators-chi-bao-khoi-luong.md",
+    "rel": "ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.4.-volume-indicators-chi-bao-khoi-luong.md",
+    "bytes": 11901
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.5.-smart-money-concepts.md",
+    "rel": "ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.5.-smart-money-concepts.md",
+    "bytes": 11419
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.6.-risk-indicators-chi-bao-rui-ro.md",
+    "rel": "ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.6.-risk-indicators-chi-bao-rui-ro.md",
+    "bytes": 1505
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.7.-money-flow-indicators-chi-bao-dong-tien.md",
+    "rel": "ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.7.-money-flow-indicators-chi-bao-dong-tien.md",
+    "bytes": 7419
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.8.-price-level-indicators-chi-bao-bien-dong-gia.md",
+    "rel": "ham-va-cong-thuc/8.-danh-sach-chi-so-ta/8.8.-price-level-indicators-chi-bao-bien-dong-gia.md",
+    "bytes": 1627
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/9.-danh-sach-mo-hinh-pattern.md",
+    "rel": "ham-va-cong-thuc/9.-danh-sach-mo-hinh-pattern.md",
+    "bytes": 268
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/9.-danh-sach-mo-hinh-pattern/9.1.-mo-hinh-bieu-do.md",
+    "rel": "ham-va-cong-thuc/9.-danh-sach-mo-hinh-pattern/9.1.-mo-hinh-bieu-do.md",
+    "bytes": 9643
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/9.-danh-sach-mo-hinh-pattern/9.2.-mo-hinh-nen.md",
+    "rel": "ham-va-cong-thuc/9.-danh-sach-mo-hinh-pattern/9.2.-mo-hinh-nen.md",
+    "bytes": 40
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/10.-bo-loc-co-phieu.md",
+    "rel": "ham-va-cong-thuc/10.-bo-loc-co-phieu.md",
+    "bytes": 8093
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/11.-du-lieu-ho-tro.md",
+    "rel": "ham-va-cong-thuc/11.-du-lieu-ho-tro.md",
+    "bytes": 316
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/11.-du-lieu-ho-tro/11.1.-danh-sach-cac-co-phieu-theo-nhom-chi-so.md",
+    "rel": "ham-va-cong-thuc/11.-du-lieu-ho-tro/11.1.-danh-sach-cac-co-phieu-theo-nhom-chi-so.md",
+    "bytes": 24667
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ham-va-cong-thuc/11.-du-lieu-ho-tro/11.2.-danh-sach-nhom-nganh-icb.md",
+    "rel": "ham-va-cong-thuc/11.-du-lieu-ho-tro/11.2.-danh-sach-nhom-nganh-icb.md",
+    "bytes": 44992
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ung-dung-thuc-hanh/truy-xuat-du-lieu.md",
+    "rel": "ung-dung-thuc-hanh/truy-xuat-du-lieu.md",
+    "bytes": 3022
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ung-dung-thuc-hanh/truy-xuat-va-luu-du-lieu-realtime-len-google-sheet.md",
+    "rel": "ung-dung-thuc-hanh/truy-xuat-va-luu-du-lieu-realtime-len-google-sheet.md",
+    "bytes": 3470
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ung-dung-thuc-hanh/mo-hinh-tin-hieu.md",
+    "rel": "ung-dung-thuc-hanh/mo-hinh-tin-hieu.md",
+    "bytes": 12794
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ung-dung-thuc-hanh/mo-hinh-dinh-luong.md",
+    "rel": "ung-dung-thuc-hanh/mo-hinh-dinh-luong.md",
+    "bytes": 22663
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ung-dung-thuc-hanh/mo-hinh-sang-loc.md",
+    "rel": "ung-dung-thuc-hanh/mo-hinh-sang-loc.md",
+    "bytes": 19
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ung-dung-thuc-hanh/chien-luoc-dau-tu.md",
+    "rel": "ung-dung-thuc-hanh/chien-luoc-dau-tu.md",
+    "bytes": 20
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ung-dung-thuc-hanh/mo-hinh-ai-ml.md",
+    "rel": "ung-dung-thuc-hanh/mo-hinh-ai-ml.md",
+    "bytes": 14256
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ung-dung-thuc-hanh/cac-mo-hinh-khac.md",
+    "rel": "ung-dung-thuc-hanh/cac-mo-hinh-khac.md",
+    "bytes": 239
+  },
+  {
+    "url": "https://docs.fiinquant.vn/ung-dung-thuc-hanh/phan-tich-phai-sinh.md",
+    "rel": "ung-dung-thuc-hanh/phan-tich-phai-sinh.md",
+    "bytes": 2072
+  },
+  {
+    "url": "https://docs.fiinquant.vn/huong-dan-python/cau-truc-du-lieu-mau.md",
+    "rel": "huong-dan-python/cau-truc-du-lieu-mau.md",
+    "bytes": 558
+  },
+  {
+    "url": "https://docs.fiinquant.vn/huong-dan-python/cau-truc-du-lieu-mau/mau-du-lieu-bctc-hop-nhat.md",
+    "rel": "huong-dan-python/cau-truc-du-lieu-mau/mau-du-lieu-bctc-hop-nhat.md",
+    "bytes": 83355
+  },
+  {
+    "url": "https://docs.fiinquant.vn/huong-dan-python/cau-truc-du-lieu-mau/mo-ta-du-lieu-giao-dich.md",
+    "rel": "huong-dan-python/cau-truc-du-lieu-mau/mo-ta-du-lieu-giao-dich.md",
+    "bytes": 5712
+  },
+  {
+    "url": "https://docs.fiinquant.vn/huong-dan-python/cau-truc-du-lieu-mau/chi-so-co-ban.md",
+    "rel": "huong-dan-python/cau-truc-du-lieu-mau/chi-so-co-ban.md",
+    "bytes": 16
+  },
+  {
+    "url": "https://docs.fiinquant.vn/huong-dan-python/cau-truc-du-lieu-mau/mo-ta-truong-du-lieu-chi-so-bao-cao-tai-chinh-goi-nang-cao.md",
+    "rel": "huong-dan-python/cau-truc-du-lieu-mau/mo-ta-truong-du-lieu-chi-so-bao-cao-tai-chinh-goi-nang-cao.md",
+    "bytes": 7106
+  },
+  {
+    "url": "https://docs.fiinquant.vn/huong-dan-python/cau-hinh-file-bat.md",
+    "rel": "huong-dan-python/cau-hinh-file-bat.md",
+    "bytes": 2243
+  },
+  {
+    "url": "https://docs.fiinquant.vn/huong-dan-python/cac-loi-thuong-gap.md",
+    "rel": "huong-dan-python/cac-loi-thuong-gap.md",
+    "bytes": 704
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-mcp/gioi-thieu.md",
+    "rel": "fiinquant-mcp/gioi-thieu.md",
+    "bytes": 1933
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-mcp/danh-sach-cac-cong-cu.md",
+    "rel": "fiinquant-mcp/danh-sach-cac-cong-cu.md",
+    "bytes": 12446
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-mcp/huong-dan-cai-dat.md",
+    "rel": "fiinquant-mcp/huong-dan-cai-dat.md",
+    "bytes": 377
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-mcp/huong-dan-cai-dat/huong-dan-cau-hinh-fiinquant-mcp-server-tren-claude-desktop.md",
+    "rel": "fiinquant-mcp/huong-dan-cai-dat/huong-dan-cau-hinh-fiinquant-mcp-server-tren-claude-desktop.md",
+    "bytes": 3075
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-mcp/huong-dan-cai-dat/huong-dan-cai-dat-fiinquant-mcp-server-tren-chatgpt.md",
+    "rel": "fiinquant-mcp/huong-dan-cai-dat/huong-dan-cai-dat-fiinquant-mcp-server-tren-chatgpt.md",
+    "bytes": 3304
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/introduction/overview.md",
+    "rel": "fiinquant-en/introduction/overview.md",
+    "bytes": 1456
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/introduction/key-highlights.md",
+    "rel": "fiinquant-en/introduction/key-highlights.md",
+    "bytes": 2650
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/introduction/for-businesses.md",
+    "rel": "fiinquant-en/introduction/for-businesses.md",
+    "bytes": 339
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/introduction/for-education.md",
+    "rel": "fiinquant-en/introduction/for-education.md",
+    "bytes": 262
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/contact-information.md",
+    "rel": "fiinquant-en/contact-information.md",
+    "bytes": 559
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/technical-document/installation-and-preparation.md",
+    "rel": "fiinquant-en/technical-document/installation-and-preparation.md",
+    "bytes": 1190
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/technical-document/sign-in.md",
+    "rel": "fiinquant-en/technical-document/sign-in.md",
+    "bytes": 684
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/available-data-list.md",
+    "rel": "fiinquant-en/available-data-list.md",
+    "bytes": 1927
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/function-and-formula/real-time-data-function.md",
+    "rel": "fiinquant-en/function-and-formula/real-time-data-function.md",
+    "bytes": 5314
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/function-and-formula/historical-data-function.md",
+    "rel": "fiinquant-en/function-and-formula/historical-data-function.md",
+    "bytes": 4721
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/function-and-formula/function-for-connecting-real-time-and-historical-data.md",
+    "rel": "fiinquant-en/function-and-formula/function-for-connecting-real-time-and-historical-data.md",
+    "bytes": 7123
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/function-and-formula/order-book-data-function.md",
+    "rel": "fiinquant-en/function-and-formula/order-book-data-function.md",
+    "bytes": 12088
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/function-and-formula/list-of-technical-analysis-indicators.md",
+    "rel": "fiinquant-en/function-and-formula/list-of-technical-analysis-indicators.md",
+    "bytes": 36137
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/function-and-formula/feature-function.md",
+    "rel": "fiinquant-en/function-and-formula/feature-function.md",
+    "bytes": 20836
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/function-and-formula/support-data.md",
+    "rel": "fiinquant-en/function-and-formula/support-data.md",
+    "bytes": 157
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/function-and-formula/support-data/list-of-stocks-by-index-group.md",
+    "rel": "fiinquant-en/function-and-formula/support-data/list-of-stocks-by-index-group.md",
+    "bytes": 24531
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/practical-application/data-retrieval.md",
+    "rel": "fiinquant-en/practical-application/data-retrieval.md",
+    "bytes": 3073
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/practical-application/retrieve-and-save-real-time-data-to-google-sheet.md",
+    "rel": "fiinquant-en/practical-application/retrieve-and-save-real-time-data-to-google-sheet.md",
+    "bytes": 1636
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/practical-application/signaling-model.md",
+    "rel": "fiinquant-en/practical-application/signaling-model.md",
+    "bytes": 12802
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/practical-application/quantitative-model.md",
+    "rel": "fiinquant-en/practical-application/quantitative-model.md",
+    "bytes": 6539
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/practical-application/screening-model.md",
+    "rel": "fiinquant-en/practical-application/screening-model.md",
+    "bytes": 18
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/practical-application/investment-strategy.md",
+    "rel": "fiinquant-en/practical-application/investment-strategy.md",
+    "bytes": 22
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/practical-application/ai-ml-model.md",
+    "rel": "fiinquant-en/practical-application/ai-ml-model.md",
+    "bytes": 14124
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/practical-application/other-models.md",
+    "rel": "fiinquant-en/practical-application/other-models.md",
+    "bytes": 235
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/python-guidelines/fiinquant-gpt.md",
+    "rel": "fiinquant-en/python-guidelines/fiinquant-gpt.md",
+    "bytes": 650
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/python-guidelines/bat-file-configuration.md",
+    "rel": "fiinquant-en/python-guidelines/bat-file-configuration.md",
+    "bytes": 25
+  },
+  {
+    "url": "https://docs.fiinquant.vn/fiinquant-en/python-guidelines/common-errors.md",
+    "rel": "fiinquant-en/python-guidelines/common-errors.md",
+    "bytes": 757
+  }
+]
