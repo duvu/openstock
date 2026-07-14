@@ -28,6 +28,14 @@ COPY pyproject.toml ./
 COPY vnstock/ ./vnstock/
 RUN pip install --no-cache-dir -e .
 
+ARG INSTALL_FIINQUANTX=false
+RUN if [ "$INSTALL_FIINQUANTX" = "true" ]; then \
+      pip install --no-cache-dir matplotlib && \
+      pip install --no-cache-dir \
+        --extra-index-url https://fiinquant.github.io/fiinquantx/simple \
+        fiinquantx==0.1.64; \
+    fi
+
 # Switch to non-root user
 USER vnstock
 

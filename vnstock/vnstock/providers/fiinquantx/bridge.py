@@ -36,4 +36,4 @@ def load_fiinquantx_sdk() -> FiinQuantXSDK:
     )
     if state is FiinQuantXState.UNTESTED_VERSION:
         return FiinQuantXSDK(state, None, installed_version)
-    return FiinQuantXSDK(state, importlib.import_module("fiinquantx"), installed_version)
+    return FiinQuantXSDK(state, importlib.import_module("FiinQuantX"), installed_version)
