@@ -37,12 +37,14 @@ class FiinQuantXProviderPlugin:
                     sdk.state is FiinQuantXState.INSTALLED_SUPPORTED
                     and dataset in IMPLEMENTED_DATASETS
                     and self._licensed_runtime_acknowledged()
+                    and self._credentials_configured()
                 ),
                 "status": (
                     "experimental"
                     if dataset in IMPLEMENTED_DATASETS
                     and sdk.state is FiinQuantXState.INSTALLED_SUPPORTED
                     and self._licensed_runtime_acknowledged()
+                    and self._credentials_configured()
                     else "unsupported"
                 ),
                 "auth_required": True,
@@ -129,10 +131,7 @@ class FiinQuantXProviderPlugin:
                 for dataset, capability in self.capabilities().items()
                 if capability["supported"]
             ],
-            "credentials_configured": bool(
-                os.environ.get("FIINQUANT_USERNAME")
-                and os.environ.get("FIINQUANT_PASSWORD")
-            ),
+            "credentials_configured": self._credentials_configured(),
             "licensed_runtime_acknowledged": self._licensed_runtime_acknowledged(),
             "configured_limits": {"max_concurrency": 1, "max_rows": 10000},
         }
@@ -145,11 +144,22 @@ class FiinQuantXProviderPlugin:
             "yes",
         }
 
+    @staticmethod
+    def _credentials_configured() -> bool:
+        return bool(
+            os.environ.get("FIINQUANT_USERNAME")
+            and os.environ.get("FIINQUANT_PASSWORD")
+        )
+
     def _capability_note(self, dataset: str, state: FiinQuantXState) -> str:
         if dataset not in IMPLEMENTED_DATASETS:
             return "Disabled until the licensed runtime contract is verified."
         if not self._licensed_runtime_acknowledged():
             return "Disabled until the licensed runtime is explicitly acknowledged."
+        if not self._credentials_configured():
+            return (
+                "Disabled until both credential environment variables are configured."
+            )
         if state is FiinQuantXState.INSTALLED_SUPPORTED:
             return "Bounded historical contract verified for SDK 0.1.64."
         return f"SDK runtime is unavailable ({state.value})."

@@ -196,3 +196,19 @@ def test_fiinquantx_requires_license_acknowledgement_before_login(monkeypatch) -
 
     with pytest.raises(FiinQuantXLicenseNotAcknowledgedError):
         FiinQuantXProviderPlugin().fetch("equity.ohlcv", {"symbol": "VCB"})
+
+
+def test_fiinquantx_capabilities_require_credentials(monkeypatch) -> None:
+    module = ModuleType("FiinQuantX")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.delenv("FIINQUANT_USERNAME", raising=False)
+    monkeypatch.delenv("FIINQUANT_PASSWORD", raising=False)
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
+        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
+    )
+
+    capabilities = FiinQuantXProviderPlugin().capabilities()
+
+    assert all(not capability["supported"] for capability in capabilities.values())
+    assert capabilities["equity.ohlcv"]["status"] == "unsupported"
