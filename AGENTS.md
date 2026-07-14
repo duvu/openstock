@@ -21,6 +21,24 @@ The system is research-only. Do not add broker integration, order placement, acc
 
 Fresh warehouse and tool output is authoritative over workspace summaries and model prose.
 
+## Mandatory implementation playbook
+
+Before implementing, reviewing, merging, or closing any OpenStock ticket, read:
+
+- [`vnalpha/docs/common-implementation-failures.md`](vnalpha/docs/common-implementation-failures.md)
+
+Use its mandatory checklist explicitly. In particular:
+
+- verify runtime semantics rather than file or command presence;
+- inspect real callable signatures and boundary types;
+- test every CLI, TUI, assistant, legacy, readiness, and packaged path affected;
+- preserve truthful `SUCCESS`/`PARTIAL`/`FAILED` and optional/required semantics;
+- cover the complete fail-closed boundary, audit correlation, evidence, remediation, and backward compatibility;
+- do not infer that focused tests, local commands, or skipped CI gates prove completion;
+- create and link a follow-up issue for intentionally deferred defects.
+
+When a review reveals a new recurring failure pattern, update the playbook in the same change or its immediate follow-up.
+
 ## OpenSpec workflow
 
 - `openspec/active-changes.yaml` is the authoritative registry for non-archived changes.

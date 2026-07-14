@@ -42,6 +42,7 @@ The system should not place orders, connect to broker execution APIs, or let an 
 Start here:
 
 - [Project overview](docs/README.md)
+- [Common implementation failures and prevention checklist](docs/common-implementation-failures.md)
 - [Vision and scope](docs/01-vision-and-scope.md)
 - [System architecture](docs/02-system-architecture.md)
 - [Data pipeline](docs/03-data-pipeline.md)
