@@ -9,6 +9,7 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
+from vnalpha.warehouse.ingestion_migrations import migrate_ingestion_run_outcome_columns
 from vnalpha.warehouse.research_answer_schema import ALL_DDL_RESEARCH_ANSWER_AUDIT
 from vnalpha.warehouse.research_models_schema import ALL_DDL_RESEARCH_MODELS
 from vnalpha.warehouse.sandbox_migrations import (
@@ -50,6 +51,7 @@ def run_migrations(
         pass
     for ddl in ALL_DDL:
         conn.execute(ddl)
+    migrate_ingestion_run_outcome_columns(conn)
     for ddl in SANDBOX_DDL:
         conn.execute(ddl)
     migrate_sandbox_contract_columns(conn)

@@ -2,76 +2,50 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from dataclasses import replace
 
 import duckdb
 
 from vnalpha.clients.vnstock.client import VnstockClient
 from vnalpha.core.logging import get_logger
+from vnalpha.ingestion.models import (
+    OHLCVBatchResult,
+    SymbolIngestionResult,
+    aggregate_ohlcv_results,
+)
+from vnalpha.ingestion.persistence import (
+    bind_ingestion_run_correlation,
+    persist_ohlcv_batch_result,
+)
+from vnalpha.ingestion.symbol_sync import sync_ohlcv_for_symbol
+from vnalpha.observability.context import get_correlation_id, set_correlation_id
 from vnalpha.warehouse.repositories import (
     create_ingestion_run,
     finish_ingestion_run,
     get_symbols_active,
-    insert_raw_ohlcv,
 )
 
 logger = get_logger("ingestion.sync_ohlcv")
 
 
-def sync_ohlcv_for_symbol(
-    conn: duckdb.DuckDBPyConnection,
-    client: VnstockClient,
-    run_id: str,
-    symbol: str,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    interval: str = "1D",
-    source: Optional[str] = None,
-) -> int:
-    """Fetch OHLCV for one symbol and insert raw rows. Returns inserted count."""
-    try:
-        response = client.get_equity_ohlcv(
-            symbol=symbol,
-            start=start,
-            end=end,
-            interval=interval,
-            source=source,
-        )
-        return insert_raw_ohlcv(
-            conn,
-            run_id=run_id,
-            symbol=symbol,
-            records=response.data,
-            provider=response.meta.provider,
-            quality_status=response.meta.quality_status,
-            fetched_at=response.meta.fetched_at,
-        )
-    except Exception as e:
-        logger.warning("Failed to sync OHLCV for %s: %s", symbol, e)
-        return 0
-
-
 def sync_ohlcv(
     conn: duckdb.DuckDBPyConnection,
-    universe: Optional[List[str]] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    universe: list[str] | None = None,
+    start: str | None = None,
+    end: str | None = None,
     interval: str = "1D",
-    source: Optional[str] = None,
-    client: Optional[VnstockClient] = None,
-    base_url: Optional[str] = None,
-) -> dict:
+    source: str | None = None,
+    client: VnstockClient | None = None,
+    base_url: str | None = None,
+) -> OHLCVBatchResult:
     """Sync OHLCV for all symbols in universe.
 
     If universe is None, reads active symbols from symbol_master.
 
-    Returns:
-        dict with "total", "inserted", "skipped" counts and "run_id".
+    Returns a typed batch with per-symbol outcomes and terminal status.
     """
-    owned = client is None
-    if owned:
-        client = VnstockClient(base_url=base_url) if base_url else VnstockClient()
-
+    if get_correlation_id() in {"", "unset"}:
+        set_correlation_id()
     if universe is None:
         universe = get_symbols_active(conn)
 
@@ -82,16 +56,22 @@ def sync_ohlcv(
         universe=f"{len(universe)}_symbols",
         params={"start": start, "end": end, "interval": interval, "source": source},
     )
+    bind_ingestion_run_correlation(conn, run_id)
 
-    total = len(universe)
-    inserted = 0
-    skipped = 0
+    results: list[SymbolIngestionResult] = []
+    active_client = client
+    owned = False
 
     try:
+        if active_client is None:
+            active_client = (
+                VnstockClient(base_url=base_url) if base_url else VnstockClient()
+            )
+            owned = True
         for symbol in universe:
-            count = sync_ohlcv_for_symbol(
+            result = sync_ohlcv_for_symbol(
                 conn,
-                client,
+                active_client,
                 run_id,
                 symbol,
                 start=start,
@@ -99,23 +79,30 @@ def sync_ohlcv(
                 interval=interval,
                 source=source,
             )
-            if count > 0:
-                inserted += count
-            else:
-                skipped += 1
+            if result.diagnostics_ref is None:
+                result = replace(
+                    result,
+                    diagnostics_ref=f"ingestion:{run_id}:{symbol}",
+                )
+            results.append(result)
 
-        finish_ingestion_run(conn, run_id, "SUCCESS")
+        batch = aggregate_ohlcv_results(run_id, tuple(results))
+        persist_ohlcv_batch_result(conn, batch)
         logger.info(
-            "OHLCV sync complete: total=%d inserted=%d skipped=%d",
-            total,
-            inserted,
-            skipped,
+            "OHLCV sync complete: status=%s total=%d inserted=%d",
+            batch.status.value,
+            batch.requested_count,
+            batch.rows_inserted,
         )
-    except Exception as e:
-        finish_ingestion_run(conn, run_id, "FAILED", error={"error": str(e)})
+        return batch
+    except Exception:
+        finish_ingestion_run(
+            conn,
+            run_id,
+            "FAILED",
+            error={"error": "OHLCV batch failed before completion."},
+        )
         raise
     finally:
-        if owned:
-            client.close()
-
-    return {"run_id": run_id, "total": total, "inserted": inserted, "skipped": skipped}
+        if owned and active_client is not None:
+            active_client.close()

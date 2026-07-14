@@ -62,14 +62,14 @@ def sync_ohlcv_cmd(
         from vnalpha.warehouse.connection import get_connection
         from vnalpha.warehouse.migrations import run_migrations
 
-        conn = get_connection()
-        run_migrations(conn=conn)
         try:
             resolved = parse_symbols_or_universe(symbols, universe)
         except ValueError as err:
             typer.echo(f"Error: {err}", err=True)
             raise typer.Exit(code=1) from err
 
+        conn = get_connection()
+        run_migrations(conn=conn)
         result = _execute(
             conn,
             DataProvisioningRequest(
@@ -82,10 +82,22 @@ def sync_ohlcv_cmd(
                 source=source,
                 interval=interval,
             ),
+            exit_on_failure=False,
         )
         typer.echo(
             f"OHLCV sync complete: {result.counts['inserted']} inserted, {result.counts['skipped']} skipped"
         )
+        for symbol_result in result.symbol_results:
+            if symbol_result.status.value not in {"SUCCESS", "SKIPPED"}:
+                typer.echo(
+                    f"{symbol_result.symbol}: {symbol_result.status.value}"
+                    + (f" - {symbol_result.message}" if symbol_result.message else "")
+                )
+                if symbol_result.remediation:
+                    typer.echo(symbol_result.remediation)
+        if result.status is ProvisioningStatus.FAILED:
+            typer.echo(result.error or "OHLCV sync did not complete.", err=True)
+            raise typer.Exit(code=1)
 
 
 @app.command("index")
@@ -127,14 +139,14 @@ def sync_index_cmd(
 
 
 def _execute(
-    conn, request: DataProvisioningRequest
+    conn, request: DataProvisioningRequest, *, exit_on_failure: bool = True
 ) -> DataProvisioningResult:
     try:
         result = DataProvisioningService(conn).execute(request)
     except DataProvisioningValidationError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
-    if result.status is ProvisioningStatus.FAILED:
+    if result.status is ProvisioningStatus.FAILED and exit_on_failure:
         typer.echo(result.error or "Data provisioning did not complete.", err=True)
         raise typer.Exit(code=1)
     return result

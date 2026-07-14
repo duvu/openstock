@@ -32,4 +32,16 @@ The slash-command equivalents use the same validation and service:
 
 Each successful result contains the artifact, status, applicable inserted/skipped or build counts, source, effective dates, warnings, and correlation ID. Failures are sanitized; use the correlation ID to inspect the audit trail. Invalid syntax, dates, unsupported data types, missing required symbols, and unsupported options fail before any provider request or warehouse mutation.
 
+OHLCV downloads report one outcome per requested symbol:
+
+```text
+SUCCESS  valid rows were persisted
+EMPTY    the provider returned a valid response with no rows
+FAILED   a connection, timeout, HTTP, or provider runtime failure occurred
+INVALID  JSON, OHLCV data, or provider quality validation failed
+SKIPPED  the provider explicitly marked the request as skipped/current
+```
+
+A batch is `SUCCESS` only when every symbol is `SUCCESS` or `SKIPPED`, `PARTIAL` when useful work completed alongside a problem outcome, and `FAILED` when no required symbol completed. Failed, empty, and invalid output includes the affected symbol, a diagnostics reference, and a bounded `vnalpha data download ohlcv SYMBOL ...` remediation command. Provider exception text is not exposed in public output.
+
 Existing `sync`, `build`, and `score` commands remain available and call the same provisioning service.

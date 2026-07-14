@@ -283,3 +283,31 @@ The implementation SHALL include documentation and validation evidence.
 - **GIVEN** the implementation is complete
 - **WHEN** the OpenSpec tasks are reviewed
 - **THEN** validation evidence SHALL show tests, lint, and mocked end-to-end `/explain` auto provisioning.
+
+---
+
+### Requirement: OHLCV ingestion shall preserve truthful symbol and batch outcomes
+
+OHLCV provisioning SHALL preserve typed `SUCCESS`, `EMPTY`, `FAILED`, `INVALID`, and `SKIPPED` outcomes for each requested symbol and SHALL derive the terminal batch status from those outcomes rather than row counts or warning text. A provider response whose quality status is `skipped` SHALL produce `SKIPPED`.
+
+#### Scenario: Mixed symbol outcomes are partial
+
+- **GIVEN** at least one required symbol succeeds
+- **AND** another required symbol is empty, failed, or invalid
+- **WHEN** the ingestion run finishes
+- **THEN** the batch and persisted `ingestion_run.status` SHALL be `PARTIAL`
+- **AND** the affected symbols and bounded remediation steps SHALL be user-visible.
+
+#### Scenario: No required symbol completes
+
+- **GIVEN** no required symbol succeeds or is explicitly already current
+- **WHEN** the ingestion run finishes
+- **THEN** the batch and persisted `ingestion_run.status` SHALL be `FAILED`
+- **AND** valid empty responses SHALL remain distinguishable from provider failures and invalid data.
+
+#### Scenario: Provider evidence is retained
+
+- **GIVEN** vnstock-service supplies a quality report or diagnostics
+- **WHEN** raw OHLCV rows and the ingestion terminal result are persisted
+- **THEN** `quality_report_json` and `diagnostics_json` SHALL retain that sanitized evidence
+- **AND** the run SHALL retain one correlation ID, exact terminal reason, counts, and per-symbol results.

@@ -131,9 +131,7 @@ def test_runtime_adapter_failure_returns_sanitized_failed_result() -> None:
         dependencies=DataProvisioningDependencies(sync_ohlcv=adapter),
     )
 
-    result = service.execute(
-        DataProvisioningRequest("download", "ohlcv", symbol="FPT")
-    )
+    result = service.execute(DataProvisioningRequest("download", "ohlcv", symbol="FPT"))
 
     assert result.status is ProvisioningStatus.FAILED
     assert result.error == (
@@ -142,7 +140,7 @@ def test_runtime_adapter_failure_returns_sanitized_failed_result() -> None:
 
 
 @pytest.mark.parametrize(
-    ("module_name", "request"),
+    ("module_name", "request_case"),
     [
         (
             "vnalpha.cli_app.sync",
@@ -160,12 +158,12 @@ def test_runtime_adapter_failure_returns_sanitized_failed_result() -> None:
 )
 def test_legacy_helpers_convert_validation_errors_to_clean_exit(
     module_name: str,
-    request: tuple[str, str, dict[str, object]],
+    request_case: tuple[str, str, dict[str, object]],
 ) -> None:
     from vnalpha.data_provisioning.service import DataProvisioningRequest
 
     module = __import__(module_name, fromlist=["placeholder"])
-    operation, artifact, kwargs = request
+    operation, artifact, kwargs = request_case
 
     with pytest.raises(typer.Exit):
         module._execute(
@@ -174,7 +172,9 @@ def test_legacy_helpers_convert_validation_errors_to_clean_exit(
         )
 
 
-def test_legacy_sync_without_selection_preserves_all_active_semantics(monkeypatch) -> None:
+def test_legacy_sync_without_selection_preserves_all_active_semantics(
+    monkeypatch,
+) -> None:
     from vnalpha.cli_app import sync as sync_cli
     from vnalpha.data_provisioning.service import (
         DataProvisioningResult,

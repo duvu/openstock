@@ -166,35 +166,30 @@ def insert_raw_ohlcv(
     """Bulk insert raw OHLCV records. Returns inserted count."""
     inserted = 0
     for r in records:
-        try:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO market_ohlcv_raw
-                (ingestion_run_id, symbol, time, interval, open, high, low, close, volume,
-                 provider, quality_status, fetched_at, raw_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    run_id,
-                    symbol,
-                    r.get("time"),
-                    r.get("interval", "1D"),
-                    r.get("open"),
-                    r.get("high"),
-                    r.get("low"),
-                    r.get("close"),
-                    r.get("volume"),
-                    provider,
-                    quality_status,
-                    fetched_at,
-                    json.dumps(r),
-                ],
-            )
-            inserted += 1
-        except Exception as e:
-            logger.warning(
-                "Failed to insert raw OHLCV for %s at %s: %s", symbol, r.get("time"), e
-            )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO market_ohlcv_raw
+            (ingestion_run_id, symbol, time, interval, open, high, low, close, volume,
+             provider, quality_status, fetched_at, raw_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                run_id,
+                symbol,
+                r.get("time"),
+                r.get("interval", "1D"),
+                r.get("open"),
+                r.get("high"),
+                r.get("low"),
+                r.get("close"),
+                r.get("volume"),
+                provider,
+                quality_status,
+                fetched_at,
+                json.dumps(r),
+            ],
+        )
+        inserted += 1
     return inserted
 
 

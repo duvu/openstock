@@ -106,7 +106,11 @@ def _payload(result) -> dict[str, str | dict[str, int] | list[str] | None]:
         "counts": result.counts,
         "warnings": list(result.warnings),
         "error": result.error,
+        "terminal_reason": result.terminal_reason,
         "correlation_id": result.correlation_id,
+        "symbol_results": [
+            symbol_result.to_payload() for symbol_result in result.symbol_results
+        ],
     }
 
 

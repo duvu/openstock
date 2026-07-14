@@ -215,6 +215,45 @@ async def test_research_command_lifecycle_redacts_raw_arguments(tmp_path: Path) 
 
 
 @pytest.mark.asyncio
+async def test_research_command_result_failure_records_failed_lifecycle(
+    tmp_path: Path,
+) -> None:
+    workspace = create_workspace(root=tmp_path)
+    router, _ = make_router(tmp_path, workspace)
+    router._command_executor.execute.return_value = CommandResult(
+        status="FAILED",
+        title="data",
+        summary="No required OHLCV symbol completed.",
+    )
+    run_context = RunContext(
+        run_id="tui-research-failure-result",
+        surface="tui",
+        actor="test",
+        log_root=tmp_path,
+    )
+    from vnalpha.observability.context import init_run_context
+
+    with patch(
+        "vnalpha.observability.context.make_run_context", return_value=run_context
+    ):
+        init_run_context("tui", actor="test", log_root=tmp_path)
+    set_correlation_id("unset")
+
+    await router.route("/data download ohlcv FPT")
+
+    records = [
+        json.loads(line)
+        for line in run_context.commands_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert [record["event_type"] for record in records] == [
+        "COMMAND_STARTED",
+        "COMMAND_FAILED",
+    ]
+    assert records[-1]["status"] == "FAILED"
+    assert records[-1]["exit_code"] == 1
+
+
+@pytest.mark.asyncio
 async def test_operational_command_lifecycle_captures_exception(tmp_path: Path) -> None:
     workspace = create_workspace(root=tmp_path)
     router, _ = make_router(tmp_path, workspace)

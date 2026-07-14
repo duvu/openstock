@@ -11,6 +11,10 @@ class VnstockConnectionError(VnstockClientError):
     """Cannot connect to vnstock-service."""
 
 
+class VnstockTimeoutError(VnstockConnectionError):
+    pass
+
+
 class VnstockHTTPError(VnstockClientError):
     """Non-200 response from vnstock-service."""
 
