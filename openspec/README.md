@@ -23,7 +23,14 @@ Archiving preserves the complete proposal/design/task/validation history. Implem
 
 ```text
 P0  fiinquantx-provider-integration
-    licensed SDK discovery → provider foundation → verified dataset slices
+    documentation inventory (complete)
+      → licensed runtime/commercial verification
+      → optional synchronous provider foundation
+      → reference and historical market data
+      → flow/ownership/market structure/valuation
+      → period-aware fundamentals
+      → namespaced vendor analytics
+    streaming requires a separate accepted change
     ↓
 P1  prod-b-sandbox-mvp
     + tui-terminal-rendering-integrity
@@ -37,7 +44,9 @@ P2  research-intelligence-data-model-foundation (completed; archived 2026-07-13)
 P3  prod-d-closed-loop-repair + tui-research-workflow-polish
 ```
 
-`fiinquantx-provider-integration` adds the first prioritized commercial provider to the `vnstock` plugin platform. The official public repository distributes wheels but does not publish SDK source, signatures, schemas, or auth contracts. Therefore licensed contract discovery and synthetic fixtures are a hard prerequisite. The implementation must use the existing plugin runtime, remain optional, preserve current providers, and stay data-only.
+`fiinquantx-provider-integration` adds the first prioritized commercial provider to the `vnstock` plugin platform. The official package repository distributes wheels, while the detailed 125-page API documentation mirror is committed under `docs/fiinquant/site/` by PR #103. Documentation inventory is complete, but licensed runtime verification remains mandatory for exact return objects, field types, units, timestamps, access/entitlement, limits and commercial persistence rights.
+
+The initial provider is synchronous and uses only the positive data-method allowlist through `PluginRuntime`. FiinQuantX realtime callbacks and order-book subscriptions require a separate streaming architecture. Every documented broker, account, funding, order, position, allocation and execution method is permanently outside scope under the **read-only research boundary**.
 
 `tui-terminal-rendering-integrity` addresses GitHub issue #60. It defines surface-aware file-backed TUI logging, terminal-frame ownership, non-overlapping Textual regions, height-aware composer suggestions, bounded TODO content, and a fully contained LogScreen. It is intentionally separate from research artifact presentation and acts as a prerequisite for further `tui-research-workflow-polish` expansion.
 
