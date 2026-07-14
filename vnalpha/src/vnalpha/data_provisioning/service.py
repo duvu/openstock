@@ -103,7 +103,10 @@ class DataProvisioningService:
                 end=normalized.end,
                 requested_date=normalized.requested_date,
                 freshness="unknown",
-                lineage={"operation": normalized.operation, "artifact": normalized.artifact},
+                lineage={
+                    "operation": normalized.operation,
+                    "artifact": normalized.artifact,
+                },
                 error="Data provisioning did not complete. Review the correlated audit record.",
                 follow_up="Review the correlated audit record and retry after correcting the input or provider.",
             )
@@ -116,7 +119,9 @@ class DataProvisioningService:
         return self._validate_fields(request, date_conn=self.conn)
 
     @classmethod
-    def _validate_fields(cls, request: DataProvisioningRequest, *, date_conn) -> DataProvisioningRequest:
+    def _validate_fields(
+        cls, request: DataProvisioningRequest, *, date_conn
+    ) -> DataProvisioningRequest:
         operation = request.operation.strip().lower()
         artifact = request.artifact.strip().lower()
         symbol = _normalize_symbol(request.symbol)
@@ -417,11 +422,19 @@ def _normalize_source(value: str | None) -> str | None:
     normalized = value.strip()
     if not normalized:
         return None
-    if normalized.upper() not in {"VCI", "TCBS", "VNDIRECT", "SSI", "FILI", "KBS", "MAS"}:
+    if normalized.upper() not in {
+        "KBS",
+        "VCI",
+        "MSN",
+        "DNSE",
+        "TCBS",
+        "FMARKET",
+        "FMP",
+    }:
         raise DataProvisioningValidationError(
-            "--source must name an approved provider (VCI, TCBS, VNDIRECT, SSI, FILI, KBS, or MAS)."
+            "--source must name an approved provider (KBS, VCI, MSN, DNSE, or TCBS)."
         )
-    return normalized
+    return normalized.upper()
 
 
 def _normalize_interval(value: str) -> str:
@@ -520,14 +533,20 @@ def _result(
     )
 
 
-def _audit_provisioning(event_type: str, request: DataProvisioningRequest, status: str) -> None:
+def _audit_provisioning(
+    event_type: str, request: DataProvisioningRequest, status: str
+) -> None:
     from vnalpha.observability.audit import log_audit
 
     log_audit(
         f"DATA_PROVISIONING_{event_type}",
         f"{request.operation} {request.artifact}",
         status=status,
-        extra={"artifact": request.artifact, "operation": request.operation, "symbol": request.symbol},
+        extra={
+            "artifact": request.artifact,
+            "operation": request.operation,
+            "symbol": request.symbol,
+        },
         object_type="data_provisioning",
         object_id=request.artifact,
     )

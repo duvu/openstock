@@ -31,7 +31,7 @@ def test_download_ohlcv_normalizes_arguments_and_reports_operation_evidence() ->
             symbol=" fpt ",
             start="2026-07-01",
             end="2026-07-10",
-            source="vndirect",
+            source="KBS",
             interval="1H",
         )
     )
@@ -45,7 +45,7 @@ def test_download_ohlcv_normalizes_arguments_and_reports_operation_evidence() ->
         universe=["FPT"],
         start="2026-07-01",
         end="2026-07-10",
-        source="vndirect",
+        source="KBS",
         interval="1H",
     )
 
@@ -84,7 +84,9 @@ def test_unapproved_source_is_rejected_before_provider_adapter_runs() -> None:
     )
     with pytest.raises(DataProvisioningValidationError, match="source"):
         service.execute(
-            DataProvisioningRequest("download", "ohlcv", symbol="FPT", source="NOT_APPROVED")
+            DataProvisioningRequest(
+                "download", "ohlcv", symbol="FPT", source="NOT_APPROVED"
+            )
         )
     sync_ohlcv.assert_not_called()
 
@@ -101,7 +103,9 @@ def test_canonical_requires_symbol_before_builder_runs() -> None:
     service = DataProvisioningService(
         MagicMock(), dependencies=DataProvisioningDependencies(build_canonical=builder)
     )
-    with pytest.raises(DataProvisioningValidationError, match="canonical requires a symbol"):
+    with pytest.raises(
+        DataProvisioningValidationError, match="canonical requires a symbol"
+    ):
         service.execute(DataProvisioningRequest("build", "canonical"))
     builder.assert_not_called()
 
@@ -148,11 +152,11 @@ def test_data_handler_uses_shared_service_and_renders_correlation() -> None:
         correlation_id="corr-77",
         counts={"inserted": 4, "skipped": 1},
         symbol="FPT",
-        source="vndirect",
+        source="KBS",
     )
 
     result = handle_data(
-        parse("/data download ohlcv fpt --source vndirect"),
+        parse("/data download ohlcv fpt --source KBS"),
         conn=MagicMock(),
         service=service,
     )
@@ -162,7 +166,7 @@ def test_data_handler_uses_shared_service_and_renders_correlation() -> None:
     assert result.panels[0].content["correlation_id"] == "corr-77"
     request = service.execute.call_args.args[0]
     assert request.symbol == "fpt"
-    assert request.source == "vndirect"
+    assert request.source == "KBS"
 
 
 def test_data_cli_validates_before_opening_connection(monkeypatch) -> None:
@@ -172,7 +176,9 @@ def test_data_cli_validates_before_opening_connection(monkeypatch) -> None:
     migrations = MagicMock()
     monkeypatch.setattr("vnalpha.warehouse.connection.get_connection", get_connection)
     monkeypatch.setattr("vnalpha.warehouse.migrations.run_migrations", migrations)
-    result = CliRunner().invoke(data_cli.app, ["build", "features", "FPT", "--date", "bad"])
+    result = CliRunner().invoke(
+        data_cli.app, ["build", "features", "FPT", "--date", "bad"]
+    )
     assert result.exit_code != 0
     get_connection.assert_not_called()
     migrations.assert_not_called()
