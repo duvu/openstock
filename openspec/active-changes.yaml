@@ -1,11 +1,17 @@
 # Authoritative registry for non-archived OpenSpec changes.
-reviewed_at: 2026-07-13
+reviewed_at: 2026-07-14
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
-  p0_change: null
+  p0_change: fiinquantx-provider-integration
   research_only_boundary: true
 changes:
+  fiinquantx-provider-integration:
+    status: planned
+    priority: P0
+    blocked_by: []
+    summary: "Integrate documented synchronous FiinQuantX market, reference, flow, valuation and period-aware fundamental data through the existing vnstock plugin runtime; defer streaming to a separate contract and exclude all trading/account SDK surfaces."
+    evidence: "Official wheel repository reviewed at abb1e038; package index lists 0.1.64. The 125-page detailed documentation mirror committed at 30b684d and merged by PR #103 establishes the documented API inventory. G0A documentation review is complete; licensed runtime, entitlement, units, return shapes, quotas and commercial persistence verification remain required before any capability is enabled."
   tui-terminal-rendering-integrity:
     status: planned
     priority: P1
