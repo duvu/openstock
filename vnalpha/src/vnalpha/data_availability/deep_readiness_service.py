@@ -41,26 +41,16 @@ class DeepAnalysisReadinessService:
         normalized_symbol = request.symbol.upper().strip()
         try:
             resolved_date = resolve_date(request.requested_date, conn=request.conn)
-        except (ValueError, duckdb.Error):
-            resolved_date = request.requested_date or "unresolved"
-            audit_started(
+        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+            return self._terminal_failure(
                 symbol=normalized_symbol,
                 requested_date=request.requested_date,
-                resolved_date=resolved_date,
+                resolved_date=request.requested_date or "unresolved",
                 correlation_id=current_correlation_id,
+                message="Deep-analysis date could not be resolved.",
+                exception_type=type(exc).__name__,
             )
-            readiness = ReadinessResult(
-                symbol=normalized_symbol,
-                requested_date=request.requested_date,
-                resolved_date=resolved_date,
-                artifacts=(),
-                actions=(),
-                warnings=(),
-                errors=("Deep-analysis date could not be resolved.",),
-                correlation_id=current_correlation_id,
-            )
-            audit_readiness(readiness)
-            return readiness
+
         audit_started(
             symbol=normalized_symbol,
             requested_date=request.requested_date,
@@ -74,12 +64,24 @@ class DeepAnalysisReadinessService:
             correlation_id=current_correlation_id,
         )
         actions = tuple(action.value for action in result.actions_taken)
-        core_artifacts = build_artifacts(
-            result=result,
-            actions=actions,
-            requested_date=request.requested_date,
-            resolved_date=resolved_date,
-        )
+        try:
+            core_artifacts = build_artifacts(
+                result=result,
+                actions=actions,
+                requested_date=request.requested_date,
+                resolved_date=resolved_date,
+            )
+        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+            return self._terminal_failure(
+                symbol=normalized_symbol,
+                requested_date=request.requested_date,
+                resolved_date=resolved_date,
+                correlation_id=current_correlation_id,
+                message="Core readiness evidence could not be evaluated.",
+                exception_type=type(exc).__name__,
+                start_already_recorded=True,
+            )
+
         context_input = ContextReadinessInput(
             conn=request.conn,
             symbol=normalized_symbol,
@@ -90,10 +92,11 @@ class DeepAnalysisReadinessService:
         )
         try:
             context_artifacts = evaluate_context_readiness(context_input)
-        except duckdb.Error:
+        except Exception:  # noqa: BROAD_EXCEPT_OK
             context_artifacts = unavailable_context_artifacts(
                 context_input, ContextIssue.CONTEXT_BUILD_FAILED
             )
+
         artifacts = (*core_artifacts, *context_artifacts)
         errors = tuple(result.errors) + tuple(
             artifact.error
@@ -146,6 +149,44 @@ class DeepAnalysisReadinessService:
                 status=EnsureDataStatus.FAILED,
                 errors=["Core data readiness could not be evaluated."],
             )
+
+    def _terminal_failure(
+        self,
+        *,
+        symbol: str,
+        requested_date: str | None,
+        resolved_date: str,
+        correlation_id: str,
+        message: str,
+        exception_type: str,
+        start_already_recorded: bool = False,
+    ) -> ReadinessResult:
+        if not start_already_recorded:
+            audit_started(
+                symbol=symbol,
+                requested_date=requested_date,
+                resolved_date=resolved_date,
+                correlation_id=correlation_id,
+            )
+        audit_ensure_exception(
+            symbol=symbol,
+            requested_date=requested_date,
+            resolved_date=resolved_date,
+            correlation_id=correlation_id,
+            exception_type=exception_type,
+        )
+        readiness = ReadinessResult(
+            symbol=symbol,
+            requested_date=requested_date,
+            resolved_date=resolved_date,
+            artifacts=(),
+            actions=(),
+            warnings=(),
+            errors=(message,),
+            correlation_id=correlation_id,
+        )
+        audit_readiness(readiness)
+        return readiness
 
 
 def ensure_deep_analysis_ready(
