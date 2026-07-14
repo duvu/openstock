@@ -32,8 +32,8 @@ candidate_score
 daily_watchlist
 quality status
 lineage
-market regime snapshot, if available
-sector strength snapshot, if available
+market regime snapshot when requested or required
+sector strength snapshot when requested or required
 historical evidence snapshot, if available
 ```
 
@@ -112,3 +112,56 @@ missing evidence
 ```
 
 They must not use execution language.
+
+## Deep-analysis readiness orchestration
+
+```text
+/analyze SYMBOL or assistant intent
+  -> DeepAnalysisReadinessService
+  -> ensure_symbol_analysis_ready (symbol, benchmark, features, score)
+  -> ensure market-regime snapshot when requested or required
+  -> ensure sector-strength snapshot when requested or required
+  -> typed readiness result and correlated audit events
+  -> analysis.deep_symbol
+  -> command/TUI/assistant rendering
+```
+
+`DeepAnalysisReadinessService` is deterministic application code. It owns the
+provisioning decision and reuses the current one-symbol ensure service plus
+the established regime/sector builders. The LLM planner only selects the
+bounded read tool and never receives `data.fetch` capability.
+
+The service returns one status per artifact: `READY`, `PROVISIONED`, `PARTIAL`,
+`FAILED`, or `NOT_REQUESTED`, including requested and resolved as-of dates,
+actions, freshness, lineage, warnings, errors, and correlation ID. The executor
+must not log-and-continue after a failed required precondition. It can execute
+only with an optional unavailable context explicitly represented in the result;
+the rendered analysis must disclose it.
+
+The default one-symbol path stays minimal and does not refresh the full
+universe. A market or sector snapshot is built only when the command option or
+deep contract requests it, and only through existing bounded builders.
+
+## Explicit user data commands
+
+One shared deterministic command service is exposed in both CLI and TUI:
+
+```text
+vnalpha data download symbols [--source PROVIDER]
+vnalpha data download ohlcv SYMBOL [--start DATE] [--end DATE] [--source PROVIDER]
+vnalpha data download index [SYMBOL] [--start DATE] [--end DATE] [--source PROVIDER]
+vnalpha data build canonical SYMBOL
+vnalpha data build features SYMBOL --date DATE
+vnalpha data build score SYMBOL --date DATE
+vnalpha data build market-regime --date DATE
+vnalpha data build sector-strength --date DATE
+
+/data download <symbols|ohlcv|index> ...
+/data build <canonical|features|score|market-regime|sector-strength> ...
+```
+
+These are explicit user-initiated operational paths. They validate arguments,
+reuse existing ingestion and builder services, render deterministic
+actions/freshness/warnings, and emit correlated audit events. Existing `sync`
+and `build` CLI commands remain supported; no provider-I/O implementation is
+duplicated.

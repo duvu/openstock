@@ -29,8 +29,8 @@ changes:
     status: partial
     priority: P2
     blocked_by: []
-    summary: "Consolidated warehouse-grounded deep symbol analysis."
-    evidence: "`analysis.deep_symbol`, assistant intent/template, grounding, and tests exist; command/persistence/full contract remain."
+    summary: "Consolidated warehouse-grounded deep symbol analysis with deterministic readiness for symbol, market-regime, and sector-strength inputs plus explicit user data commands."
+    evidence: "Runtime traces show `analysis.deep_symbol` succeeds while `market_regime_snapshot` and `sector_strength_snapshot` are missing; existing ensure-data covers symbol/benchmark/features/score only and the executor logs-and-continues after an ensure failure."
   research-scenario-plan-engine:
     status: partial
     priority: P2

@@ -40,18 +40,46 @@
 - [ ] 4.4 Add synthesis template.
 - [ ] 4.5 Add help/docs examples.
 
-## 5. Tests
+## 5. Deep-analysis readiness
 
-- [ ] 5.1 Test analysis output contains all required blocks.
-- [ ] 5.2 Test missing data caveats.
-- [ ] 5.3 Test level extraction output.
-- [ ] 5.4 Test setup quality decomposition.
-- [ ] 5.5 Test assistant route.
-- [ ] 5.6 Test no trading/execution language.
+- [ ] 5.1 Define typed deep-analysis readiness request/result models with per-artifact status, requested/resolved as-of dates, actions, freshness, lineage, warnings, errors, and correlation ID.
+- [ ] 5.2 Extend deterministic ensure-data to evaluate and provision `market_regime_snapshot` and `sector_strength_snapshot` after symbol, benchmark, feature, and score readiness.
+- [ ] 5.3 Keep one-symbol provisioning minimal and do not trigger a full-universe refresh unless an explicit market/sector context build requires its bounded input set.
+- [ ] 5.4 Invoke deep readiness before `/analyze` and before `analysis.deep_symbol` in the assistant executor.
+- [ ] 5.5 Fail the bounded execution path when a required readiness action fails; do not log-and-continue past a failed precondition.
+- [ ] 5.6 Preserve explicit missing-data disclosure only for optional/genuinely unavailable context and render deterministic readiness evidence.
+- [ ] 5.7 Emit correlated audit events for start, artifact decision/action, cache hit, partial, failure, and completion.
 
-## 6. Validation
+## 6. Explicit data provisioning commands
 
-- [ ] 6.1 Run `make test-vnalpha`.
-- [ ] 6.2 Run `make lint-vnalpha`.
-- [ ] 6.3 Run `make verify-r4`.
-- [ ] 6.4 Run `openstock-verify --ci`.
+- [ ] 6.1 Add a shared deterministic command service that reuses existing ingestion, canonical, feature, score, regime, and sector builders.
+- [ ] 6.2 Add CLI `vnalpha data download` subcommands for `symbols`, one-symbol `ohlcv`, and `index`.
+- [ ] 6.3 Add CLI `vnalpha data build` subcommands for `canonical`, `features`, `score`, `market-regime`, and `sector-strength`.
+- [ ] 6.4 Add matching TUI `/data download` and `/data build` forms, help metadata, validation, and readiness rendering.
+- [ ] 6.5 Retain existing `sync` and `build` CLI commands without duplicating provider I/O or bypassing policy.
+- [ ] 6.6 Document data types, provider options, output, failure diagnostics, and the research-only boundary.
+
+## 7. Tests
+
+- [ ] 7.1 Test analysis output contains all required blocks.
+- [ ] 7.2 Test missing data caveats.
+- [ ] 7.3 Test level extraction output.
+- [ ] 7.4 Test setup quality decomposition.
+- [ ] 7.5 Test assistant route.
+- [ ] 7.6 Test no trading/execution language.
+- [ ] 7.7 Test deep analysis provisions missing market-regime and sector-strength snapshots before the read tool runs.
+- [ ] 7.8 Test fresh deep inputs produce cache-hit readiness actions only.
+- [ ] 7.9 Test a failed required precondition prevents `analysis.deep_symbol` execution and returns an actionable structured status.
+- [ ] 7.10 Test optional unavailable context is explicitly disclosed and cannot render as current.
+- [ ] 7.11 Test each CLI and TUI data command parses valid input, rejects invalid input, reuses the shared service, and reports correlated status.
+- [ ] 7.12 Test the assistant plan remains read-only and cannot directly plan or call `data.fetch`.
+
+## 8. Validation
+
+- [ ] 8.1 Run `make test-vnalpha`.
+- [ ] 8.2 Run `make lint-vnalpha`.
+- [ ] 8.3 Run `make verify-r4`.
+- [ ] 8.4 Run `openstock-verify --ci`.
+- [ ] 8.5 Run focused data-availability, assistant-executor, deep-analysis, CLI, and TUI tests, including a mocked end-to-end missing-context path.
+- [ ] 8.6 Run `uv run vnalpha data --help`, one valid manual-fixture path, and one invalid-input path as manual QA evidence.
+- [ ] 8.7 Record exact command outcomes and runtime-log references in `validation.md`; do not claim unrun checks passed.
