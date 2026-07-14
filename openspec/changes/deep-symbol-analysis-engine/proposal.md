@@ -80,6 +80,22 @@ gate with a concrete manual remediation command. Optional market and sector
 context stays explicitly `NOT_REQUESTED`/unavailable in the research payload
 until the subsequent context-readiness work supplies bounded builders.
 
+## Issue #92 readiness-contract completion
+
+Before market and sector readiness is extended, the five-core-artifact gate
+must make its operational evidence trustworthy. Each artifact carries typed
+availability, freshness, quality, lineage, and ordered remediation evidence;
+rendered warnings are display-only and cannot determine control flow. The
+remediation domain model is independent of CLI spelling, so it renders only
+commands registered today until the later data-command namespace exists.
+
+Readiness resolves one Vietnamese-market as-of date before the core ensure
+call, establishes or reuses its correlation ID, and emits the start audit
+event before any provisioning. Known and unexpected ensure exceptions both
+produce a sanitized, fail-closed terminal result. This slice does not build
+market-regime or sector-strength snapshots and does not add `vnalpha data`
+commands; those remain issues #76 and #77.
+
 ## Target output
 
 ```text

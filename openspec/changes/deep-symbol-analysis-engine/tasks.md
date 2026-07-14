@@ -49,6 +49,8 @@
 - [x] 5.5 Fail the bounded execution path when a required readiness action fails; do not log-and-continue past a failed precondition. [evidence: `tests/test_deep_analysis_readiness.py`]
 - [x] 5.6 Preserve explicit missing-data disclosure only for optional/genuinely unavailable context and render deterministic readiness evidence. [evidence: `tests/test_deep_analysis_readiness.py`, `tests/test_phase3_artifact_references.py`]
 - [x] 5.7 Emit correlated audit events for start, artifact decision/action, cache hit, partial, failure, and completion. [evidence: `tests/test_deep_analysis_readiness.py`]
+- [x] 5.8 Issue #92: add typed five-core-artifact evidence and ordered remediation steps, rendered through commands registered today. [evidence: `tests/test_deep_analysis_readiness.py`]
+- [x] 5.9 Issue #92: resolve the effective Vietnamese-market date and establish/readiness audit correlation before ensure; convert known and unexpected ensure errors to sanitized fail-closed results. [evidence: `tests/test_deep_analysis_readiness.py`]
 
 ## 6. Explicit data provisioning commands
 
@@ -73,13 +75,14 @@
 - [x] 7.10 Test optional unavailable context is explicitly disclosed and cannot render as current. [evidence: `tests/test_phase3_artifact_references.py`]
 - [ ] 7.11 Test each CLI and TUI data command parses valid input, rejects invalid input, reuses the shared service, and reports correlated status.
 - [x] 7.12 Test the assistant plan remains read-only and cannot directly plan or call `data.fetch`. [evidence: `tests/test_tool_policy.py`, `tests/test_executor_and_policy.py`]
+- [x] 7.13 Issue #92: test typed per-artifact evidence, ordered legacy remediation, start-before-ensure audit sequencing, shared correlation/date resolution, and unexpected ensure failure. [evidence: `tests/test_deep_analysis_readiness.py`]
 
 ## 8. Validation
 
-- [ ] 8.1 Run `make test-vnalpha`.
+- [x] 8.1 Run `make test-vnalpha`. [evidence: `validation.md`]
 - [ ] 8.2 Run `make lint-vnalpha`.
-- [ ] 8.3 Run `make verify-r4`.
-- [ ] 8.4 Run `openstock-verify --ci`.
-- [ ] 8.5 Run focused data-availability, assistant-executor, deep-analysis, CLI, and TUI tests, including a mocked end-to-end missing-context path.
+- [x] 8.3 Run `make verify-r4`. [evidence: `validation.md`]
+- [x] 8.4 Run `openstock-verify --ci`. [evidence: `validation.md`]
+- [x] 8.5 Run focused data-availability, assistant-executor, deep-analysis, CLI, and TUI tests, including a mocked end-to-end missing-context path. [evidence: `validation.md`]
 - [ ] 8.6 Run `uv run vnalpha data --help`, one valid manual-fixture path, and one invalid-input path as manual QA evidence.
-- [ ] 8.7 Record exact command outcomes and runtime-log references in `validation.md`; do not claim unrun checks passed.
+- [x] 8.7 Record exact command outcomes and runtime-log references in `validation.md`; do not claim unrun checks passed. [evidence: `validation.md`]

@@ -87,9 +87,14 @@ def _readiness_error_message(readiness) -> str:
     failed_artifact = next(
         (artifact for artifact in readiness.artifacts if artifact.error), None
     )
+    remediation_steps = failed_artifact.remediation_steps if failed_artifact else ()
     remediation = failed_artifact.remediation if failed_artifact else None
     details = [readiness.failure_summary()]
-    if remediation:
+    if remediation_steps:
+        details.append(
+            "Remediation: " + " -> ".join(step.command for step in remediation_steps)
+        )
+    elif remediation:
         details.append(f"Remediation: {remediation}")
     details.append(f"correlation_id={readiness.correlation_id}")
     return ". ".join(details)

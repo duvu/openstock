@@ -58,10 +58,10 @@ def log_ensure_symbols_sync_succeeded(symbol: str) -> None:
 def log_ensure_symbols_sync_failed(symbol: str, exc: BaseException) -> None:
     log_audit(
         "DATA_ENSURE_SYMBOLS_SYNC_FAILED",
-        f"symbol_master sync failed for {symbol}: {exc}",
+        f"symbol_master sync failed for {symbol}.",
         status="FAILED",
         level="ERROR",
-        extra={"symbol": symbol, "error": str(exc)},
+        extra={"symbol": symbol, "error_type": type(exc).__name__},
     )
 
 
@@ -85,10 +85,10 @@ def log_ensure_ohlcv_sync_succeeded(symbol: str, inserted: int) -> None:
 def log_ensure_ohlcv_sync_failed(symbol: str, exc: BaseException) -> None:
     log_audit(
         "DATA_ENSURE_SYMBOL_OHLCV_SYNC_FAILED",
-        f"OHLCV sync failed for {symbol}: {exc}",
+        f"OHLCV sync failed for {symbol}.",
         status="FAILED",
         level="ERROR",
-        extra={"symbol": symbol, "error": str(exc)},
+        extra={"symbol": symbol, "error_type": type(exc).__name__},
     )
 
 
@@ -112,10 +112,10 @@ def log_ensure_canonical_build_succeeded(symbol: str, upserted: int) -> None:
 def log_ensure_canonical_build_failed(symbol: str, exc: BaseException) -> None:
     log_audit(
         "DATA_ENSURE_CANONICAL_BUILD_FAILED",
-        f"Canonical build failed for {symbol}: {exc}",
+        f"Canonical build failed for {symbol}.",
         status="FAILED",
         level="ERROR",
-        extra={"symbol": symbol, "error": str(exc)},
+        extra={"symbol": symbol, "error_type": type(exc).__name__},
     )
 
 
@@ -139,10 +139,10 @@ def log_ensure_benchmark_sync_succeeded(benchmark: str, inserted: int) -> None:
 def log_ensure_benchmark_sync_failed(benchmark: str, exc: BaseException) -> None:
     log_audit(
         "DATA_ENSURE_BENCHMARK_SYNC_FAILED",
-        f"Benchmark sync failed for {benchmark}: {exc}",
+        f"Benchmark sync failed for {benchmark}.",
         status="FAILED",
         level="ERROR",
-        extra={"benchmark": benchmark, "error": str(exc)},
+        extra={"benchmark": benchmark, "error_type": type(exc).__name__},
     )
 
 
@@ -166,10 +166,10 @@ def log_ensure_feature_build_succeeded(symbol: str) -> None:
 def log_ensure_feature_build_failed(symbol: str, exc: BaseException) -> None:
     log_audit(
         "DATA_ENSURE_FEATURE_BUILD_FAILED",
-        f"Feature build failed for {symbol}: {exc}",
+        f"Feature build failed for {symbol}.",
         status="FAILED",
         level="ERROR",
-        extra={"symbol": symbol, "error": str(exc)},
+        extra={"symbol": symbol, "error_type": type(exc).__name__},
     )
 
 
@@ -193,10 +193,10 @@ def log_ensure_score_succeeded(symbol: str) -> None:
 def log_ensure_score_failed(symbol: str, exc: BaseException) -> None:
     log_audit(
         "DATA_ENSURE_SCORE_FAILED",
-        f"Scoring failed for {symbol}: {exc}",
+        f"Scoring failed for {symbol}.",
         status="FAILED",
         level="ERROR",
-        extra={"symbol": symbol, "error": str(exc)},
+        extra={"symbol": symbol, "error_type": type(exc).__name__},
     )
 
 
@@ -212,18 +212,26 @@ def log_ensure_ready(symbol: str, target_date: str, actions: list[str]) -> None:
 def log_ensure_partial(symbol: str, target_date: str, warnings: list[str]) -> None:
     log_audit(
         "DATA_ENSURE_PARTIAL",
-        f"Data partially ready for {symbol} on {target_date}: {warnings}",
+        f"Data partially ready for {symbol} on {target_date}.",
         status="WARN",
         level="WARNING",
-        extra={"symbol": symbol, "target_date": target_date, "warnings": warnings},
+        extra={
+            "symbol": symbol,
+            "target_date": target_date,
+            "warning_count": len(warnings),
+        },
     )
 
 
 def log_ensure_failed(symbol: str, target_date: str, errors: list[str]) -> None:
     log_audit(
         "DATA_ENSURE_FAILED",
-        f"Data provisioning failed for {symbol} on {target_date}: {errors}",
+        f"Data provisioning failed for {symbol} on {target_date}.",
         status="FAILED",
         level="ERROR",
-        extra={"symbol": symbol, "target_date": target_date, "errors": errors},
+        extra={
+            "symbol": symbol,
+            "target_date": target_date,
+            "error_count": len(errors),
+        },
     )

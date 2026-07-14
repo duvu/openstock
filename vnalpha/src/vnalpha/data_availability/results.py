@@ -22,6 +22,7 @@ def cache_hit_result(
     result.canonical_bars = snapshot.canonical_bars
     result.feature_snapshot_exists = snapshot.feature_snapshot_exists
     result.candidate_score_exists = True
+    _record_snapshot_evidence(result, snapshot)
     result.actions_taken.append(EnsureDataAction.CACHE_HIT)
     result.freshness = "cache_hit"
     result.lineage_actions = [EnsureDataAction.CACHE_HIT.value]
@@ -30,7 +31,11 @@ def cache_hit_result(
     return result
 
 
-def missing_symbol_result(result: EnsureDataResult) -> EnsureDataResult:
+def missing_symbol_result(
+    result: EnsureDataResult, snapshot: EnsureDataSnapshot
+) -> EnsureDataResult:
+    _record_snapshot_evidence(result, snapshot)
+    result.symbol_known = False
     result.errors.append(f"Symbol '{result.symbol}' not found in symbol_master.")
     result.status = EnsureDataStatus.FAILED
     log_ensure_failed(result.symbol, result.target_date, result.errors)
@@ -46,6 +51,7 @@ def finalise_result(
     result.canonical_bars = snapshot.canonical_bars
     result.feature_snapshot_exists = snapshot.feature_snapshot_exists
     result.candidate_score_exists = snapshot.candidate_score_exists
+    _record_snapshot_evidence(result, snapshot)
     result.lineage_actions = [action.value for action in result.actions_taken]
     if snapshot.canonical_bars < policy.min_required_bars:
         result.freshness = "missing_canonical"
@@ -82,3 +88,15 @@ def finalise_result(
     result.status = EnsureDataStatus.READY
     log_ensure_ready(result.symbol, result.target_date, result.lineage_actions)
     return result
+
+
+def _record_snapshot_evidence(
+    result: EnsureDataResult, snapshot: EnsureDataSnapshot
+) -> None:
+    result.symbol_known = snapshot.symbol_known
+    result.benchmark_bars = snapshot.benchmark_bars
+    result.candidate_score_as_of_date = snapshot.candidate_score_as_of_date
+    result.quality_status = snapshot.quality_status
+    result.lineage_fields = snapshot.lineage_fields
+    result.artifact_evidence = snapshot.artifact_evidence
+    result.core_evidence_evaluated = True

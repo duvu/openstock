@@ -110,6 +110,7 @@ def ensure_data_availability(
     )
     lock = EnsureLock(symbol, target_date, lock_dir=request.lock_dir)
     if not lock.acquire():
+        result.failure_code = "LOCK_CONTENDED"
         result.warnings.append(
             f"Another ensure flow is active for {symbol}/{target_date}. Skipping."
         )
@@ -138,7 +139,7 @@ def ensure_data_availability(
         )
         snapshot = _snapshot(normalised_request)
         if not snapshot.symbol_known:
-            return missing_symbol_result(result)
+            return missing_symbol_result(result, snapshot)
 
         plan = plan_data_availability(snapshot, normalised_request.policy)
         context = _action_context(normalised_request, snapshot, dependencies)
