@@ -76,6 +76,7 @@ def deep_symbol_analysis(
     levels = _level_context(bars, feature)
 
     missing_data: list[str] = []
+    optional_missing_data: list[str] = []
     caveats: list[str] = []
     artifact_refs = ArtifactReferenceBuilder()
     if score is None:
@@ -129,6 +130,11 @@ def deep_symbol_analysis(
         caveats.append(
             "Required market regime context was unavailable for the resolved date."
         )
+    elif (
+        market_regime_requirement is ContextRequirement.OPTIONAL
+        and not market_snapshot_present
+    ):
+        optional_missing_data.append("market_regime_snapshot")
     sector_date = sector_data.get("as_of_date")
     sector_name = sector_data.get("sector") or normalized_symbol
     sector_snapshot_present = bool(
@@ -140,7 +146,7 @@ def deep_symbol_analysis(
         sector_snapshot_present,
     )
     if (
-        sector_strength_requirement is not ContextRequirement.NOT_REQUESTED
+        sector_strength_requirement is ContextRequirement.REQUIRED
         and not sector_snapshot_present
     ):
         missing_data.append("sector_strength_snapshot")
@@ -148,6 +154,11 @@ def deep_symbol_analysis(
             "No persisted sector strength snapshot was available for "
             f"{normalized_symbol} on or before {target_date}."
         )
+    elif (
+        sector_strength_requirement is ContextRequirement.OPTIONAL
+        and not sector_snapshot_present
+    ):
+        optional_missing_data.append("sector_strength_snapshot")
 
     data = {
         "tool": "analysis.deep_symbol",
@@ -187,6 +198,7 @@ def deep_symbol_analysis(
             "sector_strength": sector_strength_requirement.value,
         },
         "missing_data": missing_data,
+        "optional_missing_data": optional_missing_data,
         "caveats": list(dict.fromkeys(caveats)),
         "policy": {"mode": "research_only", "disclaimer": _RESEARCH_ONLY_CAVEAT},
     }

@@ -115,7 +115,15 @@ def _requirement(value) -> ContextRequirement:
     if isinstance(value, ContextRequirement):
         return value
     if isinstance(value, str):
-        return ContextRequirement(value)
+        normalized = value.strip().upper()
+        return next(
+            (
+                requirement
+                for requirement in ContextRequirement
+                if requirement.value == normalized
+            ),
+            ContextRequirement.INVALID,
+        )
     return ContextRequirement.NOT_REQUESTED
 
 
@@ -156,8 +164,13 @@ class AssistantExecutor:
     def _execute_step(self, step: ToolPlanStep) -> Any:
         try:
             permission = _TOOL_PERMISSIONS[step.tool_name]
+            arguments = {
+                key: value
+                for key, value in step.arguments.items()
+                if value is not ContextRequirement.NOT_REQUESTED
+            }
             output = self._tool_executor.call(
-                step.tool_name, {permission}, **step.arguments
+                step.tool_name, {permission}, **arguments
             )
             if dataclasses.is_dataclass(output):
                 return dataclasses.asdict(output)

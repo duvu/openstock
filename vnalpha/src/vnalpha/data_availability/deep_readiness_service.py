@@ -6,6 +6,9 @@ from dataclasses import dataclass
 import duckdb
 
 from vnalpha.core.dates import resolve_date
+from vnalpha.data_availability.deep_context_failures import (
+    unavailable_context_artifacts,
+)
 from vnalpha.data_availability.deep_context_readiness import (
     ContextReadinessInput,
     evaluate_context_readiness,
@@ -18,6 +21,7 @@ from vnalpha.data_availability.deep_readiness_audit import (
     correlation_id,
 )
 from vnalpha.data_availability.deep_readiness_models import (
+    ContextIssue,
     ContextRequirement,
     DeepAnalysisReadinessRequest,
     ReadinessResult,
@@ -34,8 +38,29 @@ class DeepAnalysisReadinessService:
 
     def ensure_ready(self, request: DeepAnalysisReadinessRequest) -> ReadinessResult:
         current_correlation_id = correlation_id()
-        resolved_date = resolve_date(request.requested_date, conn=request.conn)
         normalized_symbol = request.symbol.upper().strip()
+        try:
+            resolved_date = resolve_date(request.requested_date, conn=request.conn)
+        except (ValueError, duckdb.Error):
+            resolved_date = request.requested_date or "unresolved"
+            audit_started(
+                symbol=normalized_symbol,
+                requested_date=request.requested_date,
+                resolved_date=resolved_date,
+                correlation_id=current_correlation_id,
+            )
+            readiness = ReadinessResult(
+                symbol=normalized_symbol,
+                requested_date=request.requested_date,
+                resolved_date=resolved_date,
+                artifacts=(),
+                actions=(),
+                warnings=(),
+                errors=("Deep-analysis date could not be resolved.",),
+                correlation_id=current_correlation_id,
+            )
+            audit_readiness(readiness)
+            return readiness
         audit_started(
             symbol=normalized_symbol,
             requested_date=request.requested_date,
@@ -55,15 +80,20 @@ class DeepAnalysisReadinessService:
             requested_date=request.requested_date,
             resolved_date=resolved_date,
         )
-        context_artifacts = evaluate_context_readiness(
-            ContextReadinessInput(
-                conn=request.conn,
-                symbol=normalized_symbol,
-                resolved_date=resolved_date,
-                market_regime_requirement=request.market_regime_requirement,
-                sector_strength_requirement=request.sector_strength_requirement,
-            )
+        context_input = ContextReadinessInput(
+            conn=request.conn,
+            symbol=normalized_symbol,
+            resolved_date=resolved_date,
+            market_regime_requirement=request.market_regime_requirement,
+            sector_strength_requirement=request.sector_strength_requirement,
+            correlation_id=current_correlation_id,
         )
+        try:
+            context_artifacts = evaluate_context_readiness(context_input)
+        except duckdb.Error:
+            context_artifacts = unavailable_context_artifacts(
+                context_input, ContextIssue.CONTEXT_BUILD_FAILED
+            )
         artifacts = (*core_artifacts, *context_artifacts)
         errors = tuple(result.errors) + tuple(
             artifact.error

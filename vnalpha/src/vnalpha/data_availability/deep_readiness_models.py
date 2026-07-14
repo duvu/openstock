@@ -24,6 +24,7 @@ class ContextRequirement(str, Enum):
     NOT_REQUESTED = "NOT_REQUESTED"
     OPTIONAL = "OPTIONAL"
     REQUIRED = "REQUIRED"
+    INVALID = "INVALID"
 
 
 class ContextIssue(str, Enum):
@@ -42,6 +43,7 @@ class ContextIssue(str, Enum):
     SYMBOL_SECTOR_UNCLASSIFIED = "SYMBOL_SECTOR_UNCLASSIFIED"
     SECTOR_NOT_RANKABLE = "SECTOR_NOT_RANKABLE"
     CONTEXT_BUILD_FAILED = "CONTEXT_BUILD_FAILED"
+    INVALID_CONTEXT_REQUIREMENT = "INVALID_CONTEXT_REQUIREMENT"
 
 
 class RemediationAction(str, Enum):
@@ -99,6 +101,15 @@ class ReadinessArtifact:
     required: bool = True
     blocking: bool = True
     issues: tuple[ContextIssue, ...] = ()
+    breadth_active_count: int | None = None
+    breadth_eligible_count: int | None = None
+    breadth_excluded_count: int | None = None
+    breadth_coverage: float | None = None
+    classified_count: int | None = None
+    unclassified_count: int | None = None
+    rank: int | None = None
+    score: float | None = None
+    rotation: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,11 +142,17 @@ class ReadinessResult:
         )
 
     def to_panel_dict(self) -> dict[str, JsonValue]:
+        optional_missing_data = [
+            artifact.name
+            for artifact in self.artifacts
+            if not artifact.blocking and artifact.error_code is not None
+        ]
         return {
             "requested_date": self.requested_date or "latest",
             "resolved_date": self.resolved_date,
             "correlation_id": self.correlation_id,
             "status": "READY" if self.is_ready else "FAILED",
+            "optional_missing_data": optional_missing_data,
             "artifacts": [
                 {
                     "name": artifact.name,
@@ -169,6 +186,15 @@ class ReadinessResult:
                     "required": artifact.required,
                     "blocking": artifact.blocking,
                     "issues": [issue.value for issue in artifact.issues],
+                    "breadth_active_count": artifact.breadth_active_count,
+                    "breadth_eligible_count": artifact.breadth_eligible_count,
+                    "breadth_excluded_count": artifact.breadth_excluded_count,
+                    "breadth_coverage": artifact.breadth_coverage,
+                    "classified_count": artifact.classified_count,
+                    "unclassified_count": artifact.unclassified_count,
+                    "rank": artifact.rank,
+                    "score": artifact.score,
+                    "rotation": artifact.rotation,
                     "remediation_steps": [
                         {
                             "action": step.action.value,
