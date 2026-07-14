@@ -1,87 +1,210 @@
-# Validation: FiinQuantX Provider Integration
+# Validation: FiinQuantX Data Provider Integration
 
 ## Status
 
 ```text
 OpenSpec authored: yes
-Licensed SDK contract discovery: not started
+Detailed documentation inventory: complete
+Licensed SDK runtime verification: not started
+Commercial/license decision: not completed
 Runtime implementation: not started
-Offline validation: not run
+Offline runtime validation: not run
 Licensed live validation: not run
-Phase gates: pending
+Strict OpenSpec validation after rewrite: not run
+Phase gates: G0A passed; G0B-G7 pending
 ```
 
-This file is the evidence ledger. No task or phase gate may be checked from proposal text, marketing material, an installed wheel, or a PR description alone.
-
-## Source review evidence
-
-| Source | Reviewed state | Verified result |
-|---|---|---|
-| `https://github.com/fiinquant/fiinquantx` | `main` at `abb1e038f3e7401ab770067c5d7a539a06823097` | Public repository exists and is maintained by the `fiinquant` organization. |
-| `README.md` | reviewed | Contains the project name only; no public API/auth/schema contract. |
-| `docs/simple/fiinquantx/index.html` | reviewed | PEP-503-style package index linking release wheels. |
-| package index | reviewed | Newest listed wheel at review time is `fiinquantx-0.1.64-py3-none-any.whl`. |
+No runtime capability, provider support or licensed behavior is claimed by this documentation-only change.
 
 ## Evidence rules
 
 - Record the exact OpenStock commit tested.
 - Record the exact FiinQuantX SDK version tested.
 - Record Python version and operating system.
-- Do not attach credentials or raw licensed production payloads.
-- Synthetic fixtures must include a provenance note confirming they contain no licensed values.
-- Live-test output must include only safe counts, schemas, statuses, and hashes.
-- Mark commands `not run`, `passed`, `failed`, `skipped`, or `inconclusive`; do not infer success.
-- A capability cannot be enabled from introspection alone; it requires an approved mapping and contract test.
+- Distinguish documentation evidence from licensed runtime evidence.
+- Do not attach credentials, session state or raw licensed production payloads.
+- Synthetic fixtures must include a provenance statement confirming they contain no licensed values.
+- Live-test output may include only safe method, shape, count, hash, duration and status metadata.
+- Record `passed`, `failed`, `skipped`, `inconclusive` or `not run`; never infer a result.
+- A documented method is not an enabled capability until runtime verification, canonical normalization and contract tests pass.
+- A valid empty result is not proof of entitlement.
+- No task may be checked from PR prose alone.
 
-## Discovery ledger
+## Documentation review ledger
 
-| Timestamp | OpenStock SHA | SDK version | Discovery item | Result | Evidence |
+| Source | Revision | Result |
+|---|---|---|
+| `fiinquant/fiinquantx` public repository | `abb1e038f3e7401ab770067c5d7a539a06823097` | Binary wheel distribution repository reviewed. |
+| Official package index | same revision | Latest indexed wheel observed: `fiinquantx-0.1.64-py3-none-any.whl`. |
+| OpenStock FiinQuant docs mirror | commit `30b684d48911a3e0cf6e7c98fac6a2aa2b790f24`, PR #103 | 125-page detailed mirror reviewed as method/schema design source. |
+| `docs/fiinquant/site/tai-lieu-ki-thuat/cai-dat-va-chuan-bi.md` | PR #103 | Official extra-index installation command recorded. |
+| `docs/fiinquant/site/tai-lieu-ki-thuat/dang-nhap-tai-khoan.md` | PR #103 | `FiinSession(username, password).login()` recorded. |
+| `TickerList` and `BasicInfor` pages | PR #103 | Current membership and company/ICB reference methods recorded. |
+| Historical/realtime/order-book pages | PR #103 | Synchronous historical method and separate streaming methods recorded. |
+| `PriceStatistics` pages | PR #103 | Market-cap, foreign, free-float, price-limit and investor-flow methods/fields recorded. |
+| Fundamental and ratio pages | PR #103 | Period, scope, audit and nested company-type structures recorded; publication time absent. |
+| Valuation and breadth pages | PR #103 | Separate stock/sector/index valuation and current breadth snapshot recorded. |
+| Section 7 trading/account pages | PR #103 | Permanently excluded from provider scope. |
+
+## G0A documentation findings
+
+Verified documented calls:
+
+```text
+FiinSession(...).login()
+TickerList(ticker=...)
+BasicInfor(tickers=...).get()
+Fetch_Trading_Data(realtime=False, ...).get_data()
+PriceStatistics().get_overview(...)
+PriceStatistics().get_foreign(...)
+PriceStatistics().get_freefloat(...)
+PriceStatistics().get_ceilingfloor(...)
+PriceStatistics().get_value_by_investor(...)
+MarketDepth().get_stock_valuation(...)
+MarketDepth().get_sector_valuation(...)
+MarketDepth().get_index_valuation(...)
+MarketBreadth().get(...)
+FundamentalAnalysis().get_financial_statement(...)
+FundamentalAnalysis().get_ratios(...)
+StockScreening().get(...)
+MoneyFlow().get_contribution(...)
+```
+
+Documented streaming calls, explicitly deferred from synchronous `PluginRuntime.fetch()`:
+
+```text
+Trading_Data_Stream(...)
+Fetch_Trading_Data(realtime=True, ...)
+BidAsk(...)
+OrderBook.track_order_book_changes(...)
+```
+
+Documented but permanently out-of-scope areas:
+
+```text
+broker/account login
+account and loan information
+cash/buying power
+orders
+positions
+portfolio allocation
+close derivatives deal
+trading execution
+```
+
+## Required G0B licensed probe ledger
+
+| Probe | OpenStock SHA | SDK version | Python/OS | Result | Safe evidence |
 |---|---|---|---|---|---|
-| pending | pending | pending | installation/import contract | not run | pending |
-| pending | pending | pending | auth/session contract | not run | pending |
-| pending | pending | pending | entitlement/quota contract | not run | pending |
-| pending | pending | pending | dataset/method matrix | not run | pending |
-| pending | pending | pending | field/unit/timezone matrix | not run | pending |
-| pending | pending | pending | fundamentals publication/restatement matrix | not run | pending |
-| pending | pending | pending | license and persistence decision | not run | pending |
+| package installation and metadata | pending | pending | pending | not run | pending |
+| import and public allowlist | pending | pending | pending | not run | pending |
+| login success/failure/session reuse | pending | pending | pending | not run | pending |
+| entitlement/access behavior | pending | pending | pending | not run | pending |
+| limit/quota/concurrency behavior | pending | pending | pending | not run | pending |
+| historical bars return object and schema | pending | pending | pending | not run | pending |
+| timestamp type/timezone | pending | pending | pending | not run | pending |
+| adjusted/unadjusted price semantics | pending | pending | pending | not run | pending |
+| `bu/sd/fb/fs/fn` units and direction | pending | pending | pending | not run | pending |
+| PriceStatistics method schemas | pending | pending | pending | not run | pending |
+| free-float unit | pending | pending | pending | not run | pending |
+| membership/reference return shape | pending | pending | pending | not run | pending |
+| breadth freshness/current-only behavior | pending | pending | pending | not run | pending |
+| stock/sector/index valuation | pending | pending | pending | not run | pending |
+| statement shapes by company type | pending | pending | pending | not run | pending |
+| ratios by subscription entitlement | pending | pending | pending | not run | pending |
+| publication/restatement metadata | pending | pending | pending | not run | pending |
+| commercial persistence/exposure permission | pending | n/a | n/a | not run | pending |
 
-## Required focused validation
+## Required offline cases
 
-Expected implementation commands, adjusted only when actual test paths are created:
+### Provider foundation
+
+```text
+SDK absent
+SDK present with approved version
+SDK present with untested version
+credentials missing
+login failure
+session invalidation
+access/entitlement failure
+valid empty dataset
+rate/limit failure
+unexpected provider failure
+secret redaction
+forbidden SDK member import/call
+PluginRuntime-only execution path
+explicit source no fallback
+auto-source routing decision
+```
+
+### Documentation inconsistency regressions
+
+```text
+timestamp returned as string
+timestamp returned as integer
+PascalCase/camelCase/snake_case aliases
+unknown field casing
+fb=foreign buy and fs=foreign sell verified mapping
+conflicting fb/fs fixture rejected
+method returns DataFrame directly
+method returns object requiring get_data()
+freefloat unit unknown
+freefloat unit verified
+SDK version contract drift
+```
+
+### Dataset contracts
+
+```text
+equity and index OHLCV
+adjusted and unadjusted OHLCV
+current index membership snapshot
+current sector membership snapshot
+company/ICB reference
+price limits
+foreign flow
+foreign ownership/room
+investor flow dimensions
+market-cap history by aggregation frequency
+free-float history if unit verified
+breadth snapshot
+stock valuation
+sector valuation and ICB level
+index valuation
+nested fundamentals by company type
+financial-ratio field entitlement
+publication time missing and historical_as_of_eligible=false
+vendor analytics namespacing
+```
+
+### Boundary cases
+
+```text
+no synchronous equity.quote capability inferred from streaming docs
+no historical membership dates invented
+no full reference.symbols synthesized from partial index lists
+no outstanding-share history advertised without verified method
+no publication timestamp fabricated
+no streaming call from ProviderPlugin.fetch()
+no broker/account/order/position/allocation/execution import or route
+```
+
+## Expected focused commands
+
+Paths may be adjusted only to actual implementation locations while preserving coverage:
 
 ```bash
 cd vnstock
 
 PYTHONPATH=. pytest -q \
   tests/unit/providers/fiinquantx \
-  tests/contracts/providers/test_fiinquantx_contract.py
+  tests/contracts/providers/test_fiinquantx_contracts.py
 
 PYTHONPATH=. pytest -q \
   tests/unit/core/provider \
   tests/unit/core/auth \
-  tests/contracts/providers
-```
-
-Required cases include:
-
-```text
-SDK absent
-SDK incompatible
-valid authentication
-invalid/expired authentication
-entitlement available/unavailable
-quota and rate-limit outcomes
-explicit-source no-fallback behavior
-auto-source routing decision
-valid empty dataset
-invalid symbol and interval
-schema drift
-canonical normalization
-metadata and secret redaction
-publication-time missing/present
-financial restatement
-provider runtime path
-base-package import without SDK
+  tests/contracts/providers \
+  tests/unit/service
 ```
 
 ## Required repository validation
@@ -96,11 +219,11 @@ cd ..
 openspec validate fiinquantx-provider-integration --strict
 ```
 
-If provider-specific service tests are added, they must be included in the full offline command before G6 is checked.
+Base-package packaging validation SHALL run without FiinQuantX installed.
 
 ## Licensed live validation
 
-Live validation is opt-in and must use a minimal bounded request set:
+Live validation is opt-in and bounded:
 
 ```bash
 cd vnstock
@@ -110,55 +233,66 @@ VNSTOCK_FIINQUANTX_LICENSED=true \
 PYTHONPATH=. pytest -q tests/live/providers/test_fiinquantx_live.py -m live
 ```
 
-Live evidence must record:
+Live test requirements:
 
-- SDK version;
-- safe authenticated/entitled state;
-- datasets exercised;
-- symbols/date ranges without raw rows;
-- row counts and canonical columns;
-- quality and routing status;
-- quota impact where safely available;
-- whether any licensed payload was persisted.
+- use a minimal approved ticker/date scope;
+- do not print raw DataFrames or licensed rows;
+- record safe package version, method, requested scope, columns, dtypes, row counts, data hashes, latency and result status;
+- record whether data was persisted;
+- cleanly stop any session resources;
+- do not invoke streaming or trading/account APIs during synchronous provider validation.
 
 ## Cross-provider evidence
 
-For overlapping market datasets, attach bounded comparison output against approved providers:
+Bounded OHLCV comparisons against KBS/VCI SHALL record:
 
 ```text
 common dates
 coverage gaps
 price-scale divergence
+adjusted/unadjusted state
+OHLC divergence
 volume/value unit divergence
-symbol mapping
-adjustment-state difference
-freshness difference
+symbol/index mapping
+holiday/empty behavior
 ```
 
-Differences must remain typed diagnostics. Validation must not silently rewrite one provider to match another.
+Differences remain typed diagnostics. Tests must not mutate FiinQuantX values to match another provider silently.
 
 ## Packaging evidence
 
-Two packaging environments are required:
+### Environment A — base package
 
-1. Base environment without FiinQuantX:
-   - import `vnstock` succeeds;
-   - default registry construction succeeds;
-   - FiinQuantX reports not installed/unavailable safely;
-   - package build succeeds.
-2. Licensed environment with the approved SDK version:
-   - provider registers;
-   - auth/entitlement diagnostics work;
-   - approved contract tests and bounded live tests pass.
+Required:
+
+- FiinQuantX not installed;
+- import `vnstock` succeeds;
+- default plugin registry succeeds;
+- existing providers remain available;
+- FiinQuantX reports safe unavailable state if represented by a placeholder plugin;
+- build succeeds.
+
+### Environment B — licensed package
+
+Required:
+
+- exact approved SDK version installed;
+- safe auth/session status works;
+- approved synchronous capabilities register;
+- contract and bounded live tests pass;
+- forbidden SDK methods remain inaccessible;
+- no credentials or licensed rows are emitted.
 
 ## Phase-gate ledger
 
 | Gate | Exact commit | Result | Evidence |
 |---|---|---|---|
-| G0 licensed discovery | pending | not run | pending |
-| G1 provider foundation | pending | not run | pending |
-| G2 reference/EOD market | pending | not run | pending |
-| G3 market structure/foreign flow/valuation | pending | not run | pending |
-| G4 publication-aware fundamentals | pending | not run | pending |
-| G5 optional intraday/vendor indicators | pending | not run | pending |
-| G6 full regression/package/live/OpenSpec | pending | not run | pending |
+| G0A documentation inventory | OpenSpec branch after PR #103 review | passed | `source-review.md`, rewritten proposal/design/tasks/spec |
+| G0B licensed runtime/commercial verification | pending | not run | pending |
+| G1 optional provider foundation | pending | not run | pending |
+| G2 reference and historical market | pending | not run | pending |
+| G3 flow/ownership/market structure/valuation | pending | not run | pending |
+| G4 period-aware fundamentals | pending | not run | pending |
+| G5 namespaced vendor analytics | pending | not run | pending |
+| G6 streaming architecture | pending | deferred to separate accepted change or not run |
+| G7 full offline/package/live/OpenSpec | pending | not run | pending |
