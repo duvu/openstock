@@ -1,5 +1,10 @@
 # 05. Backtest and outcome tracking
 
+> This document describes stable design principles. Current Backtest Lab scope,
+> dependencies and status are owned by GitHub issue
+> [#108](https://github.com/duvu/openstock/issues/108); portfolio priority is
+> maintained in [#90](https://github.com/duvu/openstock/issues/90).
+
 ## Purpose
 
 Backtesting and outcome tracking are the validation layer of `vnalpha`.
