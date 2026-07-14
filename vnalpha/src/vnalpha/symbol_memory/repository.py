@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Iterable, Mapping
 
 import duckdb
@@ -63,11 +63,11 @@ class SymbolMemoryRepository:
                 event.event_type,
                 event.evidence_ref,
                 event.content_hash,
-                event.observed_at,
+                _storage_datetime(event.observed_at),
                 event.as_of_date,
                 event.origin.value,
                 event.correlation_id,
-                event.created_at,
+                _storage_datetime(event.created_at),
             ],
         )
         return True
@@ -95,8 +95,9 @@ class SymbolMemoryRepository:
             "WHERE symbol = ?"
         )
         if after is not None:
+            after_storage = _storage_datetime(after[0])
             query += " AND (created_at > ? OR (created_at = ? AND event_id > ?))"
-            values.extend((after[0], after[0], after[1]))
+            values.extend((after_storage, after_storage, after[1]))
         query += " ORDER BY created_at, event_id LIMIT ?"
         values.append(_event_limit(limit))
         rows = self.connection.execute(query, values).fetchall()
@@ -319,8 +320,8 @@ class SymbolMemoryRepository:
                 document.managed_hash,
                 document.document_hash,
                 document.token_estimate,
-                document.last_compacted_at,
-                document.updated_at,
+                _storage_datetime(document.last_compacted_at),
+                _storage_datetime(document.updated_at),
             ],
         )
 
@@ -358,7 +359,7 @@ class SymbolMemoryRepository:
                 run.before_token_estimate,
                 run.after_token_estimate,
                 run.source_coverage,
-                run.created_at,
+                _storage_datetime(run.created_at),
                 run.correlation_id,
             ],
         )
@@ -475,14 +476,14 @@ def _claim_values(claim: MemoryClaim) -> list[object]:
         claim.status.value,
         claim.pinned,
         claim.confidence,
-        claim.observed_at,
+        _storage_datetime(claim.observed_at),
         claim.as_of_date,
         claim.valid_from,
         claim.valid_until,
         claim.origin.value,
         json.dumps(claim.source_refs),
         claim.correlation_id,
-        claim.created_at,
+        _storage_datetime(claim.created_at),
         claim.supersedes_claim_id,
         claim.lifecycle_reason,
         claim.source_published_at,
@@ -572,7 +573,17 @@ def _optional_datetime(value: object) -> datetime | None:
 def _datetime(value: object) -> datetime:
     if not isinstance(value, datetime):
         raise TypeError("Expected datetime value from memory persistence.")
-    return value
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _storage_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC).isoformat()
+    return value.astimezone(UTC).isoformat()
 
 
 def _optional_date(value: object) -> date | None:
