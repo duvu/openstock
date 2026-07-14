@@ -7,7 +7,7 @@ from typing import Mapping
 
 from vnalpha.model_routing.models import ModelProfile
 
-DEFAULT_MODEL_ID = "oc-gpt-5.4-mini"
+DEFAULT_MODEL_ID = "codex/gpt-5.4-mini"
 
 _DEFAULT_FALLBACKS: Mapping[ModelProfile, tuple[ModelProfile, ...]] = MappingProxyType(
     {

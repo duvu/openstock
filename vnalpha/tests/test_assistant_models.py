@@ -247,8 +247,8 @@ def test_llm_gateway_config_defaults(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
     cfg = LLMGatewayConfig.from_env()
-    assert ASSISTANT_MODEL_DEFAULT == "oc-gpt-5.4-mini"
-    assert cfg.model == "oc-gpt-5.4-mini"
+    assert ASSISTANT_MODEL_DEFAULT == "codex/gpt-5.4-mini"
+    assert cfg.model == "codex/gpt-5.4-mini"
     assert cfg.endpoint == ASSISTANT_ENDPOINT_DEFAULT
     assert cfg.timeout == ASSISTANT_TIMEOUT_DEFAULT
     assert ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT == 16000
@@ -378,7 +378,7 @@ def test_llm_trace_record_fields():
         stage="classify",
         started_at="2026-07-06T10:00:01",
         status="SUCCESS",
-        model="oc-gpt-5.4-mini",
+        model="codex/gpt-5.4-mini",
     )
     assert rec.llm_trace_id == "trace-001"
     assert rec.input_summary_json is None

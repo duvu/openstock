@@ -49,7 +49,7 @@ def _log_llm_error(
         pass
 
 
-ASSISTANT_MODEL_DEFAULT = "oc-gpt-5.4-mini"
+ASSISTANT_MODEL_DEFAULT = "codex/gpt-5.4-mini"
 ASSISTANT_ENDPOINT_DEFAULT = "https://api.openai.com/v1/chat/completions"
 ASSISTANT_TIMEOUT_DEFAULT = 30
 ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT = 16000

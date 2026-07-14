@@ -158,7 +158,7 @@ Configuration should be provided through `/etc/vnalpha/vnalpha.env`:
 
 ```bash
 VNALPHA_LLM_ENDPOINT=http://ya-router:7071/v1/chat/completions
-VNALPHA_LLM_MODEL=provider/default-model
+VNALPHA_LLM_MODEL=codex/gpt-5.4-mini
 VNALPHA_LLM_API_KEY=
 VNALPHA_LLM_STORE_RAW=false
 ```
@@ -271,7 +271,7 @@ VNALPHA_LOG_LEVEL=INFO
 
 # Optional internal LLM gateway (ya-router deployed with Docker)
 VNALPHA_LLM_ENDPOINT=http://ya-router:7071/v1/chat/completions
-VNALPHA_LLM_MODEL=provider/default-model
+VNALPHA_LLM_MODEL=codex/gpt-5.4-mini
 VNALPHA_LLM_API_KEY=
 VNALPHA_LLM_STORE_RAW=false
 
