@@ -61,15 +61,19 @@ if _TEXTUAL_AVAILABLE:
 
         def _open_connection(self):
             """Open a single connection for this screen mount. Returns conn or None."""
-            try:
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
+            from vnalpha.warehouse.connection import get_connection
+            from vnalpha.warehouse.migrations import run_migrations
 
-                conn = get_connection()
+            conn = get_connection()
+            try:
                 run_migrations(conn=conn)
                 return conn
             except Exception as exc:
                 logger.warning(f"Error opening outcome screen connection: {exc}")
+                try:
+                    conn.close()
+                except Exception:
+                    pass
                 return None
 
         def on_mount(self) -> None:

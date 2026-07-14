@@ -10,6 +10,7 @@ from tempfile import NamedTemporaryFile
 
 from vnalpha.symbol_memory.models import MemoryDocument
 from vnalpha.symbol_memory.paths import normalize_symbol
+from vnalpha.symbol_memory.safe_files import atomic_replace
 from vnalpha.symbol_memory.storage import assert_knowledge_path, symbol_card_path
 
 _MANAGED_START = "<!-- openstock:managed:start current-snapshot -->"
@@ -218,12 +219,7 @@ def atomic_write_text(path: Path, content: str) -> None:
             handle.flush()
             os.fsync(handle.fileno())
             temp_path = Path(handle.name)
-        os.replace(temp_path, path)
-        descriptor = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
+        atomic_replace(temp_path, path)
     finally:
         if temp_path is not None and temp_path.exists():
             temp_path.unlink()

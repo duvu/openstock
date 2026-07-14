@@ -57,6 +57,9 @@ services:
       - PYTHONUNBUFFERED=1
       - VNSTOCK_SERVICE_URL=http://vnstock-service:6900
       - VNALPHA_WAREHOUSE_PATH=/warehouse/warehouse.duckdb
+      - VNALPHA_LLM_ENDPOINT=${VNALPHA_LLM_ENDPOINT:-http://ya-router:7071/v1/chat/completions}
+      - VNALPHA_LLM_MODEL=${VNALPHA_LLM_MODEL:-provider/default-model}
+      - VNALPHA_LLM_API_KEY=${VNALPHA_LLM_API_KEY}
     depends_on:
       vnstock-service:
         condition: service_healthy

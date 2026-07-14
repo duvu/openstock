@@ -107,7 +107,10 @@ def _static_catalog() -> list[UiCommand]:
         UiCommand(
             name="research-plan",
             description="Build a conditional research-only scenario plan for one symbol.",
-            usage="/research-plan SYMBOL [--date YYYY-MM-DD]",
+            usage=(
+                "/research-plan SYMBOL [--date YYYY-MM-DD] [--with-evidence] "
+                "[--with-regime]"
+            ),
             category="Research",
             examples=(
                 "/research-plan FPT",
