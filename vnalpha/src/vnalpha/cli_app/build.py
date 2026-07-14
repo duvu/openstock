@@ -7,7 +7,9 @@ import typer
 from vnalpha.core.logging import set_correlation_id
 from vnalpha.data_provisioning.service import (
     DataProvisioningRequest,
+    DataProvisioningResult,
     DataProvisioningService,
+    DataProvisioningValidationError,
     ProvisioningStatus,
 )
 from vnalpha.observability.commands import command_lifecycle
@@ -111,8 +113,14 @@ def build_sector_strength_cmd(
         )
 
 
-def _execute(conn, request: DataProvisioningRequest):
-    result = DataProvisioningService(conn).execute(request)
+def _execute(
+    conn, request: DataProvisioningRequest
+) -> DataProvisioningResult:
+    try:
+        result = DataProvisioningService(conn).execute(request)
+    except DataProvisioningValidationError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
     if result.status is ProvisioningStatus.FAILED:
         typer.echo(result.error or "Data provisioning did not complete.", err=True)
         raise typer.Exit(code=1)
