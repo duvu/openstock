@@ -7,6 +7,7 @@ import pytest
 
 from vnalpha.assistant.app import AssistantApp
 from vnalpha.assistant.context import build_context_message
+from vnalpha.assistant.errors import ToolExecutionError
 from vnalpha.assistant.gateway import FakeLLMClient
 from vnalpha.assistant.models import (
     AssistantPlan,
@@ -173,6 +174,34 @@ def test_execute_prepared_fails_closed_on_hash_mismatch() -> None:
         [prepared.prepared_turn_id],
     ).fetchone()[0]
     assert status == "HASH_MISMATCH"
+    conn.close()
+
+
+def test_execute_prepared_marks_turn_failed_when_preflight_blocks(monkeypatch) -> None:
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn)
+    app = AssistantApp(conn, llm_client=_llm())
+    prepared = app.prepare(AssistantRequest("show candidates"))
+    assert not isinstance(prepared, tuple)
+
+    monkeypatch.setattr(
+        "vnalpha.assistant.executor.AssistantExecutor.execute",
+        lambda *_args: (_ for _ in ()).throw(ToolExecutionError("core data blocked")),
+    )
+
+    with pytest.raises(ToolExecutionError, match="core data blocked"):
+        app.execute_prepared(prepared)
+
+    turn_status = conn.execute(
+        "SELECT status FROM prepared_assistant_turn WHERE prepared_turn_id = ?",
+        [prepared.prepared_turn_id],
+    ).fetchone()[0]
+    session_status = conn.execute(
+        "SELECT status FROM assistant_session WHERE assistant_session_id = ?",
+        [prepared.assistant_session_id],
+    ).fetchone()[0]
+    assert turn_status == "FAILED"
+    assert session_status == "FAILED"
     conn.close()
 
 

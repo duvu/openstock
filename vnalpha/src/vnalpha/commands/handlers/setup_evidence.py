@@ -15,12 +15,14 @@ from vnalpha.commands.handlers.research_workflow_common import (
 )
 from vnalpha.commands.models import (
     CommandResult,
+    CommandStatus,
     ParsedCommand,
     ResultColumn,
     ResultPanel,
     ResultTable,
 )
 from vnalpha.commands.normalizers import normalize_symbol
+from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
 
 
 def handle_setup_evidence(parsed: ParsedCommand, conn=None, **kwargs):
@@ -46,6 +48,16 @@ def handle_setup_evidence(parsed: ParsedCommand, conn=None, **kwargs):
     setup_type = normalized_token
     extra_warnings: list[str] = []
     if not is_setup_type:
+        readiness = ensure_deep_analysis_ready(conn, normalized_token, date)
+        readiness_panel = ResultPanel("Data Readiness", readiness.to_panel_dict())
+        if not readiness.is_ready:
+            return CommandResult(
+                status=CommandStatus.FAILED,
+                title=f"/setup-evidence — {normalized_token}",
+                summary=readiness.failure_summary(),
+                panels=[readiness_panel],
+                warnings=[*readiness.warnings, *readiness.errors],
+            )
         setup_type = _setup_type_for_symbol(tool_executor, normalized_token, date)
         extra_warnings.append(
             f"Resolved {normalize_symbol(requested_token)} to setup type {setup_type} from persisted analysis."
@@ -71,7 +83,8 @@ def handle_setup_evidence(parsed: ParsedCommand, conn=None, **kwargs):
         output=output,
         data=data,
         tables=_evidence_tables(data),
-        panels=_evidence_panels(data),
+        panels=([readiness_panel] if not is_setup_type else [])
+        + _evidence_panels(data),
         extra_warnings=extra_warnings,
     )
 

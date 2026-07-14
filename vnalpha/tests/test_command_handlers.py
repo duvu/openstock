@@ -237,18 +237,18 @@ class TestQualityHandler:
 
 
 class TestAnalyzeHandler:
-    def test_analyze_returns_semantic_panels(self, conn_with_data, reg):
+    def test_analyze_blocks_when_fixture_lacks_required_core_data(
+        self, conn_with_data, reg
+    ):
         conn, today = conn_with_data
         parsed = parse(f"/analyze FPT --date {today}")
         result = reg.execute(
             parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
         )
-        assert result.status in {"SUCCESS", "PARTIAL"}
+        assert result.status == "FAILED"
         panel_titles = [panel.title for panel in result.panels]
-        assert "Trend and momentum" in panel_titles
-        assert "Volatility and levels" in panel_titles
-        assert result.metadata is not None
-        assert result.metadata["research_view"] == "deep_analysis"
+        assert panel_titles == ["Data Readiness"]
+        assert result.metadata is None
 
 
 class TestWatchlistSummaryHandler:
@@ -300,17 +300,18 @@ class TestShortlistHandler:
 
 
 class TestResearchPlanHandler:
-    def test_research_plan_returns_scenario_table(self, conn_with_data, reg):
+    def test_research_plan_blocks_when_fixture_lacks_required_core_data(
+        self, conn_with_data, reg
+    ):
         conn, today = conn_with_data
         parsed = parse(f"/research-plan FPT --date {today}")
         result = reg.execute(
             parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
         )
-        assert result.status in {"SUCCESS", "PARTIAL"}
-        assert result.tables
-        assert result.tables[0].title == "Scenario branches"
-        assert result.metadata is not None
-        assert result.metadata["research_view"] == "scenario_plan"
+        assert result.status == "FAILED"
+        assert [panel.title for panel in result.panels] == ["Data Readiness"]
+        assert result.tables == []
+        assert result.metadata is None
 
 
 class TestSetupEvidenceHandler:

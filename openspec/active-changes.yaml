@@ -30,7 +30,7 @@ changes:
     priority: P2
     blocked_by: []
     summary: "Consolidated warehouse-grounded deep symbol analysis with deterministic readiness for symbol, market-regime, and sector-strength inputs plus explicit user data commands."
-    evidence: "Runtime traces show `analysis.deep_symbol` succeeds while `market_regime_snapshot` and `sector_strength_snapshot` are missing; existing ensure-data covers symbol/benchmark/features/score only and the executor logs-and-continues after an ensure failure."
+    evidence: "Issue #75 adds a typed, audited fail-closed gate for symbol/benchmark/features/score across `/analyze`, `/research-plan`, symbol-backed `/setup-evidence`, and assistant deep/scenario paths; optional market/sector context remains disclosed from persisted-tool output and its auto-build is pending. Focused command, assistant, readiness, and lock-observability tests pass; repository-wide lint remains blocked by pre-existing formatting in `symbol_memory/safe_files.py`."
   research-scenario-plan-engine:
     status: partial
     priority: P2
