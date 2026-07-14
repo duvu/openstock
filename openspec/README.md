@@ -4,9 +4,9 @@
 
 The machine-readable source of truth is [`active-changes.yaml`](active-changes.yaml).
 
-## Review result (2026-07-13)
+## Review result (2026-07-14)
 
-The 2026-07-11 reconciliation established the active execution set. Subsequent focused changes include `symbol-knowledge-memory` and `tui-terminal-rendering-integrity`.
+The 2026-07-11 reconciliation established the active execution set. Subsequent focused changes include `symbol-knowledge-memory`, `tui-terminal-rendering-integrity`, and the prioritized commercial-data change `fiinquantx-provider-integration`.
 
 ### Archived during reconciliation
 
@@ -22,7 +22,8 @@ Archiving preserves the complete proposal/design/task/validation history. Implem
 ## Active execution order
 
 ```text
-P0  openstock-four-phase-hardening (completed; archived 2026-07-13)
+P0  fiinquantx-provider-integration
+    licensed SDK discovery → provider foundation → verified dataset slices
     ↓
 P1  prod-b-sandbox-mvp
     + tui-terminal-rendering-integrity
@@ -35,6 +36,8 @@ P2  research-intelligence-data-model-foundation (completed; archived 2026-07-13)
     ↓
 P3  prod-d-closed-loop-repair + tui-research-workflow-polish
 ```
+
+`fiinquantx-provider-integration` adds the first prioritized commercial provider to the `vnstock` plugin platform. The official public repository distributes wheels but does not publish SDK source, signatures, schemas, or auth contracts. Therefore licensed contract discovery and synthetic fixtures are a hard prerequisite. The implementation must use the existing plugin runtime, remain optional, preserve current providers, and stay data-only.
 
 `tui-terminal-rendering-integrity` addresses GitHub issue #60. It defines surface-aware file-backed TUI logging, terminal-frame ownership, non-overlapping Textual regions, height-aware composer suggestions, bounded TODO content, and a fully contained LogScreen. It is intentionally separate from research artifact presentation and acts as a prerequisite for further `tui-research-workflow-polish` expansion.
 
