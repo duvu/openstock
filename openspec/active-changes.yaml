@@ -10,8 +10,8 @@ changes:
     status: planned
     priority: P0
     blocked_by: []
-    summary: "Integrate the licensed FiinQuantX SDK as an optional commercial provider through the existing vnstock plugin runtime."
-    evidence: "Official repository reviewed at abb1e038. It distributes wheels and lists version 0.1.64, but does not publish SDK source, signatures, schemas, or auth contracts; licensed contract discovery is required before implementation."
+    summary: "Integrate documented synchronous FiinQuantX market, reference, flow, valuation and period-aware fundamental data through the existing vnstock plugin runtime; defer streaming to a separate contract and exclude all trading/account SDK surfaces."
+    evidence: "Official wheel repository reviewed at abb1e038; package index lists 0.1.64. The 125-page detailed documentation mirror committed at 30b684d and merged by PR #103 establishes the documented API inventory. G0A documentation review is complete; licensed runtime, entitlement, units, return shapes, quotas and commercial persistence verification remain required before any capability is enabled."
   tui-terminal-rendering-integrity:
     status: planned
     priority: P1
