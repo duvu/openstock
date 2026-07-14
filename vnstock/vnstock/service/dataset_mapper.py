@@ -48,6 +48,19 @@ _ALIASES: dict[str, str] = {
 # Query params forwarded to the runtime
 _RUNTIME_PARAMS = frozenset({"source", "validate", "quality_mode"})
 _INTEGER_DATA_PARAMS = frozenset({"count_back"})
+_SENSITIVE_DATA_PARAMS = frozenset(
+    {
+        "access_token",
+        "api_key",
+        "apikey",
+        "authorization",
+        "client_secret",
+        "password",
+        "secret",
+        "token",
+        "username",
+    }
+)
 
 
 class MapperError(ValueError):
@@ -106,6 +119,8 @@ def extract_data_params(query: dict[str, list[str]]) -> dict[str, str | int]:
     for key, values in query.items():
         if key in _RUNTIME_PARAMS or not values:
             continue
+        if key.lower().replace("-", "_") in _SENSITIVE_DATA_PARAMS:
+            raise ValueError("Credential query parameters are not allowed.")
         value = values[0]
         if key in _INTEGER_DATA_PARAMS and value.isdecimal():
             result[key] = int(value)

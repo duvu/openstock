@@ -263,6 +263,24 @@ class TestErrorHandling:
         assert status == 422
         assert body["error"] == "unsupported_dataset_for_provider"
 
+    def test_credential_like_query_parameter_is_rejected_before_fetch(self):
+        fake = MagicMock()
+        runtime_dependency.override_runtime(fake)
+
+        port = _get_free_port()
+        stop = threading.Event()
+        run_server("127.0.0.1", port, _stop_event=stop)
+        time.sleep(0.15)
+        status, body = _fetch(
+            f"http://127.0.0.1:{port}/v1/equity/ohlcv?symbol=FPT&token=not-logged"
+        )
+        stop.set()
+        runtime_dependency.reset_runtime()
+
+        assert status == 400
+        assert body["error"] == "invalid_parameters"
+        fake.fetch.assert_not_called()
+
     def test_no_healthy_provider_returns_503(self):
         """When PluginRuntime raises NoHealthyProviderError, service returns 503."""
         from vnstock.core.provider.exceptions import NoHealthyProviderError

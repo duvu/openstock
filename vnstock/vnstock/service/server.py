@@ -94,7 +94,7 @@ class VnstockHandler(BaseHTTPRequestHandler):
     _auth_manager: Any = None
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
-        logger.debug(f"[service] {format % args}")
+        logger.debug("[service] request completed")
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -302,7 +302,19 @@ class VnstockHandler(BaseHTTPRequestHandler):
         validate = validate_str in ("1", "true", "yes")
         quality_mode: str = runtime_params.get("quality_mode", "warn")
 
-        params = extract_data_params(query)
+        try:
+            params = extract_data_params(query)
+        except ValueError:
+            self._send_json(
+                400,
+                {
+                    "error": "invalid_parameters",
+                    "message": "Credential query parameters are not allowed.",
+                    "dataset": dataset,
+                    "request_id": request_id,
+                },
+            )
+            return
 
         # 4. Fetch via PluginRuntime
         try:

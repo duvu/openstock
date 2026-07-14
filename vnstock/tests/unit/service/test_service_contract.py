@@ -155,6 +155,31 @@ def test_extract_data_params_parses_count_back_as_integer():
     assert result == {"symbol": "VCB", "count_back": 2}
 
 
+def test_extract_data_params_rejects_credential_like_keys():
+    from vnstock.service.dataset_mapper import extract_data_params
+
+    with pytest.raises(ValueError, match="Credential query parameters"):
+        extract_data_params({"symbol": ["VCB"], "password": ["not-logged"]})
+
+
+def test_request_logging_does_not_include_query_values(monkeypatch):
+    from vnstock.service.server import VnstockHandler
+
+    messages: list[str] = []
+    monkeypatch.setattr(
+        "vnstock.service.server.logger.debug", lambda message: messages.append(message)
+    )
+    VnstockHandler.log_message(
+        object(),
+        '"GET %s HTTP/1.1" %s %s',
+        "/v1/equity/ohlcv?password=not-logged",
+        "400",
+        "-",
+    )
+
+    assert messages == ["[service] request completed"]
+
+
 # ---------------------------------------------------------------------------
 # server module structure
 # ---------------------------------------------------------------------------
