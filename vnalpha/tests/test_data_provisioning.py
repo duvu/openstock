@@ -18,7 +18,9 @@ def test_download_ohlcv_normalizes_arguments_and_reports_operation_evidence() ->
         ProvisioningStatus,
     )
 
-    sync_ohlcv = MagicMock(return_value={"inserted": 4, "skipped": 1})
+    sync_ohlcv = MagicMock(
+        return_value={"run_id": "ing-77", "total": 2, "inserted": 4, "skipped": 1}
+    )
     service = DataProvisioningService(
         MagicMock(),
         dependencies=DataProvisioningDependencies(sync_ohlcv=sync_ohlcv),
@@ -36,9 +38,11 @@ def test_download_ohlcv_normalizes_arguments_and_reports_operation_evidence() ->
         )
     )
 
-    assert result.status is ProvisioningStatus.SUCCESS
+    assert result.status is ProvisioningStatus.PARTIAL
     assert result.artifact == "ohlcv"
-    assert result.counts == {"inserted": 4, "skipped": 1}
+    assert result.counts == {"total": 2, "inserted": 4, "skipped": 1}
+    assert result.freshness == "bounded_range"
+    assert result.lineage["ingestion_run_id"] == "ing-77"
     assert result.correlation_id
     sync_ohlcv.assert_called_once_with(
         service.conn,
@@ -64,7 +68,7 @@ def test_invalid_download_is_rejected_before_any_provider_adapter_runs() -> None
         dependencies=DataProvisioningDependencies(sync_ohlcv=sync_ohlcv),
     )
 
-    with pytest.raises(DataProvisioningValidationError, match="requires a symbol"):
+    with pytest.raises(DataProvisioningValidationError, match="requires exactly one"):
         service.execute(DataProvisioningRequest(operation="download", artifact="ohlcv"))
 
     sync_ohlcv.assert_not_called()

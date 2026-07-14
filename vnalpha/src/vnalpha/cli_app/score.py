@@ -7,7 +7,9 @@ import typer
 from vnalpha.core.logging import set_correlation_id
 from vnalpha.data_provisioning.service import (
     DataProvisioningRequest,
+    DataProvisioningResult,
     DataProvisioningService,
+    DataProvisioningValidationError,
     ProvisioningStatus,
 )
 from vnalpha.observability.commands import command_lifecycle
@@ -31,7 +33,8 @@ def score(
         from vnalpha.warehouse.connection import get_connection
 
         conn = get_connection()
-        result = DataProvisioningService(conn).execute(
+        result = _execute(
+            conn,
             DataProvisioningRequest(
                 "build",
                 "score",
@@ -40,14 +43,25 @@ def score(
                 date=date,
                 top_n=top_n,
                 min_score=min_score,
-            )
+            ),
         )
-        if result.status is ProvisioningStatus.FAILED:
-            typer.echo(result.error or "Data provisioning did not complete.", err=True)
-            raise typer.Exit(code=1)
         typer.echo(
             f"Scored {result.counts['scored']} symbols — {result.counts['saved']} candidates in watchlist for {result.resolved_date}"
         )
+
+
+def _execute(
+    conn, request: DataProvisioningRequest
+) -> DataProvisioningResult:
+    try:
+        result = DataProvisioningService(conn).execute(request)
+    except DataProvisioningValidationError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    if result.status is ProvisioningStatus.FAILED:
+        typer.echo(result.error or "Data provisioning did not complete.", err=True)
+        raise typer.Exit(code=1)
+    return result
 
 
 def register(app: typer.Typer) -> None:
