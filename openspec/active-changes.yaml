@@ -1,11 +1,17 @@
 # Authoritative registry for non-archived OpenSpec changes.
-reviewed_at: 2026-07-13
+reviewed_at: 2026-07-14
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
-  p0_change: null
+  p0_change: fiinquantx-provider-integration
   research_only_boundary: true
 changes:
+  fiinquantx-provider-integration:
+    status: planned
+    priority: P0
+    blocked_by: []
+    summary: "Integrate the licensed FiinQuantX SDK as an optional commercial provider through the existing vnstock plugin runtime."
+    evidence: "Official repository reviewed at abb1e038. It distributes wheels and lists version 0.1.64, but does not publish SDK source, signatures, schemas, or auth contracts; licensed contract discovery is required before implementation."
   tui-terminal-rendering-integrity:
     status: planned
     priority: P1
@@ -30,7 +36,7 @@ changes:
     priority: P2
     blocked_by: []
     summary: "Consolidated warehouse-grounded deep symbol analysis with deterministic readiness for symbol, market-regime, and sector-strength inputs plus explicit user data commands."
-    evidence: "Issues #75 and #92 provide a typed, audited fail-closed gate for symbol/benchmark/features/score across `/analyze`, `/research-plan`, symbol-backed `/setup-evidence`, and assistant deep/scenario paths. #92 records independent warehouse evidence and typed remediation, sanitizes known/unexpected failures, and resolves/audits the effective market date before ensure. Market/sector auto-build (#76) and shared `vnalpha data` provisioning surfaces (#77) remain pending. Repository-wide lint remains blocked by pre-existing formatting in `symbol_memory/safe_files.py`."
+    evidence: "Issues #75 and #92 provide a typed, audited fail-closed gate for symbol/benchmark/features/score. Market/sector auto-build (#76) and shared data provisioning (#77) remain pending in this registry entry."
   research-scenario-plan-engine:
     status: partial
     priority: P2
@@ -49,4 +55,4 @@ changes:
     priority: P3
     blocked_by: []
     summary: "Show slash-command suggestion list in the TUI composer on typing '/' with on-typing prefix filtering."
-    evidence: "ComposerInput renders filtered command suggestions from CommandRegistry.names(); AUTO_FOCUS + non-focusable output log keep the Input focused; headless pilot tests cover visibility, filtering, focus, and clipping."
+    evidence: "ComposerInput renders filtered command suggestions from CommandRegistry.names(); headless tests cover visibility, filtering, focus, and clipping."
