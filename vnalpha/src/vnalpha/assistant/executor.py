@@ -19,11 +19,10 @@ from vnalpha.assistant.errors import RefusalError, ToolExecutionError
 from vnalpha.assistant.models import AssistantPlan, ToolPlanStep
 from vnalpha.assistant.tool_policy import assert_safe_tool
 from vnalpha.core.logging import get_logger
+from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
 from vnalpha.tools.errors import ToolError
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import TOOL_PERMISSIONS, build_local_tool_registry
-
-logger = get_logger("assistant.executor")
 
 _ANALYSIS_TOOLS: frozenset[str] = frozenset(
     {
@@ -34,7 +33,12 @@ _ANALYSIS_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+_FAIL_CLOSED_ANALYSIS_TOOLS: frozenset[str] = frozenset(
+    {"analysis.deep_symbol", "scenario.generate_research_plan"}
+)
+
 _TOOL_PERMISSIONS = TOOL_PERMISSIONS
+logger = get_logger("assistant.executor")
 
 
 def _build_tool_registry(conn):
@@ -49,11 +53,8 @@ def _ensure_data_for_step(conn, step: ToolPlanStep) -> None:
     """
     if step.tool_name not in _ANALYSIS_TOOLS:
         return
-    try:
-        from vnalpha.commands.normalizers import normalize_date
-        from vnalpha.data_availability import ensure_symbol_analysis_ready
-    except Exception:  # noqa: BLE001
-        return
+    from vnalpha.commands.normalizers import normalize_date
+    from vnalpha.data_availability import ensure_symbol_analysis_ready
 
     args = step.arguments
     symbols: list[str] = []
@@ -69,10 +70,29 @@ def _ensure_data_for_step(conn, step: ToolPlanStep) -> None:
         return
     date = normalize_date(args.get("date"))
     for symbol in symbols:
-        try:
-            ensure_symbol_analysis_ready(conn, symbol, date)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Pre-execution data ensure failed for %s: %s", symbol, exc)
+        if step.tool_name in _FAIL_CLOSED_ANALYSIS_TOOLS:
+            readiness = ensure_deep_analysis_ready(conn, symbol, date)
+            if not readiness.is_ready:
+                raise ToolExecutionError(_readiness_error_message(readiness))
+        else:
+            try:
+                ensure_symbol_analysis_ready(conn, symbol, date)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Pre-execution data ensure failed for %s: %s", symbol, exc
+                )
+
+
+def _readiness_error_message(readiness) -> str:
+    failed_artifact = next(
+        (artifact for artifact in readiness.artifacts if artifact.error), None
+    )
+    remediation = failed_artifact.remediation if failed_artifact else None
+    details = [readiness.failure_summary()]
+    if remediation:
+        details.append(f"Remediation: {remediation}")
+    details.append(f"correlation_id={readiness.correlation_id}")
+    return ". ".join(details)
 
 
 class AssistantExecutor:

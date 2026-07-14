@@ -42,13 +42,13 @@
 
 ## 5. Deep-analysis readiness
 
-- [ ] 5.1 Define typed deep-analysis readiness request/result models with per-artifact status, requested/resolved as-of dates, actions, freshness, lineage, warnings, errors, and correlation ID.
+- [x] 5.1 Define typed deep-analysis readiness request/result models with per-artifact status, requested/resolved as-of dates, actions, freshness, lineage, warnings, errors, and correlation ID. Issue #75 implements the five core artifacts first; it does not claim market/sector auto-build. [evidence: `tests/test_deep_analysis_readiness.py`]
 - [ ] 5.2 Extend deterministic ensure-data to evaluate and provision `market_regime_snapshot` and `sector_strength_snapshot` after symbol, benchmark, feature, and score readiness.
 - [ ] 5.3 Keep one-symbol provisioning minimal and do not trigger a full-universe refresh unless an explicit market/sector context build requires its bounded input set.
-- [ ] 5.4 Invoke deep readiness before `/analyze` and before `analysis.deep_symbol` in the assistant executor.
-- [ ] 5.5 Fail the bounded execution path when a required readiness action fails; do not log-and-continue past a failed precondition.
-- [ ] 5.6 Preserve explicit missing-data disclosure only for optional/genuinely unavailable context and render deterministic readiness evidence.
-- [ ] 5.7 Emit correlated audit events for start, artifact decision/action, cache hit, partial, failure, and completion.
+- [x] 5.4 Invoke deep readiness before `/analyze` and before `analysis.deep_symbol` in the assistant executor. [evidence: command, TUI, and assistant readiness tests]
+- [x] 5.5 Fail the bounded execution path when a required readiness action fails; do not log-and-continue past a failed precondition. [evidence: `tests/test_deep_analysis_readiness.py`]
+- [x] 5.6 Preserve explicit missing-data disclosure only for optional/genuinely unavailable context and render deterministic readiness evidence. [evidence: `tests/test_deep_analysis_readiness.py`, `tests/test_phase3_artifact_references.py`]
+- [x] 5.7 Emit correlated audit events for start, artifact decision/action, cache hit, partial, failure, and completion. [evidence: `tests/test_deep_analysis_readiness.py`]
 
 ## 6. Explicit data provisioning commands
 
@@ -65,14 +65,14 @@
 - [ ] 7.2 Test missing data caveats.
 - [ ] 7.3 Test level extraction output.
 - [ ] 7.4 Test setup quality decomposition.
-- [ ] 7.5 Test assistant route.
+- [x] 7.5 Test assistant route. [evidence: `tests/test_deep_analysis_readiness.py`]
 - [ ] 7.6 Test no trading/execution language.
 - [ ] 7.7 Test deep analysis provisions missing market-regime and sector-strength snapshots before the read tool runs.
-- [ ] 7.8 Test fresh deep inputs produce cache-hit readiness actions only.
-- [ ] 7.9 Test a failed required precondition prevents `analysis.deep_symbol` execution and returns an actionable structured status.
-- [ ] 7.10 Test optional unavailable context is explicitly disclosed and cannot render as current.
+- [x] 7.8 Test fresh deep inputs produce cache-hit readiness actions only. [evidence: `tests/test_deep_analysis_readiness.py`]
+- [x] 7.9 Test a failed required precondition prevents `analysis.deep_symbol` execution and returns an actionable structured status. [evidence: `tests/test_deep_analysis_readiness.py`]
+- [x] 7.10 Test optional unavailable context is explicitly disclosed and cannot render as current. [evidence: `tests/test_phase3_artifact_references.py`]
 - [ ] 7.11 Test each CLI and TUI data command parses valid input, rejects invalid input, reuses the shared service, and reports correlated status.
-- [ ] 7.12 Test the assistant plan remains read-only and cannot directly plan or call `data.fetch`.
+- [x] 7.12 Test the assistant plan remains read-only and cannot directly plan or call `data.fetch`. [evidence: `tests/test_tool_policy.py`, `tests/test_executor_and_policy.py`]
 
 ## 8. Validation
 

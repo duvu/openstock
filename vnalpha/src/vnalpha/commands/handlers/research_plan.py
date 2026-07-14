@@ -12,12 +12,14 @@ from vnalpha.commands.handlers.research_workflow_common import (
 )
 from vnalpha.commands.models import (
     CommandResult,
+    CommandStatus,
     ParsedCommand,
     ResultColumn,
     ResultPanel,
     ResultTable,
 )
 from vnalpha.commands.normalizers import normalize_symbol
+from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
 
 
 def handle_research_plan(parsed: ParsedCommand, conn=None, **kwargs):
@@ -34,6 +36,16 @@ def handle_research_plan(parsed: ParsedCommand, conn=None, **kwargs):
 
     symbol = normalize_symbol(parsed.positional[0])
     date = optional_date(parsed)
+    readiness = ensure_deep_analysis_ready(conn, symbol, date)
+    readiness_panel = ResultPanel("Data Readiness", readiness.to_panel_dict())
+    if not readiness.is_ready:
+        return CommandResult(
+            status=CommandStatus.FAILED,
+            title=f"/research-plan — {symbol}",
+            summary=readiness.failure_summary(),
+            panels=[readiness_panel],
+            warnings=[*readiness.warnings, *readiness.errors],
+        )
     tool_executor = workflow_tool_executor(kwargs, title="/research-plan")
     if isinstance(tool_executor, CommandResult):
         return tool_executor
@@ -53,7 +65,7 @@ def handle_research_plan(parsed: ParsedCommand, conn=None, **kwargs):
         output=output,
         data=data,
         tables=_scenario_tables(data),
-        panels=_scenario_panels(data),
+        panels=[readiness_panel, *_scenario_panels(data)],
     )
 
 

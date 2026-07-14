@@ -10,8 +10,14 @@ from vnalpha.commands.handlers.research_workflow_common import (
     workflow_result,
     workflow_tool_executor,
 )
-from vnalpha.commands.models import CommandResult, ParsedCommand, ResultPanel
+from vnalpha.commands.models import (
+    CommandResult,
+    CommandStatus,
+    ParsedCommand,
+    ResultPanel,
+)
 from vnalpha.commands.normalizers import normalize_symbol
+from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
 
 
 def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
@@ -36,6 +42,19 @@ def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
 
     symbol = normalize_symbol(parsed.positional[0])
     date = optional_date(parsed)
+    readiness = ensure_deep_analysis_ready(conn, symbol, date)
+    readiness_panel = ResultPanel(
+        title="Data Readiness",
+        content=readiness.to_panel_dict(),
+    )
+    if not readiness.is_ready:
+        return CommandResult(
+            status=CommandStatus.FAILED,
+            title=f"/analyze — {symbol}",
+            summary=readiness.failure_summary(),
+            panels=[readiness_panel],
+            warnings=[*readiness.warnings, *readiness.errors],
+        )
     tool_executor = workflow_tool_executor(kwargs, title="/analyze")
     if isinstance(tool_executor, CommandResult):
         return tool_executor
@@ -50,6 +69,7 @@ def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
             artifact_id=f"analysis.deep_symbol:{symbol}:{date or 'latest'}",
             output=output,
             data=None,
+            panels=[readiness_panel],
         )
 
     artifact_id = (
@@ -62,7 +82,7 @@ def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
         artifact_id=artifact_id,
         output=output,
         data=data,
-        panels=_analysis_panels(data),
+        panels=[readiness_panel, *_analysis_panels(data)],
     )
 
 

@@ -359,7 +359,19 @@ class AssistantApp:
             assistant_session_id=prepared.assistant_session_id,
             on_trace_event=on_trace_event,
         )
-        tool_outputs = executor.execute(prepared.plan)
+        try:
+            tool_outputs = executor.execute(prepared.plan)
+        except Exception as exc:
+            finish_assistant_session(
+                self._conn,
+                prepared.assistant_session_id,
+                status="FAILED",
+                intent=prepared.intent_result.intent,
+                plan=prepared.plan.to_dict(),
+                error={"error_type": type(exc).__name__, "message": str(exc)},
+            )
+            finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="FAILED")
+            raise
         synthesis_trace_id = create_llm_trace(
             self._conn,
             assistant_session_id=prepared.assistant_session_id,
