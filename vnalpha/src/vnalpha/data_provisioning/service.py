@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
-from typing import Callable
+from math import isfinite
 
 import duckdb
 
 from vnalpha.core.dates import resolve_date
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
+
+_APPROVED_SOURCES = frozenset({"KBS", "VCI", "MSN", "DNSE", "TCBS", "FMARKET", "FMP"})
 
 
 class ProvisioningStatus(str, Enum):
@@ -61,12 +64,12 @@ class DataProvisioningResult:
 
 @dataclass(frozen=True, slots=True)
 class DataProvisioningDependencies:
-    sync_symbols: Callable[..., dict] | None = None
-    sync_ohlcv: Callable[..., dict] | None = None
-    sync_index: Callable[..., dict] | None = None
-    build_canonical: Callable[..., dict] | None = None
-    build_features: Callable[..., dict] | None = None
-    generate_watchlist: Callable[..., dict] | None = None
+    sync_symbols: Callable[..., object] | None = None
+    sync_ohlcv: Callable[..., object] | None = None
+    sync_index: Callable[..., object] | None = None
+    build_canonical: Callable[..., object] | None = None
+    build_features: Callable[..., object] | None = None
+    generate_watchlist: Callable[..., object] | None = None
     build_market_regime: Callable[..., object] | None = None
     build_sector_strength: Callable[..., object] | None = None
 
@@ -84,13 +87,15 @@ class DataProvisioningService:
     def execute(self, request: DataProvisioningRequest) -> DataProvisioningResult:
         normalized = self._validate(request)
         correlation_id = self._correlation_id()
-        _audit_provisioning("REQUESTED", normalized, "STARTED")
+        _audit_provisioning(
+            "REQUESTED", normalized, "STARTED", correlation_id=correlation_id
+        )
         try:
             result = self._execute(normalized, correlation_id)
-            _audit_provisioning(result.status.value, normalized, result.status.value)
-            return result
-        except Exception:
-            _audit_provisioning("FAILED", normalized, "FAILED")
+        except Exception:  # noqa: BROAD_EXCEPT_OK
+            _audit_provisioning(
+                "FAILED", normalized, "FAILED", correlation_id=correlation_id
+            )
             return DataProvisioningResult(
                 status=ProvisioningStatus.FAILED,
                 operation=normalized.operation,
@@ -106,10 +111,25 @@ class DataProvisioningService:
                 lineage={
                     "operation": normalized.operation,
                     "artifact": normalized.artifact,
+                    "source": normalized.source or "warehouse",
                 },
-                error="Data provisioning did not complete. Review the correlated audit record.",
-                follow_up="Review the correlated audit record and retry after correcting the input or provider.",
+                error=(
+                    "Data provisioning did not complete. "
+                    "Review the correlated audit record."
+                ),
+                follow_up=(
+                    "Review the correlated audit record and retry after correcting "
+                    "the input or provider."
+                ),
             )
+        _audit_provisioning(
+            result.status.value,
+            normalized,
+            result.status.value,
+            correlation_id=correlation_id,
+            counts=result.counts,
+        )
+        return result
 
     @classmethod
     def validate_request(cls, request: DataProvisioningRequest) -> None:
@@ -122,8 +142,8 @@ class DataProvisioningService:
     def _validate_fields(
         cls, request: DataProvisioningRequest, *, date_conn
     ) -> DataProvisioningRequest:
-        operation = request.operation.strip().lower()
-        artifact = request.artifact.strip().lower()
+        operation = _normalize_required_text(request.operation, "Operation").lower()
+        artifact = _normalize_required_text(request.artifact, "Artifact").lower()
         symbol = _normalize_symbol(request.symbol)
         symbols = _normalize_symbols(request.symbols)
         start = _normalize_date(request.start, "--start")
@@ -139,7 +159,15 @@ class DataProvisioningService:
                 "Operation must be 'download' or 'build'."
             )
         if operation == "download":
-            _validate_download(artifact, symbol, symbols, resolved_date)
+            _validate_download(
+                artifact,
+                symbol,
+                symbols,
+                request.allow_all_symbols,
+                start,
+                end,
+                resolved_date,
+            )
         else:
             _validate_build(
                 artifact,
@@ -150,6 +178,8 @@ class DataProvisioningService:
                 end,
                 source,
                 resolved_date,
+                request.top_n,
+                request.min_score,
             )
 
         return DataProvisioningRequest(
@@ -174,101 +204,144 @@ class DataProvisioningService:
     ) -> DataProvisioningResult:
         match request.operation, request.artifact:
             case "download", "symbols":
-                result = self._sync_symbols()(self.conn, source=request.source)
+                raw = _require_mapping(
+                    self._sync_symbols()(self.conn, source=request.source)
+                )
+                counts = _counts(raw, "synced", "errors")
                 return _result(
                     request,
                     correlation_id,
-                    counts=_counts(result, "synced", "errors"),
+                    counts=counts,
+                    status=_partial_if_positive(counts, "errors"),
+                    warnings=_count_warnings(counts, ("errors", "symbol errors")),
+                    raw_result=raw,
                 )
             case "download", "ohlcv":
-                result = self._sync_ohlcv()(
-                    self.conn,
-                    universe=_requested_symbols(request),
-                    start=request.start,
-                    end=request.end,
-                    source=request.source,
-                    interval=request.interval,
+                raw = _require_mapping(
+                    self._sync_ohlcv()(
+                        self.conn,
+                        universe=_requested_symbols(request),
+                        start=request.start,
+                        end=request.end,
+                        source=request.source,
+                        interval=request.interval,
+                    )
                 )
+                counts = _counts(raw, "total", "inserted", "skipped")
                 return _result(
                     request,
                     correlation_id,
-                    counts=_counts(result, "inserted", "skipped"),
+                    counts=counts,
+                    status=_partial_if_positive(counts, "skipped"),
+                    warnings=_count_warnings(counts, ("skipped", "symbols skipped")),
+                    raw_result=raw,
                 )
             case "download", "index":
-                result = self._sync_index()(
-                    self.conn,
-                    symbol=request.symbol or "VNINDEX",
-                    start=request.start,
-                    end=request.end,
-                    source=request.source,
-                    interval=request.interval,
+                raw = _require_mapping(
+                    self._sync_index()(
+                        self.conn,
+                        symbol=request.symbol or "VNINDEX",
+                        start=request.start,
+                        end=request.end,
+                        source=request.source,
+                        interval=request.interval,
+                    )
                 )
+                counts = _counts(raw, "inserted", "skipped")
                 return _result(
                     request,
                     correlation_id,
-                    counts=_counts(result, "inserted", "skipped"),
+                    counts=counts,
+                    status=_partial_if_positive(counts, "skipped"),
+                    warnings=_count_warnings(counts, ("skipped", "index requests skipped")),
+                    raw_result=raw,
                 )
             case "build", "canonical":
-                result = self._build_canonical()(
-                    self.conn, symbol=request.symbol, interval=request.interval
+                raw = _require_mapping(
+                    self._build_canonical()(
+                        self.conn, symbol=request.symbol, interval=request.interval
+                    )
                 )
+                counts = _counts(raw, "upserted", "rejected")
                 return _result(
                     request,
                     correlation_id,
-                    counts=_counts(result, "upserted", "rejected"),
+                    counts=counts,
+                    status=_partial_if_positive(counts, "rejected"),
+                    warnings=_count_warnings(
+                        counts, ("rejected", "symbols rejected")
+                    ),
+                    raw_result=raw,
                 )
             case "build", "features":
-                result = self._build_features()(
-                    self.conn,
-                    target_date=_required_date(request.date),
-                    universe=_requested_symbols(request),
-                    benchmark_symbol=request.benchmark,
+                raw = _require_mapping(
+                    self._build_features()(
+                        self.conn,
+                        target_date=_required_date(request.date),
+                        universe=_requested_symbols(request),
+                        benchmark_symbol=request.benchmark,
+                    )
                 )
+                counts = _counts(raw, "built", "skipped")
                 return _result(
                     request,
                     correlation_id,
-                    counts=_counts(result, "built", "skipped"),
+                    counts=counts,
+                    status=_partial_if_positive(counts, "skipped"),
+                    warnings=_count_warnings(counts, ("skipped", "symbols skipped")),
+                    raw_result=raw,
                 )
             case "build", "score":
-                result = self._generate_watchlist()(
-                    self.conn,
-                    date=_required_date(request.date),
-                    universe=_requested_symbols(request),
-                    top_n=request.top_n,
-                    min_score=request.min_score,
+                raw = _require_mapping(
+                    self._generate_watchlist()(
+                        self.conn,
+                        date=_required_date(request.date),
+                        universe=_requested_symbols(request),
+                        top_n=request.top_n,
+                        min_score=request.min_score,
+                    )
                 )
                 return _result(
                     request,
                     correlation_id,
-                    counts=_counts(result, "scored", "saved"),
+                    counts=_counts(raw, "scored", "saved"),
+                    raw_result=raw,
                 )
             case "build", "market-regime":
                 snapshot = self._build_market_regime()(
-                    self.conn, _required_date(request.date)
+                    self.conn, _required_date_value(request.date)
                 )
-                quality = str(getattr(snapshot, "quality", "PARTIAL"))
+                quality = str(getattr(snapshot, "quality", "INCOMPLETE"))
+                status = _quality_status(quality, success_values={"COMPLETE"})
                 return _result(
                     request,
                     correlation_id,
-                    status=_quality_status(quality),
-                    warnings=()
-                    if quality == "COMPLETE"
-                    else (f"Market-regime quality is {quality}.",),
+                    status=status,
+                    warnings=(
+                        ()
+                        if status is ProvisioningStatus.SUCCESS
+                        else (f"Market-regime quality is {quality}.",)
+                    ),
+                    lineage_extra=_object_lineage(snapshot),
                 )
             case "build", "sector-strength":
                 build_result = self._build_sector_strength()(
-                    self.conn, _required_date(request.date)
+                    self.conn, _required_date_value(request.date)
                 )
-                quality = str(getattr(build_result, "quality", "PARTIAL"))
-                snapshots = getattr(build_result, "snapshots", ())
+                quality = str(getattr(build_result, "quality", "INCOMPLETE"))
+                snapshots = getattr(build_result, "snapshots", ()) or ()
+                status = _quality_status(quality, success_values={"OK"})
                 return _result(
                     request,
                     correlation_id,
-                    status=_quality_status(quality),
+                    status=status,
                     counts={"sectors": len(snapshots)},
-                    warnings=()
-                    if quality == "COMPLETE"
-                    else (f"Sector-strength quality is {quality}.",),
+                    warnings=(
+                        ()
+                        if status is ProvisioningStatus.SUCCESS
+                        else (f"Sector-strength quality is {quality}.",)
+                    ),
+                    lineage_extra=_object_lineage(build_result),
                 )
             case unreachable:
                 raise DataProvisioningValidationError(
@@ -281,42 +354,42 @@ class DataProvisioningService:
             return set_correlation_id()
         return correlation_id
 
-    def _sync_symbols(self) -> Callable[..., dict]:
+    def _sync_symbols(self) -> Callable[..., object]:
         if self._dependencies.sync_symbols is not None:
             return self._dependencies.sync_symbols
         from vnalpha.ingestion.sync_symbols import sync_symbols
 
         return sync_symbols
 
-    def _sync_ohlcv(self) -> Callable[..., dict]:
+    def _sync_ohlcv(self) -> Callable[..., object]:
         if self._dependencies.sync_ohlcv is not None:
             return self._dependencies.sync_ohlcv
         from vnalpha.ingestion.sync_ohlcv import sync_ohlcv
 
         return sync_ohlcv
 
-    def _sync_index(self) -> Callable[..., dict]:
+    def _sync_index(self) -> Callable[..., object]:
         if self._dependencies.sync_index is not None:
             return self._dependencies.sync_index
         from vnalpha.ingestion.sync_index import sync_index_ohlcv
 
         return sync_index_ohlcv
 
-    def _build_canonical(self) -> Callable[..., dict]:
+    def _build_canonical(self) -> Callable[..., object]:
         if self._dependencies.build_canonical is not None:
             return self._dependencies.build_canonical
         from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
 
         return build_canonical_ohlcv
 
-    def _build_features(self) -> Callable[..., dict]:
+    def _build_features(self) -> Callable[..., object]:
         if self._dependencies.build_features is not None:
             return self._dependencies.build_features
         from vnalpha.features.build_features import build_features
 
         return build_features
 
-    def _generate_watchlist(self) -> Callable[..., dict]:
+    def _generate_watchlist(self) -> Callable[..., object]:
         if self._dependencies.generate_watchlist is not None:
             return self._dependencies.generate_watchlist
         from vnalpha.scoring.generate_watchlist import generate_watchlist
@@ -342,16 +415,33 @@ def _validate_download(
     artifact: str,
     symbol: str | None,
     symbols: tuple[str, ...] | None,
+    allow_all_symbols: bool,
+    start: str | None,
+    end: str | None,
     request_date: str | None,
 ) -> None:
     if artifact not in {"symbols", "ohlcv", "index"}:
         raise DataProvisioningValidationError(
             "Supported downloads: symbols, ohlcv, index."
         )
-    if artifact == "ohlcv" and symbol is None and not symbols:
-        raise DataProvisioningValidationError("Data download ohlcv requires a symbol.")
     if request_date is not None:
         raise DataProvisioningValidationError("--date is only valid for data builds.")
+    if artifact == "symbols" and (
+        symbol is not None or symbols or allow_all_symbols or start or end
+    ):
+        raise DataProvisioningValidationError(
+            "Data download symbols accepts only an optional --source."
+        )
+    if artifact == "ohlcv":
+        selected = int(symbol is not None) + int(bool(symbols)) + int(allow_all_symbols)
+        if selected != 1:
+            raise DataProvisioningValidationError(
+                "Data download ohlcv requires exactly one symbol selection or an explicit all-symbols policy."
+            )
+    if artifact == "index" and (symbols or allow_all_symbols):
+        raise DataProvisioningValidationError(
+            "Data download index accepts at most one index symbol."
+        )
 
 
 def _validate_build(
@@ -363,6 +453,8 @@ def _validate_build(
     end: str | None,
     source: str | None,
     request_date: str | None,
+    top_n: int,
+    min_score: float,
 ) -> None:
     if artifact not in {
         "canonical",
@@ -392,12 +484,29 @@ def _validate_build(
         and request_date is None
     ):
         raise DataProvisioningValidationError(f"Data build {artifact} requires --date.")
+    if artifact == "canonical" and request_date is not None:
+        raise DataProvisioningValidationError(
+            "Data build canonical does not accept --date."
+        )
     if artifact in {"market-regime", "sector-strength"} and (
-        symbol is not None or symbols
+        symbol is not None or symbols or allow_all_symbols
     ):
         raise DataProvisioningValidationError(
             f"Data build {artifact} does not accept a symbol."
         )
+    if artifact == "score":
+        if top_n <= 0:
+            raise DataProvisioningValidationError("--top-n must be greater than zero.")
+        if not isfinite(min_score) or not 0.0 <= min_score <= 1.0:
+            raise DataProvisioningValidationError(
+                "--min-score must be between 0 and 1."
+            )
+
+
+def _normalize_required_text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise DataProvisioningValidationError(f"{label} must not be empty.")
+    return value.strip()
 
 
 def _normalize_symbol(value: str | None) -> str | None:
@@ -419,22 +528,15 @@ def _normalize_symbols(values: tuple[str, ...] | None) -> tuple[str, ...] | None
 def _normalize_source(value: str | None) -> str | None:
     if value is None:
         return None
-    normalized = value.strip()
+    normalized = value.strip().upper()
     if not normalized:
         return None
-    if normalized.upper() not in {
-        "KBS",
-        "VCI",
-        "MSN",
-        "DNSE",
-        "TCBS",
-        "FMARKET",
-        "FMP",
-    }:
+    if normalized not in _APPROVED_SOURCES:
+        approved = ", ".join(sorted(_APPROVED_SOURCES))
         raise DataProvisioningValidationError(
-            "--source must name an approved provider (KBS, VCI, MSN, DNSE, TCBS, FMARKET, or FMP)."
+            f"--source must name an approved provider ({approved})."
         )
-    return normalized.upper()
+    return normalized
 
 
 def _normalize_interval(value: str) -> str:
@@ -449,7 +551,7 @@ def _normalize_date(value: str | None, option: str) -> str | None:
         return None
     try:
         return date.fromisoformat(value.strip()).isoformat()
-    except ValueError as exc:
+    except (AttributeError, ValueError) as exc:
         raise DataProvisioningValidationError(
             f"{option} must use YYYY-MM-DD format."
         ) from exc
@@ -462,7 +564,7 @@ def _resolve_request_date(
         return None
     try:
         return resolve_date(value, conn=conn)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, duckdb.Error) as exc:
         raise DataProvisioningValidationError(str(exc)) from exc
 
 
@@ -486,15 +588,54 @@ def _required_date(value: str | None) -> str:
     return value
 
 
-def _counts(result: dict, *keys: str) -> dict[str, int]:
-    return {key: int(result.get(key, 0)) for key in keys}
+def _required_date_value(value: str | None) -> date:
+    return date.fromisoformat(_required_date(value))
 
 
-def _quality_status(quality: str) -> ProvisioningStatus:
+def _require_mapping(result: object) -> Mapping[str, object]:
+    if not isinstance(result, Mapping):
+        raise TypeError("Provisioning adapter returned an invalid result.")
+    return result
+
+
+def _counts(result: Mapping[str, object], *keys: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for key in keys:
+        value = result.get(key, 0)
+        try:
+            counts[key] = int(value or 0)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(f"Invalid count for {key}.") from exc
+    return counts
+
+
+def _partial_if_positive(
+    counts: Mapping[str, int], *problem_keys: str
+) -> ProvisioningStatus:
+    return (
+        ProvisioningStatus.PARTIAL
+        if any(counts.get(key, 0) > 0 for key in problem_keys)
+        else ProvisioningStatus.SUCCESS
+    )
+
+
+def _quality_status(
+    quality: str, *, success_values: set[str]
+) -> ProvisioningStatus:
     return (
         ProvisioningStatus.SUCCESS
-        if quality == "COMPLETE"
+        if quality.upper() in success_values
         else ProvisioningStatus.PARTIAL
+    )
+
+
+def _count_warnings(
+    counts: Mapping[str, int], *descriptions: tuple[str, str]
+) -> tuple[str, ...]:
+    return tuple(
+        f"{counts[key]} {description}."
+        for key, description in descriptions
+        if counts.get(key, 0) > 0
     )
 
 
@@ -505,7 +646,20 @@ def _result(
     status: ProvisioningStatus = ProvisioningStatus.SUCCESS,
     counts: dict[str, int] | None = None,
     warnings: tuple[str, ...] = (),
+    raw_result: Mapping[str, object] | None = None,
+    lineage_extra: Mapping[str, str] | None = None,
 ) -> DataProvisioningResult:
+    lineage = {
+        "operation": request.operation,
+        "artifact": request.artifact,
+        "source": request.source or "warehouse",
+    }
+    if raw_result is not None:
+        run_id = raw_result.get("run_id") or raw_result.get("ingestion_run_id")
+        if run_id:
+            lineage["ingestion_run_id"] = str(run_id)
+    if lineage_extra:
+        lineage.update({key: str(value) for key, value in lineage_extra.items() if value})
     return DataProvisioningResult(
         status=status,
         operation=request.operation,
@@ -519,12 +673,8 @@ def _result(
         end=request.end,
         warnings=warnings,
         requested_date=request.requested_date or request.date,
-        freshness=request.date or request.end or "unknown",
-        lineage={
-            "operation": request.operation,
-            "artifact": request.artifact,
-            "source": request.source or "warehouse",
-        },
+        freshness=_freshness_state(request),
+        lineage=lineage,
         follow_up=(
             "Review warnings and rerun the bounded command if needed."
             if warnings or status is not ProvisioningStatus.SUCCESS
@@ -533,8 +683,42 @@ def _result(
     )
 
 
+def _freshness_state(request: DataProvisioningRequest) -> str:
+    if request.operation == "build" and request.date:
+        return "exact"
+    if request.start or request.end:
+        return "bounded_range"
+    if request.operation == "build":
+        return "warehouse_current"
+    return "provider_default"
+
+
+def _object_lineage(value: object) -> dict[str, str]:
+    lineage: dict[str, str] = {}
+    methodology = getattr(value, "methodology_version", None)
+    if methodology:
+        lineage["methodology_version"] = str(methodology)
+    quality = getattr(value, "quality", None)
+    if quality:
+        lineage["quality"] = str(quality)
+    generated_at = getattr(value, "generated_at", None)
+    if generated_at:
+        lineage["generated_at"] = str(generated_at)
+    embedded = getattr(value, "lineage", None)
+    if isinstance(embedded, Mapping):
+        for key, item in embedded.items():
+            if item not in (None, ""):
+                lineage[str(key)] = str(item)
+    return lineage
+
+
 def _audit_provisioning(
-    event_type: str, request: DataProvisioningRequest, status: str
+    event_type: str,
+    request: DataProvisioningRequest,
+    status: str,
+    *,
+    correlation_id: str,
+    counts: Mapping[str, int] | None = None,
 ) -> None:
     from vnalpha.observability.audit import log_audit
 
@@ -546,6 +730,8 @@ def _audit_provisioning(
             "artifact": request.artifact,
             "operation": request.operation,
             "symbol": request.symbol,
+            "correlation_id": correlation_id,
+            "counts": dict(counts or {}),
         },
         object_type="data_provisioning",
         object_id=request.artifact,
