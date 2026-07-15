@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import pandas as pd
+from pandas.api.types import is_string_dtype
 
 from vnstock.core.provider.models import ProviderIssue
 
@@ -92,6 +93,20 @@ def _get_baseline() -> dict[tuple[str, str], DatasetSchema]:
     if _BASELINE is None:
         _BASELINE = _baseline_schemas()
     return _BASELINE
+
+
+def _dtype_matches(series: pd.Series, expected_prefix: str) -> bool:
+    """Match semantic string dtypes across supported pandas versions.
+
+    Pandas 3 may infer textual columns as the dedicated ``str`` dtype while
+    earlier versions report ``object``. The provider contract treats both as
+    normalized text; numeric and datetime contracts remain exact/prefix based.
+    """
+
+    actual_dtype = str(series.dtype)
+    if actual_dtype == expected_prefix or actual_dtype.startswith(expected_prefix):
+        return True
+    return expected_prefix == "object" and is_string_dtype(series.dtype)
 
 
 def detect_drift(
@@ -210,13 +225,10 @@ def detect_drift(
             )
             continue
 
-        # dtype check — use prefix matching for datetime variants
-        actual_dtype = str(df[col_spec.name].dtype)
+        series = df[col_spec.name]
+        actual_dtype = str(series.dtype)
         expected_prefix = col_spec.dtype
-        dtype_ok = actual_dtype == expected_prefix or actual_dtype.startswith(
-            expected_prefix
-        )
-        if not dtype_ok:
+        if not _dtype_matches(series, expected_prefix):
             severity = "warning" if col_spec.nullable else "error"
             issues.append(
                 ProviderIssue(
@@ -237,8 +249,8 @@ def detect_drift(
             )
 
         # null check for non-nullable columns
-        if not col_spec.nullable and df[col_spec.name].isna().any():
-            n_null = int(df[col_spec.name].isna().sum())
+        if not col_spec.nullable and series.isna().any():
+            n_null = int(series.isna().sum())
             issues.append(
                 ProviderIssue(
                     code="DRIFT_UNEXPECTED_NULLS",
