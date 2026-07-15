@@ -1,455 +1,181 @@
 # 02. System architecture
 
+> **Status:** current architecture.
+>
+> Delivery priority and completion status are owned by the root `ROADMAP.md` and
+> GitHub issue #90. This document describes stable component boundaries and the
+> implementation direction; it is not a second roadmap.
+
 ## Architecture goal
 
-`vnalpha` should be built as an independent OpenBB-inspired research workspace service for Vietnamese equities.
-
-It should not embed market data provider logic. The data foundation is a separate service:
-
-```text
-vnstock-service  = market data platform service
-vnalpha-service  = research workspace service
-```
-
-`vnalpha-service` owns research state, user-facing workflows, watchlists, dashboards, AI explanations, reports, journals, and backtest/outcome artifacts. `vnstock-service` owns provider connectivity, provider routing, validation, auth-aware data access, rate limits, ingestion runtime, and normalized market data delivery.
-
-The system should not begin as an auto-trading platform.
-
----
-
-## High-level service architecture
+`vnalpha` is a terminal-first, AI-assisted research workspace for Vietnamese
+equities. It consumes provider-independent data from `vnstock-service`, persists
+research evidence in DuckDB and exposes one typed application layer through the
+Typer CLI, Textual TUI and any future read-only API.
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                    Workspace UI Layer                        │
-│ Streamlit MVP / later Next.js / Watchlist / Journal / Charts │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                    vnalpha-service API                       │
-│ FastAPI / Workspace API / Query API / Report endpoints       │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                  Workspace Application Layer                 │
-│ Market │ Watchlist │ Pattern │ Backtest │ AI │ Journal │ Risk │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                    Core Research Engine                      │
-│ Feature │ Pivot │ Pattern │ Scoring │ Outcome │ Regime       │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                  Research Data Warehouse                     │
-│ Raw refs │ Canonical OHLCV │ Features │ Patterns │ Outcomes  │
-│ Watchlists │ Reports │ AI outputs │ Journal                    │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                vnstock-service client adapter                │
-│ HTTP client / SDK client / data contracts / diagnostics      │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                      vnstock-service                         │
-│ Provider plugins │ routing │ quality │ auth │ ingestion      │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                  External Data Providers                     │
-│              KBS / VCI / DNSE / TCBS / others                │
-└─────────────────────────────────────────────────────────────┘
+vnstock-service = provider access, routing, normalization and data contracts
+vnalpha         = research warehouse, deterministic analysis and workspace UX
 ```
 
----
+The system permanently remains inside a read-only research boundary. Broker,
+account, order, allocation, transfer, margin and execution capabilities are not
+part of the architecture.
 
-## Product analogy
-
-`vnalpha` should be closer to an investment research workspace than a single scanner.
-
-OpenBB positions Workspace as a place where investment teams bring data, workflows, and AI together under their control, with interactive dashboards that analysts and AI agents can use together. `vnalpha` should adapt that idea to Vietnamese equities, but with a narrower MVP and a strict research-only boundary.
-
----
-
-## Service ownership boundary
-
-### `vnstock-service` owns
+## Current high-level architecture
 
 ```text
-provider plugins
-provider auth/session management
-provider health and diagnostics
-provider routing
-quality validation
-rate limiting
-batch ingestion
-raw/normalized market data delivery
-market/reference/fundamental/fund data APIs
+External market/reference providers
+        ↓
+vnstock ProviderPlugin implementations
+        ↓
+PluginRegistry → PluginRouter → PluginRuntime
+        ↓
+canonical read-only vnstock-service contracts
+        ↓
+vnalpha client and bounded ingestion services
+        ↓
+raw evidence → validation/quarantine → canonical DuckDB tables
+        ↓
+features → completeness evidence → scores/context/outcomes/artifacts
+        ↓
+typed application services and deterministic tools
+        ↓
+Typer CLI + Textual TUI + optional read-only integration adapters
+        ↓
+grounded assistant classification, planning and synthesis
 ```
 
-### `vnalpha-service` owns
+## Component ownership
 
-```text
-workspace API
-workspace UI
-research data warehouse
-canonical OHLCV selection
-feature store
-pivot engine
-pattern engine
-scoring engine
-market regime engine
-watchlist generation
-outcome tracking
-backtest workspace
-AI explanation and risk critique
-research journal
-report generation
-```
+### `vnstock-service`
 
-### Explicit non-ownership
+Owns:
 
-`vnalpha-service` must not own:
+- provider plugins and provider-specific normalization;
+- credentialed data-provider authentication and session handling;
+- capability, auth and health-aware routing;
+- canonical dataset contracts and quality validation;
+- bounded localhost read-only HTTP delivery;
+- safe provider diagnostics and provenance.
 
-```text
-provider crawling
-provider login implementation
-broker account APIs
-order placement
-portfolio execution
-automated trading
-investment advice claims
-```
+Does not own research scoring, watchlists, outcomes, backtests, journals or AI
+research narratives.
 
----
+### `vnalpha`
 
-## Major layers
+Owns:
 
-### 1. Data foundation client
+- ingestion runs and raw provider evidence received from `vnstock-service`;
+- canonical OHLCV selection and quarantine evidence;
+- symbol lifecycle and point-in-time taxonomy history;
+- feature snapshots and feature-completeness contracts;
+- benchmark-relative strength, scoring, watchlists and context snapshots;
+- outcome evaluation, event studies and research artifacts;
+- assistant/tool/session traces and bounded symbol memory;
+- CLI and TUI workflows.
 
-Responsibility:
+`vnalpha` must not call provider-specific endpoints or SDKs directly. A missing
+dataset requires a provider-independent contract in `vnstock`, not an adapter in
+the research layer.
 
-- call `vnstock-service` through HTTP or a thin SDK client;
-- request validated data and provider diagnostics;
-- preserve provider metadata and quality status;
-- translate service responses into local research ingestion records;
-- avoid direct dependency on provider-specific endpoints.
+## Current application structure
 
-Boundary:
-
-`vnalpha` should not reimplement provider crawling or endpoint-specific logic if `vnstock-service` already provides it.
-
-### 2. Research data warehouse
-
-Responsibility:
-
-- persist fetched data snapshots;
-- store quality reports and provider diagnostics;
-- build canonical OHLCV dataset;
-- version ingestion runs;
-- provide reliable tables for feature engineering and backtests;
-- store workspace artifacts such as watchlists, AI outputs, reports, and journal entries.
-
-Recommended MVP storage:
-
-```text
-DuckDB + Parquet
-```
-
-Recommended later storage:
-
-```text
-PostgreSQL / TimescaleDB + object storage
-```
-
-### 3. Core research engine
-
-Responsibility:
-
-- compute features;
-- identify swing/pivot points;
-- detect pattern candidates;
-- score patterns;
-- classify market regime;
-- evaluate outcomes;
-- prepare backtest datasets.
-
-This is the deterministic research engine. It should be unit-tested and auditable.
-
-### 4. Workspace application layer
-
-Responsibility:
-
-- produce daily watchlists;
-- expose pattern details;
-- run backtests;
-- store journal entries;
-- generate AI explanations and risk critiques;
-- support user workflows such as market overview, symbol workspace, pattern review, failed breakout review, and outcome analysis.
-
-### 5. Workspace API layer
-
-MVP API:
-
-```text
-GET  /healthz
-GET  /v1/workspace/market/overview
-GET  /v1/workspace/watchlists/daily
-GET  /v1/workspace/patterns
-GET  /v1/workspace/patterns/{pattern_id}
-GET  /v1/workspace/symbols/{symbol}
-GET  /v1/workspace/outcomes/summary
-POST /v1/workspace/backtests
-POST /v1/workspace/ai/explain-pattern
-POST /v1/workspace/journal
-```
-
-Forbidden API groups:
-
-```text
-broker login
-account balance
-order placement
-order history
-portfolio execution
-auto trading
-```
-
-### 6. Workspace UI layer
-
-MVP UI:
-
-```text
-Streamlit
-```
-
-Later UI:
-
-```text
-FastAPI backend + Next.js frontend
-```
-
-Workspace screens:
-
-```text
-Market Overview
-Daily Watchlist
-Symbol Workspace
-Pattern Detail
-Failed Breakout Review
-Outcome Summary
-Backtest Lab
-AI Explanation
-Research Journal
-```
-
----
-
-## Service decomposition
-
-MVP can be two services:
-
-```text
-vnstock-service
-vnalpha-service
-```
-
-Inside `vnalpha-service`, use modular monolith boundaries:
+The implementation is a modular monolith. Important packages include:
 
 ```text
 vnalpha/
-├── clients
-│   └── vnstock
-├── ingestion
-├── warehouse
-├── features
-├── pivots
-├── patterns
-├── scoring
-├── regime
-├── outcome
-├── backtest
-├── ai
-├── workspace
-├── api
-├── dashboard
-└── common
+├── assistant              # intent, planner, gateway, synthesis and traces
+├── cli_app                # Typer command groups
+├── clients/vnstock        # provider-independent service client
+├── commands               # shared slash-command registry and handlers
+├── data_availability      # typed readiness checks and remediation
+├── data_provisioning      # shared download/build orchestration
+├── features               # feature calculation and completeness policy
+├── ingestion              # raw storage, validation and canonical promotion
+├── model_routing          # model profiles, fallback policy and observability
+├── outcome                # forward-outcome evaluation
+├── research_automation    # event studies and reusable research artifacts
+├── research_intelligence  # market breadth, regime and sector context
+├── scoring                # deterministic candidate scoring and watchlists
+├── tui                    # Textual workspace
+└── warehouse              # DuckDB schema, migrations and repositories
 ```
 
-A later split could be:
+A future split into network services is allowed only after a real concurrency or
+multi-user requirement exists. It must not duplicate business rules already
+owned by the typed application layer.
+
+## Primary interfaces
+
+### Typer CLI
+
+The CLI is the explicit operational and automation surface. Current command
+groups include:
 
 ```text
-workspace-api
-feature-service
-pattern-service
-backtest-service
-ai-report-service
-dashboard
+vnalpha init
+vnalpha sync ...
+vnalpha data ...
+vnalpha build ...
+vnalpha score
+vnalpha watchlist
+vnalpha outcome ...
+vnalpha eval ...
+vnalpha repair ...
+vnalpha deploy ...
+vnalpha validate ...
+vnalpha tui
 ```
 
-Do not split `vnalpha-service` into microservices before the core scanner/backtest is proven useful.
+### Textual TUI
 
----
+The TUI is the main interactive research workspace. It delegates to shared
+command handlers, provisioning services and readiness contracts rather than
+implementing separate data or scoring logic.
 
-## Daily processing flow
+### Optional read-only API
 
-```text
-1. sync_universe_from_vnstock_service
-2. sync_ohlcv_from_vnstock_service
-3. store_raw_service_responses
-4. build_canonical_ohlcv
-5. compute_features
-6. detect_pivots
-7. detect_patterns
-8. score_patterns
-9. update_pattern_outcomes
-10. generate_watchlist
-11. generate_ai_explanations
-12. publish_workspace_dashboard
-```
+An API is a later integration adapter, not the core architecture. Any endpoint
+must delegate to the same typed application services used by CLI/TUI and remain
+read-only. No standalone FastAPI service or web dashboard is required for the
+current terminal-first product.
 
----
+## Data and research truthfulness
 
-## Key data contracts
+Every research operation must preserve:
 
-### Canonical OHLCV
+- requested and effective as-of dates;
+- provider and ingestion-run lineage;
+- canonical validation and quarantine status;
+- feature profile and missing-evidence status;
+- benchmark identity and methodology version;
+- price basis and future adjustment lineage when implemented;
+- deterministic rule and artifact versions;
+- caveats and remediation when required evidence is missing.
 
-The feature engine must consume canonical data, not anonymous provider frames.
+Existing rows without a modern contract remain readable only as legacy evidence
+and must fail closed at capability boundaries.
 
-Minimum fields:
+## AI boundary
 
-```text
-symbol
-time
-interval
-open
-high
-low
-close
-volume
-selected_provider
-quality_status
-ingestion_run_id
-source_service_run_id
-```
+AI may classify requests, propose bounded plans, explain deterministic output,
+compare evidence and produce caveated summaries. It may not:
 
-### Pattern instance
+- fetch unrestricted or provider-specific data;
+- execute arbitrary SQL or shell commands;
+- alter policy, validation or scoring rules;
+- invent missing evidence;
+- present aliases or proxies as completed backtests;
+- create or execute trading instructions.
 
-Every detected pattern should be stored as a structured object.
+## Implemented versus planned
 
-Minimum fields:
+Implemented architecture includes the terminal app, DuckDB warehouse, canonical
+OHLCV pipeline, feature/scoring/context contracts, research artifacts and
+assistant workflow infrastructure.
 
-```text
-pattern_id
-symbol
-pattern_type
-start_date
-end_date
-trigger_date
-status
-score
-invalidation_price
-feature_json
-risk_json
-data_quality_status
-ingestion_run_id
-created_at
-```
-
-### Pattern outcome
-
-Every pattern should later receive forward outcome labels.
-
-Minimum fields:
-
-```text
-pattern_id
-horizon_days
-forward_return
-index_return
-sector_return
-excess_return
-max_gain
-max_drawdown
-outcome_label
-```
-
-### Workspace artifact
-
-Workspace state should be explicit.
-
-Minimum fields:
-
-```text
-artifact_id
-artifact_type
-workspace_date
-symbol
-pattern_id
-payload_json
-created_by
-generated_by
-created_at
-```
-
----
-
-## Technology choices
-
-### MVP
-
-```text
-Python
-FastAPI
-Streamlit
-DuckDB
-Parquet
-Pandas / NumPy
-vnstock-service HTTP client
-LiteLLM-compatible gateway
-```
-
-### Later
-
-```text
-PostgreSQL / TimescaleDB
-Next.js
-Redis cache
-VectorBT
-MLflow
-MCP tools
-```
-
----
-
-## Deployment view
-
-Local MVP:
-
-```text
-docker compose
-├── vnstock-service
-├── vnalpha-service
-├── vnalpha-dashboard
-└── duckdb/parquet volume
-```
-
-Later deployment:
-
-```text
-vnstock-service
-vnalpha-service
-workspace-dashboard
-postgres/timescaledb
-object storage
-llm gateway
-```
-
----
-
-## Design principle
-
-`vnstock-service` answers: "What is the validated market data?"
-
-`vnalpha-service` answers: "What does this data mean for research, patterns, watchlists, risk, outcomes, and reports?"
+Planned capabilities such as adjusted prices, the point-in-time Backtest Lab,
+publication-aware fundamentals, official-document retrieval and an optional API
+remain owned by their linked GitHub issues. Their target designs do not imply
+that a runtime surface already exists.
