@@ -70,6 +70,59 @@ def _check_active_changes(errors: list[str]) -> None:
             )
 
 
+def _check_ci_gate_contract(errors: list[str]) -> None:
+    workflow_path = ".github/workflows/openstock-ci.yml"
+    workflow = _read(workflow_path)
+    if re.search(r"(?m)^  pull_request:\s*\n    paths:", workflow):
+        errors.append(
+            f"{workflow_path}: pull_request path filters can hide required checks"
+        )
+    if re.search(
+        r"(?m)^  push:\s*\n    branches:\s*\n      - main\s*\n    paths:",
+        workflow,
+    ):
+        errors.append(
+            f"{workflow_path}: main push validation must not be path-filtered"
+        )
+    for required in (
+        "name: Repository consistency",
+        "name: vnalpha lint and tests",
+        "name: vnstock contracts and package",
+        "name: Required merge gate",
+        "if: always()",
+        'test "$CONSISTENCY_RESULT" = success',
+        'test "$VNALPHA_RESULT" = success',
+        'test "$VNSTOCK_RESULT" = success',
+    ):
+        if required not in workflow:
+            errors.append(
+                f"{workflow_path}: missing required merge-gate contract {required!r}"
+            )
+
+    doc_path = "vnalpha/docs/branch-protection.md"
+    document = _read(doc_path)
+    for required in (
+        "openstock-ci / Repository consistency",
+        "openstock-ci / vnalpha lint and tests",
+        "openstock-ci / vnstock contracts and package",
+        "openstock-ci / Required merge gate",
+        "Require branches to be up to date before merging",
+        "Do not allow bypassing the above settings",
+    ):
+        if required not in document:
+            errors.append(
+                f"{doc_path}: missing required branch-protection contract {required!r}"
+            )
+    for stale in (
+        ".github/workflows/vnalpha-ci.yml",
+        "vnalpha-ci / validate",
+    ):
+        if stale in document:
+            errors.append(
+                f"{doc_path}: contains stale branch-protection contract {stale!r}"
+            )
+
+
 def check() -> tuple[str, ...]:
     errors: list[str] = []
 
@@ -137,6 +190,7 @@ def check() -> tuple[str, ...]:
         )
 
     _check_active_changes(errors)
+    _check_ci_gate_contract(errors)
     return tuple(errors)
 
 
