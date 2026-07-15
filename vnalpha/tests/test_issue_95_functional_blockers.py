@@ -61,9 +61,7 @@ def test_root_cause_remediation_orders_upstream_repairs() -> None:
     metadata = sector_remediation_steps(
         target, (ContextIssue.SYMBOL_SECTOR_UNCLASSIFIED,)
     )
-    coverage = sector_remediation_steps(
-        target, (ContextIssue.SECTOR_NOT_RANKABLE,)
-    )
+    coverage = sector_remediation_steps(target, (ContextIssue.SECTOR_NOT_RANKABLE,))
 
     assert [step.command for step in market] == [
         "vnalpha build features --date 2026-07-10",
@@ -148,7 +146,9 @@ def test_unexpected_context_evaluation_failure_returns_structured_result(
 
     assert result.is_ready is False
     market = next(
-        artifact for artifact in result.artifacts if artifact.name == "market_regime_snapshot"
+        artifact
+        for artifact in result.artifacts
+        if artifact.name == "market_regime_snapshot"
     )
     assert market.error_code == ContextIssue.CONTEXT_BUILD_FAILED.value
 

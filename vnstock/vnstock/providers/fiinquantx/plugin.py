@@ -5,6 +5,7 @@ from datetime import date
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+
 from vnstock.providers.fiinquantx.bridge import (
     SUPPORTED_VERSIONS,
     FiinQuantXState,
@@ -41,7 +42,9 @@ def _parse_iso_date(value: object, field: str) -> date | None:
     try:
         return date.fromisoformat(value)
     except ValueError:
-        raise ValueError(f"'{field}' must be an ISO date string (YYYY-MM-DD).") from None
+        raise ValueError(
+            f"'{field}' must be an ISO date string (YYYY-MM-DD)."
+        ) from None
 
 
 class FiinQuantXProviderPlugin:
@@ -257,7 +260,9 @@ class FiinQuantXProviderPlugin:
         if not self._licensed_runtime_acknowledged():
             return "Disabled until the licensed runtime is explicitly acknowledged."
         if not self._credentials_configured():
-            return "Disabled until both credential environment variables are configured."
+            return (
+                "Disabled until both credential environment variables are configured."
+            )
         if state is FiinQuantXState.INSTALLED_SUPPORTED:
             return "Bounded historical contract verified for SDK 0.1.64."
         return f"SDK runtime is unavailable ({state.value})."

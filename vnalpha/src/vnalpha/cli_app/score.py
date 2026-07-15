@@ -50,9 +50,7 @@ def score(
         )
 
 
-def _execute(
-    conn, request: DataProvisioningRequest
-) -> DataProvisioningResult:
+def _execute(conn, request: DataProvisioningRequest) -> DataProvisioningResult:
     try:
         result = DataProvisioningService(conn).execute(request)
     except DataProvisioningValidationError as exc:

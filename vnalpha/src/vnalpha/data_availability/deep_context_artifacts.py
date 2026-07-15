@@ -88,7 +88,9 @@ def context_artifact(
         freshness=freshness,
         lineage=lineage,
         error=error,
-        remediation=remediation_steps[0].command if failed and remediation_steps else None,
+        remediation=remediation_steps[0].command
+        if failed and remediation_steps
+        else None,
         available=not failed,
         requested_date=requested_date,
         resolved_date=requested_date,

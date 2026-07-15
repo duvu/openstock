@@ -536,12 +536,12 @@ def test_readiness_contains_optional_missing_data_separately() -> None:
 
     # Then: optional data is disclosed without making the readiness gate fail.
     assert result.is_ready is True
-    assert result.to_panel_dict()["optional_missing_data"] == [
-        "market_regime_snapshot"
-    ]
+    assert result.to_panel_dict()["optional_missing_data"] == ["market_regime_snapshot"]
 
 
-def test_readiness_converts_date_resolution_failure_to_typed_result(monkeypatch) -> None:
+def test_readiness_converts_date_resolution_failure_to_typed_result(
+    monkeypatch,
+) -> None:
     # Given: the warehouse date resolver cannot determine an effective date.
     monkeypatch.setattr(
         "vnalpha.data_availability.deep_readiness_service.resolve_date",

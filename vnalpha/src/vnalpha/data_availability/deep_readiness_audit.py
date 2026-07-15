@@ -11,9 +11,7 @@ from vnalpha.observability.audit import log_audit
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
 
 
-def audit_context_build(
-    name: str, phase: str, context: ContextReadinessInput
-) -> None:
+def audit_context_build(name: str, phase: str, context: ContextReadinessInput) -> None:
     """Record a context builder phase under the readiness correlation ID."""
     log_audit(
         f"DEEP_ANALYSIS_CONTEXT_BUILD_{phase}",

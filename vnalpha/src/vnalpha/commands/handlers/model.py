@@ -285,8 +285,6 @@ def _effective_fallbacks(config: ModelRoutingConfig) -> dict[str, list[dict[str,
             if fallback_model in seen_models:
                 continue
             seen_models.add(fallback_model)
-            effective.append(
-                {"profile": fallback.value, "model_id": fallback_model}
-            )
+            effective.append({"profile": fallback.value, "model_id": fallback_model})
         result[profile.value] = effective
     return result

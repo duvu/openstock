@@ -49,9 +49,7 @@ def test_resolve_benchmark_rejects_inapplicable_explicit_index(
     _insert_common_equity(conn, "FPT", "HOSE")
 
     with pytest.raises(BenchmarkSelectionError, match="not applicable"):
-        resolve_benchmark(
-            conn, "FPT", date(2026, 7, 10), requested_symbol="HNXINDEX"
-        )
+        resolve_benchmark(conn, "FPT", date(2026, 7, 10), requested_symbol="HNXINDEX")
 
 
 def test_migration_backfills_legacy_vnindex_relative_strength(

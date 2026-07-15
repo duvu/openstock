@@ -43,8 +43,6 @@ class TestIntentClassifier(_IntentClassifierCases):
         )
         assert classifier._client.call_metadata[1]["model_profile"] == "default"
         assert (
-            classifier._client.call_metadata[1]["route_metadata"][
-                "schema_repair_retry"
-            ]
+            classifier._client.call_metadata[1]["route_metadata"]["schema_repair_retry"]
             is True
         )
