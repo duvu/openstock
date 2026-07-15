@@ -28,6 +28,8 @@ _CANONICAL: dict[str, str] = {
     "/v1/equity/intraday-trades": "equity.intraday_trades",
     "/v1/index/ohlcv": "index.ohlcv",
     "/v1/reference/symbols": "reference.symbols",
+    "/v1/reference/index-membership": "reference.index_membership_snapshot",
+    "/v1/reference/sector-membership": "reference.sector_membership_snapshot",
     "/v1/company/info": "reference.company_info",
     "/v1/fundamental/balance-sheet": "fundamental.balance_sheet",
     "/v1/fundamental/income-statement": "fundamental.income_statement",
@@ -45,6 +47,20 @@ _ALIASES: dict[str, str] = {
 
 # Query params forwarded to the runtime
 _RUNTIME_PARAMS = frozenset({"source", "validate", "quality_mode"})
+_INTEGER_DATA_PARAMS = frozenset({"count_back"})
+_SENSITIVE_DATA_PARAM_FRAGMENTS = frozenset(
+    {
+        "api",
+        "authorization",
+        "cookie",
+        "credential",
+        "password",
+        "secret",
+        "session",
+        "token",
+        "username",
+    }
+)
 
 
 class MapperError(ValueError):
@@ -95,4 +111,22 @@ def extract_runtime_params(query: dict[str, list[str]]) -> dict[str, str]:
     for key in _RUNTIME_PARAMS:
         if key in query:
             result[key] = query[key][0]
+    return result
+
+
+def extract_data_params(query: dict[str, list[str]]) -> dict[str, str | int]:
+    result: dict[str, str | int] = {}
+    for key, values in query.items():
+        if key in _RUNTIME_PARAMS or not values:
+            continue
+        normalized_key = key.lower().replace("-", "_")
+        if any(
+            fragment in normalized_key for fragment in _SENSITIVE_DATA_PARAM_FRAGMENTS
+        ):
+            raise ValueError("Credential query parameters are not allowed.")
+        value = values[0]
+        if key in _INTEGER_DATA_PARAMS and value.isdecimal():
+            result[key] = int(value)
+        else:
+            result[key] = value
     return result

@@ -23,6 +23,17 @@ def test_index_ohlcv_endpoint():
     assert path_to_dataset("/v1/index/ohlcv") == "index.ohlcv"
 
 
+def test_fiinquantx_membership_endpoints():
+    assert (
+        path_to_dataset("/v1/reference/index-membership")
+        == "reference.index_membership_snapshot"
+    )
+    assert (
+        path_to_dataset("/v1/reference/sector-membership")
+        == "reference.sector_membership_snapshot"
+    )
+
+
 def test_all_required_endpoints_exist():
     """All endpoints required by vnalpha must be mappable."""
     required = [
@@ -132,6 +143,52 @@ def test_extract_runtime_params_ignores_data_params():
 
     result = extract_runtime_params({"symbol": ["FPT"], "start": ["2024-01-01"]})
     assert result == {}
+
+
+def test_extract_data_params_parses_count_back_as_integer():
+    from vnstock.service.dataset_mapper import extract_data_params
+
+    result = extract_data_params(
+        {"symbol": ["VCB"], "count_back": ["2"], "source": ["FIINQUANTX"]}
+    )
+
+    assert result == {"symbol": "VCB", "count_back": 2}
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "password",
+        "fiinquant_password",
+        "credential",
+        "credentials",
+        "cookie",
+        "session_id",
+    ],
+)
+def test_extract_data_params_rejects_credential_like_keys(key):
+    from vnstock.service.dataset_mapper import extract_data_params
+
+    with pytest.raises(ValueError, match="Credential query parameters"):
+        extract_data_params({"symbol": ["VCB"], key: [""]})
+
+
+def test_request_logging_does_not_include_query_values(monkeypatch):
+    from vnstock.service.server import VnstockHandler
+
+    messages: list[str] = []
+    monkeypatch.setattr(
+        "vnstock.service.server.logger.debug", lambda message: messages.append(message)
+    )
+    VnstockHandler.log_message(
+        object(),
+        '"GET %s HTTP/1.1" %s %s',
+        "/v1/equity/ohlcv?password=not-logged",
+        "400",
+        "-",
+    )
+
+    assert messages == ["[service] request completed"]
 
 
 # ---------------------------------------------------------------------------

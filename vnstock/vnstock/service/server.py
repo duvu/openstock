@@ -94,12 +94,12 @@ class VnstockHandler(BaseHTTPRequestHandler):
     _auth_manager: Any = None
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
-        logger.debug(f"[service] {format % args}")
+        logger.debug("[service] request completed")
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
-        query = parse_qs(parsed.query)
+        query = parse_qs(parsed.query, keep_blank_values=True)
 
         # ── Forbidden gate ────────────────────────────────────────────────
         if _is_forbidden(path):
@@ -168,9 +168,7 @@ class VnstockHandler(BaseHTTPRequestHandler):
         except Exception:
             health_data = {}
         providers = [
-            health
-            for datasets in health_data.values()
-            for health in datasets.values()
+            health for datasets in health_data.values() for health in datasets.values()
         ]
         self._send_json(200, {"health": health_data, "providers": providers})
 
@@ -269,10 +267,12 @@ class VnstockHandler(BaseHTTPRequestHandler):
             NoHealthyProviderError,
             ProviderFetchError,
             UnsupportedDatasetError,
+            UnsupportedDatasetForProviderError,
             VnstockPlatformError,
         )
         from vnstock.service.dataset_mapper import (
             MapperError,
+            extract_data_params,
             extract_runtime_params,
             path_to_dataset,
         )
@@ -302,12 +302,19 @@ class VnstockHandler(BaseHTTPRequestHandler):
         validate = validate_str in ("1", "true", "yes")
         quality_mode: str = runtime_params.get("quality_mode", "warn")
 
-        # 3. Build fetch params from remaining query keys
-        params: dict[str, Any] = {}
-        skip_keys = {"source", "validate", "quality_mode"}
-        for k, v_list in query.items():
-            if k not in skip_keys and v_list:
-                params[k] = v_list[0]
+        try:
+            params = extract_data_params(query)
+        except ValueError:
+            self._send_json(
+                400,
+                {
+                    "error": "invalid_parameters",
+                    "message": "Credential query parameters are not allowed.",
+                    "dataset": dataset,
+                    "request_id": request_id,
+                },
+            )
+            return
 
         # 4. Fetch via PluginRuntime
         try:
@@ -325,6 +332,17 @@ class VnstockHandler(BaseHTTPRequestHandler):
                 404,
                 {
                     "error": "unsupported_dataset",
+                    "message": str(exc)[:300],
+                    "dataset": dataset,
+                    "request_id": request_id,
+                },
+            )
+            return
+        except UnsupportedDatasetForProviderError as exc:
+            self._send_json(
+                422,
+                {
+                    "error": "unsupported_dataset_for_provider",
                     "message": str(exc)[:300],
                     "dataset": dataset,
                     "request_id": request_id,

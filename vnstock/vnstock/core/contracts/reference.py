@@ -53,3 +53,31 @@ COMPANY_INFO_CONTRACT = DatasetContract(
     validator=None,
     description="Company profile and fundamental overview data.",
 )
+
+INDEX_MEMBERSHIP_SNAPSHOT_CONTRACT = DatasetContract(
+    dataset="reference.index_membership_snapshot",
+    required_columns=["entity_id", "member_symbol", "observed_at"],
+    dtype_rules={
+        "entity_id": "string",
+        "member_symbol": "string",
+        "observed_at": "datetime64[ns]",
+    },
+    time_column="observed_at",
+    symbol_column="member_symbol",
+    validator=None,
+    description="Observed current membership snapshot for a market index.",
+)
+
+SECTOR_MEMBERSHIP_SNAPSHOT_CONTRACT = DatasetContract(
+    dataset="reference.sector_membership_snapshot",
+    required_columns=["entity_id", "member_symbol", "observed_at"],
+    dtype_rules={
+        "entity_id": "string",
+        "member_symbol": "string",
+        "observed_at": "datetime64[ns]",
+    },
+    time_column="observed_at",
+    symbol_column="member_symbol",
+    validator=None,
+    description="Observed current membership snapshot for an ICB sector query.",
+)

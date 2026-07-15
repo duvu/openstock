@@ -6,10 +6,23 @@ licensed rows, or proprietary source.
 
 ## Current evidence state
 
-The repository contains documentation and an offline-safe provider foundation.
-No licensed SDK or credentials are available in the normal development
-environment, so all FiinQuantX capabilities remain disabled. Documentation is
-not runtime evidence.
+The provider is an optional integration. It stays disabled unless the approved
+SDK version, both credential environment variables, and
+`VNSTOCK_FIINQUANTX_LICENSED=true` are present. This acknowledgement is an
+operational guard; it is not a substitute for commercial approval.
+
+The runtime-verified, experimental datasets are:
+
+| Dataset | Method | Contract |
+|---|---|---|
+| `equity.ohlcv` | `Fetch_Trading_Data(realtime=False)` | bounded daily OHLCV |
+| `index.ohlcv` | `Fetch_Trading_Data(realtime=False)` | bounded daily OHLCV |
+| `reference.index_membership_snapshot` | `TickerList(index)` | current observation only |
+| `reference.sector_membership_snapshot` | `TickerList(sector)` | current observation only |
+
+`reference.company_info` remains disabled. The bounded `BasicInfor` probe did
+not establish a stable reference contract, so the provider will return an
+explicit unsupported-dataset error instead of falling back to another source.
 
 ## Licensed installation
 
@@ -28,6 +41,20 @@ The operator must record the wheel hash or equivalent integrity decision,
 Python/OS compatibility, and the approved commercial license before enabling a
 capability. Do not use an unpinned mixed-index installation.
 
+## Runtime configuration
+
+Configure these values in the deployment environment, never in source,
+fixtures, request parameters, logs, or responses:
+
+```text
+FIINQUANT_USERNAME=<licensed-account>
+FIINQUANT_PASSWORD=<licensed-secret>
+VNSTOCK_FIINQUANTX_LICENSED=true
+```
+
+For the local service image, set `VNSTOCK_INSTALL_FIINQUANTX=true` at build
+time. The Docker Compose deployment publishes only `127.0.0.1:6900`.
+
 ## Commercial and persistence decisions
 
 | Mode | Decision before licensed approval |
@@ -36,7 +63,7 @@ capability. Do not use an unpinned mixed-index installation.
 | SQLite or normalized files | Disabled until the license explicitly permits persistence |
 | DuckDB/Postgres | Disabled until commercial and multi-user terms are reviewed |
 | Raw archive | Prohibited by default |
-| Local REST | Disabled until exposure terms and credential isolation are reviewed |
+| Local REST | Only a licensed, credential-isolated operator may enable it |
 | Multi-user/public exposure | Prohibited by default |
 | Bulk export | Prohibited by default |
 | Model training and derived analytics | Require a separate written license decision |
@@ -49,10 +76,19 @@ account, cash, buying power, loan, margin, order, position, portfolio,
 allocation, transfer, and execution surfaces are forbidden. Streaming,
 WebSocket, order-book, and realtime quote methods are not enabled by this MVP.
 
-The planned first capability set is historical equity/index OHLCV, company
-reference information, and current index/sector membership snapshots. These
-remain disabled until the licensed probes verify return shapes, units,
-timestamps, entitlement and failure semantics.
+The implemented first capability set is bounded historical equity/index OHLCV
+and current index/sector membership snapshots. It intentionally excludes
+company reference information, realtime data, streaming, order-book data and
+all broker/account/trading surfaces.
+
+Membership timestamps are local observation times. They are not effective
+dates and must not be used to infer historical index or sector composition.
+
+For OHLCV, the supported request controls are `symbol`, `count_back` (1 to
+10,000), and `interval=1D`. The provider sends the verified bounded SDK
+request policy (`adjusted=True`, `lasted=False`); callers cannot override
+those controls until their semantics are verified. Unknown vendor columns are
+dropped before the canonical response is returned.
 
 Credentials must come from local environment or credential abstractions. They
 must never be passed as dataset parameters or written to logs, diagnostics,
