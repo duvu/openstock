@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from vnstock.providers.fiinquantx.approval import fiinquantx_license_approval
 from vnstock.providers.fiinquantx.bridge import (
     SUPPORTED_VERSIONS,
     FiinQuantXState,
@@ -52,9 +53,10 @@ class FiinQuantXProviderPlugin:
 
     def capabilities(self) -> dict[str, Any]:
         sdk = load_fiinquantx_sdk()
+        approval = fiinquantx_license_approval()
         runtime_ready = (
             sdk.state is FiinQuantXState.INSTALLED_SUPPORTED
-            and self._licensed_runtime_acknowledged()
+            and approval.approved
             and self._credentials_configured()
         )
         return {
@@ -212,6 +214,7 @@ class FiinQuantXProviderPlugin:
     def diagnostics(self) -> dict[str, Any]:
         sdk = load_fiinquantx_sdk()
         runtime = DEFAULT_FIINQUANTX_SESSION_PROVIDER.diagnostics()
+        approval = fiinquantx_license_approval()
         return {
             "name": self.name,
             "state": sdk.state.value,
@@ -223,7 +226,10 @@ class FiinQuantXProviderPlugin:
                 if capability["supported"]
             ],
             "credentials_configured": self._credentials_configured(),
-            "licensed_runtime_acknowledged": self._licensed_runtime_acknowledged(),
+            "licensed_runtime_acknowledged": approval.acknowledged,
+            "licensed_runtime_approved": approval.approved,
+            "license_approval_reference_configured": approval.reference_configured,
+            "license_approval_reference_fingerprint": approval.reference_fingerprint,
             "configured_limits": {
                 "max_concurrency": runtime["max_concurrency"],
                 "max_rows": _MAX_ROWS,
@@ -241,11 +247,11 @@ class FiinQuantXProviderPlugin:
 
     @staticmethod
     def _licensed_runtime_acknowledged() -> bool:
-        return os.environ.get("VNSTOCK_FIINQUANTX_LICENSED", "false").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
+        return fiinquantx_license_approval().acknowledged
+
+    @staticmethod
+    def _licensed_runtime_approved() -> bool:
+        return fiinquantx_license_approval().approved
 
     @staticmethod
     def _credentials_configured() -> bool:
@@ -255,10 +261,13 @@ class FiinQuantXProviderPlugin:
         )
 
     def _capability_note(self, dataset: str, state: FiinQuantXState) -> str:
+        approval = fiinquantx_license_approval()
         if dataset not in IMPLEMENTED_DATASETS:
             return "Disabled until the licensed runtime contract is verified."
-        if not self._licensed_runtime_acknowledged():
+        if not approval.acknowledged:
             return "Disabled until the licensed runtime is explicitly acknowledged."
+        if not approval.reference_configured:
+            return "Disabled until a reviewed license approval reference is configured."
         if not self._credentials_configured():
             return (
                 "Disabled until both credential environment variables are configured."
