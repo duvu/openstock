@@ -317,7 +317,7 @@ def test_cmd_help_mentions_research_commands(in_memory_conn):
     ctrl, _ = _make_ctrl(in_memory_conn)
     result = ctrl.handle_chat_local_command("help", [])
 
-    for cmd in ("/scan", "/filter", "/quality", "/explain"):
+    for cmd in ("/scan", "/filter", "/quality", "/explain", "/experiment"):
         assert cmd in result, f"Expected research command '{cmd}' in /help output"
 
 

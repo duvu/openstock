@@ -135,7 +135,19 @@ def test_experiment_catalog_advertises_the_enabled_event_study_path():
 
     assert experiment is not None
     assert "event-study" in experiment.usage
+    assert "backtest" not in experiment.usage
     assert all("event-study" in example for example in experiment.examples[1:])
+
+
+def test_catalog_command_suggestions_are_alphabetical():
+    from vnalpha.tui.command_catalog import command_names, commands_for_prefix
+
+    names = command_names()
+
+    assert names == sorted(names)
+    assert [command.name for command in commands_for_prefix("")] == sorted(
+        command.name for command in commands_for_prefix("")
+    )
 
 
 @skip_if_no_textual
@@ -308,6 +320,7 @@ def test_composer_input_falls_back_to_known_command_names_when_registry_fails(
         composer = ComposerInput()
 
     assert composer._command_names == composer._FALLBACK_COMMAND_NAMES
+    assert composer._command_names == sorted(composer._command_names)
 
     composer.query_one = lambda selector, _type=None: panel
     composer._render_suggestions("/")

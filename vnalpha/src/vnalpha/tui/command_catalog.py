@@ -304,7 +304,7 @@ def command_names() -> list[str]:
             continue
         seen.add(name)
         deduped.append(name)
-    return deduped
+    return sorted(deduped)
 
 
 def find_command(name: str) -> UiCommand | None:
@@ -319,11 +319,11 @@ def find_command(name: str) -> UiCommand | None:
 def commands_for_prefix(prefix: str) -> list[UiCommand]:
     normalized = prefix.lower().lstrip("/")
     if not normalized:
-        return list_commands()
+        return sorted(list_commands(), key=lambda command: command.name)
     results: list[UiCommand] = []
     for command in list_commands():
         if command.name.lower().startswith(normalized) or any(
             alias.lower().startswith(normalized) for alias in command.aliases
         ):
             results.append(command)
-    return results
+    return sorted(results, key=lambda command: command.name)

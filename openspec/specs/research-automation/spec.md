@@ -29,7 +29,7 @@ The default composer path SHALL support research automation commands.
 
 #### Scenario: Offline event study is requested
 
-- **WHEN** the user submits `/experiment backtest <event-study-description>`
+- **WHEN** the user submits `/experiment event-study <allowlisted-condition>`
 - **THEN** the system treats the request as an offline research event study
 - **AND** does not connect to broker, account, portfolio, margin, or trading execution systems
 - **AND** renders metrics with caveats
@@ -100,4 +100,3 @@ Research automation lifecycle events SHALL be persisted and correlated with sand
 - **WHEN** an experiment reaches a terminal state
 - **THEN** the system emits success or failure lifecycle events
 - **AND** links output artifacts, logs, generated code, and validation evidence by correlation ID
-

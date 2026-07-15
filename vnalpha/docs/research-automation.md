@@ -10,10 +10,10 @@ OpenStock research automation turns persisted Vietnamese equity data into reprod
 /experiment indicator relative strength 20 sessions vs VNINDEX --universe VN30
 /pattern scan accumulation base with volatility contraction and volume dry-up --universe VN30
 /hypothesis test symbols with positive rs_20 have better 20-session return
-/experiment backtest FPT accumulation breakout --horizon 10
+/experiment event-study rs_20d_vs_vnindex > 0 --horizon 10
 ```
 
-`/experiment backtest` is only a convenient command name. Its output is always labeled an **offline research event study**. It uses persisted warehouse data and never reads live broker, account, order, margin, transfer, allocation, or portfolio state.
+`/experiment event-study` produces an **offline research event study** from an allowlisted condition. It uses persisted warehouse data and never reads live broker, account, order, margin, transfer, allocation, or portfolio state.
 
 ## Execution boundary
 
