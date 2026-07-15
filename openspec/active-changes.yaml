@@ -13,17 +13,19 @@ policy:
 changes:
 
   required-ci-merge-gates:
-    status: in_progress
+    status: partial
     github_issues: [147]
-    roadmap_state: scheduled
+    roadmap_state: review_required
     summary: >-
       Keep all openstock-ci checks present on every pull request, aggregate their
       results into an always-evaluated merge gate and align executable repository
       checks with branch-protection documentation.
     evidence: >-
-      Workflow, checker, checker tests and branch-protection documentation are
-      implemented in the issue #147 branch. Exact final-SHA CI and administrator
-      verification of the live GitHub ruleset remain pending.
+      Implementation SHA 1adcae5db3ab1b0fcb22139874b27508228418fc passed
+      repository consistency, checker tests, Ruff, focused regressions, R0, the
+      complete vnalpha suite, vnstock contracts, both package builds and the
+      Required merge gate in openstock-ci run #47. Administrator verification of
+      the live GitHub main ruleset remains pending in issue #147.
 
   llm-capability-aware-strict-fallback:
     status: ready
