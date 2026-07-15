@@ -56,12 +56,15 @@ def persist_workflow_artifact(
         if resolution.sufficient
         else ResearchArtifactStatus.REJECTED
     )
-    result_payload = {
-        **result,
-        "sample_size": resolution.dataset.row_count,
-        "period_coverage": period_coverage,
-        "research_only": True,
-    }
+    result_payload = dict(result)
+    result_payload.setdefault("sample_size", resolution.dataset.row_count)
+    result_payload.update(
+        {
+            "dataset_row_count": resolution.dataset.row_count,
+            "period_coverage": period_coverage,
+            "research_only": True,
+        }
+    )
     summary = _summary(name, summary_body, caveats)
     validation = {
         "schema_valid": True,
