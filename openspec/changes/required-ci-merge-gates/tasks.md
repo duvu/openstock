@@ -12,5 +12,5 @@
 
 ## 3. Validation
 
-- [ ] 3.1 Run repository consistency, checker tests, full CI and package builds on the final PR SHA.
+- [x] 3.1 Run repository consistency, checker tests, full CI and package builds on the final implementation SHA.
 - [ ] 3.2 Record administrator verification of the active GitHub `main` ruleset in issue #147.
