@@ -13,17 +13,19 @@ policy:
 changes:
 
   production-market-context-v2:
-    status: in_progress
+    status: ready
     github_issues: [84]
-    roadmap_state: scheduled
+    roadmap_state: review_required
     summary: >-
       Preserve explicit v1 compatibility while making production market-regime
       and sector-strength v2 policies the default for coverage, robust
       aggregation and deep-analysis readiness.
     evidence: >-
-      Local focused and related regression suites pass on the implementation
-      working tree. Exact final-SHA CI, package evidence and closure remain
-      pending the issue #84 pull request.
+      Implementation SHA 661f35ce1aebe7bc8e56b6f7490686cd2cfaa9a2 passed
+      repository consistency, Ruff, focused regressions, R0, the complete
+      vnalpha suite, 347 vnstock provider/canonical tests and both package builds
+      in openstock-ci run #35. PR #145 is ready for final metadata validation and
+      review; archive after merge and roadmap reconciliation.
   fiinquantx-provider-integration:
     status: partial
     github_issues: [105, 106, 136]
