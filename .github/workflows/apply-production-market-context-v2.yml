@@ -1,9 +1,9 @@
 name: Apply production market context v2
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/production-market-context-v2
+      - main
     paths:
       - ".github/production-market-context-v2.patch.gz.b64"
       - ".github/workflows/apply-production-market-context-v2.yml"
@@ -14,6 +14,9 @@ permissions:
 jobs:
   apply:
     name: Apply reviewed implementation patch
+    if: >-
+      github.event.pull_request.head.ref == 'agent/production-market-context-v2' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
