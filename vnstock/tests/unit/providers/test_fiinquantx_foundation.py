@@ -20,9 +20,7 @@ from vnstock.providers.fiinquantx.plugin import FiinQuantXProviderPlugin
 
 def _approve_runtime(monkeypatch) -> None:
     monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
-    monkeypatch.setenv(
-        "VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", "LEGAL-2026-001"
-    )
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", "LEGAL-2026-001")
 
 
 def test_default_registry_constructs_without_fiinquantx() -> None:
