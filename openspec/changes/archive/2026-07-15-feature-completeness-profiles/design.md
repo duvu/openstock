@@ -1,13 +1,13 @@
 ## Context
 
 `feature_snapshot` currently records freshness, source counts, benchmark counts,
-and a broad feature-data status.  It does not encode whether a row has enough
-history or populated fields for a particular research capability.  As a result,
+and a broad feature-data status. It does not encode whether a row has enough
+history or populated fields for a particular research capability. As a result,
 the builder can persist a 20-bar row while scoring or context builders consume
 fields that need substantially more history.
 
 Issue #80 established canonical-data quality and issue #82 established
-benchmark-specific relative-strength artifacts.  This change consumes those
+benchmark-specific relative-strength artifacts. This change consumes those
 contracts; it does not alter provider, canonical OHLCV, or benchmark selection
 behavior.
 
@@ -35,14 +35,14 @@ behavior.
 ### One pure profile evaluator owns completeness policy
 
 `vnalpha.features.completeness` will expose frozen request/result models and a
-small explicit profile registry.  The evaluator receives observed history,
+small explicit profile registry. The evaluator receives observed history,
 feature values, freshness, and benchmark-relative-strength evidence and returns
-typed missing neutral and relative-strength requirements.  Feature construction
+typed missing neutral and relative-strength requirements. Feature construction
 uses it before persistence; consumers use its persisted projection rather than
 repeating null predicates.
 
 Duplicating SQL predicates in each consumer would be a smaller first diff but
-would recreate the drift that this issue fixes.  A separate evidence table
+would recreate the drift that this issue fixes. A separate evidence table
 would normalize evaluations but would add joins and an invalidation lifecycle
 without a second evaluator or retained history requirement.
 
@@ -50,13 +50,13 @@ without a second evaluator or retained history requirement.
 
 `feature_snapshot` gains additive columns for profile, neutral completeness,
 relative-strength completeness, required and observed history, missing neutral
-fields, missing relative-strength fields, and validation-rule version.  The
+fields, missing relative-strength fields, and validation-rule version. The
 builder persists the strongest supported neutral profile and records RS
-completeness independently for that profile.  Consumers select a profile and
+completeness independently for that profile. Consumers select a profile and
 declare whether relative strength is required.
 
 This avoids treating missing benchmark data as a reason to discard valid
-price/volume/volatility data.  It also permits market breadth to use its
+price/volume/volatility data. It also permits market breadth to use its
 benchmark-neutral minimum while sector strength and scoring require the
 explicit RS evidence they actually consume.
 
@@ -64,16 +64,16 @@ explicit RS evidence they actually consume.
 
 Completeness does not replace `as_of_bar_date` or `feature_data_status`.
 Every consumer continues to require an exact-date, non-legacy snapshot and
-adds the profile evidence predicate.  The query/persistence adapter maps typed
+adds the profile evidence predicate. The query/persistence adapter maps typed
 profile and issue codes to stored values; user-facing renderers only receive
 allowlisted missing-field labels.
 
 ### Migration is additive and fail-closed
 
-New columns use `ADD COLUMN IF NOT EXISTS`.  Existing rows are backfilled as
+New columns use `ADD COLUMN IF NOT EXISTS`. Existing rows are backfilled as
 `LEGACY_UNKNOWN` with no asserted profile so they remain readable but cannot
-satisfy a profile-enforcing consumer.  Rebuilding features produces the new
-evidence.  Removing the new consumer predicates restores legacy read behavior,
+satisfy a profile-enforcing consumer. Rebuilding features produces the new
+evidence. Removing the new consumer predicates restores legacy read behavior,
 so rollback does not require schema reversal.
 
 ## Risks / Trade-offs
@@ -100,5 +100,5 @@ so rollback does not require schema reversal.
 
 ## Open Questions
 
-None.  The issue defines the three profile names and the existing field set
+None. The issue defines the three profile names and the existing field set
 defines their initial requirements.

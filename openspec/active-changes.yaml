@@ -11,21 +11,6 @@ policy:
   research_only_boundary: true
 
 changes:
-  feature-completeness-profiles:
-    status: partial
-    github_issues: [83, 131]
-    roadmap_state: review_required
-    summary: >-
-      Versioned feature-completeness profiles and capability-specific evidence
-      for feature construction, scoring, readiness, market breadth, and sector
-      strength.
-    evidence: >-
-      PR #132 completed the scoped feature-completeness implementation and closed
-      issue #83. Focused suites and `make verify-r0` passed. Repository-wide lint,
-      safety, routing and full-suite closure is owned by issue #131 and the
-      consistency/CI repair PR. Archive this change only after those exact gates
-      pass on the final implementation SHA.
-
   fiinquantx-provider-integration:
     status: partial
     github_issues: [105, 106]

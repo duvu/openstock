@@ -1,8 +1,8 @@
 ## Why
 
-Issue #83 is the next unblocked core roadmap item.  Feature snapshots can be
+Issue #83 is the next unblocked core roadmap item. Feature snapshots can be
 persisted after only 20 bars even when downstream work requires MA100,
-60-session returns, or 52-week context.  Existing freshness and
+60-session returns, or 52-week context. Existing freshness and
 benchmark-status metadata is valuable but does not say which capabilities a
 snapshot can truthfully support.
 

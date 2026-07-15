@@ -1,3 +1,5 @@
+# Specification: Feature completeness profiles
+
 ## ADDED Requirements
 
 ### Requirement: Versioned feature completeness evidence
@@ -24,7 +26,7 @@ relative-strength completeness outcomes, and the validation-rule version.
 ### Requirement: Benchmark-neutral and relative-strength completeness remain distinct
 
 The system SHALL evaluate benchmark-neutral feature evidence independently from
-relative-strength evidence.  Missing or incomplete benchmark data SHALL not
+relative-strength evidence. Missing or incomplete benchmark data SHALL not
 invalidate an otherwise complete neutral profile, but SHALL prevent a
 relative-strength-requiring consumer from treating the snapshot as complete.
 
@@ -39,7 +41,7 @@ relative-strength-requiring consumer from treating the snapshot as complete.
 ### Requirement: Profile-enforcing consumers fail closed
 
 Scoring, readiness, market breadth, and sector strength SHALL declare their
-required profile and whether relative strength is required.  They SHALL use
+required profile and whether relative strength is required. They SHALL use
 only exact-date, non-legacy snapshots that satisfy that declared evidence and
 SHALL expose typed exclusions rather than inferring readiness from row
 existence or warning text.
@@ -66,7 +68,7 @@ existence or warning text.
 ### Requirement: Legacy feature snapshots are explicit
 
 The warehouse migration SHALL preserve existing feature snapshots while marking
-their completeness as `LEGACY_UNKNOWN`.  A legacy snapshot SHALL remain
+their completeness as `LEGACY_UNKNOWN`. A legacy snapshot SHALL remain
 readable for compatibility but SHALL not satisfy a profile-enforcing consumer
 until rebuilt under a known validation-rule version.
 
