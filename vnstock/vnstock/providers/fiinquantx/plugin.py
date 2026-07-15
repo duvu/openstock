@@ -19,7 +19,10 @@ from vnstock.providers.fiinquantx.exceptions import (
     map_fiinquantx_exception,
 )
 from vnstock.providers.fiinquantx.normalize import normalize_membership, normalize_ohlcv
-from vnstock.providers.fiinquantx.policy import DOCUMENTED_DATASETS, IMPLEMENTED_DATASETS
+from vnstock.providers.fiinquantx.policy import (
+    DOCUMENTED_DATASETS,
+    IMPLEMENTED_DATASETS,
+)
 from vnstock.providers.fiinquantx.session import (
     DEFAULT_FIINQUANTX_SESSION_PROVIDER,
 )

@@ -3,6 +3,8 @@
 from tests._intent_and_planner_cases import *  # noqa: F403
 from tests._intent_and_planner_cases import (
     TestIntentClassifier as _IntentClassifierCases,
+)
+from tests._intent_and_planner_cases import (
     _fake_response,
     _make_classifier,
 )
