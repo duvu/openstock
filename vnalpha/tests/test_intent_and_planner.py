@@ -1,11 +1,11 @@
 """Intent/planner tests with strict-schema contract overrides."""
 
-from tests._intent_and_planner_cases import *  # noqa: F403
 from tests._intent_and_planner_cases import (
     TestIntentClassifier as _IntentClassifierCases,
     _fake_response,
     _make_classifier,
 )
+from tests._intent_and_planner_cases import *  # noqa: F403
 from vnalpha.assistant.intent import INTENT_CLASSIFICATION_SCHEMA
 
 
