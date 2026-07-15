@@ -5,7 +5,6 @@ from datetime import date
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
-
 from vnstock.providers.fiinquantx.bridge import (
     SUPPORTED_VERSIONS,
     FiinQuantXState,
@@ -19,7 +18,10 @@ from vnstock.providers.fiinquantx.exceptions import (
     map_fiinquantx_exception,
 )
 from vnstock.providers.fiinquantx.normalize import normalize_membership, normalize_ohlcv
-from vnstock.providers.fiinquantx.policy import DOCUMENTED_DATASETS, IMPLEMENTED_DATASETS
+from vnstock.providers.fiinquantx.policy import (
+    DOCUMENTED_DATASETS,
+    IMPLEMENTED_DATASETS,
+)
 from vnstock.providers.fiinquantx.session import (
     DEFAULT_FIINQUANTX_SESSION_PROVIDER,
 )
