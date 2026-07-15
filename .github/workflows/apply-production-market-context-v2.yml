@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - ".github/production-market-context-v2.patch.gz.b64"
+      - ".github/production-market-context-v2.patch.part*"
       - ".github/workflows/apply-production-market-context-v2.yml"
 
 permissions:
@@ -25,12 +25,23 @@ jobs:
           ref: agent/production-market-context-v2
           fetch-depth: 0
 
-      - name: Decode and validate patch
+      - name: Reassemble and validate patch
         shell: bash
         run: |
           set -euo pipefail
-          base64 --decode .github/production-market-context-v2.patch.gz.b64 \
+          cat \
+            .github/production-market-context-v2.patch.part00 \
+            .github/production-market-context-v2.patch.part01 \
+            .github/production-market-context-v2.patch.part02 \
+            .github/production-market-context-v2.patch.part03 \
+            .github/production-market-context-v2.patch.part04 \
+            > /tmp/production-market-context-v2.patch.gz.b64
+          echo "b49574a701a7b4a617cb77a6ea73f7b82987ec3d3a7fce43a82aac24e7bc122c  /tmp/production-market-context-v2.patch.gz.b64" \
+            | sha256sum --check --strict
+          base64 --decode /tmp/production-market-context-v2.patch.gz.b64 \
             | gzip --decompress > /tmp/production-market-context-v2.patch
+          echo "0b434e03185235253f167056daf20743433a353bd8a2da69370b55c822e7738b  /tmp/production-market-context-v2.patch" \
+            | sha256sum --check --strict
           git apply --check /tmp/production-market-context-v2.patch
 
       - name: Apply patch and remove temporary bootstrap files
@@ -38,7 +49,8 @@ jobs:
         run: |
           set -euo pipefail
           git apply /tmp/production-market-context-v2.patch
-          rm .github/production-market-context-v2.patch.gz.b64
+          rm -f .github/production-market-context-v2.patch.gz.b64
+          rm -f .github/production-market-context-v2.patch.part*
           rm .github/workflows/apply-production-market-context-v2.yml
 
       - name: Commit implementation
