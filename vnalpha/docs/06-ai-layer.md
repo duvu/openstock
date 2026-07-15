@@ -62,13 +62,15 @@ is only a real fallback when it resolves to a distinct verified model ID.
 Configuration is fail-closed:
 
 ```bash
-VNALPHA_LLM_ENDPOINT=http://ya-router:7071/v1/chat/completions
+VNALPHA_LLM_ENDPOINT=
 VNALPHA_LLM_MODEL=
 VNALPHA_LLM_API_KEY=
 ```
 
-The assistant remains unavailable until an API key and verified model alias are
-configured. Deterministic CLI/TUI research functions continue to work.
+The assistant remains unavailable until an explicit endpoint, dedicated
+`VNALPHA_LLM_API_KEY`, and verified model alias are configured. The runtime does
+not use `OPENAI_API_KEY` as an implicit fallback and ships no public endpoint or
+guessed model ID. Deterministic CLI/TUI research functions continue to work.
 
 Strict `json_schema` is preferred. A single compatibility downgrade to
 `json_object` is allowed only when the endpoint explicitly reports structured
