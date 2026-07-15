@@ -72,10 +72,20 @@ The assistant remains unavailable until an explicit endpoint, dedicated
 not use `OPENAI_API_KEY` as an implicit fallback and ships no public endpoint or
 guessed model ID. Deterministic CLI/TUI research functions continue to work.
 
-Strict `json_schema` is preferred. A single compatibility downgrade to
-`json_object` is allowed only when the endpoint explicitly reports structured
-schema support as unavailable. The downgrade does not create extra transport
-retry budget.
+Strict `json_schema` is preferred. Model capabilities are declared explicitly
+per logical profile through `VNALPHA_MODEL_CAPABILITIES_<PROFILE>`; the runtime
+does not infer support from a provider or model name. The primary route remains
+callable for compatibility, but after a primary failure a strict request may
+fall back only to a distinct profile that explicitly declares `json_schema`.
+Unverified fallbacks are skipped. If no compatible fallback exists, the gateway
+raises `LLMNoCompatibleFallbackError` with error code
+`no_compatible_fallback` and preserves the primary failure as its cause.
+
+A single compatibility downgrade from `json_schema` to `json_object` is allowed
+per attempted model route only when the endpoint explicitly reports schema
+support as unavailable. The downgrade does not create extra transport retry
+budget. `/model status`, `/model profiles`, and `/model explain-route` expose
+configured capabilities plus effective strict-schema fallbacks.
 
 ## Allowed uses
 
