@@ -11,6 +11,7 @@ from typing import Iterator, Protocol
 
 import pandas as pd
 
+from vnstock.providers.fiinquantx.approval import fiinquantx_license_approval
 from vnstock.providers.fiinquantx.exceptions import (
     FiinQuantXAuthenticationError,
     FiinQuantXConcurrencyError,
@@ -89,11 +90,7 @@ def reset_fiinquantx_runtime_state() -> None:
 class FiinQuantXSessionProvider:
     def get_session(self, module: ModuleType, dataset: str) -> FiinQuantXSession:
         global _SESSION_ENTRY
-        if os.environ.get("VNSTOCK_FIINQUANTX_LICENSED", "false").lower() not in {
-            "1",
-            "true",
-            "yes",
-        }:
+        if not fiinquantx_license_approval().approved:
             raise FiinQuantXLicenseNotAcknowledgedError(dataset)
         username = os.environ.get("FIINQUANT_USERNAME")
         password = os.environ.get("FIINQUANT_PASSWORD")
