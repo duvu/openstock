@@ -1,267 +1,171 @@
-# Plugin Architecture Status
+# Plugin architecture status
 
-This document records the closure status for Phases 1–4 of the vnstock plugin
-platform. It is the authoritative reference for what is closed, what is
-in-scope for these phases, and what has been deferred to future phases.
-
----
+This document records the stable architecture and accepted closure state of the synchronous `vnstock` provider platform. It is not a live delivery roadmap; current priority and issue status are maintained in GitHub issue #90.
 
 ## Scorecard
 
-| Phase | Description | Closed? | Score |
-|-------|-------------|---------|-------|
-| Phase 1 | Core contracts and internal plugin foundation | Yes | 98% |
-| Phase 2 | Provider plugin normalization | Yes | 98% |
-| Phase 3 | Health-aware and auth-aware routing | Yes | 97% |
-| Phase 3.5 | PluginRuntime default execution path | Yes | 99% |
-| Phase 4 | Auth-aware local data service runtime | Yes | 98% |
+| Area | Status |
+|---|---|
+| Core contracts and internal plugin foundation | Implemented |
+| Built-in provider normalization | Implemented for the registered providers and their declared datasets |
+| Health- and auth-aware routing | Implemented |
+| `PluginRuntime` synchronous execution path | Implemented |
+| Auth-aware localhost data service | Implemented |
+| Commercial FiinQuantX provider | Partial/experimental; bounded explicit-only slice implemented, closure remains #105/#106 |
+| Streaming/WebSocket provider runtime | Not implemented |
 
-Score interpretation:
+## Core contracts
 
-- 97% = production-shaped internal architecture, fully tested for defined scope
-- 98% = public/service runtime paths are guarded against regression
-- 99% = phase scope documented, no hidden ambiguity, future work separated
+The platform uses:
 
----
+- runtime-checkable `ProviderPlugin` for internal provider adapters;
+- instance-based, case-insensitive `PluginRegistry`;
+- `PluginRouter` for capability, auth, health, cooldown and explicit-source decisions;
+- `PluginRuntime.fetch()` as the canonical synchronous execution path;
+- `DataResult` for data, provider, dataset, quality, diagnostics and fetch time;
+- canonical dataset contracts and strict/warn validation;
+- safe provider diagnostics with no credentials or session material.
 
-## Phase 1: Core contracts and internal plugin foundation
+Initial registered contracts include:
 
-**Status: CLOSED**
-
-### What is closed
-
-- `ProviderPlugin` is the canonical provider adapter interface. All internal
-  provider adapters must satisfy this runtime-checkable Protocol.
-- `PluginRegistry` manages provider plugin instances (not classes). Lookups
-  are case-insensitive. Duplicate registration raises `ValueError`.
-- `DataResult` is the canonical internal result envelope. It wraps a
-  `DataFrame` with provider name, dataset, quality status, diagnostics, and
-  fetch timestamp. Auth secrets are never written to `DataResult` or
-  `DataFrame.attrs`.
-- Dataset contracts for the initial twelve datasets are registered in
-  `CONTRACT_REGISTRY`:
-  - `equity.ohlcv`
-  - `equity.quote`
-  - `equity.intraday_trades`
-  - `index.ohlcv`
-  - `reference.symbols`
-  - `reference.company_info`
-  - `fundamental.balance_sheet`
-  - `fundamental.income_statement`
-  - `fundamental.cash_flow`
-  - `fundamental.financial_ratio`
-  - `fund.nav`
-  - `foreign_flow.daily`
-- `CAPABILITY_STATUSES` frozenset defines the allowed status values:
-  `stable`, `experimental`, `partial`, `deprecated`, `unsupported`.
-
-### What is NOT part of Phase 1
-
-- External plugin package discovery (Phase 10)
-- Plugin version negotiation
-- Public user registration of custom providers
-- Third-party marketplace or plugin loading
-
-### Registry split
-
-There are two separate registries in this codebase. Do not confuse them:
-
-- `vnstock/core/provider/plugin_registry.py::PluginRegistry` — the plugin
-  platform registry, manages `ProviderPlugin` instances. Used by
-  `PluginRouter` and `PluginRuntime`.
-- `vnstock/core/registry.py::ProviderRegistry` — the legacy class-based
-  registry used by `vnstock/base.py` and the Unified UI dispatch layer.
-
-The two registries coexist during the migration period.
-
----
-
-## Phase 2: Provider plugin normalization
-
-**Status: CLOSED**
-
-### What is closed
-
-- All seven built-in providers are registered through `default_plugin_registry()`:
-  - `KBS` — primary Vietnamese market data provider (stable)
-  - `VCI` — secondary Vietnamese market data provider (stable)
-  - `DNSE` — DNSE chart API (geographic restriction applies)
-  - `TCBS` — TCBS market data (requires bearer token auth)
-  - `FMARKET` — FMarket fund platform (fund data only)
-  - `MSN` — MSN Money market data (experimental)
-  - `FMP` — Financial Modeling Prep API (requires `FMP_API_KEY`)
-- All built-in providers satisfy the `ProviderPlugin` protocol.
-- Every capability declaration contains `supported` and `status` fields.
-- Capability status values are restricted to `CAPABILITY_STATUSES`.
-- Supported dataset names are restricted to known dataset names.
-- Unsupported dataset fetches raise `UnsupportedDatasetForProviderError`.
-- Provider `diagnostics()` output is dict-like, JSON-serializable, and
-  contains no sensitive credential keys.
-- The capability matrix is deterministic (sorted by provider name).
-
-### What is NOT part of Phase 2
-
-- Provider hot-reload or runtime plugin swapping
-- Provider version pinning
-- Provider capability drift detection at startup
-- Marketplace or external provider loading
-
----
-
-## Phase 3: Health-aware and auth-aware routing
-
-**Status: CLOSED**
-
-### What is closed
-
-- `PluginRouter` resolves dataset requests to provider plugins using health
-  status, routing policy, auth policy, and priority tiebreakers.
-- Auto routing tier hierarchy: HEALTHY/UNKNOWN → DEGRADED (fallback) →
-  FAILING (last resort, only when `allow_failing_fallback=True`).
-- DISABLED providers are never selected regardless of policy.
-- Cooldown is honored when `respect_cooldown=True` in `RoutingPolicy`.
-- Explicit `source=` routing returns the named provider with health checks:
-  - DISABLED raises `ProviderDisabledError`.
-  - Cooled-down raises `ProviderInCooldownError`.
-  - DEGRADED/FAILING adds warnings to the routing decision but proceeds.
-- Auth policy variants:
-  - `PREFER_NO_AUTH` — public providers first, authenticated as fallback.
-  - `FORBID_AUTHENTICATED` — exclude all providers requiring authentication.
-  - `REQUIRE_AUTHENTICATED` — only providers requiring authentication.
-  - `ALLOW_AUTHENTICATED` — no auth filter.
-- Every routing call produces a `RoutingDecision` with `selected_provider`,
-  `candidates`, `rejected`, `fallback`, `reason`, and `warnings`.
-- `record_success()` and `record_failure()` update the `InMemoryProviderHealthStore`.
-- Health transitions: UNKNOWN → HEALTHY (success), HEALTHY → DEGRADED (first
-  failure), DEGRADED/consecutive failures → FAILING + cooldown.
-
-### What is NOT part of Phase 3
-
-- Persistent health store (database-backed or Redis-backed)
-- Rate limiting per provider
-- Circuit breaker pattern (only cooldown is implemented)
-- Multi-region routing or geo-routing
-
----
-
-## Phase 3.5: PluginRuntime default execution path
-
-**Status: CLOSED**
-
-### What is closed
-
-- `PluginRuntime.fetch(dataset, params, ...)` is the single execution path
-  for all supported dataset fetches.
-- `return_result=True` returns a `DataResult`; default returns a `DataFrame`.
-- `DataResult.to_dataframe()` preserves provider, dataset, diagnostics,
-  quality_status, and fetched_at in `DataFrame.attrs`.
-- `runtime_path` is always attached to `DataResult.diagnostics`.
-- Routing diagnostics from `PluginRouter.last_decision` are embedded in
-  `DataResult.diagnostics["routing"]`.
-- `latency_ms` is recorded and included in diagnostics.
-- Provider success is recorded to the health store after every successful fetch.
-- Provider failure is recorded after any `ProviderFetchError` or unexpected
-  exception.
-- Contract validation is supported: `validate=True` checks required columns;
-  `quality_mode="strict"` raises `DatasetContractError` on failure.
-- Parameter validation via `provider.validate_params()` raises
-  `VnstockPlatformError` on invalid params.
-
-### What is NOT part of Phase 3.5
-
-- Caching layer integration at the runtime level (cache is at `_dispatch()`)
-- Batch fetching across multiple datasets in one call
-- Streaming / async data fetch paths
-- SDK migration of all legacy Unified UI methods (in progress separately)
-
----
-
-## Phase 4: Auth-aware local data service runtime
-
-**Status: CLOSED**
-
-### What is closed
-
-- The `vnstock-serve` CLI entrypoint starts the local data service on
-  `127.0.0.1:6900` (default).
-- Canonical read-only data endpoints under `/v1/<domain>/<dataset>` route
-  all fetches through `PluginRuntime.fetch(..., return_result=True)`.
-- Responses use the `data / meta / diagnostics` envelope:
-  - `data` — list of records from the DataFrame
-  - `meta` — dataset, provider, quality_status, runtime_path, fetched_at
-  - `diagnostics` — routing and provider diagnostics
-- Provider metadata endpoints use the plugin registry:
-  - `GET /v1/providers` — list of registered provider names
-  - `GET /v1/providers/capabilities` — full capability matrix
-- Auth status endpoint `GET /v1/auth/status` works with and without an
-  auth manager. Sensitive fields (tokens, passwords, API keys) are
-  never returned.
-- Permanently forbidden endpoint groups return 404:
-  - `/v1/auth/login` and `/v1/auth/login/oauth`
-  - `/v1/order` and order sub-paths
-  - `/v1/account` and account sub-paths
-  - `/v1/portfolio` and portfolio sub-paths
-  - `/v1/transfer`, `/v1/margin`, `/v1/trading`
-- `PluginRuntime` is injectable via `runtime_dependency.override_runtime()`
-  for test isolation.
-- Docker and localhost-only deployment: default binding is `127.0.0.1`.
-
-### CLI entrypoints
-
-Declared in `pyproject.toml [project.scripts]`:
-
-```
-vnstock-serve   = "vnstock.cli.serve:main"
-vnstock-auth    = "vnstock.cli.auth:main"
-vnstock-tcbs-login = "vnstock.cli.tcbs_login:main"
+```text
+equity.ohlcv
+equity.quote
+equity.intraday_trades
+index.ohlcv
+reference.symbols
+reference.company_info
+fundamental.balance_sheet
+fundamental.income_statement
+fundamental.cash_flow
+fundamental.financial_ratio
+fund.nav
+foreign_flow.daily
 ```
 
-### What is NOT part of Phase 4
+Additional reference contracts may be registered for approved provider slices, including current index/sector membership snapshots. Contract registration does not imply every provider supports the dataset.
 
-- REST login / logout endpoints (auth is CLI-only)
-- Broker, account, order, portfolio, transfer, and margin endpoints
-- Public-facing deployment (TLS termination, reverse proxy config)
-- Multi-tenant or multi-user service model
-- Rate limiting at the HTTP layer
-- WebSocket or streaming endpoints
+## Registry split
 
----
+Two registries coexist during migration:
 
-## Future work (not part of Phases 1–4)
+- `vnstock/core/provider/plugin_registry.py::PluginRegistry` manages `ProviderPlugin` instances and is used by `PluginRouter`/`PluginRuntime`.
+- `vnstock/core/registry.py::ProviderRegistry` is the legacy class-based registry used by older public UI dispatch paths.
 
-The following items are explicitly deferred to future phases:
+New service/provider work must use the plugin runtime rather than create a third registry or direct SDK path.
 
-| Item | Planned Phase |
-|------|--------------|
-| External plugin package discovery (`pip install vnstock-myprovider`) | Phase 10 |
-| Plugin version negotiation and compatibility matrix | Phase 10 |
-| Marketplace or third-party provider loading | Phase 10 |
-| Rate limiter per provider | Phase 5 |
-| Batch ingestion and partial failure envelope | Phase 5 |
-| Storage sinks (Parquet, databases) | Phase 6 |
-| MCP (Model Context Protocol) integration | Phase 8 |
-| TUI (terminal user interface) | Phase 9 |
-| Quality engine v2 with configurable rules | Phase 7 |
-| SDK migration of all legacy Unified UI methods | Ongoing |
-| Async / streaming fetch paths | Phase 5+ |
+## Registered provider set
 
----
+The built-in registry currently includes:
+
+| Provider | Status and purpose |
+|---|---|
+| KBS | Stable primary Vietnamese market provider |
+| VCI | Stable secondary Vietnamese market/reference provider |
+| DNSE | Vietnam equity market data with availability constraints |
+| TCBS | Experimental market/reference/fundamental provider requiring provider-specific auth behavior |
+| FMARKET | Fund NAV/fund data |
+| MSN | Experimental selected global market data |
+| FMP | Authenticated global data via API key |
+| FIINQUANTX | Experimental licensed provider, explicit source only for bounded daily equity/index OHLCV and current index/sector membership snapshots |
+
+The base package and default registry remain functional when FiinQuantX is not installed. The SDK is loaded lazily and is never vendored.
+
+Current FiinQuantX limitations:
+
+- exact approved SDK version and local credentials required;
+- `VNSTOCK_FIINQUANTX_LICENSED=true` required as an operational acknowledgement;
+- no automatic selection as a general default provider;
+- no synchronous quote, company information, flow, fundamentals or broader contracts until separately verified and implemented;
+- no streaming/WebSocket/order-book subscription path;
+- commercial approval, session lifecycle and entitlement/quota closure remain in #105/#106.
+
+## Routing behavior
+
+`PluginRouter` is health- and auth-aware.
+
+Automatic routing tiers providers by usable capability and health, respects cooldown and auth policy, and records a `RoutingDecision` containing selected/rejected candidates, fallback status, reason and warnings.
+
+Explicit source routing preserves provider identity:
+
+- disabled provider → typed disabled failure;
+- cooldown according to policy → typed cooldown failure;
+- missing SDK/credentials/access for a commercial provider → typed provider failure;
+- degraded/failing provider may proceed only according to explicit routing policy;
+- explicit selection never silently substitutes another provider.
+
+## Runtime behavior
+
+`PluginRuntime.fetch(dataset, params, ...)`:
+
+1. validates the dataset/provider request;
+2. obtains a routing decision;
+3. applies auth policy and provider parameter validation;
+4. calls one selected provider plugin;
+5. records latency and provider health outcome;
+6. validates the canonical dataset contract when requested;
+7. returns `DataResult` or a DataFrame carrying safe metadata.
+
+Direct provider calls from the local service are architecture regressions.
+
+The current runtime is synchronous. Streaming callbacks, reconnection, sequence, backpressure and subscription lifecycle require a separate architecture.
+
+## Local data service
+
+The `vnstock-serve` entry point exposes canonical read-only endpoints, normally bound to `127.0.0.1:6900`.
+
+Responses use a bounded envelope:
+
+```text
+data
+meta: dataset, provider, quality, runtime path, fetched time
+diagnostics: routing and safe provider evidence
+```
+
+Provider metadata endpoints can expose capability and safe auth/install status. They must not expose credentials, tokens, cookies, account identifiers or raw auth responses.
+
+Permanently forbidden endpoint families include:
+
+```text
+auth login through REST
+broker/account
+order
+portfolio
+transfer
+margin
+trading/execution
+```
+
+Credential configuration remains local and outside data query parameters.
+
+## Validation expectations
+
+Provider/platform closure evidence should include:
+
+- protocol and registry conformance;
+- dataset contract and schema-drift tests;
+- explicit/auto routing tests;
+- auth and secret-redaction tests;
+- provider failure and valid-empty distinction;
+- service runtime-path tests;
+- base-package build without optional commercial SDKs;
+- bounded opt-in live tests where permitted;
+- exact version and license evidence for commercial providers.
+
+A documented or mocked provider method is not licensed/live proof. Experimental capability remains partial until its linked issue acceptance criteria are met.
+
+## Deferred architecture
+
+Not part of the current synchronous provider platform:
+
+- public third-party plugin marketplace/loading;
+- hot reload of external plugins;
+- generic version negotiation across arbitrary provider packages;
+- streaming/WebSocket service runtime;
+- persistent multi-process provider quota store;
+- multi-tenant/public commercial data service;
+- trading, broker or account functionality.
 
 ## Data-only boundary
 
-The plugin platform and local service are data-extraction-only:
-
-- No trading execution, order management, or broker API calls
-- No charting, visualization, or notification delivery
-- No portfolio tracking or account management
-- No third-party integrations outside of public data providers and
-  the FMP commercial API
-
----
-
-## Runtime-first rule
-
-Any data fetch that reaches the service layer MUST route through
-`PluginRuntime`. Direct provider calls that bypass `PluginRuntime` are
-considered regressions. Tests in `test_service_runtime_closure.py` guard
-this invariant.
+`vnstock` is a data platform. It does not own research scoring, watchlist construction, backtesting, portfolio decisions or trading execution. Those research workflows belong in `vnalpha`, and all OpenStock components preserve the **read-only research boundary**.

@@ -1,33 +1,64 @@
-# vnstock — Data-Only Market Data Toolkit
+# vnstock — data-only market data platform
 
-`vnstock` is a Python library for extracting and normalizing financial market data, with a strong focus on Vietnamese securities data.
+`vnstock` is the data layer of OpenStock. It extracts, normalizes, validates and serves financial market data, with a strong focus on Vietnamese securities.
 
-This fork is maintained as a **data-only market data layer**. It intentionally excludes charting, bot notification, broker login, portfolio management, order placement, and trading execution.
+```text
+vnstock  = provider plugins + canonical dataset contracts + quality/routing/service
+vnalpha  = research warehouse + analysis + watchlists + backtests + AI workspace
+```
 
-> Vietnamese summary: fork này tập trung vào **thu thập dữ liệu, chuẩn hóa schema, kiểm tra chất lượng dữ liệu, và so sánh/fallback giữa providers**. Không dùng cho đặt lệnh, quản lý tài khoản, hay tự động giao dịch.
+The package is intentionally data-only. It excludes broker/account access, portfolio mutation, order placement, allocation, margin, transfer, trading bots and execution.
 
----
+## Product objective
 
-## Current Scope
+Develop a provider-independent Vietnamese financial data platform that can:
+
+- support public and credentialed data providers through one plugin contract;
+- normalize provider-specific responses into canonical datasets;
+- distinguish valid empty data, partial data, schema drift and provider failure;
+- validate data quality before downstream research consumes it;
+- expose provider health, routing, freshness and provenance;
+- serve bounded read-only data to `vnalpha`, notebooks, batch jobs and approved tools.
+
+Current priority and delivery order are maintained in [the root roadmap](../ROADMAP.md) and GitHub issue [#90](https://github.com/duvu/openstock/issues/90), not in component planning documents.
+
+## Current scope
 
 | Area | Status |
 |---|---|
-| Unified UI | Available through `Market`, `Reference`, `Fundamental`, `Retail` |
-| Vietnam equity OHLCV | KBS default, with VCI/DNSE/TCBS alternatives for core equity market paths |
-| Price board / quote | KBS default, VCI/DNSE/TCBS alternatives for core equity market paths |
-| Intraday trades | KBS default, VCI/DNSE alternatives where supported (TCBS experimental) |
-| Index / ETF / futures / warrant / bond market paths | Primarily KBS-backed |
-| Global OHLCV | MSN/FMP where available |
-| Fund data | FMarket-backed fund NAV/holding data |
-| Cache layer | Memory/SQLite cache with env config |
-| Data quality layer | OHLCV, price board, intraday validators |
-| Provider hardening | Capability registry, schema drift detection, comparison, health scoring, contract fixtures/tests |
-| Live smoke tests | Available but disabled by default and gated by env vars |
-| Broker execution | Explicitly out of scope |
+| Plugin platform | `ProviderPlugin`, `PluginRegistry`, auth/health-aware `PluginRouter`, synchronous `PluginRuntime` and `DataResult` are implemented |
+| Local service | Canonical read-only REST endpoints, default localhost binding and forbidden broker/account routes |
+| Vietnam OHLCV | KBS default; VCI, DNSE and TCBS alternatives where supported |
+| Quote and intraday | Public-provider paths where supported; quality and freshness controls apply |
+| Index/ETF/futures/warrant/bond data | Primarily KBS-backed |
+| Global market data | MSN/FMP where available |
+| Fund data | FMARKET NAV and fund data |
+| FiinQuantX | Experimental, explicit-source-only licensed provider for bounded daily equity/index OHLCV and current index/sector membership snapshots |
+| Cache | Memory/SQLite for permitted data; commercial-provider persistence follows provider-specific license policy |
+| Quality | OHLCV, price-board and intraday validators; reference/fundamental quality contracts remain incomplete |
+| Provider hardening | Capability contracts, schema drift, comparison, health, routing diagnostics, fixtures and opt-in live tests |
+| Trading execution | Permanently out of scope |
 
----
+The current FiinQuantX slice is deliberately limited. Commercial approval, complete entitlement/quota/session behavior, company reference and later flow/fundamental contracts remain open work under issues #105/#106. See [`docs/providers/FIINQUANTX.md`](docs/providers/FIINQUANTX.md).
 
-## Install
+## Architecture
+
+```text
+public/credentialed data source
+→ built-in ProviderPlugin
+→ PluginRegistry
+→ auth- and health-aware PluginRouter
+→ synchronous PluginRuntime.fetch()
+→ provider-specific normalizer
+→ canonical DatasetContract and quality validation
+→ DataResult with safe diagnostics and lineage
+→ Python UI or localhost read-only service
+→ vnalpha ingestion and research workflows
+```
+
+Public and service data fetches must not bypass `PluginRuntime`. Streaming/WebSocket subscriptions need a separate lifecycle and are not represented as ordinary synchronous fetches.
+
+## Installation
 
 ```bash
 pip install -U vnstock
@@ -36,26 +67,25 @@ pip install -U vnstock
 For development:
 
 ```bash
-git clone https://github.com/duvu/vnstock.git
-cd vnstock
+git clone https://github.com/duvu/openstock.git
+cd openstock/vnstock
 python -m pip install -r requirements.lock
 python -m pip install -e . --no-deps
 ```
 
-Python support follows `pyproject.toml`: Python `>=3.10`.
+Python support follows `pyproject.toml` and is currently Python `>=3.10`.
 
----
+Commercial SDKs are optional and are not vendored by `vnstock`. Follow the exact-version, credential and license instructions in the provider-specific documentation.
 
-## Quick Start
+## Quick start
 
 ```python
-from vnstock import Market, Reference, Fundamental
+from vnstock import Fundamental, Market, Reference
 
 market = Market()
-ref = Reference()
-fa = Fundamental()
+reference = Reference()
+fundamental = Fundamental()
 
-# Historical OHLCV, default source is KBS for Vietnamese equities
 bars = market.equity.ohlcv(
     symbol="FPT",
     start="2024-01-01",
@@ -63,41 +93,24 @@ bars = market.equity.ohlcv(
     interval="1D",
 )
 
-# Use an alternative provider where the UI registry supports it
-bars_dnse = market.equity.ohlcv(
+bars_vci = market.equity.ohlcv(
     symbol="FPT",
     start="2024-01-01",
     end="2024-06-30",
     interval="1D",
-    source="DNSE",
+    source="VCI",
 )
 
-# TCBS provider — unofficial public endpoints, data-only, not the default
-bars_tcbs = market.equity.ohlcv(
-    symbol="FPT",
-    start="2024-01-01",
-    end="2024-06-30",
-    interval="1D",
-    source="TCBS",
-)
-
-# Price board snapshot
 quote = market.equity.quote(symbols_list=["FPT", "VCB", "TCB"])
-
-# Company reference data
-profile = ref.company.info(symbol="FPT")
-
-# Financial statements
-balance_sheet = fa.equity.balance_sheet(symbol="TCB", period="year")
+profile = reference.company.info(symbol="FPT")
+balance_sheet = fundamental.equity.balance_sheet(symbol="TCB", period="year")
 ```
 
----
+For the licensed FiinQuantX experimental path, use only documented canonical endpoints and explicit `source="FIINQUANTX"` after completing local SDK, credential and license configuration. Explicit selection returns a typed failure rather than silently falling back.
 
-## Data Quality Validation
+## Data quality
 
-Quality validation is available for market datasets, but it is **off by default** unless explicitly enabled.
-
-Per-call usage:
+Quality validation is available for market datasets and is opt-in unless a higher-level ingestion contract requires it.
 
 ```python
 bars = market.equity.ohlcv(
@@ -105,13 +118,13 @@ bars = market.equity.ohlcv(
     start="2024-01-01",
     end="2024-06-30",
     validate=True,
-    quality_mode="warn",  # "off" | "warn" | "strict"
+    quality_mode="warn",  # off | warn | strict
 )
 
-report = bars.attrs.get("quality")
+quality = bars.attrs.get("quality")
 ```
 
-Global env config:
+Environment configuration:
 
 ```bash
 export VNSTOCK_QUALITY_ENABLED=true
@@ -119,52 +132,49 @@ export VNSTOCK_QUALITY_MODE=warn
 export VNSTOCK_QUALITY_ATTACH_REPORT=true
 ```
 
-Current validators:
-
 | Dataset | Validator status |
 |---|---|
-| `ohlcv` | Schema, temporal, numeric, OHLC consistency, freshness checks |
-| `price_board` | Required columns, duplicate symbols, price-band consistency, bid/ask checks, non-negative volumes, freshness checks |
-| `intraday_trades` | Required columns, trade price/volume, duplicate id, match type, optional session-time checks |
-| `reference` / `fundamental` | Planned, not yet implemented as first-class quality contracts |
+| OHLCV | Schema, temporal, numeric, OHLC consistency and freshness checks |
+| Price board | Required columns, duplicates, price bands, bid/ask, non-negative volumes and freshness |
+| Intraday trades | Required columns, trade values, duplicates, match type and optional session checks |
+| Reference/fundamental | First-class quality contracts remain planned |
 
-See: [`docs/DATA_QUALITY.md`](docs/DATA_QUALITY.md).
+See [`docs/DATA_QUALITY.md`](docs/DATA_QUALITY.md).
 
----
+## Provider platform and diagnostics
 
-## Provider Hardening
+The provider platform provides:
 
-The provider hardening layer is under `vnstock/core/provider/`.
+- capability declarations and contract validation;
+- provider-specific authentication specifications;
+- health- and auth-aware routing with explicit-source semantics;
+- cooldown and safe routing decisions;
+- schema-drift detection;
+- OHLCV cross-provider comparison;
+- provider health scoring and capability matrices;
+- synthetic offline fixtures and opt-in live smoke tests;
+- safe service metadata without credentials or session state.
 
-It provides:
+See:
 
-- provider capability declarations
-- schema drift detection
-- OHLCV cross-provider comparison
-- provider health scoring
-- provider capability matrix generation
-- offline provider contract tests using fixtures
-- live smoke test scaffold gated by environment variables
+- [`docs/PLUGIN_ARCHITECTURE_STATUS.md`](docs/PLUGIN_ARCHITECTURE_STATUS.md)
+- [`docs/PROVIDER_HARDENING.md`](docs/PROVIDER_HARDENING.md)
+- [`docs/providers/FIINQUANTX.md`](docs/providers/FIINQUANTX.md)
 
-See: [`docs/PROVIDER_HARDENING.md`](docs/PROVIDER_HARDENING.md).
+## Credentialed data providers
 
----
+Credentialed data-provider authentication is permitted when it is used only to access licensed data through the approved auth layer.
 
-## Foreign Investor Data
+Credentials must not appear in:
 
-The current system exposes foreign investor fields mainly through price board snapshots:
+- dataset parameters;
+- REST query/body fields;
+- DataFrame attributes or `DataResult` diagnostics;
+- logs, fixtures, notebooks, MCP inputs or assistant tool parameters.
 
-- `foreign_buy_volume`
-- `foreign_sell_volume`
-- `foreign_room`
+Broker login, account sessions, order sessions and trading execution remain prohibited even if a vendor SDK contains those methods.
 
-This is enough for session/snapshot inspection, but not yet a full daily time-series foreign-flow dataset. Historical foreign flow remains a roadmap item.
-
----
-
-## Cache Configuration
-
-The cache layer supports memory and SQLite backends.
+## Cache and persistence
 
 ```bash
 export VNSTOCK_CACHE_ENABLED=true
@@ -174,31 +184,19 @@ export VNSTOCK_CACHE_MAX_SIZE=100
 export VNSTOCK_CACHE_PATH=~/.vnstock/cache.db
 ```
 
-Live or near-live data such as price board snapshots and intraday trades should use conservative TTLs or disable cache per call when freshness matters.
+Near-live data should use conservative TTLs or bypass cache. Commercial-provider data may be cached or persisted only when the provider-specific license decision permits it.
 
----
+## Live smoke tests
 
-## Live Smoke Tests
-
-Live tests are disabled by default. To run them manually:
+Live tests are disabled by default:
 
 ```bash
 VNSTOCK_LIVE_TESTS=true PYTHONPATH=. pytest tests/live/providers -m live -v
 ```
 
-Optional filters:
+Provider filters can be applied through `VNSTOCK_LIVE_PROVIDERS` and `VNSTOCK_LIVE_SYMBOLS`. Licensed providers require their additional explicit acknowledgement flags and must not print raw licensed rows or secrets.
 
-```bash
-VNSTOCK_LIVE_TESTS=true VNSTOCK_LIVE_PROVIDERS=DNSE pytest tests/live/providers -m live
-VNSTOCK_LIVE_TESTS=true VNSTOCK_LIVE_PROVIDERS=TCBS VNSTOCK_LIVE_SYMBOLS=FPT pytest tests/live/providers/test_tcbs_live.py -m live -v
-VNSTOCK_LIVE_TESTS=true VNSTOCK_LIVE_SYMBOLS=FPT pytest tests/live/providers -m live
-```
-
-Live tests are not part of the default CI path.
-
----
-
-## Development Checks
+## Development checks
 
 ```bash
 ruff check .
@@ -207,67 +205,36 @@ PYTHONPATH=. pytest -m "not slow" tests/unit/core tests/unit/ui tests/unified_ui
 python -m build --sdist --wheel --no-isolation
 ```
 
-Targeted provider/quality checks:
+Targeted provider checks:
 
 ```bash
-PYTHONPATH=. pytest tests/unit/core/quality tests/unit/core/provider tests/contracts/providers -q
+PYTHONPATH=. pytest tests/unit/core/provider tests/contracts/providers -q
 ```
 
----
-
-## Examples
-
-Runnable scripts demonstrating every data provider:
-
-```bash
-python examples/kbs_example.py        # KBS  — default provider
-python examples/vci_example.py        # VCI
-python examples/dnse_example.py       # DNSE
-python examples/msn_example.py        # MSN
-python examples/tcbs_example.py       # TCBS
-FMP_API_KEY=<key> python examples/fmp_example.py    # FMP (key required)
-python examples/fmarket_example.py    # FMarket funds
-```
-
-See [`examples/README.md`](examples/README.md) for the full provider reference table.
-
----
-
-## Documentation Map
+## Documentation map
 
 | Document | Purpose |
 |---|---|
-| [`roadmap.md`](roadmap.md) | Current roadmap focused on data collection foundation |
-| [`docs/DATA_QUALITY.md`](docs/DATA_QUALITY.md) | Quality validation behavior, modes, env config, and limitations |
-| [`docs/PROVIDER_HARDENING.md`](docs/PROVIDER_HARDENING.md) | Provider capabilities, drift detection, comparison, health scoring, tests |
+| [`../ROADMAP.md`](../ROADMAP.md) | Canonical roadmap pointer and governance |
+| [`roadmap.md`](roadmap.md) | Historical platform-evolution design; not a live delivery queue |
+| [`docs/DATA_QUALITY.md`](docs/DATA_QUALITY.md) | Quality behavior and limitations |
+| [`docs/PROVIDER_HARDENING.md`](docs/PROVIDER_HARDENING.md) | Capabilities, drift, comparison, health, routing and tests |
+| [`docs/PLUGIN_ARCHITECTURE_STATUS.md`](docs/PLUGIN_ARCHITECTURE_STATUS.md) | Accepted plugin-platform architecture and closure status |
 | [`docs/REMOVED_APIS.md`](docs/REMOVED_APIS.md) | APIs removed from the data-only fork |
 | [`docs/COMPATIBILITY_MATRIX.md`](docs/COMPATIBILITY_MATRIX.md) | Compatibility notes versus upstream |
-| [`requirements.lock`](requirements.lock) | Locked dependency set for reproducible dev/test/build |
 
----
+## Permanent non-goals
 
-## Non-Goals
+The core package must not include:
 
-This package must not include:
-
-- broker login or session management
-- order placement, order cancel/modify, portfolio, or account APIs
-- trading bots or automated execution
-- investment advice, signals, or recommendations
-- charting or notification integrations in the core package
-
-Keep those concerns in application-level projects, not in the data extraction library.
-
----
+- broker/account login or session management;
+- order placement, modification or cancellation;
+- portfolio mutation, allocation or rebalance execution;
+- cash, buying power, loan, margin or transfer workflows;
+- trading bots or automated execution;
+- investment recommendations or advice;
+- charting and notification delivery in the core data layer.
 
 ## Disclaimer
 
-`vnstock` is a data extraction and normalization tool. It is not an official data vendor, broker, investment adviser, or trading system. Extracted data can be incomplete, delayed, inconsistent, or wrong. Validate data before using it in research, reporting, or any financial workflow.
-
-Do not treat library output as investment advice.
-
----
-
-## License
-
-This project uses a custom license oriented toward personal, research, and non-commercial use. See the repository license and upstream license notes before using it in commercial or organizational workflows.
+`vnstock` is a data extraction and normalization tool, not an official data vendor, broker, investment adviser or trading system. Provider output can be incomplete, delayed, revised or wrong. Validate data and review provider licenses before using it in research or organizational workflows.

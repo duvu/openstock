@@ -1,41 +1,67 @@
 # vnalpha
 
-`vnalpha` is an OpenBB-inspired, AI-assisted research workspace service for Vietnamese equities.
+`vnalpha` is an OpenBB-inspired, AI-assisted research workspace for Vietnamese equities.
 
-It is designed to run as an independent workspace service that consumes market data from `vnstock-service` instead of embedding provider-specific data access logic.
+It runs as the research layer of OpenStock and consumes normalized market data from `vnstock-service` instead of embedding provider-specific access logic.
 
 ```text
-vnstock-service  = data platform service
-vnalpha-service  = research workspace service
+vnstock-service  = data-only market/reference/fundamental platform
+vnalpha          = terminal-first research workspace and evidence engine
 ```
 
-## Product direction
+## Product objective
 
-`vnalpha` should behave like a Vietnam-focused investment research workspace:
+Build a trustworthy, reproducible workspace that helps a researcher:
 
-- connect to `vnstock-service` for validated market/reference/fundamental data;
-- build and own research datasets such as canonical OHLCV, features, patterns, outcomes, watchlists, reports, and journals;
-- provide interactive workspace screens for analysts and AI agents;
-- expose a workspace API for dashboards, notebooks, CLI/TUI, and future agent tools;
-- keep data lineage, scoring evidence, assumptions, and forward outcomes auditable.
+- maintain provider-independent Vietnamese market data;
+- produce evidence-backed daily watchlists and symbol analysis;
+- inspect market regime, sector strength, technical setups and forward outcomes;
+- test hypotheses and strategies with point-in-time data and explicit assumptions;
+- use AI for explanation, critique and workflow assistance without allowing it to invent evidence or bypass deterministic policy.
 
-## Core workflows
+The live delivery order is maintained in [the canonical roadmap](../ROADMAP.md) and GitHub issue [#90](https://github.com/duvu/openstock/issues/90).
 
-The project focuses on end-of-day research workflows:
+## Architecture
 
-- ingest validated market data from `vnstock-service`;
-- build a canonical OHLCV research dataset;
-- compute technical, liquidity, relative-strength, and market-regime features;
-- detect structured price/volume patterns such as accumulation bases, breakouts, failed breakouts, VCP, and healthy pullbacks;
-- track forward outcomes for every detected pattern;
-- run backtests and parameter studies;
-- generate AI-assisted explanations, risk critiques, daily reports, and trading journal notes.
+```text
+vnstock providers
+→ PluginRuntime and canonical data contracts
+→ vnstock local read-only service
+→ vnalpha ingestion and validation
+→ canonical DuckDB warehouse
+→ features, scores, market/sector context and research artifacts
+→ deterministic tools and application services
+→ Typer CLI and Textual TUI
+→ grounded AI synthesis with citations, caveats and audit evidence
+```
 
-## Core principle
+`vnalpha` owns research datasets and workflows such as:
 
-`vnalpha` is a research and watchlist workspace, not an auto-trading bot.
+- canonical OHLCV and readiness evidence;
+- feature snapshots and candidate scores;
+- pattern/setup analysis and watchlists;
+- market-regime and sector-strength snapshots;
+- forward outcomes, event studies and the future point-in-time Backtest Lab;
+- research artifacts, source references, journals and bounded symbol memory;
+- CLI/TUI research workflows and optional read-only service interfaces.
 
-The system should not place orders, connect to broker execution APIs, or let an LLM override deterministic risk rules. AI is used for explanation, critique, summarization, and research assistance. Signal generation must remain rule-based, testable, auditable, and validated by backtests/outcome tracking.
+## Primary interfaces
+
+- **Textual TUI** — the main interactive workspace.
+- **Typer CLI** — explicit data, build, analysis, evaluation and maintenance commands.
+- **Deterministic local tools** — bounded read/research operations used by the assistant.
+- **Optional read-only API** — for approved integrations; not a broker or execution surface.
+
+## Core principles
+
+1. **Evidence before narrative.** Current warehouse and validated tool output outrank summaries, memory and model prose.
+2. **Fail closed.** Missing, stale, invalid or low-quality required inputs block the research operation or are disclosed as optional missing context.
+3. **Point-in-time correctness.** Historical analysis must not use future classifications, publications, actions or observations.
+4. **One service contract across surfaces.** CLI, TUI, assistant and API should delegate to the same typed application services.
+5. **Auditable research.** Dates, providers, versions, assumptions, lineage, caveats and outcomes remain inspectable.
+6. **Read-only research boundary.** No broker, account, order, portfolio mutation, allocation, margin, transfer or trading-execution capability.
+
+AI is used for classification, explanation, comparison, critique and synthesis. It must not autonomously fetch unrestricted data, execute raw SQL/shell code, alter policy, or replace deterministic scoring and validation rules.
 
 ## Documentation
 
@@ -50,22 +76,21 @@ Start here:
 - [Pattern engine](docs/04-pattern-engine.md)
 - [Backtest and outcome tracking](docs/05-backtest-and-outcome.md)
 - [AI layer](docs/06-ai-layer.md)
-- [Initial repository structure](docs/08-initial-repository-structure.md)
 - [Workspace service design](docs/09-workspace-service-design.md)
 - [Deployment architecture](docs/11-deployment-architecture.md)
 - [Research answer evaluation fixtures](docs/research-answer-evaluation.md)
 
-## Suggested MVP stack
+## Current technology direction
 
-- Python
-- FastAPI for `vnalpha-service`
-- Streamlit for first workspace UI
-- `vnstock-service` as the data foundation
-- DuckDB + Parquet for local research storage
-- Pandas / NumPy for feature engineering
-- VectorBT for backtesting
-- LiteLLM or a compatible LLM gateway for AI explanations
+- Python 3.10+
+- DuckDB warehouse and local filesystem artifacts
+- Pandas/NumPy for deterministic data processing
+- Typer CLI
+- Textual TUI
+- FastAPI only for bounded read-only service surfaces
+- LiteLLM-compatible gateway for AI assistance
+- pytest, Ruff, runtime replay and OpenSpec evidence for validation
 
 ## Compliance note
 
-This project is for personal research, education, and market analysis. It does not provide investment advice, does not guarantee performance, and should not be used for automated trading without a legally valid data source, broker API authorization, execution controls, and regulatory review.
+OpenStock is for research, education and market analysis. It does not provide investment advice or guarantee performance. The project permanently excludes automated order routing and trading execution, even when a data vendor SDK also contains broker or account functions.

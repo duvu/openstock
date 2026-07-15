@@ -1,286 +1,199 @@
-# Provider Hardening
+# Provider hardening
 
-The provider hardening layer makes provider outputs more observable and safer to use in data collection pipelines.
+The provider-hardening layer makes source selection and provider output observable, testable and fail-closed before data reaches downstream research.
 
-It lives under:
-
-```text
-vnstock/core/provider/
-```
-
-It does not fetch data by itself. It declares provider capabilities, detects schema drift, compares normalized provider outputs, scores provider health from collected evidence, and supports offline/live tests.
-
----
-
-## Current Status
-
-| Component | Module | Status |
-|---|---|---:|
-| Provider capability registry | `vnstock/core/provider/capabilities.py` | Implemented |
-| Provider models | `vnstock/core/provider/models.py` | Implemented |
-| Schema drift detection | `vnstock/core/provider/drift.py` | Implemented |
-| OHLCV cross-provider comparison | `vnstock/core/provider/compare.py` | Implemented |
-| Provider health scoring | `vnstock/core/provider/health.py` | Implemented |
-| Capability matrix | `vnstock/core/provider/matrix.py` | Implemented |
-| Offline contract tests | `tests/contracts/providers/` | Implemented |
-| Live smoke tests | `tests/live/providers/` | Implemented, disabled by default |
-| Health-aware runtime router | `vnstock/core/router.py` | Not yet integrated; router is still round-robin + cooldown |
-| Price-board / intraday comparison | `compare.py` | Planned |
-
----
-
-## Registered Providers
-
-Provider capabilities currently cover the implemented data-source surface:
-
-| Provider | Main use |
-|---|---|
-| KBS | Vietnam equity/index OHLCV, price board, intraday, reference/fundamental APIs |
-| VCI | Vietnam equity/index OHLCV, price board, intraday, industry/index data |
-| DNSE | Vietnam equity OHLCV and price board; intraday is treated as auth/availability constrained |
-| TCBS | Vietnam equity OHLCV, price board, company reference, financial statements, symbol industry, screener (experimental); unofficial public endpoints — may drift |
-| MSN | Global/search and selected global OHLCV use cases |
-| FMP | Auth-gated global OHLCV via FMP API key |
-| FMARKET | Fund NAV and fund data |
-
-SSI and ABS are **not implemented providers**. They remain discovery candidates until public/credential strategy, raw samples, and contract feasibility are confirmed.
-
----
-
-## Capability Registry
-
-Use capability queries to inspect what a provider claims to support.
-
-```python
-from vnstock.core.provider.capabilities import query_capabilities
-
-# All equity OHLCV providers
-caps = query_capabilities(dataset_type="ohlcv", asset_class="equity")
-
-# DNSE-specific capabilities
-caps_dnse = query_capabilities(provider="DNSE")
-```
-
-Each capability is represented by `ProviderCapability`, including:
+Primary modules live under:
 
 ```text
-provider
-dataset_type
-asset_class
-method
-intervals
-supports_batch
-supports_intraday
-supports_history
-supports_live_snapshot
-requires_auth
-is_live_testable
-notes
+vnstock/vnstock/core/provider/
+vnstock/vnstock/core/contracts/
+vnstock/vnstock/core/auth/
 ```
 
-Capability declarations are not a substitute for tests. They describe expected support and must be kept aligned with fixtures, live smoke checks, and actual provider behavior.
+## Current architecture
 
----
-
-## Schema Drift Detection
-
-`detect_drift()` compares a normalized provider DataFrame against a stored baseline schema.
-
-```python
-from vnstock.core.provider.drift import detect_drift
-
-issues = detect_drift(df, provider="KBS", dataset_type="ohlcv")
-
-for issue in issues:
-    print(issue.severity, issue.code, issue.message)
+```text
+canonical dataset request
+→ PluginRegistry.providers_for(dataset)
+→ PluginRouter selection by explicit source, capability, auth and health
+→ PluginRuntime.fetch()
+→ provider validation and allowlisted fetch
+→ provider-specific normalization
+→ DatasetContract validation
+→ DataResult with quality, diagnostics, latency and routing lineage
 ```
 
-Important issue codes:
+`PluginRuntime` is the canonical synchronous service execution path. Public/service code must not call a provider SDK directly.
 
-| Code | Meaning |
+## Current status
+
+| Component | Current state |
 |---|---|
-| `DRIFT_INVALID_INPUT` | Non-DataFrame input or invalid provider argument |
-| `DRIFT_NO_BASELINE` | No baseline registered for provider/dataset combination |
-| `DRIFT_MISSING_COLUMN` | Required column missing from normalized output |
-| `DRIFT_DTYPE_MISMATCH` | Column dtype differs from baseline expectation |
-| `DRIFT_UNEXPECTED_NULLS` | Non-nullable field contains null values |
-| `DRIFT_ROW_COUNT_LOW` | Too few rows relative to baseline expectation |
-| `DRIFT_ROW_COUNT_HIGH` | Too many rows relative to baseline expectation |
+| Provider protocol and instance registry | Implemented |
+| Canonical dataset contracts | Implemented for the accepted initial dataset set and selected later reference contracts |
+| Auth-aware routing | Implemented |
+| Health-aware routing and cooldown | Implemented in `PluginRouter` |
+| Explicit-source no-silent-fallback behavior | Implemented |
+| `PluginRuntime` result/diagnostic path | Implemented |
+| Schema-drift detection | Implemented |
+| OHLCV cross-provider comparison | Implemented |
+| Provider health scoring | Implemented |
+| Capability matrix | Implemented |
+| Synthetic offline contract tests | Implemented |
+| Opt-in live smoke tests | Implemented |
+| Price-board/intraday comparison | Planned |
+| First-class reference/fundamental quality rules | Incomplete |
+| Provider-level persistent quota/rate accounting | Incomplete; provider-specific bounded controls may exist |
+| Streaming/WebSocket runtime | Not part of synchronous `PluginRuntime` |
 
-Current limitation: drift detection checks schema and dtype shape. Value-level correctness should be handled by the data quality layer.
+Older text stating that runtime routing is still round-robin is obsolete. `PluginRouter` now performs health- and auth-aware selection; legacy registries may still exist for backward-compatible public UI dispatch.
 
----
+## Registered providers
 
-## Cross-Provider Comparison
+| Provider | Main supported use | Status notes |
+|---|---|---|
+| KBS | Vietnam equity/index OHLCV, quote, intraday, reference and fundamental paths | Primary public provider |
+| VCI | Vietnam equity/index OHLCV, quote, intraday, industry and index data | Stable secondary provider |
+| DNSE | Vietnam equity OHLCV and quote | Geographic/auth availability constraints may apply |
+| TCBS | Equity market/reference/fundamental paths | Experimental, unofficial endpoints may drift |
+| MSN | Selected global/search and OHLCV use cases | Experimental |
+| FMP | Authenticated global market/fundamental data | Requires API key |
+| FMARKET | Fund NAV and fund information | Fund-only provider |
+| FIINQUANTX | Bounded licensed daily equity/index OHLCV and current index/sector membership snapshots | Experimental, explicit source only, exact SDK/credentials/license acknowledgement required |
 
-Current implementation supports OHLCV comparison.
+The current FiinQuantX implementation is not a general replacement for public providers. It remains limited to capabilities with runtime evidence, and issues #105/#106 own the unresolved commercial, session, entitlement/quota, company-reference and closure work.
 
-```python
-from vnstock.core.provider.compare import compare_ohlcv
+SSI and ABS are discovery candidates, not implemented providers.
 
-report = compare_ohlcv(
-    {
-        "KBS": kbs_df,
-        "VCI": vci_df,
-        "DNSE": dnse_df,
-    },
-    symbol="FPT",
-    interval="1D",
-    start="2024-01-01",
-    end="2024-06-30",
-)
+## Capability declarations
 
-print(report.comparable)
-print(report.price_diff_summary)
+Every provider capability must declare at least:
 
-for issue in report.issues:
-    print(issue.code, issue.message)
+```text
+supported
+status
+requires authentication
+dataset
+asset type
+supported intervals or query shape
+known limitations
 ```
 
-Important issue codes:
+A capability declaration is not sufficient proof. It must match:
 
-| Code | Meaning |
-|---|---|
-| `COMPARE_INVALID_INPUT` | Input is not a dict or provider value is not a DataFrame |
-| `COMPARE_INSUFFICIENT_PROVIDERS` | Fewer than two providers supplied |
-| `COMPARE_COVERAGE_GAP` | Provider misses too many base-provider dates |
-| `COMPARE_NO_COMMON_DATES` | Providers have no overlapping time index |
-| `COMPARE_PRICE_DIVERGENCE` | Price difference exceeds warning threshold |
-| `COMPARE_PRICE_DIVERGENCE_HIGH` | Price difference exceeds error threshold |
-| `COMPARE_VOLUME_DIVERGENCE` | Volume difference exceeds warning threshold |
+- the implemented provider handler;
+- canonical contract and normalizer;
+- synthetic fixture and contract test;
+- bounded live evidence where the source can be tested safely;
+- current license and entitlement policy for commercial providers.
 
-Current limitations:
+Unsupported or unresolved datasets must fail as typed unsupported/access outcomes rather than appearing as valid empty data.
 
-- comparison is OHLCV-only
-- price board comparison is planned
-- intraday comparison is planned
-- provider-specific tolerances should be expanded before using comparison as a production acceptance gate
+## Routing semantics
 
----
+### Explicit source
 
-## Provider Health Scoring
-
-`score_health()` derives a `ProviderHealth` snapshot from collected issues and optional runtime evidence.
-
-```python
-from vnstock.core.provider.health import score_health
-
-health = score_health(
-    provider="KBS",
-    issues=issues,
-    latency_ms=250.0,
-    error_rate=0.02,
-    schema_status="ok",
-    freshness_status="fresh",
-    capabilities_checked=["ohlcv/equity", "price_board/equity"],
-)
-
-print(health.status)  # healthy | degraded | failing | unknown
+```text
+source="FIINQUANTX"
 ```
 
-Status rules are evidence-based:
+or any other explicit source means:
 
-| Evidence | Status effect |
-|---|---|
-| Error-severity issue | failing |
-| High latency | degraded or failing depending threshold |
-| High error rate | degraded or failing depending threshold |
-| Warning-severity issue | degraded |
-| No negative evidence | healthy |
+- use that provider if it is implemented and usable;
+- otherwise return a typed installation/auth/access/cooldown/schema/provider failure;
+- never silently return another provider's data.
 
-Current limitation: this is not yet wired into runtime source selection. `vnstock/core/router.py` currently uses round-robin selection with provider cooldown after runtime failures.
+### Automatic source
 
----
+Auto routing considers:
 
-## Offline Contract Tests
+- dataset capability;
+- auth policy;
+- provider health and cooldown;
+- configured priority;
+- availability/freshness evidence;
+- provider-specific policy such as commercial acknowledgement and bounded request limits.
 
-Offline provider contract tests live under:
+The routing decision records selected and rejected candidates with sanitized reasons.
+
+## Schema drift
+
+Drift detection checks normalized output against the registered schema baseline. Important outcomes include:
+
+```text
+invalid input
+missing baseline
+missing required column
+dtype mismatch
+unexpected null
+unexpected row-count shape
+```
+
+Unknown provider field casing, timestamp representation, units or response objects must not be guessed. Versioned provider normalizers should fail closed or return a degraded typed result according to the dataset contract.
+
+## Cross-provider comparison
+
+OHLCV comparison evaluates:
+
+- common date coverage;
+- missing-date gaps;
+- price-scale divergence;
+- volume divergence;
+- symbol/interval/request identity.
+
+Comparison diagnostics are evidence. They do not silently rewrite one provider to match another. Adjusted versus unadjusted data must be declared before values are considered comparable.
+
+## Provider health
+
+Health is derived from collected evidence such as:
+
+```text
+latency
+error rate
+schema status
+freshness status
+warning/error diagnostics
+consecutive failures
+cooldown state
+```
+
+A successful fetch records success; provider/runtime failures record failure. Health affects automatic routing but explicit-source requests preserve their named-provider semantics subject to disabled/cooldown policy.
+
+## Offline and live tests
+
+Offline provider contract tests use synthetic fixtures:
 
 ```text
 tests/contracts/providers/
-```
-
-They use stored fixtures under:
-
-```text
 tests/fixtures/providers/
 ```
 
-Run:
-
-```bash
-PYTHONPATH=. pytest tests/contracts/providers -q
-```
-
-Offline contract tests should fail when adapter imports or normalized schema contracts drift. They should not silently skip broken provider interfaces.
-
----
-
-## Live Smoke Tests
-
-Live smoke tests live under:
-
-```text
-tests/live/providers/
-```
-
-They are disabled by default and require explicit env enablement:
+Live tests are disabled by default:
 
 ```bash
 VNSTOCK_LIVE_TESTS=true PYTHONPATH=. pytest tests/live/providers -m live -v
 ```
 
-Filters:
+Licensed tests require provider-specific acknowledgement and credentials. They must use bounded requests and log only safe shapes, counts, hashes, versions and statuses—never secrets or raw licensed rows.
 
-```bash
-VNSTOCK_LIVE_TESTS=true VNSTOCK_LIVE_PROVIDERS=DNSE pytest tests/live/providers -m live
-VNSTOCK_LIVE_TESTS=true VNSTOCK_LIVE_SYMBOLS=FPT pytest tests/live/providers -m live
-```
+## Provider onboarding gate
 
-Live tests are not part of the default CI job. They are intended for manual or separately scheduled verification because they call real provider endpoints.
+A new provider or dataset is not complete until it has:
 
----
+1. explicit data-only scope;
+2. an official or otherwise reviewed access contract;
+3. positive allowlist excluding broker/account/execution members;
+4. parameter validation before provider I/O;
+5. canonical field/unit/time semantics;
+6. a provider normalizer and dataset contract;
+7. truthful empty/partial/failure outcomes;
+8. capability and routing integration;
+9. synthetic fixtures and contract tests;
+10. bounded live evidence where permitted;
+11. secret redaction and safe diagnostics;
+12. license/persistence/exposure decisions for commercial data;
+13. documentation and GitHub issue closure evidence.
 
-## Foreign Investor Data
+## Permanent boundary
 
-Foreign investor fields are currently exposed mainly in price board snapshots:
-
-```text
-foreign_buy_volume
-foreign_sell_volume
-foreign_room
-```
-
-This is not yet a first-class `foreign_flow` dataset. A historical daily foreign-flow dataset should be added only after endpoint feasibility, fixtures, contract tests, and quality contracts are defined.
-
----
-
-## Recommended Provider-Onboarding Gate
-
-A new provider should not be merged until it has:
-
-1. explicit data-only scope
-2. no broker login/order/account APIs in core provider path
-3. verified endpoint discovery or official API documentation
-4. raw fixtures for core endpoints
-5. normalized DataFrame schema
-6. capability declarations
-7. drift baselines
-8. contract tests
-9. live smoke tests if the endpoint can be tested safely
-10. roadmap/docs updates
-
-For credentialed official APIs, credentials must be supplied through environment variables or caller config. Never commit credentials or account-specific samples.
-
----
-
-## Roadmap Notes
-
-Next provider-hardening work:
-
-- integrate provider health into router or batch diagnostics
-- add price board comparison
-- add intraday comparison
-- add dedicated live smoke workflow
-- add `foreign_flow` dataset discovery/spec
-- expand quality contracts beyond market data into reference and fundamental datasets
+The provider platform remains within the **read-only research boundary**. Credentialed data access is permitted only for approved data providers. Broker login, account information, buying power, loans, orders, positions, portfolio mutation, allocation, margin, transfers and trading execution are prohibited even if a vendor SDK exposes them.

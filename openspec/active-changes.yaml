@@ -1,6 +1,6 @@
 # Registry for non-archived OpenSpec lifecycle and evidence.
 # GitHub issue #90 owns roadmap priority and execution order.
-reviewed_at: 2026-07-14
+reviewed_at: 2026-07-15
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
@@ -12,7 +12,7 @@ policy:
 
 changes:
   fiinquantx-provider-integration:
-    status: planned
+    status: partial
     github_issues: [105, 106]
     roadmap_state: scheduled
     summary: >-
@@ -20,9 +20,13 @@ changes:
       reference capabilities through the vnstock plugin runtime; defer
       streaming and exclude all trading/account SDK surfaces.
     evidence: >-
-      Documentation inventory is complete. Issue #105 owns licensed runtime,
-      entitlement and commercial-policy verification; issue #106 owns the
-      provider MVP. The provider track is optional and does not block #79.
+      PR #122 merged an experimental explicit-source-only runtime for bounded
+      daily equity/index OHLCV and current index/sector membership snapshots,
+      with lazy SDK loading, exact-version checks, local credentials, canonical
+      output guards and bounded licensed smoke tests. Issues #105/#106 remain
+      open for commercial approval, session lifecycle, entitlement/quota,
+      company reference and full acceptance evidence. The provider track is
+      optional and does not block #79.
 
   tui-terminal-rendering-integrity:
     status: partial
@@ -32,9 +36,11 @@ changes:
       Surface-aware file-backed TUI logging and bounded non-overlapping
       Textual regions.
     evidence: >-
-      Issue #60 is closed while this change remains non-archived. Reconcile the
-      accepted implementation and validation evidence, then archive the change
-      or create a focused follow-up issue for verified remaining scope.
+      PR #67 merged the primary rendering/logging implementation and issue #60
+      is closed, while this change remains non-archived and post-merge review
+      identified logging cleanup/degraded-startup findings. Reconcile accepted
+      evidence and either archive completed scope or create a focused follow-up
+      issue for verified residual defects.
 
   prod-d-closed-loop-repair:
     status: partial
@@ -49,15 +55,18 @@ changes:
       scheduled until such an issue is created.
 
   symbol-knowledge-memory:
-    status: planned
+    status: partial
     github_issues: []
     roadmap_state: proposed_untracked
     summary: >-
       Per-symbol knowledge cards backed by structured claims, auditable
       correction, compaction and bounded temporal retrieval.
     evidence: >-
-      The design draft exists, but no open GitHub issue owns implementation.
-      It is not part of the execution queue.
+      PR #71 merged the core event/claim store, per-symbol Markdown cards,
+      lifecycle, compaction, commands and assistant retrieval. Later review
+      found residual scalable-retrieval, ingestion-order, auto-ingestion,
+      context-budget and governance gaps. No open GitHub issue owns that
+      hardening, so residual work is not scheduled.
 
   deep-symbol-analysis-engine:
     status: partial
@@ -68,9 +77,10 @@ changes:
       symbol, market-regime and sector-strength inputs plus explicit data
       commands.
     evidence: >-
-      Linked readiness and provisioning issues are closed. Reconcile remaining
-      OpenSpec tasks against merged evidence and archive completed scope; any
-      real residual work requires a new focused issue before scheduling.
+      Linked readiness and provisioning issues are closed and their runtime
+      paths are implemented. Reconcile remaining broad OpenSpec tasks against
+      merged evidence and archive the accepted scope; any real residual work
+      requires a new focused issue before scheduling.
 
   research-scenario-plan-engine:
     status: partial
