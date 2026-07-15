@@ -29,8 +29,9 @@ def handle_experiment(parsed: ParsedCommand, conn=None, **_kwargs) -> CommandRes
     if subcommand == "backtest":
         raise CommandValidationError(
             "The /experiment backtest alias is disabled because OpenStock does not "
-            "yet implement a portfolio backtest. Use /experiment event-study with "
-            "an allowlisted condition such as 'rs_20d_vs_vnindex > 0'."
+            "yet implement a point-in-time strategy simulator. Use /experiment "
+            "event-study with an allowlisted condition such as "
+            "'rs_20d_vs_vnindex > 0'."
         )
     raise CommandValidationError(
         "Unsupported /experiment subcommand. Supported: indicator, event-study."
