@@ -120,14 +120,3 @@ changes:
       Existing setup-history slices are partial. Issue #85 owns richer
       distributions, adverse/favorable excursion evidence, conditioning,
       persistence and closure validation.
-
-  tui-slash-command-on-typing-search:
-    status: in_progress
-    github_issues: []
-    roadmap_state: proposed_untracked
-    summary: >-
-      Slash-command suggestions in the TUI composer with prefix filtering.
-    evidence: >-
-      Focused implementation and headless tests exist, but no open GitHub issue
-      owns completion. It cannot change roadmap priority until an issue is
-      created.
