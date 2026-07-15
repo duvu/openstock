@@ -136,15 +136,17 @@ as the root Makefile deployment source.
 AI is optional. Deterministic research remains available with no model configured.
 
 ```bash
-VNALPHA_LLM_ENDPOINT=http://ya-router:7071/v1/chat/completions
+VNALPHA_LLM_ENDPOINT=
 VNALPHA_LLM_MODEL=
 VNALPHA_LLM_API_KEY=
 VNALPHA_LLM_STORE_RAW=false
 ```
 
-Do not ship placeholder or guessed model IDs. Configure a model only after the
-alias is verified in the deployed gateway. Optional profile routes may be set
-individually:
+Do not ship a public endpoint, placeholder model or guessed model ID. Configure
+`VNALPHA_LLM_ENDPOINT`, `VNALPHA_LLM_MODEL` (or `VNALPHA_MODEL_DEFAULT`) and the
+dedicated `VNALPHA_LLM_API_KEY` only after the endpoint and alias are verified.
+A process-level `OPENAI_API_KEY` does not enable OpenStock AI. Optional profile
+routes may be set individually:
 
 ```bash
 VNALPHA_MODEL_SMALL=
