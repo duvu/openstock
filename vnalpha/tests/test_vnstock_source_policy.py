@@ -65,9 +65,7 @@ def test_placeholder_or_malformed_reference_is_rejected(monkeypatch, reference) 
 
 def test_fiinquantx_is_available_only_after_explicit_approval(monkeypatch) -> None:
     monkeypatch.setenv("VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED", "true")
-    monkeypatch.setenv(
-        "VNALPHA_FIINQUANTX_PERSISTENCE_APPROVAL_REF", "LEGAL-2026-001"
-    )
+    monkeypatch.setenv("VNALPHA_FIINQUANTX_PERSISTENCE_APPROVAL_REF", "LEGAL-2026-001")
 
     approval = fiinquantx_persistence_approval()
 
