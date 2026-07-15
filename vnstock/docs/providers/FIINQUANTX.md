@@ -84,6 +84,12 @@ all broker/account/trading surfaces.
 Membership timestamps are local observation times. They are not effective
 dates and must not be used to infer historical index or sector composition.
 
+For OHLCV, the supported request controls are `symbol`, `count_back` (1 to
+10,000), and `interval=1D`. The provider sends the verified bounded SDK
+request policy (`adjusted=True`, `lasted=False`); callers cannot override
+those controls until their semantics are verified. Unknown vendor columns are
+dropped before the canonical response is returned.
+
 Credentials must come from local environment or credential abstractions. They
 must never be passed as dataset parameters or written to logs, diagnostics,
 dataframes, service responses, or fixtures.

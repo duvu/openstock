@@ -48,6 +48,27 @@ docker build --build-arg INSTALL_FIINQUANTX=true -t vnstock-service:latest .
 VNSTOCK_LIVE_TESTS=true VNSTOCK_LIVE_PROVIDERS=FIINQUANTX pytest -q tests/live/providers/test_fiinquantx_live.py -m live
 ```
 
+## Review remediation evidence
+
+The final runtime contract is implemented by commits
+`18da95fcc00b1ea8be4630aaf6d51832da0953ec`,
+`73b781e36f60651e9ed274dafa1311854afc2352`, and
+`d0e801a48f910cf4ee6675239b08cbd933d8e6e1`.
+
+- Credential-like query keys are rejected before runtime fetch, and access
+  logging records no request target or query values.
+- Capabilities require SDK, runtime acknowledgement, and both credential
+  environment variables.
+- `explicit_only` providers are excluded from auto-routing.
+- The FiinQuantX OHLCV adapter accepts only bounded, verified request
+  controls and retains only canonical output columns.
+- The final focused suite passed: 125 tests; Ruff check/format and strict
+  OpenSpec validation also passed. The bounded licensed live suite passed:
+  2 tests.
+- Local HTTP smoke on the final deployed image passed for bounded OHLCV,
+  membership snapshot, disabled company information, rejected credential-like
+  query input, rejected unverified OHLCV control, and forbidden auth route.
+
 ## Offline foundation evidence
 
 Environment: OpenStock commit `64f0337`, Python 3.12.3 on Linux, with no
