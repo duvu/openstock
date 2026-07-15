@@ -164,6 +164,18 @@ if _TEXTUAL_AVAILABLE:
                     pass
                 return self._FALLBACK_COMMAND_NAMES.copy()
 
+        def _root_command_suggestions(self) -> list[str]:
+            """Return the bounded discovery list with ``/help`` always reachable."""
+
+            suggestions = self._command_names[: self._max_suggestions]
+            if (
+                "help" in self._command_names
+                and "help" not in suggestions
+                and suggestions
+            ):
+                suggestions[-1] = "help"
+            return suggestions
+
         def _command_suggestions(self, raw_text: str) -> list[str]:
             if not raw_text.startswith("/"):
                 return []
@@ -173,11 +185,11 @@ if _TEXTUAL_AVAILABLE:
 
             body = raw_text[1:]
             if not body:
-                return self._command_names[: self._max_suggestions]
+                return self._root_command_suggestions()
 
             base = body.split(None, 1)[0]
             if not base:
-                return self._command_names[: self._max_suggestions]
+                return self._root_command_suggestions()
 
             return [
                 name
