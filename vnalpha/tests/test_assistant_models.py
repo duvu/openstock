@@ -231,13 +231,14 @@ def test_refusal_error_no_suggestion():
 
 
 # ---------------------------------------------------------------------------
-# 11. LLMGatewayConfig.from_env() uses defaults
+# 11. LLMGatewayConfig.from_env() stays disabled by default
 # ---------------------------------------------------------------------------
 
 
 def test_llm_gateway_config_defaults(monkeypatch):
     for key in [
         "VNALPHA_LLM_MODEL",
+        "VNALPHA_MODEL_DEFAULT",
         "VNALPHA_LLM_ENDPOINT",
         "VNALPHA_LLM_TIMEOUT",
         "VNALPHA_LLM_MAX_OUTPUT_TOKENS",
@@ -247,9 +248,10 @@ def test_llm_gateway_config_defaults(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
     cfg = LLMGatewayConfig.from_env()
-    assert ASSISTANT_MODEL_DEFAULT == "codex/gpt-5.4-mini"
-    assert cfg.model == "codex/gpt-5.4-mini"
-    assert cfg.endpoint == ASSISTANT_ENDPOINT_DEFAULT
+    assert ASSISTANT_MODEL_DEFAULT == ""
+    assert ASSISTANT_ENDPOINT_DEFAULT == ""
+    assert cfg.model == ""
+    assert cfg.endpoint == ""
     assert cfg.timeout == ASSISTANT_TIMEOUT_DEFAULT
     assert ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT == 16000
     assert cfg.max_output_tokens == 16000
