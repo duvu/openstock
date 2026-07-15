@@ -57,10 +57,46 @@ def handle_model(
 
 
 def _status_result(*, session_id: str | None = None) -> CommandResult:
-    config = _load_config()
     override = DEFAULT_OVERRIDE_STORE.get_current_override(session_id=session_id)
     last_route = get_last_route_decision()
     active_profile = override.session_profile or override.workspace_profile
+    config, config_error = _load_optional_config()
+    if config is None:
+        return CommandResult(
+            status=CommandStatus.PARTIAL,
+            title="/model status",
+            summary="Assistant model routing is disabled until a verified model is configured.",
+            panels=[
+                ResultPanel(
+                    title="Model Routing Status",
+                    content={
+                        "active_override": (
+                            active_profile.value if active_profile is not None else None
+                        ),
+                        "session_id": session_id,
+                        "override_source": (
+                            "session"
+                            if override.session_profile is not None
+                            else "workspace"
+                            if override.workspace_profile is not None
+                            else None
+                        ),
+                        "routing_mode": "disabled",
+                        "configured": False,
+                        "configuration_error": config_error,
+                        "distinct_model_count": 0,
+                        "distinct_models": [],
+                        "default_profile": ModelProfile.DEFAULT.value,
+                        "resolved_models": {},
+                        "effective_fallbacks": {},
+                        "last_route": (
+                            last_route.to_dict() if last_route is not None else None
+                        ),
+                    },
+                )
+            ],
+        )
+
     distinct_models = _distinct_models(config)
     routing_mode = "multi_model" if len(distinct_models) > 1 else "single_model"
     return CommandResult(
@@ -87,6 +123,7 @@ def _status_result(*, session_id: str | None = None) -> CommandResult:
                         else None
                     ),
                     "routing_mode": routing_mode,
+                    "configured": True,
                     "distinct_model_count": len(distinct_models),
                     "distinct_models": sorted(distinct_models),
                     "default_profile": ModelProfile.DEFAULT.value,
@@ -264,6 +301,13 @@ def _load_config() -> ModelRoutingConfig:
         raise CommandValidationError(
             f"Invalid model routing configuration: {exc}"
         ) from exc
+
+
+def _load_optional_config() -> tuple[ModelRoutingConfig | None, str | None]:
+    try:
+        return ModelRoutingConfig.from_env(), None
+    except ValueError as exc:
+        return None, str(exc)
 
 
 def _profile_models(config: ModelRoutingConfig) -> dict[str, str]:
