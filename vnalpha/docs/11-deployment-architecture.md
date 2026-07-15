@@ -1,361 +1,188 @@
-# Deployment Architecture
+# 11. Deployment architecture
 
-## Summary
+> **Status:** current single-host deployment contract.
+>
+> The canonical runtime topology is defined by the root `docker-compose.yml`,
+> `packaging/config/vnalpha.env` and the Debian packaging scripts. Component
+> examples must not define competing warehouse paths or model defaults.
 
-`vnalpha` should be deployed as a terminal-first research workspace, while the data platform remains Docker-managed.
+## Deployment model
 
-The deployment architecture is intentionally split into three layers:
-
-```text
-Docker data platform
-  - vnstock-service
-  - vnalpha-worker batch jobs
-  - optional scheduler
-
-Persistent warehouse
-  - DuckDB file stored on a host bind mount
-
-Terminal workspace
-  - vnalpha Debian package
-  - direct terminal/TUI usage similar to OpenCode
-```
-
-This keeps the data platform reproducible and service-oriented while keeping the user-facing TUI native to the terminal.
-
-## Deployment goals
-
-- Run `vnalpha tui` directly from a user terminal, SSH session, or `tmux`, similar to OpenCode.
-- Keep `vnstock-service` as a Docker service because it is the data platform layer.
-- Keep DuckDB for the POC because it is lightweight, zero-server, analytical, and well-suited to local-first research workflows.
-- Manage data ingestion/build/score jobs through Docker worker containers.
-- Store the warehouse in a stable host path so both Docker jobs and the terminal app can access the same DuckDB file.
-- Avoid running the TUI as a background Docker daemon.
-- Preserve the research-only safety boundary: no broker orders, no account access, no portfolio mutation, no automated trading.
-
-## High-level architecture
+OpenStock separates the Docker-managed data platform from the host-installed
+terminal workspace:
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│ User Terminal / SSH / tmux                                    │
-│                                                              │
-│   $ vnalpha tui --date 2026-07-06                             │
-│                                                              │
-│ vnalpha.deb                                                   │
-│ - CLI/TUI                                                     │
-│ - command layer                                               │
-│ - assistant layer                                             │
-│ - reads DuckDB warehouse                                      │
-└───────────────────────────┬──────────────────────────────────┘
-                            │ reads local/shared file
-                            ▼
-┌──────────────────────────────────────────────────────────────┐
-│ DuckDB Warehouse                                              │
-│                                                              │
-│ /var/lib/openstock/warehouse/warehouse.duckdb                 │
-│                                                              │
-│ - market_ohlcv_raw                                            │
-│ - canonical_ohlcv                                             │
-│ - feature_snapshot                                            │
-│ - candidate_score                                             │
-│ - daily_watchlist                                             │
-│ - outcome tables                                              │
-│ - assistant/tool trace tables                                 │
-└───────────────────────────▲──────────────────────────────────┘
-                            │ writes/sync/build/score
-                            │
-┌───────────────────────────┴──────────────────────────────────┐
-│ Docker Data Platform                                          │
-│                                                              │
-│ docker compose                                                │
-│ - vnstock-service                                             │
-│ - vnalpha-worker                                              │
-│ - optional scheduler                                          │
-│                                                              │
-│ vnstock-service: http://127.0.0.1:6900                        │
-│ vnalpha-worker: batch job writing DuckDB                      │
-└──────────────────────────────────────────────────────────────┘
+Docker
+├── vnstock-service       # long-running localhost data service
+├── vnstock-login         # optional one-shot credential helper
+└── vnalpha-worker        # one-shot pipeline jobs
+
+Host
+├── /var/lib/openstock/vnstock-config/
+├── /var/lib/openstock/warehouse/warehouse.duckdb
+└── vnalpha Debian package → CLI and Textual TUI
 ```
 
-## Component responsibilities
+The TUI is launched by the user from a terminal, SSH session or `tmux`; it is not
+a background container or web dashboard.
+
+## Canonical paths
+
+Production defaults:
+
+```bash
+OPENSTOCK_WAREHOUSE_DIR=/var/lib/openstock/warehouse
+VNSTOCK_CONFIG_DIR=/var/lib/openstock/vnstock-config
+VNALPHA_WAREHOUSE_PATH=/var/lib/openstock/warehouse/warehouse.duckdb
+```
+
+Prepare them before starting Compose:
+
+```bash
+sudo install -d -m 0755 /var/lib/openstock/warehouse
+sudo install -d -m 0755 /var/lib/openstock/vnstock-config
+```
+
+The root Compose file mounts `OPENSTOCK_WAREHOUSE_DIR` at `/warehouse`; the
+worker writes `/warehouse/warehouse.duckdb`. The Debian package reads the same
+host file through `VNALPHA_WAREHOUSE_PATH`.
+
+Never hard-code a developer home directory in Compose or packaging. Development
+installations may override the two host directories through `.env`, but worker
+and TUI must still resolve the same database.
+
+## Components
 
 ### `vnstock-service`
 
-Deployment form: Docker service.
+Deployment: Docker service bound to `127.0.0.1:6900`.
 
 Responsibilities:
 
-```text
-- provider access
-- market data normalization
-- provider fallback and health
-- data quality checks
-- data-only HTTP API
+- provider access and authentication policy;
+- plugin routing and health;
+- canonical data contracts and quality checks;
+- bounded read-only HTTP responses;
+- safe provider diagnostics.
+
+Commercial providers remain optional. FiinQuantX is built only when
+`VNSTOCK_INSTALL_FIINQUANTX=true` and requires separate licensed-runtime and
+commercial-policy evidence.
+
+### `vnstock-login`
+
+Deployment: optional one-shot Compose profile with write access to the provider
+configuration directory.
+
+```bash
+docker compose --profile login run --rm vnstock-login status
 ```
 
-Default exposure:
-
-```text
-http://127.0.0.1:6900
-```
-
-The service must remain data-only. Broker, order, account, portfolio, margin, transfer, and trading endpoints are out of scope.
+Credentials remain outside query parameters, logs, artifacts and assistant
+inputs.
 
 ### `vnalpha-worker`
 
-Deployment form: Docker job container.
-
-Responsibilities:
-
-```text
-- initialize warehouse schema
-- sync symbol master
-- sync equity OHLCV
-- sync benchmark/index OHLCV
-- build canonical OHLCV
-- build features
-- score candidate watchlist
-- optionally evaluate outcomes
-```
-
-The worker writes to the shared DuckDB file through a bind mount.
-
-### DuckDB warehouse
-
-Deployment form: host file managed as persistent storage.
-
-Canonical path:
-
-```text
-/var/lib/openstock/warehouse/warehouse.duckdb
-```
-
-DuckDB is not deployed as a database server. It is an embedded analytical warehouse file used by `vnalpha-worker` and `vnalpha`.
-
-For the POC, this is the preferred storage model because it is simple, local-first, analytical, and low-operations.
-
-### `vnalpha` terminal app
-
-Deployment form: Debian package.
-
-Responsibilities:
-
-```text
-- expose the `vnalpha` CLI command
-- launch the Textual TUI with `vnalpha tui`
-- inspect watchlists and evidence
-- run read-only command workflows
-- run assistant prompts through the configured LLM gateway
-- read from the shared DuckDB warehouse
-```
-
-The TUI should be launched directly from the user's terminal, SSH session, or `tmux`, not as a background Docker daemon.
-
-### Optional LLM gateway
-
-Deployment form: external or internal OpenAI-compatible endpoint.
-
-Configuration should be provided through `/etc/vnalpha/vnalpha.env`:
-
-```bash
-VNALPHA_LLM_ENDPOINT=http://ya-router:7071/v1/chat/completions
-VNALPHA_LLM_MODEL=codex/gpt-5.4-mini
-VNALPHA_LLM_API_KEY=
-VNALPHA_LLM_STORE_RAW=false
-```
-
-For internal deployments, the endpoint should point to the organization's LLM gateway rather than a public default endpoint.
-
-## Deployment units
-
-### Data platform unit
-
-The data platform is Docker-managed.
-
-Recommended package/config layout:
-
-```text
-/opt/openstock/docker-compose.yml
-/etc/openstock/openstock.env
-/var/lib/openstock/warehouse/warehouse.duckdb
-/var/lib/openstock/vnstock-config/
-/etc/systemd/system/openstock-data-platform.service
-```
-
-It manages:
-
-```text
-- vnstock-service
-- vnalpha-worker image
-- shared DuckDB bind mount
-- optional scheduler/timer
-```
-
-### Terminal app unit
-
-`vnalpha` should be installed through a Debian package.
-
-Recommended layout:
-
-```text
-/opt/vnalpha/venv/
-/usr/bin/vnalpha
-/usr/bin/vnalpha-poc
-/etc/vnalpha/vnalpha.env
-```
-
-The package should not start the TUI automatically. The user starts it explicitly:
-
-```bash
-vnalpha tui --date 2026-07-06
-```
-
-or through a convenience launcher:
-
-```bash
-vnalpha-poc
-```
-
-## Docker Compose reference
-
-```yaml
-services:
-  vnstock-service:
-    build: ./vnstock
-    image: vnstock-service:latest
-    container_name: vnstock-service
-    ports:
-      - "127.0.0.1:6900:6900"
-    volumes:
-      - /var/lib/openstock/vnstock-config:/home/vnstock/.config/vnstock:ro
-    environment:
-      - PYTHONUNBUFFERED=1
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python3",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6900/healthz')",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  vnalpha-worker:
-    build:
-      context: .
-      dockerfile: vnalpha/Dockerfile
-    image: vnalpha-worker:latest
-    environment:
-      VNSTOCK_SERVICE_URL: http://vnstock-service:6900
-      VNALPHA_WAREHOUSE_PATH: /warehouse/warehouse.duckdb
-      VNALPHA_LOG_LEVEL: INFO
-    volumes:
-      - /var/lib/openstock/warehouse:/warehouse
-    depends_on:
-      - vnstock-service
-    profiles:
-      - job
-    entrypoint: ["vnalpha"]
-```
-
-## `vnalpha` Debian package config
-
-`/etc/vnalpha/vnalpha.env`:
-
-```bash
-VNSTOCK_SERVICE_URL=http://127.0.0.1:6900
-VNALPHA_WAREHOUSE_PATH=/var/lib/openstock/warehouse/warehouse.duckdb
-VNALPHA_LOG_LEVEL=INFO
-
-# Optional internal LLM gateway (ya-router deployed with Docker)
-VNALPHA_LLM_ENDPOINT=http://ya-router:7071/v1/chat/completions
-VNALPHA_LLM_MODEL=codex/gpt-5.4-mini
-VNALPHA_LLM_API_KEY=
-VNALPHA_LLM_STORE_RAW=false
-
-# Optional demo date
-VNALPHA_DEMO_DATE=2026-07-06
-```
-
-`/usr/bin/vnalpha`:
-
-```bash
-#!/usr/bin/env bash
-set -a
-[ -f /etc/vnalpha/vnalpha.env ] && . /etc/vnalpha/vnalpha.env
-set +a
-
-exec /opt/vnalpha/venv/bin/vnalpha "$@"
-```
-
-`/usr/bin/vnalpha-poc`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-set -a
-[ -f /etc/vnalpha/vnalpha.env ] && . /etc/vnalpha/vnalpha.env
-set +a
-
-DEMO_DATE="${VNALPHA_DEMO_DATE:-today}"
-
-exec /opt/vnalpha/venv/bin/vnalpha tui --date "$DEMO_DATE"
-```
-
-## Runtime flow
-
-### 1. Start data platform
-
-```bash
-sudo mkdir -p /var/lib/openstock/warehouse
-sudo mkdir -p /var/lib/openstock/vnstock-config
-
-cd /opt/openstock
-docker compose up -d vnstock-service
-
-curl http://127.0.0.1:6900/healthz
-```
-
-### 2. Initialize the warehouse
+Deployment: one-shot Docker job using the `vnalpha` CLI.
 
 ```bash
 docker compose --profile job run --rm vnalpha-worker init
-```
-
-### 3. Run the data pipeline
-
-```bash
 docker compose --profile job run --rm vnalpha-worker sync symbols
-
-docker compose --profile job run --rm vnalpha-worker sync ohlcv \
-  --universe VN30 \
-  --start 2024-01-01
-
-docker compose --profile job run --rm vnalpha-worker sync index \
-  --symbol VNINDEX \
-  --start 2024-01-01
-
 docker compose --profile job run --rm vnalpha-worker build canonical
-
-docker compose --profile job run --rm vnalpha-worker build features \
-  --date 2026-07-06
-
-docker compose --profile job run --rm vnalpha-worker score \
-  --date 2026-07-06
+docker compose --profile job run --rm vnalpha-worker build features --date today
+docker compose --profile job run --rm vnalpha-worker score --date today
 ```
 
-### 4. Open TUI from terminal
+The worker is not a daemon. A scheduler or systemd timer may invoke these jobs,
+but overlapping writers are prohibited for the DuckDB deployment.
+
+### Host-installed `vnalpha`
+
+Deployment: Debian package under `/opt/vnalpha` with launchers in `/usr/bin`.
 
 ```bash
-vnalpha tui --date 2026-07-06
+vnalpha --help
+vnalpha tui
 ```
 
-## systemd wrapper for the data platform
+The package loads `/etc/vnalpha/vnalpha.env` and reads the shared warehouse.
+Interactive workflows should be read-mostly while a pipeline job is active.
 
-The data platform can be controlled with systemd while still using Docker Compose internally.
+## Root Compose is canonical
+
+Use:
+
+```bash
+make up-vnstock
+make down-vnstock
+make login-vnstock
+make validate-compose
+```
+
+or the equivalent root commands:
+
+```bash
+docker compose up -d vnstock-service
+docker compose stop vnstock-service
+docker compose config --quiet
+```
+
+`vnstock/docker-compose.yml` may be used as a component development fixture, but
+it does not define the integrated worker/warehouse topology and must not be used
+as the root Makefile deployment source.
+
+## LLM configuration
+
+AI is optional. Deterministic research remains available with no model configured.
+
+```bash
+VNALPHA_LLM_ENDPOINT=http://ya-router:7071/v1/chat/completions
+VNALPHA_LLM_MODEL=
+VNALPHA_LLM_API_KEY=
+VNALPHA_LLM_STORE_RAW=false
+```
+
+Do not ship placeholder or guessed model IDs. Configure a model only after the
+alias is verified in the deployed gateway. Optional profile routes may be set
+individually:
+
+```bash
+VNALPHA_MODEL_SMALL=
+VNALPHA_MODEL_DEFAULT=
+VNALPHA_MODEL_REASONING=
+VNALPHA_MODEL_LONG_CONTEXT=
+```
+
+When all profiles resolve to one model, status surfaces must report single-model
+routing rather than a false fallback chain.
+
+## FiinQuantX persistence
+
+The worker defaults to:
+
+```bash
+VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=false
+```
+
+An environment acknowledgement is not commercial approval. Enable persistence
+only after a reviewed decision covers the actual storage and exposure mode.
+
+## DuckDB concurrency
+
+The current embedded warehouse follows these rules:
+
+1. run only one writer at a time;
+2. serialize sync, repair, build, score and outcome jobs;
+3. keep TUI operations read-only where practical during jobs;
+4. back up the file before migrations or operational repair;
+5. do not place the database on an unsafe network filesystem.
+
+Move to a server database only when concurrent writers, multi-user SQL access or
+central transaction control become real requirements.
+
+## systemd integration
+
+A systemd unit may manage the root Compose service:
 
 ```ini
 [Unit]
@@ -368,103 +195,29 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/openstock
 ExecStart=/usr/bin/docker compose up -d vnstock-service
-ExecStop=/usr/bin/docker compose down
+ExecStop=/usr/bin/docker compose stop vnstock-service
 TimeoutStartSec=0
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Enable it:
+Use separate timer units for daily one-shot worker commands. Do not launch the
+interactive TUI from systemd.
+
+## Validation
+
+Before release or deployment:
 
 ```bash
-sudo systemctl enable --now openstock-data-platform
+make validate-compose
+make verify-repo-consistency
+make lint-vnalpha
+make verify-r0
+make test-vnalpha
+make verify-vnalpha-package
 ```
 
-For scheduled pipelines, add separate timer units:
-
-```text
-openstock-daily-pipeline.service
-openstock-daily-pipeline.timer
-```
-
-The daily pipeline should run the `vnalpha-worker` job commands, not the interactive TUI.
-
-## Concurrency rules for DuckDB
-
-DuckDB is an embedded database file. The POC should follow simple operational rules:
-
-```text
-1. Pipeline jobs write the warehouse.
-2. TUI primarily reads the warehouse.
-3. Do not run multiple writers at the same time.
-4. For demos, finish the pipeline before opening the TUI.
-5. If a scheduler is enabled, avoid running heavy jobs during live demo sessions.
-```
-
-If the system later requires many concurrent writers, central access control, SQL over network, or multiple user-facing apps, the warehouse layer should be revisited. Candidate upgrades include PostgreSQL/TimescaleDB or ClickHouse. For the current POC, DuckDB remains the correct default.
-
-## Packaging roadmap
-
-### Phase 1: POC packaging
-
-```text
-- Add Dockerfile for vnalpha-worker.
-- Add Docker Compose profile for job execution.
-- Add `vnalpha.deb` packaging scripts.
-- Add `/usr/bin/vnalpha` launcher.
-- Add `/usr/bin/vnalpha-poc` launcher.
-- Add systemd wrapper for `openstock-data-platform`.
-```
-
-### Phase 2: Operator hardening
-
-```text
-- Add healthcheck command for data platform readiness.
-- Add backup script for `/var/lib/openstock/warehouse`.
-- Add restore procedure.
-- Add daily pipeline timer.
-- Add log rotation.
-- Add POC smoke-test script.
-```
-
-### Phase 3: Team deployment hardening
-
-```text
-- Add optional internal network exposure for vnstock-service.
-- Add auth/reverse proxy if vnstock-service is shared across users.
-- Add warehouse access policy.
-- Add read-only TUI mode while pipeline writer is running.
-- Add migration/backup guard before schema changes.
-```
-
-## Final decision
-
-The selected deployment architecture is:
-
-```text
-Data Platform:
-  Docker Compose
-  - vnstock-service
-  - vnalpha-worker
-  - shared DuckDB bind mount
-  - optional scheduler
-
-Terminal Workspace:
-  Debian package
-  - vnalpha CLI/TUI
-  - one-command launcher
-  - reads DuckDB warehouse
-
-Storage:
-  DuckDB file
-  /var/lib/openstock/warehouse/warehouse.duckdb
-```
-
-In short:
-
-```text
-Docker manages the data platform and batch jobs.
-Debian package manages the terminal user experience.
-DuckDB is the persisted analytical warehouse file shared by both sides.
-```
+CI must run the relevant lint, tests, package builds and consistency checks on
+pull requests. Manual documentation of failures is not a replacement for a merge
+gate.
