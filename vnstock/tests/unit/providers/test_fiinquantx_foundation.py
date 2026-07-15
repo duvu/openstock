@@ -9,12 +9,18 @@ import pytest
 from vnstock.core.contracts import CONTRACT_REGISTRY
 from vnstock.core.provider.plugin import ProviderPlugin
 from vnstock.core.runtime.bootstrap import default_plugin_registry
+from vnstock.providers.fiinquantx.approval import fiinquantx_license_approval
 from vnstock.providers.fiinquantx.bridge import FiinQuantXSDK, FiinQuantXState
 from vnstock.providers.fiinquantx.exceptions import (
     FiinQuantXLicenseNotAcknowledgedError,
     FiinQuantXNotInstalledError,
 )
 from vnstock.providers.fiinquantx.plugin import FiinQuantXProviderPlugin
+
+
+def _approve_runtime(monkeypatch) -> None:
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", "LEGAL-2026-001")
 
 
 def test_default_registry_constructs_without_fiinquantx() -> None:
@@ -89,7 +95,7 @@ def test_fiinquantx_normalizes_licensed_equity_ohlcv(monkeypatch) -> None:
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -129,7 +135,7 @@ def test_fiinquantx_normalizes_current_membership_snapshot(monkeypatch) -> None:
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -170,7 +176,7 @@ def test_fiinquantx_rejects_unbounded_history_before_session_login(monkeypatch) 
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -193,6 +199,7 @@ def test_fiinquantx_requires_license_acknowledgement_before_login(monkeypatch) -
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
     monkeypatch.delenv("VNSTOCK_FIINQUANTX_LICENSED", raising=False)
+    monkeypatch.delenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", raising=False)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -202,9 +209,44 @@ def test_fiinquantx_requires_license_acknowledgement_before_login(monkeypatch) -
         FiinQuantXProviderPlugin().fetch("equity.ohlcv", {"symbol": "VCB"})
 
 
+def test_boolean_acknowledgement_alone_cannot_create_session(monkeypatch) -> None:
+    class FakeFiinSession:
+        def __init__(self, **_kwargs) -> None:
+            raise AssertionError("session factory must not be called")
+
+    module = ModuleType("FiinQuantX")
+    module.FiinSession = FakeFiinSession
+    monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
+    monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.delenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", raising=False)
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
+        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
+    )
+
+    approval = fiinquantx_license_approval()
+
+    assert approval.acknowledged is True
+    assert approval.approved is False
+    assert approval.reference_fingerprint is None
+    with pytest.raises(FiinQuantXLicenseNotAcknowledgedError):
+        FiinQuantXProviderPlugin().fetch("equity.ohlcv", {"symbol": "VCB"})
+
+
+@pytest.mark.parametrize("reference", ["pending", "TBD", "bad reference", "x"])
+def test_placeholder_or_malformed_license_reference_is_rejected(
+    monkeypatch, reference
+) -> None:
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", reference)
+
+    assert fiinquantx_license_approval().approved is False
+
+
 def test_fiinquantx_capabilities_require_credentials(monkeypatch) -> None:
     module = ModuleType("FiinQuantX")
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    _approve_runtime(monkeypatch)
     monkeypatch.delenv("FIINQUANT_USERNAME", raising=False)
     monkeypatch.delenv("FIINQUANT_PASSWORD", raising=False)
     monkeypatch.setattr(
@@ -216,6 +258,24 @@ def test_fiinquantx_capabilities_require_credentials(monkeypatch) -> None:
 
     assert all(not capability["supported"] for capability in capabilities.values())
     assert capabilities["equity.ohlcv"]["status"] == "unsupported"
+
+
+def test_fiinquantx_diagnostics_redact_approval_reference(monkeypatch) -> None:
+    module = ModuleType("FiinQuantX")
+    monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
+    monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
+    _approve_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
+        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
+    )
+
+    diagnostics = FiinQuantXProviderPlugin().diagnostics()
+
+    assert diagnostics["licensed_runtime_approved"] is True
+    assert diagnostics["license_approval_reference_configured"] is True
+    assert diagnostics["license_approval_reference_fingerprint"]
+    assert "LEGAL-2026-001" not in str(diagnostics)
 
 
 @pytest.mark.parametrize(
@@ -240,7 +300,7 @@ def test_fiinquantx_rejects_unverified_or_unbounded_controls_before_login(
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -280,7 +340,7 @@ def test_fiinquantx_enforces_requested_ohlcv_row_limit(monkeypatch) -> None:
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),

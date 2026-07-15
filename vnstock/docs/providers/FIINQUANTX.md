@@ -7,9 +7,11 @@ licensed rows, or proprietary source.
 ## Current evidence state
 
 The provider is an optional integration. It stays disabled unless the approved
-SDK version, both credential environment variables, and
-`VNSTOCK_FIINQUANTX_LICENSED=true` are present. This acknowledgement is an
-operational guard; it is not a substitute for commercial approval.
+SDK version, both credential environment variables,
+`VNSTOCK_FIINQUANTX_LICENSED=true`, and a valid non-secret
+`VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF` are present. The acknowledgement and
+reference are operational audit guards; they are not substitutes for commercial
+approval and do not create or expand license rights.
 
 The runtime-verified, experimental datasets are:
 
@@ -50,9 +52,16 @@ fixtures, request parameters, logs, or responses:
 FIINQUANT_USERNAME=<licensed-account>
 FIINQUANT_PASSWORD=<licensed-secret>
 VNSTOCK_FIINQUANTX_LICENSED=true
+VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF=<non-secret-decision-id>
 VNSTOCK_FIINQUANTX_SESSION_TTL=900
 VNSTOCK_FIINQUANTX_ACQUIRE_TIMEOUT=30
 ```
+
+The approval reference must be a stable internal identifier such as a legal,
+procurement or vendor decision ID. Blank values, free-form sentences and
+placeholders such as `PENDING`, `TBD` or `UNAPPROVED` fail closed. Provider
+diagnostics expose only whether the reference is configured and a short
+SHA-256 fingerprint; they never expose the reference itself.
 
 The runtime caches one authenticated session for the configured TTL, allows one
 provider request at a time, closes expired sessions on replacement, and clears
@@ -65,6 +74,10 @@ time. The Docker Compose deployment publishes only `127.0.0.1:6900`.
 
 ## Commercial and persistence decisions
 
+Use [`FIINQUANTX_LICENSE_DECISION.md`](FIINQUANTX_LICENSE_DECISION.md) to record
+the non-secret decision metadata and usage-scope matrix. The agreement and legal
+advice remain in the organization's approved document system, not Git.
+
 | Mode | Decision before licensed approval |
 |---|---|
 | In-memory cache | Allowed only for the local process and approved account |
@@ -75,13 +88,20 @@ time. The Docker Compose deployment publishes only `127.0.0.1:6900`.
 | Multi-user/public exposure | Prohibited by default |
 | Bulk export | Prohibited by default |
 | Model training and derived analytics | Require a separate written license decision |
-| Synthetic fixtures | Allowed; must contain no credentials or licensed production values |
+| Synthetic fixtures | Allowed only after review; must contain no credentials or licensed production values |
 
-`vnalpha` additionally requires
-`VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true` before it accepts
-`--source FIINQUANTX` for warehouse-bound sync or repair. The default is false.
-This flag records an operator decision; it does not create or expand license
-rights.
+`vnalpha` additionally requires both:
+
+```text
+VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true
+VNALPHA_FIINQUANTX_PERSISTENCE_APPROVAL_REF=<non-secret-decision-id>
+```
+
+before it accepts `--source FIINQUANTX` for warehouse-bound sync or repair. The
+default is false and blank. The persistence reference must identify a decision
+that explicitly permits the actual storage target and downstream use. Runtime
+access approval does not automatically permit persistence, bulk export, derived
+analytics or model training.
 
 ## Boundary and capabilities
 
@@ -110,6 +130,7 @@ controls until their semantics are verified. The output metadata says
 `adjusted=requested_true`, not independently verified adjusted-price lineage.
 Unknown vendor columns are dropped before the canonical response is returned.
 
-Credentials must come from local environment or credential abstractions. They
-must never be passed as dataset parameters or written to logs, diagnostics,
-dataframes, service responses, or fixtures.
+Credentials and approval references must come from local environment or
+credential/configuration abstractions. They must never be passed as dataset
+parameters or written in full to logs, diagnostics, dataframes, service
+responses, or fixtures.

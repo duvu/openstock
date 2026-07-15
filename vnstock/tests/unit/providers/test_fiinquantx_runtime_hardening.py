@@ -27,6 +27,7 @@ def _configure(monkeypatch, module: ModuleType) -> None:
     monkeypatch.setenv("FIINQUANT_USERNAME", "u")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "p")
     monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", "LEGAL-2026-001")
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),

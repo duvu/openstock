@@ -13,7 +13,7 @@ policy:
 changes:
   fiinquantx-provider-integration:
     status: partial
-    github_issues: [105, 106]
+    github_issues: [105, 106, 136]
     roadmap_state: scheduled
     summary: >-
       Integrate only licensed, verified synchronous FiinQuantX market and
@@ -23,10 +23,13 @@ changes:
       PR #122 merged an experimental explicit-source-only runtime for bounded
       daily equity/index OHLCV and current index/sector membership snapshots,
       with lazy SDK loading, exact-version checks, local credentials, canonical
-      output guards and bounded licensed smoke tests. Issues #105/#106 remain
-      open for commercial approval, session lifecycle, entitlement/quota,
-      company reference and full acceptance evidence. The provider track is
-      optional and does not block the default-provider roadmap.
+      output guards and bounded licensed smoke tests. Issue #136 hardens the
+      runtime and persistence gates so boolean acknowledgements also require
+      auditable non-secret approval references; it does not establish commercial
+      permission. Issues #105/#106 remain open for commercial approval, session
+      lifecycle, entitlement/quota, company reference and full acceptance
+      evidence. The provider track is optional and does not block the
+      default-provider roadmap.
 
   tui-terminal-rendering-integrity:
     status: partial

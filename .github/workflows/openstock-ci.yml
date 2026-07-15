@@ -200,7 +200,11 @@ jobs:
           set -o pipefail
           (
             cd vnstock
-            PYTHONPATH=. pytest -q tests/unit/core/provider tests/contracts/providers
+            PYTHONPATH=. pytest -q \
+              tests/unit/core/provider \
+              tests/unit/providers/test_fiinquantx_foundation.py \
+              tests/unit/providers/test_fiinquantx_runtime_hardening.py \
+              tests/contracts/providers
           ) 2>&1 | tee vnstock-contract-tests.log
 
       - name: Upload vnstock contract diagnostics
