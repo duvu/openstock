@@ -6,6 +6,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 from vnalpha.model_routing.config import ModelRoutingConfig
 from vnalpha.model_routing.integration import GatewayRouteRequest, resolve_gateway_route
@@ -50,8 +51,8 @@ def _log_llm_error(
         pass
 
 
-ASSISTANT_MODEL_DEFAULT = "codex/gpt-5.4-mini"
-ASSISTANT_ENDPOINT_DEFAULT = "https://api.openai.com/v1/chat/completions"
+ASSISTANT_MODEL_DEFAULT = ""
+ASSISTANT_ENDPOINT_DEFAULT = ""
 ASSISTANT_TIMEOUT_DEFAULT = 30
 ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT = 16000
 ASSISTANT_MAX_RETRIES_DEFAULT = 2
@@ -63,6 +64,18 @@ _SCHEMA_UNSUPPORTED_MARKERS = (
     "structured_output",
     "unsupported schema",
 )
+
+
+def _integer_env(name: str, default: int) -> int:
+    from vnalpha.assistant.errors import LLMConfigError
+
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise LLMConfigError(f"{name} must be an integer.") from exc
 
 
 def _schema_name(schema: Mapping[str, Any]) -> str:
@@ -102,24 +115,56 @@ class LLMGatewayConfig:
 
     @classmethod
     def from_env(cls) -> LLMGatewayConfig:
-        return cls(
-            model=os.environ.get("VNALPHA_LLM_MODEL", ASSISTANT_MODEL_DEFAULT),
-            endpoint=os.environ.get("VNALPHA_LLM_ENDPOINT", ASSISTANT_ENDPOINT_DEFAULT),
-            timeout=int(
-                os.environ.get("VNALPHA_LLM_TIMEOUT", ASSISTANT_TIMEOUT_DEFAULT)
+        model = (
+            os.environ.get("VNALPHA_MODEL_DEFAULT", "").strip()
+            or os.environ.get("VNALPHA_LLM_MODEL", ASSISTANT_MODEL_DEFAULT).strip()
+        )
+        config = cls(
+            model=model,
+            endpoint=os.environ.get(
+                "VNALPHA_LLM_ENDPOINT", ASSISTANT_ENDPOINT_DEFAULT
+            ).strip(),
+            timeout=_integer_env("VNALPHA_LLM_TIMEOUT", ASSISTANT_TIMEOUT_DEFAULT),
+            max_output_tokens=_integer_env(
+                "VNALPHA_LLM_MAX_OUTPUT_TOKENS",
+                ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT,
             ),
-            max_output_tokens=int(
-                os.environ.get(
-                    "VNALPHA_LLM_MAX_OUTPUT_TOKENS",
-                    ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT,
-                )
-            ),
-            max_retries=int(
-                os.environ.get("VNALPHA_LLM_MAX_RETRIES", ASSISTANT_MAX_RETRIES_DEFAULT)
+            max_retries=_integer_env(
+                "VNALPHA_LLM_MAX_RETRIES", ASSISTANT_MAX_RETRIES_DEFAULT
             ),
             store_raw=os.environ.get("VNALPHA_LLM_STORE_RAW", "").lower()
             in ("1", "true", "yes"),
         )
+        return config
+
+    def validate(self) -> None:
+        from vnalpha.assistant.errors import LLMConfigError
+
+        missing: list[str] = []
+        if not self.endpoint.strip():
+            missing.append("VNALPHA_LLM_ENDPOINT")
+        if not self.model.strip():
+            missing.append("VNALPHA_MODEL_DEFAULT or VNALPHA_LLM_MODEL")
+        if missing:
+            raise LLMConfigError(
+                "LLM assistant is disabled because explicit configuration is missing: "
+                + ", ".join(missing)
+                + "."
+            )
+
+        parsed = urlparse(self.endpoint)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise LLMConfigError(
+                "VNALPHA_LLM_ENDPOINT must be an explicit http:// or https:// URL."
+            )
+        if self.timeout <= 0:
+            raise LLMConfigError("VNALPHA_LLM_TIMEOUT must be greater than zero.")
+        if self.max_output_tokens <= 0:
+            raise LLMConfigError(
+                "VNALPHA_LLM_MAX_OUTPUT_TOKENS must be greater than zero."
+            )
+        if self.max_retries < 0:
+            raise LLMConfigError("VNALPHA_LLM_MAX_RETRIES must not be negative.")
 
 
 def redact_summary(text: str | None, max_chars: int = 200) -> str | None:
@@ -147,9 +192,15 @@ class LLMGatewayClient:
         override_store: ModelOverrideStore | None = None,
     ) -> None:
         self._config = config or LLMGatewayConfig.from_env()
-        self._routing_config = routing_config or ModelRoutingConfig.from_env(
-            default_model_id=self._config.model
-        )
+        self._config.validate()
+        try:
+            self._routing_config = routing_config or ModelRoutingConfig.from_env(
+                default_model_id=self._config.model
+            )
+        except ValueError as exc:
+            from vnalpha.assistant.errors import LLMConfigError
+
+            raise LLMConfigError(f"Invalid model routing configuration: {exc}") from exc
         self._override_store = override_store or DEFAULT_OVERRIDE_STORE
         self._last_route_decision: ModelRouteDecision | None = None
         self._last_raw_responses: list[dict[str, Any]] = []
@@ -189,13 +240,11 @@ class LLMGatewayClient:
     ) -> tuple[str, dict]:
         from vnalpha.assistant.errors import LLMConfigError, LLMGatewayError
 
-        api_key = os.environ.get("VNALPHA_LLM_API_KEY") or os.environ.get(
-            "OPENAI_API_KEY", ""
-        )
-        if not api_key or not api_key.strip():
+        api_key = os.environ.get("VNALPHA_LLM_API_KEY", "").strip()
+        if not api_key:
             err = LLMConfigError(
-                "LLM API key is not set. "
-                "Set VNALPHA_LLM_API_KEY (or OPENAI_API_KEY) in your environment or .env file."
+                "LLM assistant is disabled because VNALPHA_LLM_API_KEY is not set. "
+                "OPENAI_API_KEY is intentionally not used as an implicit fallback."
             )
             _log_llm_error(stage, err)
             raise err
