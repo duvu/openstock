@@ -8,7 +8,7 @@ from typing import Final
 
 import duckdb
 
-from vnalpha.research_automation.dataset_resolver import DatasetResolution, DatasetResolver
+from vnalpha.research_automation.dataset_resolver import DatasetResolver
 from vnalpha.research_automation.event_study_spec import parse_event_study_spec
 from vnalpha.research_automation.models import (
     OfflineEventStudy,
@@ -130,7 +130,7 @@ class ResearchStudyService:
             rejection_reasons.append("the executed condition selected no observations")
         if excluded:
             rejection_reasons.append(
-                f"{len(excluded)} selected observations lacked observable inputs or outcomes"
+                f"{len(excluded)} selected observations lacked trustworthy inputs or outcomes"
             )
         if len(included) < _MIN_EVENT_OBSERVATIONS:
             rejection_reasons.append(
@@ -165,6 +165,7 @@ class ResearchStudyService:
             "feature_observable_at_event": True,
             "canonical_interval": "1D",
             "canonical_quality": "good|ok|pass",
+            "unresolved_quarantine": False,
         }
         result = {
             **metrics,
@@ -291,6 +292,11 @@ class ResearchStudyService:
                 FROM canonical_ohlcv
                 WHERE interval = '1D'
                   AND lower(trim(coalesce(quality_status, ''))) IN ('good', 'ok', 'pass')
+            ),
+            unresolved_quarantine AS (
+                SELECT DISTINCT symbol, CAST(time AS DATE) AS quarantine_date
+                FROM ohlcv_quarantine
+                WHERE interval = '1D' AND resolution_ref IS NULL
             )
             SELECT
                 f.symbol,
@@ -311,6 +317,8 @@ class ResearchStudyService:
                     THEN 'non_observable_feature'
                     WHEN f.benchmark_as_of_bar_date IS NULL OR f.benchmark_as_of_bar_date > f.date
                     THEN 'non_observable_benchmark'
+                    WHEN q.symbol IS NOT NULL
+                    THEN 'unresolved_quarantine'
                     WHEN p.entry_close IS NULL OR p.entry_close = 0
                     THEN 'missing_entry_price'
                     WHEN p.outcome_close IS NULL OR p.outcome_date IS NULL
@@ -320,6 +328,8 @@ class ResearchStudyService:
             FROM feature_snapshot f
             LEFT JOIN price_path p
               ON p.symbol = f.symbol AND p.price_date = f.date
+            LEFT JOIN unresolved_quarantine q
+              ON q.symbol = f.symbol AND q.quarantine_date = f.date
             WHERE {where}
             ORDER BY f.date, f.symbol
             """,
