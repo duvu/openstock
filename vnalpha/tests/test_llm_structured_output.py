@@ -16,8 +16,8 @@ from vnalpha.model_routing.models import ModelProfile
 
 
 def _client() -> LLMGatewayClient:
-    models = MappingProxyType({profile: "test-model" for profile in ModelProfile})
-    no_fallbacks = MappingProxyType({profile: () for profile in ModelProfile})
+    models = MappingProxyType(dict.fromkeys(ModelProfile, "test-model"))
+    no_fallbacks = MappingProxyType(dict.fromkeys(ModelProfile, ()))
     return LLMGatewayClient(
         LLMGatewayConfig(
             model="test-model",
