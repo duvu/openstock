@@ -65,11 +65,18 @@ def _indicator(
 
 def _event_study(parsed: ParsedCommand, service: ResearchStudyService) -> CommandResult:
     allowed = {"horizon", "start", "end"}
-    if parsed.filters or set(parsed.options) - allowed:
+    if set(parsed.options) - allowed:
         raise CommandValidationError(
             "/experiment event-study supports --horizon, --start, and --end."
         )
-    description = " ".join(parsed.positional[1:]).strip()
+    condition_parts: list[str] = []
+    positional_condition = " ".join(parsed.positional[1:]).strip()
+    if positional_condition:
+        condition_parts.append(positional_condition)
+    for item in parsed.filters:
+        operator = "==" if item.op == "=" else item.op
+        condition_parts.append(f"{item.key} {operator} {item.value}")
+    description = " AND ".join(condition_parts)
     if not description:
         raise CommandValidationError(
             "/experiment event-study requires an allowlisted numeric condition."
