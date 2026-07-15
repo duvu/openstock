@@ -18,16 +18,22 @@ def handle_experiment(parsed: ParsedCommand, conn=None, **_kwargs) -> CommandRes
         )
     if not parsed.positional:
         raise CommandValidationError(
-            "Experiment subcommand is required: indicator or backtest."
+            "Experiment subcommand is required: indicator or event-study."
         )
     service = ResearchWorkflowService(conn)
     subcommand = parsed.positional[0].lower()
     if subcommand == "indicator":
         return _indicator(parsed, service)
+    if subcommand == "event-study":
+        return _event_study(parsed, ResearchStudyService(conn))
     if subcommand == "backtest":
-        return _backtest(parsed, ResearchStudyService(conn))
+        raise CommandValidationError(
+            "The /experiment backtest alias is disabled because OpenStock does not "
+            "yet implement a portfolio backtest. Use /experiment event-study with "
+            "an allowlisted condition such as 'rs_20d_vs_vnindex > 0'."
+        )
     raise CommandValidationError(
-        "Unsupported /experiment subcommand. Supported: indicator, backtest."
+        "Unsupported /experiment subcommand. Supported: indicator, event-study."
     )
 
 
@@ -57,16 +63,16 @@ def _indicator(
     return _result("/experiment indicator", outcome.artifact, "Indicator experiment")
 
 
-def _backtest(parsed: ParsedCommand, service: ResearchStudyService) -> CommandResult:
+def _event_study(parsed: ParsedCommand, service: ResearchStudyService) -> CommandResult:
     allowed = {"horizon", "start", "end"}
     if parsed.filters or set(parsed.options) - allowed:
         raise CommandValidationError(
-            "/experiment backtest supports --horizon, --start, and --end."
+            "/experiment event-study supports --horizon, --start, and --end."
         )
     description = " ".join(parsed.positional[1:]).strip()
     if not description:
         raise CommandValidationError(
-            "/experiment backtest requires an event-study description."
+            "/experiment event-study requires an allowlisted numeric condition."
         )
     try:
         outcome = service.event_study(
@@ -78,7 +84,7 @@ def _backtest(parsed: ParsedCommand, service: ResearchStudyService) -> CommandRe
     except ValueError as exc:
         raise CommandValidationError(str(exc)) from exc
     return _result(
-        "/experiment backtest", outcome.artifact, "Offline research event study"
+        "/experiment event-study", outcome.artifact, "Offline research event study"
     )
 
 
@@ -95,6 +101,7 @@ def _result(title: str, artifact, label: str) -> CommandResult:
                     "artifact_id": artifact.artifact_id,
                     "status": artifact.status.value,
                     "metrics": dict(artifact.metrics),
+                    "lineage": dict(artifact.lineage),
                     "dataset_refs": [
                         item.snapshot_id for item in artifact.input_datasets
                     ],
