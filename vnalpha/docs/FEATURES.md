@@ -9,7 +9,7 @@ the quality of the underlying OHLCV bars used to build the features.
 |-------|---------|---------------------------|
 | `EXACT_DATE` | Latest bar date matches the target date exactly | `as_of_bar_date == target_date` |
 | `STALE_DATE` | Latest available bar is older than the target date | `as_of_bar_date < target_date` |
-| `MISSING_BENCHMARK` | Benchmark (VNINDEX) data was absent; only symbol features built | N/A |
+| `MISSING_BENCHMARK` | The selected benchmark data was absent; only symbol features built | N/A |
 
 **Precedence**: `EXACT_DATE` > `STALE_DATE` > `MISSING_BENCHMARK`. A row is
 `MISSING_BENCHMARK` only when the benchmark DataFrame is empty; it takes
@@ -44,6 +44,31 @@ source used when building features.
 | `quality_status` | Quality status of the source bar (e.g. `"GOOD"`, `"WARN"`) |
 | `as_of_bar_date` | The actual bar date used (same as `as_of_bar_date` column) |
 | `feature_build_version` | Package version of `vnalpha` at feature build time |
+| `benchmark_symbol` | Actual index used for relative strength (`VNINDEX`, `VN30`, `HNXINDEX`, or `UPCOMINDEX`) |
+| `benchmark_as_of_bar_date` | Actual benchmark bar date aligned to the feature row |
+| `benchmark_provider` | Provider selected for the benchmark canonical bar |
+| `benchmark_ingestion_run_id` | Ingestion run selected for the benchmark canonical bar |
+
+## Benchmark-Aware Relative Strength
+
+Relative-strength evidence is stored in `relative_strength_snapshot`, keyed by
+symbol, date, actual benchmark, and horizon. VNINDEX legacy feature columns
+remain readable, but a non-VNINDEX calculation never writes data into a column
+labeled `vs_vnindex`.
+
+The default policy selects VNINDEX for HOSE, HNXINDEX for HNX, and UPCOMINDEX
+for UPCOM common equities. VN30 is an approved secondary benchmark and can be
+selected explicitly. Both feature-build interfaces accept `--benchmark`:
+
+```text
+vnalpha build features --date 2026-07-10 --benchmark VN30
+vnalpha data build features FPT --date 2026-07-10 --benchmark VN30
+```
+
+Scoring and deep-analysis feature context read the normalized evidence and
+display the benchmark recorded in lineage. Readiness requires successful 20-
+and 60-session evidence for that same benchmark; a missing horizon is not
+treated as a successful relative-strength input.
 
 ### lineage_status in candidate_score
 

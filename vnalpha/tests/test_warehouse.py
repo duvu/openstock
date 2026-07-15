@@ -35,6 +35,8 @@ def test_all_tables_created(conn):
         "canonical_ohlcv",
         "ohlcv_gap_observation",
         "feature_snapshot",
+        "benchmark_definition",
+        "relative_strength_snapshot",
         "candidate_score",
         "daily_watchlist",
         "rejected_symbol",
@@ -140,7 +142,7 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 49
+    assert len(tables) == 51
 
 
 def test_get_watchlist_empty(conn):

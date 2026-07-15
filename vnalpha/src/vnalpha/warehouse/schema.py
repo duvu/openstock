@@ -192,6 +192,39 @@ CREATE TABLE IF NOT EXISTS feature_snapshot (
 )
 """
 
+BENCHMARK_DEFINITION_DDL = """
+CREATE TABLE IF NOT EXISTS benchmark_definition (
+    symbol                  VARCHAR PRIMARY KEY,
+    benchmark_type          VARCHAR NOT NULL,
+    exchange                VARCHAR,
+    universe                VARCHAR,
+    role                    VARCHAR NOT NULL,
+    source                  VARCHAR NOT NULL,
+    methodology_version     VARCHAR NOT NULL,
+    active_from             DATE,
+    active_to               DATE
+)
+"""
+
+RELATIVE_STRENGTH_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS relative_strength_snapshot (
+    symbol                  VARCHAR NOT NULL,
+    date                    DATE NOT NULL,
+    benchmark_symbol        VARCHAR NOT NULL,
+    horizon_sessions        INTEGER NOT NULL,
+    relative_return         DOUBLE,
+    source_bar_date         DATE,
+    benchmark_bar_date      DATE,
+    source_row_count        INTEGER,
+    benchmark_row_count     INTEGER,
+    data_status             VARCHAR NOT NULL,
+    methodology_version     VARCHAR NOT NULL,
+    generated_at            TIMESTAMPTZ,
+    lineage_json            VARCHAR,
+    PRIMARY KEY (symbol, date, benchmark_symbol, horizon_sessions)
+)
+"""
+
 CANDIDATE_SCORE_DDL = """
 CREATE TABLE IF NOT EXISTS candidate_score (
     symbol                    VARCHAR NOT NULL,
@@ -269,6 +302,8 @@ ALL_DDL = [
     CANONICAL_OHLCV_DDL,
     OHLCV_GAP_OBSERVATION_DDL,
     FEATURE_SNAPSHOT_DDL,
+    BENCHMARK_DEFINITION_DDL,
+    RELATIVE_STRENGTH_SNAPSHOT_DDL,
     CANDIDATE_SCORE_DDL,
     DAILY_WATCHLIST_DDL,
     REJECTED_SYMBOL_DDL,

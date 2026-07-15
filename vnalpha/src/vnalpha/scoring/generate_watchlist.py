@@ -43,20 +43,34 @@ def score_universe(
 
     Persists each result to candidate_score and returns the count of scored symbols.
     """
-    query = """
-        SELECT symbol, date, close, ma20, ma50, ma100,
+    relative_strength_columns = "fs.rs_20d_vs_vnindex, fs.rs_60d_vs_vnindex"
+    if _relative_strength_snapshot_exists(conn):
+        relative_strength_columns = """
+            COALESCE((SELECT relative_return FROM relative_strength_snapshot rs
+                      WHERE rs.symbol = fs.symbol AND rs.date = fs.date
+                        AND rs.horizon_sessions = 20 AND rs.data_status = 'SUCCESS'
+                        AND rs.benchmark_symbol = json_extract_string(fs.lineage_json, '$.benchmark_symbol')),
+                     fs.rs_20d_vs_vnindex) AS rs_20d_vs_vnindex,
+            COALESCE((SELECT relative_return FROM relative_strength_snapshot rs
+                      WHERE rs.symbol = fs.symbol AND rs.date = fs.date
+                        AND rs.horizon_sessions = 60 AND rs.data_status = 'SUCCESS'
+                        AND rs.benchmark_symbol = json_extract_string(fs.lineage_json, '$.benchmark_symbol')),
+                     fs.rs_60d_vs_vnindex) AS rs_60d_vs_vnindex
+        """
+    query = f"""
+        SELECT fs.symbol, fs.date, fs.close, fs.ma20, fs.ma50, fs.ma100,
                ma20_slope, ma50_slope, volume_ma20, volume_ratio,
-               atr14, return_20d, return_60d, rs_20d_vs_vnindex,
-               rs_60d_vs_vnindex, distance_to_ma20, distance_to_52w_high,
+               atr14, return_20d, return_60d, {relative_strength_columns},
+               distance_to_ma20, distance_to_52w_high,
                base_range_30d, close_strength, volatility_20d,
                lineage_json
-        FROM feature_snapshot
-        WHERE date = ?
+        FROM feature_snapshot fs
+        WHERE fs.date = ?
     """
     params: list = [date]
     if universe:
         placeholders = ", ".join(["?"] * len(universe))
-        query += f" AND symbol IN ({placeholders})"
+        query += f" AND fs.symbol IN ({placeholders})"
         params.extend(universe)
 
     rows = conn.execute(query, params).fetchall()
@@ -121,6 +135,14 @@ def score_universe(
 
     logger.info("Scored and persisted %d symbols for %s", scored_count, date)
     return scored_count
+
+
+def _relative_strength_snapshot_exists(conn: duckdb.DuckDBPyConnection) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM information_schema.tables "
+        "WHERE table_schema = 'main' AND table_name = 'relative_strength_snapshot'"
+    ).fetchone()
+    return row is not None
 
 
 def _project_candidate_score_to_memory(

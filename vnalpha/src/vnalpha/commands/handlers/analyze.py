@@ -154,8 +154,11 @@ def _analysis_panels(data: dict[str, Any]) -> list[ResultPanel]:
         ResultPanel(
             title="Relative strength and volume",
             content={
-                "rs_20d_vs_vnindex": format_number(feature.get("rs_20d_vs_vnindex")),
-                "rs_60d_vs_vnindex": format_number(feature.get("rs_60d_vs_vnindex")),
+                "benchmark": feature.get("lineage", {}).get(
+                    "benchmark_symbol", "VNINDEX"
+                ),
+                "rs_20d": format_number(feature.get("rs_20d_vs_vnindex")),
+                "rs_60d": format_number(feature.get("rs_60d_vs_vnindex")),
                 "sector_alignment": sector.get("sector"),
                 "sector_rank": sector.get("rank"),
                 "volume_ratio": format_number(feature.get("volume_ratio")),

@@ -51,8 +51,10 @@ def build_features_cmd(
     symbols: Optional[str] = typer.Option(
         None, "--symbols", help="Comma-separated symbols, default: all."
     ),
-    benchmark: str = typer.Option(
-        "VNINDEX", "--benchmark", help="Benchmark symbol for relative strength."
+    benchmark: str | None = typer.Option(
+        None,
+        "--benchmark",
+        help="Benchmark symbol for relative strength; defaults to the benchmark policy.",
     ),
 ) -> None:
     """Compute technical features for all symbols on the given date."""

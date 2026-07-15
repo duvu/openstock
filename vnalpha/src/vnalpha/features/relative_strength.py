@@ -23,6 +23,7 @@ def compute_relative_strength(
 def compute_relative_strength_features(
     df: pd.DataFrame,
     benchmark_df: pd.DataFrame,
+    benchmark_symbol: str = "VNINDEX",
 ) -> pd.DataFrame:
     """Compute RS features for a symbol vs benchmark.
 
@@ -31,11 +32,17 @@ def compute_relative_strength_features(
         benchmark_df: benchmark OHLCV DataFrame with DatetimeIndex
 
     Returns:
-        df with rs_20d_vs_vnindex and rs_60d_vs_vnindex added.
+        df with benchmark-neutral RS columns and legacy VNINDEX projections.
     """
     df = df.copy()
     # Align benchmark to symbol's dates
     bench_close = benchmark_df["close"].reindex(df.index)
-    df["rs_20d_vs_vnindex"] = compute_relative_strength(df["close"], bench_close, 20)
-    df["rs_60d_vs_vnindex"] = compute_relative_strength(df["close"], bench_close, 60)
+    df["rs_20d"] = compute_relative_strength(df["close"], bench_close, 20)
+    df["rs_60d"] = compute_relative_strength(df["close"], bench_close, 60)
+    if benchmark_symbol == "VNINDEX":
+        df["rs_20d_vs_vnindex"] = df["rs_20d"]
+        df["rs_60d_vs_vnindex"] = df["rs_60d"]
+    else:
+        df["rs_20d_vs_vnindex"] = float("nan")
+        df["rs_60d_vs_vnindex"] = float("nan")
     return df

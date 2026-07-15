@@ -80,6 +80,8 @@ def run_migrations(
     _migrate_market_context_columns(conn)
     _migrate_symbol_master_lifecycle_columns(conn)
     _migrate_feature_snapshot_columns(conn)
+    _seed_benchmark_definitions(conn)
+    _backfill_legacy_relative_strength(conn)
     _migrate_rejected_symbol_columns(conn)
     _migrate_candidate_outcome_columns(conn)
     _migrate_aggregate_outcome_columns(conn)
@@ -236,6 +238,37 @@ def _migrate_feature_snapshot_columns(conn: duckdb.DuckDBPyConnection) -> None:
     for col, col_type in cols:
         conn.execute(
             f"ALTER TABLE feature_snapshot ADD COLUMN IF NOT EXISTS {col} {col_type}"
+        )
+
+
+def _seed_benchmark_definitions(conn: duckdb.DuckDBPyConnection) -> None:
+    conn.executemany(
+        "INSERT INTO benchmark_definition "
+        "(symbol, benchmark_type, exchange, universe, role, source, methodology_version) "
+        "VALUES (?, ?, ?, ?, ?, 'openstock', 'v1') ON CONFLICT (symbol) DO NOTHING",
+        [
+            ("VNINDEX", "MARKET", None, None, "DEFAULT"),
+            ("VN30", "SIZE", "HOSE", "VN30", "SECONDARY"),
+            ("HNXINDEX", "MARKET", "HNX", None, "DEFAULT"),
+            ("UPCOMINDEX", "MARKET", "UPCOM", None, "DEFAULT"),
+        ],
+    )
+
+
+def _backfill_legacy_relative_strength(conn: duckdb.DuckDBPyConnection) -> None:
+    for horizon, column in ((20, "rs_20d_vs_vnindex"), (60, "rs_60d_vs_vnindex")):
+        conn.execute(
+            "INSERT INTO relative_strength_snapshot "
+            "(symbol, date, benchmark_symbol, horizon_sessions, relative_return, "
+            "source_bar_date, benchmark_bar_date, source_row_count, benchmark_row_count, "
+            "data_status, methodology_version, generated_at, lineage_json) "
+            "SELECT symbol, date, 'VNINDEX', ?, "
+            f"{column}, as_of_bar_date, benchmark_as_of_bar_date, source_row_count, "
+            "benchmark_row_count, COALESCE(feature_data_status, 'LEGACY'), "
+            "COALESCE(feature_build_version, 'legacy-vnindex'), feature_generated_at, lineage_json "
+            f"FROM feature_snapshot WHERE {column} IS NOT NULL "
+            "ON CONFLICT (symbol, date, benchmark_symbol, horizon_sessions) DO NOTHING",
+            [horizon],
         )
 
 

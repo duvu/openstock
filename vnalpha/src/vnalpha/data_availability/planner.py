@@ -31,6 +31,9 @@ from vnalpha.data_availability.ohlcv_gap_checks import (
     count_unresolved_true_gaps,
 )
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
+from vnalpha.data_availability.relative_strength_checks import (
+    get_relative_strength_evidence,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +69,22 @@ def capture_availability_snapshot(
 
     lookback_start = compute_lookback_start(target_date, policy.lookback_days)
     score_evidence = get_candidate_score_evidence(conn, symbol, target_date)
+    feature_evidence = get_feature_snapshot_evidence(conn, symbol, target_date)
+    relative_strength_evidence = get_relative_strength_evidence(
+        conn, symbol, target_date
+    )
+    feature_evidence = replace(
+        feature_evidence,
+        available=feature_evidence.available and relative_strength_evidence.available,
+        benchmark_as_of_date=(
+            relative_strength_evidence.benchmark_bar_date
+            or feature_evidence.benchmark_as_of_date
+        ),
+        benchmark_row_count=(
+            relative_strength_evidence.benchmark_row_count
+            or feature_evidence.benchmark_row_count
+        ),
+    )
     snapshot = EnsureDataSnapshot(
         symbol=symbol,
         target_date=target_date,
@@ -106,7 +125,7 @@ def capture_availability_snapshot(
                 lookback_start,
                 DataArtifact.BENCHMARK_OHLCV,
             ),
-            get_feature_snapshot_evidence(conn, symbol, target_date),
+            feature_evidence,
             get_candidate_score_artifact_evidence(conn, symbol, target_date),
         ),
     )

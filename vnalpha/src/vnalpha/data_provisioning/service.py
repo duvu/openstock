@@ -50,7 +50,7 @@ class DataProvisioningRequest:
     interval: str = "1D"
     top_n: int = 30
     min_score: float = 0.40
-    benchmark: str = "VNINDEX"
+    benchmark: str | None = None
     requested_date: str | None = None
     authoritative_snapshot: bool = False
 
@@ -249,7 +249,7 @@ class DataProvisioningService:
             interval=interval,
             top_n=request.top_n,
             min_score=request.min_score,
-            benchmark=_normalize_symbol(request.benchmark) or "VNINDEX",
+            benchmark=_normalize_symbol(request.benchmark),
             requested_date=request.requested_date or request.date,
         )
 
