@@ -95,18 +95,18 @@ if _TEXTUAL_AVAILABLE:
             "help",
             "history",
             "lineage",
-            "shortlist",
             "market-regime",
-            "research-plan",
-            "setup-evidence",
-            "watchlist-summary",
             "model",
             "note",
             "quality",
+            "research-plan",
+            "sandbox",
             "scan",
             "sector-strength",
-            "sandbox",
+            "setup-evidence",
+            "shortlist",
             "todo",
+            "watchlist-summary",
         ]
 
         def __init__(self, history: InputHistory | None = None, **kwargs) -> None:
