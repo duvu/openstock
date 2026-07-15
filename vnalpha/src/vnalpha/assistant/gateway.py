@@ -277,12 +277,12 @@ class LLMGatewayClient:
         started = time.monotonic()
         last_transport_error: Exception | None = None
         schema_downgraded = False
-        max_attempts = self._config.max_retries + 1 + (
-            1 if structured_mode == "json_schema" else 0
-        )
-        for attempt in range(max_attempts):
+        retry_attempt = 0
+        call_count = 0
+        while retry_attempt <= self._config.max_retries:
             response_content_chars: int | None = None
             finish_reason: str | None = None
+            call_count += 1
             try:
                 response = httpx.post(
                     self._config.endpoint,
@@ -332,12 +332,16 @@ class LLMGatewayClient:
                 return content, usage_payload
             except httpx.TimeoutException as exc:
                 last_transport_error = exc
-                if attempt < max_attempts - 1:
+                if retry_attempt < self._config.max_retries:
+                    retry_attempt += 1
                     continue
+                break
             except httpx.RequestError as exc:
                 last_transport_error = exc
-                if attempt < max_attempts - 1:
+                if retry_attempt < self._config.max_retries:
+                    retry_attempt += 1
                     continue
+                break
             except httpx.HTTPStatusError as exc:
                 status_code = exc.response.status_code
                 if (
@@ -357,7 +361,8 @@ class LLMGatewayClient:
                     status_code in {400, 404, 408, 409, 429} or status_code >= 500
                 )
                 retryable = status_code in {408, 409, 429} or status_code >= 500
-                if retryable and attempt < max_attempts - 1:
+                if retryable and retry_attempt < self._config.max_retries:
+                    retry_attempt += 1
                     continue
                 latency_ms = (time.monotonic() - started) * 1000
                 emit_call_failed(
@@ -366,7 +371,7 @@ class LLMGatewayClient:
                     latency_ms=latency_ms,
                     metadata=route_metadata,
                 )
-                _log_llm_error(decision.stage, error, attempt=attempt)
+                _log_llm_error(decision.stage, error, attempt=retry_attempt)
                 if fallbackable:
                     raise _FallbackableCallError(error) from exc
                 raise error from exc
@@ -383,7 +388,7 @@ class LLMGatewayClient:
                 _log_llm_error(
                     decision.stage,
                     exc,
-                    attempt=attempt,
+                    attempt=retry_attempt,
                     response_content_chars=response_content_chars,
                     finish_reason=finish_reason,
                 )
@@ -404,14 +409,14 @@ class LLMGatewayClient:
                 _log_llm_error(
                     decision.stage,
                     error,
-                    attempt=attempt,
+                    attempt=retry_attempt,
                     response_content_chars=response_content_chars,
                     finish_reason=finish_reason,
                 )
                 raise _FallbackableCallError(error) from exc
 
         timeout_error = LLMTimeoutError(
-            f"Model '{decision.model_id}' failed after {max_attempts} attempt(s)."
+            f"Model '{decision.model_id}' failed after {call_count} attempt(s)."
         )
         latency_ms = (time.monotonic() - started) * 1000
         emit_call_failed(
