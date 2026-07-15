@@ -28,12 +28,16 @@ def test_all_tables_created(conn):
     expected = {
         "ingestion_run",
         "symbol_master",
+        "symbol_source_snapshot",
+        "symbol_source_membership",
+        "symbol_classification_history",
         "market_ohlcv_raw",
         "canonical_ohlcv",
         "feature_snapshot",
         "candidate_score",
         "daily_watchlist",
         "rejected_symbol",
+        "ohlcv_quarantine",
         "research_session",
         "tool_trace",
         "research_note",
@@ -135,7 +139,7 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 44
+    assert len(tables) == 48
 
 
 def test_get_watchlist_empty(conn):

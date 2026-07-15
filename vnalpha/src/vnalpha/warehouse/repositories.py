@@ -18,6 +18,12 @@ from vnalpha.research_intelligence.models import (
     SectorStrengthSnapshot,
     SymbolSectorAlignment,
 )
+from vnalpha.warehouse.symbol_lifecycle import (
+    SymbolTaxonomyAsOf,
+)
+from vnalpha.warehouse.symbol_lifecycle import (
+    get_symbol_taxonomy_as_of as _get_symbol_taxonomy_as_of,
+)
 
 logger = get_logger("warehouse.repositories")
 
@@ -194,11 +200,28 @@ def insert_raw_ohlcv(
 
 
 def get_symbols_active(conn: duckdb.DuckDBPyConnection) -> list[str]:
-    """Return list of active symbols."""
+    """Return active common equities eligible for the default research universe."""
     rows = conn.execute(
-        "SELECT symbol FROM symbol_master WHERE is_active = TRUE ORDER BY symbol"
+        """
+        SELECT symbol
+        FROM symbol_master
+        WHERE is_active = TRUE
+          AND COALESCE(security_type, 'COMMON_EQUITY') = 'COMMON_EQUITY'
+          AND COALESCE(lifecycle_status, 'ACTIVE') = 'ACTIVE'
+        ORDER BY symbol
+        """
     ).fetchall()
     return [r[0] for r in rows]
+
+
+def get_symbol_taxonomy_as_of(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    as_of: object,
+) -> SymbolTaxonomyAsOf | None:
+    """Return the historical lifecycle and taxonomy classification for a symbol."""
+
+    return _get_symbol_taxonomy_as_of(conn, symbol, as_of)
 
 
 def save_candidate_score(

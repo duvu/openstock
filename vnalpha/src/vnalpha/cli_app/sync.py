@@ -20,6 +20,11 @@ app = typer.Typer(help="Sync data from vnstock-service into the warehouse.")
 @app.command("symbols")
 def sync_symbols_cmd(
     source: Optional[str] = typer.Option(None, "--source", help="Preferred provider"),
+    authoritative: bool = typer.Option(
+        False,
+        "--authoritative",
+        help="Reconcile unseen symbols only after a complete authoritative source snapshot",
+    ),
 ):
     """Sync symbol master from vnstock-service."""
     set_correlation_id()
@@ -30,7 +35,13 @@ def sync_symbols_cmd(
         conn = get_connection()
         run_migrations(conn=conn)
         result = _execute(
-            conn, DataProvisioningRequest("download", "symbols", source=source)
+            conn,
+            DataProvisioningRequest(
+                "download",
+                "symbols",
+                source=source,
+                authoritative_snapshot=authoritative,
+            ),
         )
         typer.echo(
             f"Synced {result.counts['synced']} symbols (errors: {result.counts['errors']})"

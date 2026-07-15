@@ -32,13 +32,74 @@ CREATE TABLE IF NOT EXISTS ingestion_run (
 
 SYMBOL_MASTER_DDL = """
 CREATE TABLE IF NOT EXISTS symbol_master (
-    symbol        VARCHAR PRIMARY KEY,
-    exchange      VARCHAR,
-    name          VARCHAR,
-    sector        VARCHAR,
-    industry      VARCHAR,
-    is_active     BOOLEAN DEFAULT TRUE,
-    last_seen_at  TIMESTAMPTZ
+    symbol                             VARCHAR PRIMARY KEY,
+    exchange                           VARCHAR,
+    name                               VARCHAR,
+    sector                             VARCHAR,
+    industry                           VARCHAR,
+    is_active                          BOOLEAN DEFAULT TRUE,
+    last_seen_at                       TIMESTAMPTZ,
+    security_type                      VARCHAR,
+    listing_date                       DATE,
+    delisting_date                     DATE,
+    lifecycle_status                   VARCHAR,
+    sector_code                        VARCHAR,
+    sector_name                        VARCHAR,
+    industry_code                      VARCHAR,
+    industry_name                      VARCHAR,
+    taxonomy_name                      VARCHAR,
+    taxonomy_version                   VARCHAR,
+    classification_source              VARCHAR,
+    classification_effective_from      TIMESTAMPTZ,
+    last_seen_source_snapshot_id       VARCHAR
+)
+"""
+
+SYMBOL_SOURCE_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS symbol_source_snapshot (
+    snapshot_id         VARCHAR PRIMARY KEY,
+    ingestion_run_id    VARCHAR NOT NULL,
+    source              VARCHAR NOT NULL,
+    is_authoritative    BOOLEAN NOT NULL,
+    snapshot_status     VARCHAR NOT NULL,
+    observed_count      INTEGER NOT NULL DEFAULT 0,
+    synced_count        INTEGER NOT NULL DEFAULT 0,
+    error_count         INTEGER NOT NULL DEFAULT 0,
+    deactivated_count   INTEGER NOT NULL DEFAULT 0,
+    correlation_id      VARCHAR,
+    started_at          TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
+    completed_at        TIMESTAMPTZ
+)
+"""
+
+SYMBOL_SOURCE_MEMBERSHIP_DDL = """
+CREATE TABLE IF NOT EXISTS symbol_source_membership (
+    source_snapshot_id  VARCHAR NOT NULL,
+    symbol              VARCHAR NOT NULL,
+    source              VARCHAR NOT NULL,
+    observed_at         TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
+    PRIMARY KEY (source_snapshot_id, symbol)
+)
+"""
+
+SYMBOL_CLASSIFICATION_HISTORY_DDL = """
+CREATE TABLE IF NOT EXISTS symbol_classification_history (
+    symbol              VARCHAR NOT NULL,
+    effective_from      TIMESTAMPTZ NOT NULL,
+    effective_to        TIMESTAMPTZ,
+    source_snapshot_id  VARCHAR NOT NULL,
+    classification_source VARCHAR NOT NULL,
+    security_type       VARCHAR NOT NULL,
+    lifecycle_status    VARCHAR NOT NULL,
+    listing_date        DATE,
+    delisting_date      DATE,
+    sector_code         VARCHAR,
+    sector_name         VARCHAR,
+    industry_code       VARCHAR,
+    industry_name       VARCHAR,
+    taxonomy_name       VARCHAR NOT NULL,
+    taxonomy_version    VARCHAR NOT NULL,
+    PRIMARY KEY (symbol, effective_from, source_snapshot_id)
 )
 """
 
@@ -165,15 +226,36 @@ CREATE TABLE IF NOT EXISTS rejected_symbol (
 """
 # Note: `date` is the affected data/bar date; `created_at` is the detection timestamp.
 
+OHLCV_QUARANTINE_DDL = """
+CREATE TABLE IF NOT EXISTS ohlcv_quarantine (
+    ingestion_run_id   VARCHAR NOT NULL,
+    symbol             VARCHAR NOT NULL,
+    time               TIMESTAMP NOT NULL,
+    interval           VARCHAR NOT NULL,
+    provider           VARCHAR NOT NULL,
+    rule_ids_json      VARCHAR NOT NULL,
+    validation_version VARCHAR NOT NULL,
+    invalid_values_json VARCHAR NOT NULL,
+    first_detected_at  TIMESTAMPTZ NOT NULL,
+    last_detected_at   TIMESTAMPTZ NOT NULL,
+    resolution_ref     VARCHAR,
+    PRIMARY KEY (ingestion_run_id, symbol, time, interval, provider)
+)
+"""
+
 ALL_DDL = [
     INGESTION_RUN_DDL,
     SYMBOL_MASTER_DDL,
+    SYMBOL_SOURCE_SNAPSHOT_DDL,
+    SYMBOL_SOURCE_MEMBERSHIP_DDL,
+    SYMBOL_CLASSIFICATION_HISTORY_DDL,
     MARKET_OHLCV_RAW_DDL,
     CANONICAL_OHLCV_DDL,
     FEATURE_SNAPSHOT_DDL,
     CANDIDATE_SCORE_DDL,
     DAILY_WATCHLIST_DDL,
     REJECTED_SYMBOL_DDL,
+    OHLCV_QUARANTINE_DDL,
 ]
 
 # Phase 5.8 command-layer tables
