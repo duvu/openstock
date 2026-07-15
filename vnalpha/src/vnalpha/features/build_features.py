@@ -20,6 +20,10 @@ from vnalpha.features.build_support import (
     canonical_bar_lineage,
     resolve_feature_benchmark,
 )
+from vnalpha.features.completeness import (
+    FeatureCompletenessInput,
+    evaluate_feature_completeness,
+)
 from vnalpha.features.price import compute_price_features
 from vnalpha.features.relative_strength import compute_relative_strength_features
 from vnalpha.features.relative_strength_store import (
@@ -39,6 +43,7 @@ try:
     _FEATURE_BUILD_VERSION: str = importlib.metadata.version("vnalpha")
 except importlib.metadata.PackageNotFoundError:
     _FEATURE_BUILD_VERSION = "dev"
+
 
 def load_canonical_ohlcv(
     conn: duckdb.DuckDBPyConnection,
@@ -204,6 +209,25 @@ def build_features(
             if "close" in last_row.index and not pd.isna(last_row["close"])
             else None
         )
+        completeness = evaluate_feature_completeness(
+            FeatureCompletenessInput(
+                observed_bar_count=source_row_count,
+                exact_date=as_of_bar_date == target_date,
+                values={
+                    **features,
+                    "rs_20d": (
+                        None
+                        if pd.isna(last_row["rs_20d"])
+                        else float(last_row["rs_20d"])
+                    ),
+                    "rs_60d": (
+                        None
+                        if pd.isna(last_row["rs_60d"])
+                        else float(last_row["rs_60d"])
+                    ),
+                },
+            )
+        )
         metadata = {
             "as_of_bar_date": as_of_bar_date,
             "benchmark_as_of_bar_date": benchmark_as_of,
@@ -213,6 +237,18 @@ def build_features(
             "feature_build_version": _FEATURE_BUILD_VERSION,
             "feature_generated_at": generated_at.isoformat(),
             "lineage_json": json.dumps(lineage),
+            "feature_profile": completeness.profile.value,
+            "neutral_completeness": completeness.neutral_status.value,
+            "relative_strength_completeness": completeness.relative_strength_status.value,
+            "required_bar_count": completeness.required_bar_count,
+            "observed_bar_count": completeness.observed_bar_count,
+            "missing_neutral_fields_json": json.dumps(
+                completeness.missing_neutral_fields
+            ),
+            "missing_relative_strength_fields_json": json.dumps(
+                completeness.missing_relative_strength_fields
+            ),
+            "feature_completeness_rule_version": completeness.rule_version,
         }
         save_feature_snapshot(conn, symbol, target_date, features, metadata)
         save_relative_strength_snapshots(

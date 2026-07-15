@@ -68,8 +68,11 @@ def _insert_feature(conn: duckdb.DuckDBPyConnection, fixture: FeatureFixture) ->
             symbol, date, close, ma20, ma50, return_20d, return_60d,
             rs_20d_vs_vnindex, rs_60d_vs_vnindex, as_of_bar_date,
             feature_data_status, source_row_count, feature_build_version,
-            feature_generated_at, lineage_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            feature_generated_at, lineage_json, feature_profile,
+            neutral_completeness, relative_strength_completeness,
+            required_bar_count, observed_bar_count,
+            feature_completeness_rule_version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             fixture.symbol,
@@ -83,10 +86,16 @@ def _insert_feature(conn: duckdb.DuckDBPyConnection, fixture: FeatureFixture) ->
             fixture.rs60,
             as_of_bar_date,
             "EXACT_DATE" if fixture.exact else "STALE_DATE",
-            70,
+            120,
             "fixture-v1",
             GENERATED_AT,
             '{"fixture":"sector"}',
+            "STANDARD_120",
+            "COMPLETE" if fixture.exact else "INCOMPLETE",
+            "COMPLETE",
+            120,
+            120,
+            "feature-completeness-v1",
         ],
     )
 

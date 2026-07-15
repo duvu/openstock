@@ -186,9 +186,19 @@ def test_generate_watchlist(tmp_path):
     run_migrations(conn=conn)
 
     # Insert feature snapshot rows
-    feature_cols = ["symbol", "date"] + list(STRONG_FEATURES.keys())
-    strong_row = ["FPT", "2024-01-02"] + list(STRONG_FEATURES.values())
-    weak_row = ["VNM", "2024-01-02"] + list(WEAK_FEATURES.values())
+    feature_cols = [
+        "symbol",
+        "date",
+        *STRONG_FEATURES.keys(),
+        "as_of_bar_date",
+        "feature_data_status",
+        "feature_profile",
+        "neutral_completeness",
+        "relative_strength_completeness",
+    ]
+    evidence = ["2024-01-02", "EXACT_DATE", "STANDARD_120", "COMPLETE", "COMPLETE"]
+    strong_row = ["FPT", "2024-01-02", *STRONG_FEATURES.values(), *evidence]
+    weak_row = ["VNM", "2024-01-02", *WEAK_FEATURES.values(), *evidence]
 
     for row in [strong_row, weak_row]:
         placeholders = ", ".join(["?"] * len(row))

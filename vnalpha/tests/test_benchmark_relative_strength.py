@@ -38,7 +38,7 @@ def conn() -> duckdb.DuckDBPyConnection:
 
 
 def _insert_bars(conn: duckdb.DuckDBPyConnection, symbol: str, base: float) -> None:
-    dates = pd.date_range(end=TARGET_DATE, periods=80, freq="B")
+    dates = pd.date_range(end=TARGET_DATE, periods=120, freq="B")
     conn.executemany(
         """
         INSERT INTO canonical_ohlcv
@@ -122,13 +122,16 @@ def test_score_uses_selected_benchmark_relative_strength(
     build_features(conn, TARGET_DATE, universe=["FPT"], benchmark_symbol="VN30")
 
     assert score_universe(conn, TARGET_DATE, universe=["FPT"]) == 1
-    assert conn.execute(
-        """
+    assert (
+        conn.execute(
+            """
         SELECT relative_strength_score, lineage_json
         FROM candidate_score WHERE symbol = 'FPT' AND date = ?
         """,
-        [TARGET_DATE],
-    ).fetchone()[0] > 0.9
+            [TARGET_DATE],
+        ).fetchone()[0]
+        > 0.9
+    )
 
 
 def test_readiness_requires_both_selected_benchmark_horizons(

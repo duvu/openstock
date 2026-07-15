@@ -11,6 +11,20 @@ policy:
   research_only_boundary: true
 
 changes:
+  feature-completeness-profiles:
+    status: in_progress
+    github_issues: [83]
+    roadmap_state: scheduled
+    summary: >-
+      Versioned feature-completeness profiles and capability-specific evidence
+      for feature construction, scoring, readiness, market breadth, and sector
+      strength.
+    evidence: >-
+      Issue #83 is the first unblocked core roadmap item after #79 and #82.
+      The change begins from the merged canonical-data and benchmark contracts.
+      Focused completeness suites and `make verify-r0` pass; full-suite and
+      repository-wide lint failures outside this change are tracked in issue 131.
+
   fiinquantx-provider-integration:
     status: partial
     github_issues: [105, 106]

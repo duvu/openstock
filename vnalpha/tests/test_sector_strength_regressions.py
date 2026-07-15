@@ -43,8 +43,10 @@ def _insert_feature(conn: duckdb.DuckDBPyConnection, feature: FeatureInput) -> N
         INSERT INTO feature_snapshot (
             symbol, date, close, ma20, ma50, return_20d, return_60d,
             rs_20d_vs_vnindex, rs_60d_vs_vnindex, as_of_bar_date,
-            feature_data_status, feature_generated_at
-        ) VALUES (?, ?, 101, 100, 100, .1, .05, .02, .01, ?, ?, ?)
+            feature_data_status, feature_generated_at, feature_profile,
+            neutral_completeness, relative_strength_completeness
+        ) VALUES (?, ?, 101, 100, 100, .1, .05, .02, .01, ?, ?, ?,
+                  'STANDARD_120', 'COMPLETE', 'COMPLETE')
         """,
         [
             feature.symbol,
@@ -112,6 +114,23 @@ def test_feature_gaps_make_active_universe_incompleteness_visible(
     assert snapshot.lineage["active_symbol_count"] == "6"
     assert snapshot.lineage["eligible_symbol_count"] == "3"
     assert snapshot.lineage["excluded_symbol_count"] == "3"
+
+
+def test_sector_strength_rejects_incomplete_relative_strength_evidence(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    # Given: a rankable sector with one row marked RS-incomplete.
+    _insert_members(conn, "T", "Technology", 3)
+    conn.execute(
+        "UPDATE feature_snapshot SET relative_strength_completeness = 'INCOMPLETE' "
+        "WHERE symbol = 'T0'"
+    )
+
+    # When: sector strength loads its profile-enforcing input context.
+    result = _build(conn)
+
+    # Then: the remaining two rows cannot form a rankable sector.
+    assert result.snapshots == ()
 
 
 def test_persisted_lineage_declares_exact_feature_freshness_basis(

@@ -36,10 +36,15 @@ def _insert_feature_snapshot(conn, symbol, date_str):
     conn.execute(
         """
         INSERT INTO feature_snapshot
-        (symbol, date, close, ma20, feature_data_status, feature_build_version, feature_generated_at)
-        VALUES (?, ?, 105.0, 100.0, 'EXACT_DATE', 'dev', current_timestamp)
+        (symbol, date, close, ma20, as_of_bar_date, feature_data_status,
+         feature_build_version, feature_generated_at, feature_profile,
+         neutral_completeness, relative_strength_completeness,
+         required_bar_count, observed_bar_count, feature_completeness_rule_version)
+        VALUES (?, ?, 105.0, 100.0, ?, 'EXACT_DATE', 'dev', current_timestamp,
+                'STANDARD_120', 'COMPLETE', 'COMPLETE', 120, 120,
+                'feature-completeness-v1')
         """,
-        [symbol, date_str],
+        [symbol, date_str, date_str],
     )
 
 

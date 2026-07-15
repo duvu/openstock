@@ -66,6 +66,11 @@ def score_universe(
                lineage_json
         FROM feature_snapshot fs
         WHERE fs.date = ?
+          AND fs.as_of_bar_date = fs.date
+          AND fs.feature_data_status = 'EXACT_DATE'
+          AND fs.feature_profile IN ('STANDARD_120', 'FULL_252')
+          AND fs.neutral_completeness = 'COMPLETE'
+          AND fs.relative_strength_completeness = 'COMPLETE'
     """
     params: list = [date]
     if universe:

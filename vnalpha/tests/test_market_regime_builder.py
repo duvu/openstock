@@ -90,8 +90,9 @@ def _insert_feature(
         INSERT INTO feature_snapshot (
             symbol, date, close, ma20, ma50, return_20d, as_of_bar_date,
             feature_data_status, source_row_count, feature_build_version,
-            feature_generated_at, lineage_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            feature_generated_at, lineage_json, feature_profile,
+            neutral_completeness
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'MINIMAL_20', 'COMPLETE')
         """,
         [
             symbol,

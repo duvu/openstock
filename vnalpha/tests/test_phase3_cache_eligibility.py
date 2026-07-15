@@ -157,8 +157,12 @@ def _seed_complete_evidence(conn: duckdb.DuckDBPyConnection) -> None:
         INSERT INTO feature_snapshot
         (symbol, date, close, as_of_bar_date, benchmark_as_of_bar_date,
          source_row_count, benchmark_row_count, feature_data_status,
-         feature_build_version, feature_generated_at)
-        VALUES ('FPT', ?, 10.5, ?, ?, 1, 1, 'EXACT_DATE', 'test-v1', current_timestamp)
+         feature_build_version, feature_generated_at, feature_profile,
+         neutral_completeness, relative_strength_completeness,
+         required_bar_count, observed_bar_count, feature_completeness_rule_version)
+        VALUES ('FPT', ?, 10.5, ?, ?, 120, 120, 'EXACT_DATE', 'test-v1', current_timestamp,
+                'STANDARD_120', 'COMPLETE', 'COMPLETE', 120, 120,
+                'feature-completeness-v1')
         """,
         [date, date, date],
     )
