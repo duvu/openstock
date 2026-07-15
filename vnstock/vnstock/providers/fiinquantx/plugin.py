@@ -58,6 +58,14 @@ class FiinQuantXProviderPlugin:
     def validate_params(self, dataset: str, params: dict[str, Any]) -> None:
         if dataset not in IMPLEMENTED_DATASETS:
             raise ValueError(f"Unsupported FiinQuantX dataset: {dataset}")
+        allowed_params = {"symbol"}
+        if dataset in {"equity.ohlcv", "index.ohlcv"}:
+            allowed_params.update({"count_back", "interval"})
+        unsupported_params = sorted(set(params) - allowed_params)
+        if unsupported_params:
+            raise ValueError(
+                f"Unsupported FiinQuantX parameters: {', '.join(unsupported_params)}"
+            )
         if not params.get("symbol"):
             raise ValueError(f"'symbol' is required for dataset '{dataset}'")
         if (
@@ -88,10 +96,10 @@ class FiinQuantXProviderPlugin:
                     realtime=False,
                     tickers=[str(params["symbol"]).upper()],
                     fields=["open", "high", "low", "close", "volume", "value"],
-                    adjusted=bool(params.get("adjusted", True)),
+                    adjusted=True,
                     by="1d",
                     period=params.get("count_back", 100),
-                    lasted=bool(params.get("lasted", False)),
+                    lasted=False,
                 )
                 result = normalize_ohlcv(event.get_data(), dataset)
             else:
@@ -109,7 +117,10 @@ class FiinQuantXProviderPlugin:
                 "dataset": dataset,
                 "sdk_version": sdk.version,
                 "contract_version": SUPPORTED_VERSIONS[sdk.version],
-                "adjusted": bool(params.get("adjusted", True)),
+                "ohlcv_request_policy": {
+                    "adjusted": "requested_true",
+                    "lasted": "requested_false",
+                },
             }
         )
         if dataset in {
@@ -134,6 +145,10 @@ class FiinQuantXProviderPlugin:
             "credentials_configured": self._credentials_configured(),
             "licensed_runtime_acknowledged": self._licensed_runtime_acknowledged(),
             "configured_limits": {"max_concurrency": 1, "max_rows": 10000},
+            "ohlcv_request_policy": {
+                "adjusted": "requested_true",
+                "lasted": "requested_false",
+            },
         }
 
     @staticmethod

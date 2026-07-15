@@ -59,6 +59,15 @@ class ExperimentalAuthProviderPlugin(FakeProviderPlugin):
         return AuthSpec.tcbs_experimental()
 
 
+class ExplicitOnlyAuthProviderPlugin(FakeProviderPlugin):
+    def auth_spec(self, dataset: str) -> AuthSpec:
+        return AuthSpec(
+            auth_type=AuthType.API_KEY,
+            required=True,
+            explicit_only=True,
+        )
+
+
 class NoAuthSpecProviderPlugin(FakeProviderPlugin):
     """Provider without auth_spec method (legacy, treat as public)."""
 
@@ -148,6 +157,16 @@ class TestAllowAuthenticated:
         r = PluginRouter(reg, health_store=health_store)
         provider = r.resolve("equity.ohlcv", auth_policy=AuthPolicy.ALLOW_AUTHENTICATED)
         assert provider.name == "FMP"
+
+    def test_does_not_auto_select_explicit_only_provider(self, health_store):
+        reg = PluginRegistry()
+        reg.register(ExplicitOnlyAuthProviderPlugin("EXPLICIT", ["equity.ohlcv"]))
+        router = PluginRouter(reg, health_store=health_store)
+
+        with pytest.raises(NoHealthyProviderError):
+            router.resolve("equity.ohlcv", auth_policy=AuthPolicy.ALLOW_AUTHENTICATED)
+
+        assert router.last_decision.rejected["EXPLICIT"] == "explicit source required"
 
 
 # ---------------------------------------------------------------------------

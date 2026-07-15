@@ -65,6 +65,7 @@ def test_fiinquantx_normalizes_licensed_equity_ohlcv(monkeypatch) -> None:
                     "close": [101.0],
                     "volume": [200.0],
                     "value": [20200.0],
+                    "unverified_field": [1.0],
                 }
             )
 
@@ -212,3 +213,35 @@ def test_fiinquantx_capabilities_require_credentials(monkeypatch) -> None:
 
     assert all(not capability["supported"] for capability in capabilities.values())
     assert capabilities["equity.ohlcv"]["status"] == "unsupported"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"symbol": "VCB", "adjusted": "false"},
+        {"symbol": "VCB", "lasted": "true"},
+        {"symbol": "VCB", "start": "2026-07-01"},
+    ],
+)
+def test_fiinquantx_rejects_unverified_ohlcv_controls_before_login(
+    monkeypatch, params
+) -> None:
+    class FakeFiinSession:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def login(self) -> None:
+            raise AssertionError("session login must not be called")
+
+    module = ModuleType("FiinQuantX")
+    module.FiinSession = FakeFiinSession
+    monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
+    monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
+        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
+    )
+
+    with pytest.raises(ValueError, match="Unsupported FiinQuantX parameters"):
+        FiinQuantXProviderPlugin().fetch("equity.ohlcv", params)

@@ -20,7 +20,10 @@ def normalize_ohlcv(frame: pd.DataFrame, dataset: str) -> pd.DataFrame:
                 normalized[column] = pd.to_numeric(normalized[column], errors="raise")
     except (TypeError, ValueError):
         raise FiinQuantXSchemaError(dataset) from None
-    return normalized
+    columns = ["symbol", "time", "open", "high", "low", "close", "volume"]
+    if "value" in normalized.columns:
+        columns.append("value")
+    return normalized.loc[:, columns]
 
 
 def normalize_membership(members: list[str], entity_id: str) -> pd.DataFrame:

@@ -105,6 +105,13 @@ def _provider_requires_auth(provider: "ProviderPlugin", dataset: str) -> bool:
         return False
 
 
+def _provider_is_explicit_only(provider: "ProviderPlugin", dataset: str) -> bool:
+    try:
+        return bool(provider.auth_spec(dataset).explicit_only)  # type: ignore[attr-defined]
+    except (AttributeError, Exception):
+        return False
+
+
 class PluginRouter:
     """Resolves dataset requests to provider plugin instances.
 
@@ -290,6 +297,9 @@ class PluginRouter:
         rejected: dict[str, str] = {}
 
         for p in ordered:
+            if _provider_is_explicit_only(p, dataset):
+                rejected[p.name] = "explicit source required"
+                continue
             h = self.health_store.get(p.name, dataset)
             if h.status == HealthStatus.DISABLED:
                 rejected[p.name] = "DISABLED"
