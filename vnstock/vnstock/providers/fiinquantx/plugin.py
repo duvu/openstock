@@ -99,6 +99,8 @@ class FiinQuantXProviderPlugin:
             raise ValueError("Use either 'count_back' or 'start'/'end', not both.")
         if end is not None and start is None:
             raise ValueError("'end' requires 'start'.")
+        if start is not None and end is None:
+            raise ValueError("'start' requires 'end' for a bounded date range.")
         if start is not None and end is not None:
             if end < start:
                 raise ValueError("'end' must not be before 'start'.")
@@ -150,8 +152,7 @@ class FiinQuantXProviderPlugin:
                     }
                     if start is not None:
                         request["from_date"] = start.isoformat()
-                        if end is not None:
-                            request["to_date"] = end.isoformat()
+                        request["to_date"] = end.isoformat() if end else None
                     else:
                         request["period"] = params.get("count_back", 100)
                     event = session.Fetch_Trading_Data(**request)
