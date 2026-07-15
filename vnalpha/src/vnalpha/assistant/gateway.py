@@ -213,7 +213,14 @@ class LLMGatewayClient:
         safe_metadata = redact_route_metadata(route_metadata or {})
         emit_route_selected(primary, safe_metadata)
         self._last_raw_responses = []
-        routes = (primary, *fallback_route_decisions(self._routing_config, primary))
+        strict_schema = bool(
+            response_schema and response_schema != {"type": "json_object"}
+        )
+        routes = (
+            (primary,)
+            if strict_schema
+            else (primary, *fallback_route_decisions(self._routing_config, primary))
+        )
         previous: ModelRouteDecision | None = None
         last_error: Exception | None = None
 

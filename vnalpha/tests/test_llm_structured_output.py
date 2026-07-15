@@ -114,6 +114,7 @@ def test_gateway_downgrades_once_when_endpoint_rejects_json_schema(monkeypatch) 
 
 def test_unrelated_http_400_does_not_trigger_schema_downgrade(monkeypatch) -> None:
     monkeypatch.setenv("VNALPHA_LLM_API_KEY", "test")
+    monkeypatch.setenv("VNALPHA_MODEL_SMALL", "strict-primary-model")
     payloads: list[dict] = []
 
     def fake_post(url, *, json, headers, timeout):
@@ -140,6 +141,7 @@ def test_unrelated_http_400_does_not_trigger_schema_downgrade(monkeypatch) -> No
 
 def test_strict_schema_does_not_add_transport_retry_budget(monkeypatch) -> None:
     monkeypatch.setenv("VNALPHA_LLM_API_KEY", "test")
+    monkeypatch.setenv("VNALPHA_MODEL_SMALL", "strict-primary-model")
     calls = 0
 
     def fake_post(url, *, json, headers, timeout):

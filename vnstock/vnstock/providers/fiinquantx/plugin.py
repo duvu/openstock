@@ -19,7 +19,10 @@ from vnstock.providers.fiinquantx.exceptions import (
     map_fiinquantx_exception,
 )
 from vnstock.providers.fiinquantx.normalize import normalize_membership, normalize_ohlcv
-from vnstock.providers.fiinquantx.policy import DOCUMENTED_DATASETS, IMPLEMENTED_DATASETS
+from vnstock.providers.fiinquantx.policy import (
+    DOCUMENTED_DATASETS,
+    IMPLEMENTED_DATASETS,
+)
 from vnstock.providers.fiinquantx.session import (
     DEFAULT_FIINQUANTX_SESSION_PROVIDER,
 )
@@ -39,7 +42,9 @@ def _parse_iso_date(value: object, field: str) -> date | None:
     try:
         return date.fromisoformat(value)
     except ValueError:
-        raise ValueError(f"'{field}' must be an ISO date string (YYYY-MM-DD).") from None
+        raise ValueError(
+            f"'{field}' must be an ISO date string (YYYY-MM-DD)."
+        ) from None
 
 
 class FiinQuantXProviderPlugin:
@@ -255,7 +260,9 @@ class FiinQuantXProviderPlugin:
         if not self._licensed_runtime_acknowledged():
             return "Disabled until the licensed runtime is explicitly acknowledged."
         if not self._credentials_configured():
-            return "Disabled until both credential environment variables are configured."
+            return (
+                "Disabled until both credential environment variables are configured."
+            )
         if state is FiinQuantXState.INSTALLED_SUPPORTED:
             return "Bounded historical contract verified for SDK 0.1.64."
         return f"SDK runtime is unavailable ({state.value})."

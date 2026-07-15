@@ -1,8 +1,9 @@
 # 05. Backtest and outcome tracking
 
-> This document describes stable design principles. Current Backtest Lab scope,
-> dependencies and status are owned by GitHub issue
-> [#108](https://github.com/duvu/openstock/issues/108); portfolio priority is
+> **Status:** stable design principles plus current/target command boundaries.
+>
+> Current Backtest Lab scope, dependencies and status are owned by GitHub issue
+> [#108](https://github.com/duvu/openstock/issues/108); product priority is
 > maintained in [#90](https://github.com/duvu/openstock/issues/90).
 
 ## Purpose
@@ -66,6 +67,9 @@ CREATE TABLE pattern_outcome (
 );
 ```
 
+The SQL above is a conceptual contract. The implemented warehouse schema and
+migrations remain authoritative.
+
 ## Outcome metrics
 
 For each pattern, calculate:
@@ -123,11 +127,12 @@ OR excess_return_20d < -3%
 neither SUCCESS nor FAIL
 ```
 
-These thresholds should be configurable.
+These thresholds should be configurable and versioned. A document example must
+not override the implemented metric policy.
 
 ## Backtest scenarios
 
-MVP should test at least these entry assumptions:
+The target Backtest Lab should test at least these entry assumptions.
 
 ### Scenario A: close-entry reference only
 
@@ -154,7 +159,7 @@ Purpose: reduce chase risk
 
 ## Exit rules
 
-Initial exit rules:
+Initial target rules:
 
 ```text
 Exit after 5/10/20 sessions
@@ -164,7 +169,8 @@ Take profit at +10% or +15%
 Trailing stop after profit threshold
 ```
 
-Each rule should be tested separately.
+Each rule should be tested separately and represented by a versioned strategy
+specification rather than prose-only configuration.
 
 ## Required backtest metrics
 
@@ -207,7 +213,7 @@ Backtest buys at open of T+1 or later.
 
 The universe should not include only stocks that still exist today if the backtest period includes delisted or inactive stocks.
 
-MVP may accept this limitation temporarily, but it should be documented.
+MVP limitations must be explicit and must not be presented as point-in-time correctness.
 
 ### Liquidity bias
 
@@ -236,11 +242,12 @@ spread assumption
 
 If prices are not adjusted for splits/dividends, pattern detection and returns can be wrong.
 
-Data quality checks should flag potential corporate-action anomalies.
+Adjusted-price claims require the provider-independent corporate-action and price-basis contracts owned by issues #112–#114. A vendor request flag is not sufficient lineage.
 
 ## Market regime validation
 
-Backtest results should be split by regime:
+Backtest results should be split by regime only after the production methodology
+owned by issue #84 is validated and versioned.
 
 ```text
 UPTREND
@@ -264,11 +271,11 @@ rs_window: 20, 30, 60 sessions
 max_distance_to_ma20: 6%, 8%, 10%
 ```
 
-The goal is not to find the best-looking historical parameter. The goal is to find stable parameter zones.
+The goal is not to find the best-looking historical parameter. The goal is to find stable parameter zones with explicit train/test and sensitivity evidence.
 
 ## Output reports
 
-The backtest module should produce:
+The target Backtest Lab should produce:
 
 ```text
 pattern summary
@@ -279,22 +286,24 @@ sector breakdown
 parameter sensitivity report
 ```
 
-## MVP implementation recommendation
+## Current and planned command surfaces
 
-Use:
-
-```text
-VectorBT for vectorized backtests
-Pandas for outcome tracking
-DuckDB for storing outcome tables
-```
-
-MVP commands:
+Current implemented research-validation commands use the public Typer CLI:
 
 ```bash
-python -m vnalpha.outcome.evaluate_forward_returns --as-of today
-python -m vnalpha.backtest.run_pattern_backtest --pattern ACCUMULATION_BREAKOUT
+vnalpha outcome --help
+vnalpha outcome evaluate --help
+vnalpha cmd "/experiment event-study rs_20d_vs_vnindex > 0 --horizon 10"
 ```
+
+The exact subcommands shown by `--help` are authoritative for the installed
+version. Module-level `python -m vnalpha.<implementation module>` invocations are
+not a supported public interface.
+
+A full Backtest Lab command is **planned, not implemented**. Issue #108 and child
+issues #119–#121 own its point-in-time dataset, engine, metrics, artifact and
+surface contracts. Until those issues close, no command or event-study alias may
+be presented as a completed strategy backtest.
 
 ## Decision rule
 

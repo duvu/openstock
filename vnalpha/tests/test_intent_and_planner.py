@@ -3,6 +3,8 @@
 from tests._intent_and_planner_cases import *  # noqa: F403
 from tests._intent_and_planner_cases import (
     TestIntentClassifier as _IntentClassifierCases,
+)
+from tests._intent_and_planner_cases import (
     _fake_response,
     _make_classifier,
 )
@@ -41,8 +43,6 @@ class TestIntentClassifier(_IntentClassifierCases):
         )
         assert classifier._client.call_metadata[1]["model_profile"] == "default"
         assert (
-            classifier._client.call_metadata[1]["route_metadata"][
-                "schema_repair_retry"
-            ]
+            classifier._client.call_metadata[1]["route_metadata"]["schema_repair_retry"]
             is True
         )

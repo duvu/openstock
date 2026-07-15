@@ -4,11 +4,11 @@
 # openstock Makefile
 # ──────────────────────────────────────────────
 
-.PHONY: help up-vnstock down-vnstock sync features score tui \
-        install-vnalpha lint-vnalpha test-vnalpha \
+.PHONY: help up-vnstock down-vnstock login-vnstock validate-compose \
+        sync features score tui install-vnalpha lint-vnalpha test-vnalpha \
         eval-research-answers eval-research-runtime verify-hardening verify-r0 \
-        verify-r2-ci verify-r4 repo-hygiene verify-vnalpha-package \
-        build-vnalpha-deb verify-vnalpha-deb
+        verify-r2-ci verify-r4 repo-hygiene verify-repo-consistency \
+        verify-vnalpha-package build-vnalpha-deb verify-vnalpha-deb
 
 help: ## Show this help message
 	@printf "\nopenstock — local research workflow\n\n"
@@ -18,13 +18,19 @@ help: ## Show this help message
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 	@printf "\nUsage: make <target>\n\n"
 
-# ── vnstock-service ───────────────────────────
+# ── Canonical Docker deployment ───────────────
 
-up-vnstock: ## Start vnstock-service (Docker)
-	docker compose -f vnstock/docker-compose.yml up -d
+up-vnstock: ## Start vnstock-service with the canonical root Compose file
+	docker compose up -d vnstock-service
 
-down-vnstock: ## Stop vnstock-service (Docker)
-	docker compose -f vnstock/docker-compose.yml down
+down-vnstock: ## Stop vnstock-service without deleting the shared warehouse
+	docker compose stop vnstock-service
+
+login-vnstock: ## Open the credentialed-provider auth/status helper
+	docker compose --profile login run --rm vnstock-login status
+
+validate-compose: ## Validate canonical Docker Compose interpolation and schema
+	docker compose config --quiet
 
 # ── vnalpha pipeline ──────────────────────────
 
@@ -90,6 +96,8 @@ eval-research-runtime: ## Evaluate offline runtime-replay fixtures
 verify-hardening: ## Run hardening verification gates in dependency order
 	$(MAKE) repo-hygiene
 	packaging/scripts/openstock-secret-scan
+	$(MAKE) verify-repo-consistency
+	$(MAKE) validate-compose
 	$(MAKE) lint-vnalpha
 	$(MAKE) verify-r0
 	$(MAKE) verify-r2-ci
@@ -105,6 +113,9 @@ verify-hardening: ## Run hardening verification gates in dependency order
 
 repo-hygiene: ## Verify tracked paths and gitlinks against repository policy
 	packaging/scripts/openstock-repo-hygiene
+
+verify-repo-consistency: ## Check roadmap, OpenSpec, deployment and documentation invariants
+	python scripts/check-repo-consistency.py
 
 build-vnalpha-deb: ## Build the vnalpha Debian package
 	./packaging/build-deb.sh

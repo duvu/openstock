@@ -1,326 +1,192 @@
 # 03. Data pipeline
 
-## Purpose
+> **Status:** current implementation contract.
+>
+> Dataset priority and delivery order are maintained in GitHub issue #90. This
+> document describes the stable ingestion, validation and lineage boundaries.
 
-The data pipeline is the foundation of `vnalpha`. A pattern detector is only useful when its input data is validated, auditable, and reproducible.
-
-The pipeline must enforce this rule:
-
-```text
-No unvalidated anonymous DataFrame should enter the feature engine.
-```
-
-## Data flow
+## Core rule
 
 ```text
-vnstock fetch
-→ validated DataFrame + quality metadata
-→ raw/provider-level storage
-→ quality gate
-→ canonical OHLCV
-→ feature store
-→ pattern engine
+No anonymous or unvalidated provider frame may enter research computation.
 ```
 
-## Data sources
+`vnalpha` consumes provider-independent responses from `vnstock-service`. It
+must not import commercial SDKs, call provider-specific endpoints or introduce a
+research-layer fallback adapter when a dataset is missing.
 
-Initial sources:
-
-- `vnstock` unified API;
-- local CSV/manual import for fallback testing;
-- optional provider-specific adapters only when `vnstock` does not expose a required dataset.
-
-Required datasets for MVP:
+## Current data flow
 
 ```text
-OHLCV daily per ticker
-VN-Index OHLCV
-ticker master
-sector/industry mapping
+vnstock-service request
+→ typed per-symbol outcome and safe provider metadata
+→ ingestion_run
+→ market_ohlcv_raw
+→ validation and ohlcv_quarantine
+→ canonical_ohlcv
+→ feature_snapshot + relative_strength_snapshot
+→ scoring, market/sector context, outcomes and research artifacts
 ```
 
-Optional later datasets:
+Reference-data flow additionally preserves symbol source snapshots, membership
+and point-in-time classification history before updating `symbol_master`.
+
+## Storage layers
+
+### Ingestion evidence
+
+`ingestion_run` records the requested universe, source, parameters, correlation
+ID, terminal status and per-symbol SUCCESS/EMPTY/FAILED/INVALID/SKIPPED outcomes.
+A partial batch must remain partial; aggregate success cannot hide symbol-level
+failure.
+
+`market_ohlcv_raw` stores the bounded response associated with one ingestion run
+and retains provider, quality, diagnostics and fetch-time evidence.
+
+### Validation and quarantine
+
+Invalid OHLCV observations are written to `ohlcv_quarantine` with:
+
+- provider and ingestion run;
+- affected symbol/time/interval;
+- rule IDs and validation version;
+- bounded invalid-value evidence;
+- first/last detection and resolution reference.
+
+An unresolved quarantined observation cannot be promoted or silently used by
+research consumers.
+
+### Canonical OHLCV
+
+`canonical_ohlcv` is the only price input for features, scoring, context and
+research studies. Each row preserves selected provider, quality status and
+source run lineage.
+
+Canonical promotion is validation-first. Provider preference cannot override a
+failed quality gate.
+
+### Symbol identity and taxonomy
+
+Current contracts include:
 
 ```text
-foreign flow
-proprietary trading flow
-financial statements
-valuation ratios
-corporate actions
-news/events
+symbol_master
+symbol_source_snapshot
+symbol_source_membership
+symbol_classification_history
 ```
 
-## Ingestion principles
+Authoritative symbol reconciliation is allowed only for completed, error-free
+source snapshots. Historical research must use the classification observable at
+the requested date, not the latest sector or lifecycle value.
 
-### 1. Store provider metadata
+### Feature evidence
 
-Every fetched record should preserve:
+`feature_snapshot` persists calculated values together with:
+
+- exact source and benchmark bar dates;
+- observed and required history;
+- feature profile;
+- neutral completeness;
+- relative-strength completeness;
+- missing-field evidence;
+- build and rule versions;
+- lineage.
+
+The profile registry currently distinguishes `MINIMAL_20`, `STANDARD_120` and
+`FULL_252`. Consumers declare the profile they need. Row existence alone is not
+a readiness contract.
+
+`relative_strength_snapshot` stores benchmark-specific horizons and methodology
+lineage. Compatibility fields versus VNINDEX remain transitional; new consumers
+must preserve the actual benchmark identity.
+
+## Incremental sync and gap handling
+
+Daily operation is watermark- and session-aware:
 
 ```text
-provider
-source_priority
-fetched_at
-ingestion_run_id
-quality_status
-quality_report_json
-provider_diagnostics_json
+vnalpha data sync daily
+vnalpha data gaps SYMBOL
+vnalpha data repair ohlcv SYMBOL
 ```
 
-### 2. Separate provider data from canonical data
+The pipeline distinguishes:
 
-Use two storage layers:
+- expected non-trading dates;
+- provider-valid empty responses;
+- missing sessions;
+- unresolved invalid observations;
+- stale or incomplete feature evidence.
 
-```text
-market_ohlcv      = provider-level data, for audit and comparison
-canonical_ohlcv   = selected dataset used by research and pattern detection
-```
+Repairs are bounded by symbol, interval and date range. They preserve correlation
+and resolution references and must be idempotent.
 
-### 3. Never overwrite silently
+## Canonical command surface
 
-If the same symbol/date/provider is fetched again and values differ, the system should log the difference or version the ingestion run.
-
-### 4. Validate before feature computation
-
-Features must be computed only from canonical data that passes the quality gate.
-
-## Suggested tables
-
-### ingestion_run
-
-```sql
-CREATE TABLE ingestion_run (
-    id TEXT PRIMARY KEY,
-    run_date DATE NOT NULL,
-    dataset TEXT NOT NULL,
-    started_at TIMESTAMP,
-    finished_at TIMESTAMP,
-    status TEXT,
-    config_json JSON,
-    summary_json JSON
-);
-```
-
-### market_ohlcv
-
-```sql
-CREATE TABLE market_ohlcv (
-    symbol TEXT NOT NULL,
-    time TIMESTAMP NOT NULL,
-    interval TEXT NOT NULL,
-    open DOUBLE,
-    high DOUBLE,
-    low DOUBLE,
-    close DOUBLE,
-    volume DOUBLE,
-
-    provider TEXT NOT NULL,
-    source_priority INT,
-    fetched_at TIMESTAMP NOT NULL,
-
-    quality_status TEXT,
-    quality_report_json JSON,
-    provider_diagnostics_json JSON,
-    ingestion_run_id TEXT,
-
-    PRIMARY KEY(symbol, time, interval, provider)
-);
-```
-
-### canonical_ohlcv
-
-```sql
-CREATE TABLE canonical_ohlcv (
-    symbol TEXT NOT NULL,
-    time TIMESTAMP NOT NULL,
-    interval TEXT NOT NULL,
-    open DOUBLE,
-    high DOUBLE,
-    low DOUBLE,
-    close DOUBLE,
-    volume DOUBLE,
-
-    selected_provider TEXT,
-    quality_status TEXT,
-    selection_reason TEXT,
-    ingestion_run_id TEXT,
-
-    PRIMARY KEY(symbol, time, interval)
-);
-```
-
-### ticker_master
-
-```sql
-CREATE TABLE ticker_master (
-    symbol TEXT PRIMARY KEY,
-    exchange TEXT,
-    sector TEXT,
-    industry TEXT,
-    company_name TEXT,
-    market_cap DOUBLE,
-    listing_status TEXT,
-    is_active BOOLEAN DEFAULT true,
-    updated_at TIMESTAMP
-);
-```
-
-## Quality gate
-
-The quality gate converts data validation results into scanner decisions.
-
-Possible statuses:
-
-```text
-PASS
-WARN_ACCEPTED
-REJECT
-```
-
-### PASS
-
-Data can enter canonical OHLCV.
-
-Examples:
-
-```text
-valid OHLC schema
-no critical nulls
-no invalid high/low/close relationship
-enough lookback history
-acceptable missing-session ratio
-```
-
-### WARN_ACCEPTED
-
-Data can enter canonical OHLCV but should carry warning flags.
-
-Examples:
-
-```text
-minor freshness warning on historical backfill
-small number of missing sessions
-non-critical provider warning
-```
-
-### REJECT
-
-Data must not enter feature computation.
-
-Examples:
-
-```text
-missing close/high/low
-close > high
-close < low
-negative volume
-too many missing bars
-large provider divergence
-insufficient history
-```
-
-## Canonical selection policy
-
-Initial policy:
-
-```yaml
-ohlcv_daily:
-  primary: KBS
-  fallback:
-    - VCI
-    - DNSE
-  validate: true
-  quality_mode: warn
-  min_history_sessions: 250
-```
-
-Selection logic:
-
-```text
-1. Try primary provider.
-2. Validate returned data.
-3. If PASS, select provider as canonical.
-4. If WARN_ACCEPTED, select only if no better fallback exists.
-5. If REJECT, try fallback provider.
-6. Store all provider-level data for audit.
-7. Store selected row in canonical_ohlcv.
-```
-
-## Batch ingestion requirements
-
-Full-market scanning requires batch ingestion.
-
-The ingestion module should support:
-
-```text
-symbol universe input
-start/end dates
-provider policy
-retry/backoff
-quality report collection
-partial failure handling
-run summary
-```
-
-Example CLI:
+Typical explicit workflow:
 
 ```bash
-python -m vnalpha.ingestion.sync_ohlcv \
-  --start 2020-01-01 \
-  --end 2026-07-03 \
-  --interval 1D \
-  --validate \
-  --universe hose-hnx-upcom
+vnalpha init
+vnalpha sync symbols
+vnalpha sync ohlcv --universe VN30 --start 2024-01-01
+vnalpha sync index --symbol VNINDEX --start 2024-01-01
+vnalpha build canonical
+vnalpha build features --date today
+vnalpha score --date today
+vnalpha watchlist --date today
 ```
 
-## Data quality checks for technical signals
+For scheduled or container execution, use the same commands through the root
+Compose worker:
 
-Additional scanner-level checks:
-
-```text
-minimum average traded value
-minimum number of sessions
-maximum missing-session ratio
-corporate-action anomaly detection
-volume zero streak detection
-outlier gap detection
+```bash
+docker compose --profile job run --rm vnalpha-worker sync symbols
+docker compose --profile job run --rm vnalpha-worker build canonical
+docker compose --profile job run --rm vnalpha-worker build features --date today
 ```
 
-These checks should produce exclusion reasons such as:
+Module-level `python -m vnalpha.<implementation module>` commands are not a
+public interface and must not be documented as the normal operational path.
 
-```text
-LOW_LIQUIDITY
-INSUFFICIENT_HISTORY
-DATA_QUALITY_REJECTED
-TOO_MANY_MISSING_BARS
-UNADJUSTED_CORPORATE_ACTION_RISK
-```
+## Quality and readiness semantics
 
-## Data lineage in downstream objects
+Research boundaries fail closed when required evidence is:
 
-Every `pattern_instance` should store:
+- missing;
+- stale for the requested date;
+- invalid or quarantined;
+- based on an unsupported/legacy feature profile;
+- missing required benchmark-relative strength;
+- inconsistent with provider persistence policy.
 
-```text
-ingestion_run_id
-data_quality_status
-selected_provider
-feature_version
-pattern_detector_version
-```
+Optional context may be disclosed as missing without blocking an unrelated
+capability. For example, benchmark-neutral breadth can use neutral feature
+evidence while sector strength and scoring require complete relative-strength
+evidence.
 
-This makes it possible to answer:
+## Point-in-time guarantees
 
-- Which data version generated this signal?
-- Which provider was used?
-- Did the signal come from warning-level data?
-- Would the signal change if another provider were used?
+Historical datasets must not use future:
 
-## MVP deliverables
+- symbol membership or lifecycle status;
+- sector classifications;
+- corporate publications;
+- corporate actions or adjusted-price factors;
+- feature rows or benchmark observations;
+- repair outcomes that were not observable at the research date.
 
-- `sync_universe.py`
-- `sync_ohlcv.py`
-- `quality_gate.py`
-- `build_canonical.py`
-- `market_ohlcv` table
-- `canonical_ohlcv` table
-- `ticker_master` table
-- ingestion run summary
+The future Backtest Lab consumes these contracts; it must not create a second,
+less strict ingestion path.
+
+## Extension rule
+
+A new dataset begins in `vnstock` with a provider-independent capability and
+canonical contract. It enters `vnalpha` only after:
+
+1. access and commercial policy are reviewed;
+2. parameters and schema are canonicalized;
+3. empty, partial and failure outcomes are typed;
+4. validation and provenance are defined;
+5. fixtures and bounded evidence exist;
+6. persistence policy is explicit.

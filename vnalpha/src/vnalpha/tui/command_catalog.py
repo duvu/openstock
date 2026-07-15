@@ -38,11 +38,11 @@ def _static_catalog() -> list[UiCommand]:
         UiCommand(
             name="experiment",
             description="Run indicator experiments or offline research event studies.",
-            usage="/experiment indicator DESCRIPTION | /experiment backtest DESCRIPTION",
+            usage="/experiment indicator DESCRIPTION | /experiment event-study ALLOWLISTED_CONDITION",
             category="Research Automation",
             examples=(
                 "/experiment indicator relative strength 20 sessions vs VNINDEX --universe VN30",
-                "/experiment backtest FPT accumulation breakout --horizon 10",
+                "/experiment event-study rs_20d_vs_vnindex > 0 --horizon 10",
             ),
         ),
         UiCommand(

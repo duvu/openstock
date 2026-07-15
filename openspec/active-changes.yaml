@@ -12,18 +12,19 @@ policy:
 
 changes:
   feature-completeness-profiles:
-    status: in_progress
-    github_issues: [83]
-    roadmap_state: scheduled
+    status: partial
+    github_issues: [83, 131]
+    roadmap_state: review_required
     summary: >-
       Versioned feature-completeness profiles and capability-specific evidence
       for feature construction, scoring, readiness, market breadth, and sector
       strength.
     evidence: >-
-      Issue #83 is the first unblocked core roadmap item after #79 and #82.
-      The change begins from the merged canonical-data and benchmark contracts.
-      Focused completeness suites and `make verify-r0` pass; full-suite and
-      repository-wide lint failures outside this change are tracked in issue 131.
+      PR #132 completed the scoped feature-completeness implementation and closed
+      issue #83. Focused suites and `make verify-r0` passed. Repository-wide lint,
+      safety, routing and full-suite closure is owned by issue #131 and the
+      consistency/CI repair PR. Archive this change only after those exact gates
+      pass on the final implementation SHA.
 
   fiinquantx-provider-integration:
     status: partial
@@ -40,7 +41,7 @@ changes:
       output guards and bounded licensed smoke tests. Issues #105/#106 remain
       open for commercial approval, session lifecycle, entitlement/quota,
       company reference and full acceptance evidence. The provider track is
-      optional and does not block #79.
+      optional and does not block the default-provider roadmap.
 
   tui-terminal-rendering-integrity:
     status: partial
@@ -119,14 +120,3 @@ changes:
       Existing setup-history slices are partial. Issue #85 owns richer
       distributions, adverse/favorable excursion evidence, conditioning,
       persistence and closure validation.
-
-  tui-slash-command-on-typing-search:
-    status: in_progress
-    github_issues: []
-    roadmap_state: proposed_untracked
-    summary: >-
-      Slash-command suggestions in the TUI composer with prefix filtering.
-    evidence: >-
-      Focused implementation and headless tests exist, but no open GitHub issue
-      owns completion. It cannot change roadmap priority until an issue is
-      created.

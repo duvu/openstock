@@ -1,0 +1,217 @@
+name: openstock-ci
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/openstock-ci.yml"
+      - ".env.example"
+      - "Makefile"
+      - "docker-compose.yml"
+      - "openspec/**"
+      - "packaging/**"
+      - "scripts/**"
+      - "vnalpha/**"
+      - "vnstock/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/openstock-ci.yml"
+      - ".env.example"
+      - "Makefile"
+      - "docker-compose.yml"
+      - "openspec/**"
+      - "packaging/**"
+      - "scripts/**"
+      - "vnalpha/**"
+      - "vnstock/**"
+
+concurrency:
+  group: openstock-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NO_COLOR: "1"
+  _TYPER_FORCE_DISABLE_TERMINAL: "1"
+
+jobs:
+  consistency:
+    name: Repository consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install checker dependencies
+        run: python -m pip install --quiet --disable-pip-version-check pytest
+
+      - name: Repository and documentation contracts
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/check-repo-consistency.py 2>&1 | tee consistency.log
+
+      - name: Upload consistency diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-consistency-log
+          path: consistency.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Repository hygiene
+        run: make repo-hygiene
+
+      - name: Secret scan
+        run: packaging/scripts/openstock-secret-scan
+
+      - name: Compose validation
+        run: make validate-compose
+
+      - name: OpenSpec checker tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -q scripts/tests/test_check_openspec_completion.py \
+            2>&1 | tee openspec-checker-tests.log
+
+      - name: Upload OpenSpec checker diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openspec-checker-tests-log
+          path: openspec-checker-tests.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  vnalpha:
+    name: vnalpha lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: vnalpha/pyproject.toml
+
+      - name: Install vnalpha development dependencies
+        run: |
+          python -m pip install --quiet --disable-pip-version-check --upgrade pip
+          python -m pip install --quiet --disable-pip-version-check -e "./vnalpha[dev]"
+
+      - name: Ruff
+        shell: bash
+        run: |
+          set -o pipefail
+          make lint-vnalpha 2>&1 | tee vnalpha-ruff.log
+
+      - name: Upload vnalpha Ruff diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnalpha-ruff-log
+          path: vnalpha-ruff.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Repository validation regressions
+        run: |
+          cd vnalpha
+          pytest -q \
+            tests/test_command_registry.py::TestCommandRegistry::test_names_sorted \
+            tests/test_llm_structured_output.py::test_unrelated_http_400_does_not_trigger_schema_downgrade \
+            tests/test_llm_structured_output.py::test_strict_schema_does_not_add_transport_retry_budget \
+            tests/test_safety_boundary.py::test_no_hard_forbidden_terms \
+            tests/test_safety_boundary.py::test_static_scan_source_files_for_forbidden_terms
+
+      - name: Offline R0 pipeline
+        run: make verify-r0
+
+      - name: Full vnalpha suite
+        shell: bash
+        run: |
+          set -o pipefail
+          make test-vnalpha 2>&1 | tee vnalpha-full-suite.log
+
+      - name: Upload full vnalpha diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnalpha-full-suite-log
+          path: vnalpha-full-suite.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Build vnalpha package artifacts
+        run: |
+          python -m build --wheel --sdist --no-isolation --outdir /tmp/vnalpha-dist ./vnalpha
+
+  vnstock:
+    name: vnstock contracts and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: vnstock/pyproject.toml
+
+      - name: Install vnstock development dependencies
+        run: |
+          python -m pip install --quiet --disable-pip-version-check --upgrade pip
+          python -m pip install --quiet --disable-pip-version-check -e "./vnstock[dev]"
+
+      - name: Ruff
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            cd vnstock
+            ruff check .
+            ruff format --check .
+          ) 2>&1 | tee vnstock-ruff.log
+
+      - name: Upload vnstock Ruff diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnstock-ruff-log
+          path: vnstock-ruff.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Provider and canonical contract tests
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            cd vnstock
+            PYTHONPATH=. pytest -q tests/unit/core/provider tests/contracts/providers
+          ) 2>&1 | tee vnstock-contract-tests.log
+
+      - name: Upload vnstock contract diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnstock-contract-tests-log
+          path: vnstock-contract-tests.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Build vnstock package artifacts
+        run: |
+          python -m build --wheel --sdist --no-isolation --outdir /tmp/vnstock-dist ./vnstock

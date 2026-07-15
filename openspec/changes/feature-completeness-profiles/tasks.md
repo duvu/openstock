@@ -23,4 +23,13 @@
 
 - [x] 4.1 Exercise the feature-build and score CLI paths against an offline warehouse fixture, including an incomplete input rejection. [evidence: isolated DuckDB fixture: `vnalpha build features --date 2024-01-10 --symbols FPT,BAD --benchmark VNINDEX` reported `built: 1, skipped: 1`; `vnalpha score` scored and saved FPT only; persisted FPT as `STANDARD_120` with both outcomes `COMPLETE`]
 - [x] 4.2 Exercise affected TUI/assistant/readiness adapters or record an evidence-backed no-direct-surface determination. [evidence: source search confirms no TUI or assistant renderer directly reads `feature_snapshot`; assistant/TUI command text delegates feature construction to the shared provisioning/readiness path, and readiness evidence regressions cover that adapter]
-- [ ] 4.3 Run focused tests, `make verify-r0`, full `vnalpha` tests, lint/format, strict OpenSpec validation, and relevant packaging checks; record exact outcomes and follow-up issues for any deferred failures. [partial evidence: focused contract suites and `make verify-r0` passed; the full `vnalpha` suite has five unrelated failures, and `make lint-vnalpha` has one unrelated import-order failure. Follow-up issue #131 owns all six repository-wide gate failures.]
+- [ ] 4.3 Run focused tests, `make verify-r0`, full `vnalpha` tests, lint/format, strict OpenSpec validation, and relevant packaging checks; record exact outcomes and follow-up issues for any deferred failures. [deferred: focused contract suites and `make verify-r0` passed; repository-wide lint, safety, routing and full-suite closure moved to issue #131 and the consistency/CI repair PR]
+
+## Deferred work register
+
+Task ID: 4.3
+Reason: The scoped feature-completeness implementation passed its focused and R0 gates, while unrelated repository-wide validation failures were discovered in command ordering, structured-output test isolation, safety vocabulary and Ruff import ordering.
+Owner: GitHub issue #131
+Dependency: Merge and validate the repository consistency and CI repair PR on its final implementation SHA.
+Risk accepted until: 2026-07-31
+Approval reference: Issue #131 and the feature-completeness OpenSpec registry entry.

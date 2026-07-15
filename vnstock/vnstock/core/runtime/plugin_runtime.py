@@ -252,7 +252,9 @@ class PluginRuntime:
             return []
 
         errors: list[str] = []
-        missing = [column for column in contract.required_columns if column not in df.columns]
+        missing = [
+            column for column in contract.required_columns if column not in df.columns
+        ]
         if missing:
             errors.append(f"Missing required columns: {missing}")
         return errors

@@ -144,7 +144,9 @@ class ResearchStudyService:
             else replace(
                 resolution,
                 sufficient=False,
-                warnings=tuple(dict.fromkeys((*resolution.warnings, *rejection_reasons))),
+                warnings=tuple(
+                    dict.fromkeys((*resolution.warnings, *rejection_reasons))
+                ),
             )
         )
         metrics = {

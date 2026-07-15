@@ -107,7 +107,10 @@ def _market_artifact(
             snapshot.benchmark_bar_date.isoformat() if snapshot else None
         ),
         evidence=(
-            ("breadth_active_count", snapshot.breadth_active_count if snapshot else None),
+            (
+                "breadth_active_count",
+                snapshot.breadth_active_count if snapshot else None,
+            ),
             (
                 "breadth_eligible_count",
                 snapshot.breadth_eligible_count if snapshot else None,
@@ -228,7 +231,10 @@ def _sector_artifacts(
             else None
         ),
         evidence=(
-            ("member_count", alignment_snapshot.member_count if alignment_snapshot else None),
+            (
+                "member_count",
+                alignment_snapshot.member_count if alignment_snapshot else None,
+            ),
             (
                 "eligible_count",
                 alignment_snapshot.eligible_count if alignment_snapshot else None,

@@ -1,375 +1,205 @@
-# 09. Workspace service design
+# 09. Workspace application design
+
+> **Status:** current terminal-first application design.
+>
+> The term “service” in this document means shared typed application services.
+> It does not imply that a long-running FastAPI process or web dashboard is part
+> of the current deployment.
 
 ## Purpose
 
-`vnalpha-service` is the research workspace layer for Vietnamese equities.
-
-It is inspired by the OpenBB Workspace model: one controlled environment where analysts, dashboards, research workflows, and AI assistants operate on the same governed data and context.
-
-The service boundary is explicit:
+`vnalpha` is a research workspace rather than a single scanner command. CLI,
+TUI, assistant workflows and future read-only integrations should operate on the
+same governed warehouse, readiness checks and application services.
 
 ```text
-vnstock-service  = data platform service
-vnalpha-service  = research workspace service
+vnstock-service  = provider-independent data delivery
+vnalpha          = research workspace and evidence engine
 ```
 
-## Core idea
+## Workspace responsibilities
 
-`vnalpha-service` should not be a single scanner script.
+The workspace owns:
 
-It should be a workspace that lets users:
+- data/readiness inspection;
+- canonical feature and benchmark evidence;
+- deterministic scoring and watchlists;
+- market breadth, regime and sector context;
+- outcome evaluation and event studies;
+- research artifacts, notes and bounded symbol memory;
+- assistant classification, planning, tool execution and synthesis;
+- operator diagnostics, repair evidence and deployment validation.
 
-- monitor the market;
-- inspect watchlists;
-- open a symbol workspace;
-- inspect pattern evidence;
-- review failed setups;
-- track forward outcomes;
-- run backtests;
-- generate AI explanations and critiques;
-- keep a research journal.
+It does not own provider-specific authentication logic, crawling, broker/account
+access, execution or unrestricted data acquisition.
 
-## Service responsibilities
+## Shared application-service rule
 
-`vnalpha-service` owns:
+Every capability should have one typed service contract:
 
 ```text
-workspace API
-workspace UI state
-canonical research datasets
-feature store
-pattern engine
-outcome tracker
-backtest artifacts
-AI explanations
-risk critiques
-reports
-research journal
+Typer CLI ─┐
+Textual TUI ├─→ shared application service → warehouse/provider client
+Assistant ─┤
+Future API ─┘
 ```
 
-`vnalpha-service` does not own:
+A surface may format results differently, but it must not reimplement readiness,
+selection, scoring, persistence or policy logic.
 
-```text
-market provider login
-provider crawling
-provider-specific endpoints
-broker account data
-order placement
-portfolio execution
-auto-trading
-investment advice claims
-```
+## Current workspace modules
 
-## Dependency on vnstock-service
+### Market and data status
 
-`vnalpha-service` consumes `vnstock-service` through a service client.
+Users can inspect:
 
-Minimum data operations:
+- provider and ingestion status;
+- gaps, invalid observations and quarantine evidence;
+- feature completeness;
+- benchmark availability;
+- market-regime and sector-context readiness.
 
-```text
-GET /v1/equity/ohlcv
-GET /v1/equity/quote
-GET /v1/index/ohlcv
-GET /v1/reference/symbols
-GET /v1/company/info
-GET /v1/providers/health
-GET /v1/providers/capabilities
-```
+Missing required evidence produces typed remediation rather than a fabricated or
+partially labelled result.
 
-`vnalpha-service` should preserve:
+### Daily watchlist
 
-```text
-provider
-quality_status
-quality_report
-diagnostics
-fetched_at
-ingestion_run_id
-```
-
-## Workspace modules
-
-### 1. Market Overview
-
-Purpose:
-
-- summarize index behavior;
-- show market breadth;
-- show sector strength;
-- show liquidity conditions;
-- identify regime.
-
-Output examples:
-
-```text
-VNINDEX trend state
-VN30 leadership
-advancers / decliners
-new highs / new lows
-volume above/below average
-risk-on / risk-off regime
-```
-
-### 2. Daily Watchlist
-
-Purpose:
-
-- list symbols with interesting setups;
-- rank by deterministic score;
-- show evidence, not just a score.
-
-Minimum fields:
+The watchlist is derived from exact-date feature rows that satisfy the scoring
+profile. A row should expose:
 
 ```text
 symbol
-pattern_type
-status
-score
-setup_date
-trigger_date
-relative_strength
-volume_signal
-risk_flags
-invalidation_price
+as_of_date
+score and candidate class
+setup/evidence fields
+benchmark identity
+risk flags and exclusion reasons
+feature/build/methodology lineage
 ```
 
-### 3. Symbol Workspace
+The watchlist is research evidence, not a trade instruction.
 
-Purpose:
+### Symbol workspace
 
-- open a single-symbol research page;
-- show price/volume context;
-- show detected patterns;
-- show feature history;
-- show outcome history.
+A symbol workspace combines:
 
-### 4. Pattern Detail
+- canonical OHLCV lineage;
+- feature and completeness evidence;
+- relative strength versus an explicit benchmark;
+- score/watchlist history;
+- outcome and event-study artifacts;
+- market/sector context;
+- notes and bounded memory claims.
 
-Purpose:
+The requested date remains explicit. Current classifications or future data must
+not leak into a historical view.
 
-- explain why a pattern exists;
-- expose every evidence feature;
-- show invalidation logic;
-- show data quality and provider lineage.
+### Research validation
 
-### 5. Failed Breakout Review
+Current validation surfaces include forward-outcome evaluation and deterministic
+offline event studies. A full Backtest Lab is a separate point-in-time capability
+owned by issue #108 and its child issues. Until those contracts are complete,
+the workspace must not label a fixed-horizon proxy as a complete backtest.
 
-Purpose:
+### Assistant workspace
 
-- learn from invalidated setups;
-- detect repeat failure modes;
-- improve pattern rules.
+The assistant operates through allowlisted tools and shared services. Answers
+include evidence references, missing-data disclosure and caveats. The model
+cannot directly modify warehouse policy, scores or deployment configuration.
 
-### 6. Outcome Summary
+### Research notes and artifacts
 
-Purpose:
+Research artifacts preserve input dataset references, parameters, metrics,
+lineage, quality and caveats. Notes and symbol memory may reference artifacts but
+remain untrusted until reconciled with structured evidence.
 
-- evaluate patterns after 5/10/20/60 sessions;
-- aggregate by pattern type, score bucket, sector, and regime.
+## Current interfaces
 
-### 7. Backtest Lab
+### Textual TUI
 
-Purpose:
+The TUI is the primary interactive workspace. It is installed on the operating
+system and launched explicitly:
 
-- test deterministic rules;
-- configure entry/exit assumptions;
-- compare against benchmarks.
-
-### 8. AI Explanation
-
-Purpose:
-
-- generate grounded explanation from pattern JSON;
-- critique setup risk;
-- summarize daily market context;
-- write journal notes.
-
-AI must not generate unverified buy/sell instructions or override deterministic rules.
-
-### 9. Research Journal
-
-Purpose:
-
-- store user notes;
-- attach notes to symbols, patterns, watchlists, or dates;
-- compare later outcomes against original reasoning.
-
-## API design
-
-### Health
-
-```text
-GET /healthz
+```bash
+vnalpha tui
 ```
 
-### Market workspace
+It reads the same configured DuckDB file used by pipeline jobs and delegates
+commands to shared handlers.
 
-```text
-GET /v1/workspace/market/overview
-GET /v1/workspace/market/regime
-GET /v1/workspace/market/breadth
+### Typer CLI
+
+The CLI is the explicit operational surface:
+
+```bash
+vnalpha sync ...
+vnalpha data ...
+vnalpha build ...
+vnalpha score ...
+vnalpha watchlist ...
+vnalpha outcome ...
+vnalpha eval ...
+vnalpha repair ...
+vnalpha validate ...
 ```
 
-### Watchlists
+### Optional read-only API
 
-```text
-GET  /v1/workspace/watchlists/daily
-GET  /v1/workspace/watchlists/{watchlist_id}
-POST /v1/workspace/watchlists/export
-```
+A network API may be added for approved integrations when a concrete requirement
+exists. It must:
 
-### Symbols
+- expose only bounded read/research operations;
+- use the same services and response models as CLI/TUI;
+- enforce local authentication and safe diagnostics;
+- avoid direct provider calls;
+- exclude all broker/account/execution routes.
 
-```text
-GET /v1/workspace/symbols/{symbol}
-GET /v1/workspace/symbols/{symbol}/features
-GET /v1/workspace/symbols/{symbol}/patterns
-GET /v1/workspace/symbols/{symbol}/outcomes
-```
+An API design is a target contract, not evidence that endpoints already exist.
 
-### Patterns
+## Warehouse contract
 
-```text
-GET /v1/workspace/patterns
-GET /v1/workspace/patterns/{pattern_id}
-GET /v1/workspace/patterns/{pattern_id}/evidence
-GET /v1/workspace/patterns/{pattern_id}/outcomes
-```
-
-### Backtests
-
-```text
-POST /v1/workspace/backtests
-GET  /v1/workspace/backtests/{backtest_id}
-```
-
-### AI
-
-```text
-POST /v1/workspace/ai/explain-pattern
-POST /v1/workspace/ai/risk-critic
-POST /v1/workspace/ai/daily-report
-```
-
-### Journal
-
-```text
-POST /v1/workspace/journal
-GET  /v1/workspace/journal
-GET  /v1/workspace/journal/{entry_id}
-```
-
-## Forbidden endpoints
-
-`vnalpha-service` must not expose:
-
-```text
-POST /order
-POST /trade
-POST /broker/login
-GET  /account
-GET  /portfolio/live
-POST /portfolio/execute
-```
-
-## Data model overview
-
-Minimum tables:
+The workspace reads and writes versioned research tables such as:
 
 ```text
 ingestion_run
-market_ohlcv
-canonical_ohlcv
-feature_snapshot
-pattern_instance
-pattern_outcome
-watchlist
-watchlist_item
-ai_output
-journal_entry
-backtest_run
-backtest_result
+symbol_master and classification history
+market_ohlcv_raw and canonical_ohlcv
+ohlcv_quarantine and gap observations
+feature_snapshot and relative_strength_snapshot
+candidate_score and daily_watchlist
+market_regime_snapshot and sector_strength_snapshot
+candidate/watchlist outcome tables
+research artifacts, sessions and traces
 ```
 
-## AI safety and grounding
-
-AI outputs must be generated from structured workspace data:
-
-```text
-pattern_instance
-feature_snapshot
-market_regime
-quality_report
-outcome_history
-```
-
-AI outputs must store:
-
-```text
-model_name
-prompt_version
-input_hash
-generated_at
-source_artifact_ids
-output_text
-```
-
-AI must not:
-
-```text
-override score
-place orders
-generate broker payloads
-claim certainty
-invent missing data
-```
+Schema definitions in `vnalpha/warehouse/schema.py` and migrations are the
+implementation source of truth. Documentation must not duplicate an outdated
+SQL schema as if it were current.
 
 ## Deployment model
 
-Local MVP:
+The current single-host design is:
 
 ```text
-docker compose
-├── vnstock-service      # market data service
-├── vnalpha-service      # FastAPI workspace service
-├── vnalpha-dashboard    # Streamlit workspace UI
-└── data-volume          # DuckDB + Parquet
+Docker
+├── vnstock-service
+└── vnalpha-worker one-shot jobs
+
+Host
+├── /var/lib/openstock/warehouse/warehouse.duckdb
+└── vnalpha Debian package → CLI/TUI
 ```
 
-Service URLs:
+The TUI is not a background container. Pipeline writes are serialized because
+DuckDB is an embedded file; interactive use is primarily read-only while jobs
+are running.
 
-```text
-vnstock-service: http://localhost:6900
-vnalpha-service: http://localhost:7800
-vnalpha-dashboard: http://localhost:8501
-```
+## Design rules
 
-## MVP build order
-
-```text
-1. Create FastAPI service skeleton.
-2. Add vnstock-service client.
-3. Add DuckDB schema.
-4. Sync small OHLCV universe.
-5. Build canonical OHLCV.
-6. Compute core features.
-7. Detect accumulation base and breakout.
-8. Generate daily watchlist API.
-9. Build Streamlit dashboard.
-10. Add AI explanation after pattern evidence is stable.
-```
-
-## Design rule
-
-`vnalpha-service` should never answer from raw market data alone.
-
-It should answer from research artifacts with lineage:
-
-```text
-raw service response
-→ canonical OHLCV
-→ feature snapshot
-→ pattern instance
-→ watchlist item
-→ explanation / journal / report
-```
+1. Evidence precedes narrative.
+2. Required missing evidence fails closed.
+3. Historical operations remain point-in-time.
+4. All surfaces share one typed service contract.
+5. Provider-specific behavior remains in `vnstock`.
+6. Current implementation and target architecture are labelled separately.
+7. The workspace remains read-only research software.

@@ -52,15 +52,31 @@ def resolve_benchmark(
     normalized_symbol = symbol.upper().strip()
     exchange, security_type = _symbol_classification(conn, normalized_symbol)
     if security_type is not None and security_type != "COMMON_EQUITY":
-        raise BenchmarkSelectionError(normalized_symbol, "symbol is not a common equity")
-    benchmark_symbol = requested_symbol.upper().strip() if requested_symbol else _default_symbol(exchange)
+        raise BenchmarkSelectionError(
+            normalized_symbol, "symbol is not a common equity"
+        )
+    benchmark_symbol = (
+        requested_symbol.upper().strip()
+        if requested_symbol
+        else _default_symbol(exchange)
+    )
     definition = _load_definition(conn, benchmark_symbol)
     if definition is None:
-        raise BenchmarkSelectionError(normalized_symbol, f"{benchmark_symbol} is not registered")
+        raise BenchmarkSelectionError(
+            normalized_symbol, f"{benchmark_symbol} is not registered"
+        )
     if not _active_on(definition, as_of):
-        raise BenchmarkSelectionError(normalized_symbol, f"{benchmark_symbol} is not active")
-    if definition.exchange is not None and exchange is not None and definition.exchange != exchange:
-        raise BenchmarkSelectionError(normalized_symbol, f"{benchmark_symbol} is not applicable to {exchange}")
+        raise BenchmarkSelectionError(
+            normalized_symbol, f"{benchmark_symbol} is not active"
+        )
+    if (
+        definition.exchange is not None
+        and exchange is not None
+        and definition.exchange != exchange
+    ):
+        raise BenchmarkSelectionError(
+            normalized_symbol, f"{benchmark_symbol} is not applicable to {exchange}"
+        )
     return definition
 
 

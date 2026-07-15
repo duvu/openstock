@@ -128,6 +128,16 @@ def test_tui_source_has_research_language():
     assert "Research Candidates" in src or "research candidate" in src.lower()
 
 
+def test_experiment_catalog_advertises_the_enabled_event_study_path():
+    from vnalpha.tui.command_catalog import find_command
+
+    experiment = find_command("experiment")
+
+    assert experiment is not None
+    assert "event-study" in experiment.usage
+    assert all("event-study" in example for example in experiment.examples[1:])
+
+
 @skip_if_no_textual
 def test_composer_input_css_allows_suggestion_expansion():
     from vnalpha.tui.app import VnAlphaApp
@@ -162,7 +172,11 @@ async def test_composer_input_focused_at_launch_shows_slash_suggestions():
         await pilot.pause()
         panel = app.query_one("#composer-suggestions", Static)
         assert panel.display is True
-        assert "/help" in str(panel.render())
+        assert "/analyze" in str(panel.render())
+
+        await pilot.press("h")
+        await pilot.pause()
+        assert str(panel.render()).splitlines() == ["/help", "/history", "/hypothesis"]
 
 
 @skip_if_no_textual
