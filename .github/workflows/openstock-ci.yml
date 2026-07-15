@@ -2,29 +2,9 @@ name: openstock-ci
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/openstock-ci.yml"
-      - ".env.example"
-      - "Makefile"
-      - "docker-compose.yml"
-      - "openspec/**"
-      - "packaging/**"
-      - "scripts/**"
-      - "vnalpha/**"
-      - "vnstock/**"
   push:
     branches:
       - main
-    paths:
-      - ".github/workflows/openstock-ci.yml"
-      - ".env.example"
-      - "Makefile"
-      - "docker-compose.yml"
-      - "openspec/**"
-      - "packaging/**"
-      - "scripts/**"
-      - "vnalpha/**"
-      - "vnstock/**"
 
 concurrency:
   group: openstock-ci-${{ github.workflow }}-${{ github.ref }}
@@ -80,15 +60,17 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python -m pytest -q scripts/tests/test_check_openspec_completion.py \
-            2>&1 | tee openspec-checker-tests.log
+          python -m pytest -q \
+            scripts/tests/test_check_openspec_completion.py \
+            scripts/tests/test_check_repo_consistency.py \
+            2>&1 | tee repository-checker-tests.log
 
-      - name: Upload OpenSpec checker diagnostics
+      - name: Upload repository checker diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: openspec-checker-tests-log
-          path: openspec-checker-tests.log
+          name: repository-checker-tests-log
+          path: repository-checker-tests.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -221,3 +203,26 @@ jobs:
       - name: Build vnstock package artifacts
         run: |
           python -m build --wheel --sdist --no-isolation --outdir /tmp/vnstock-dist ./vnstock
+
+  required:
+    name: Required merge gate
+    if: always()
+    needs:
+      - consistency
+      - vnalpha
+      - vnstock
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all validation jobs
+        env:
+          CONSISTENCY_RESULT: ${{ needs.consistency.result }}
+          VNALPHA_RESULT: ${{ needs.vnalpha.result }}
+          VNSTOCK_RESULT: ${{ needs.vnstock.result }}
+        run: |
+          printf 'Repository consistency: %s\n' "$CONSISTENCY_RESULT"
+          printf 'vnalpha lint and tests: %s\n' "$VNALPHA_RESULT"
+          printf 'vnstock contracts and package: %s\n' "$VNSTOCK_RESULT"
+          test "$CONSISTENCY_RESULT" = success
+          test "$VNALPHA_RESULT" = success
+          test "$VNSTOCK_RESULT" = success
