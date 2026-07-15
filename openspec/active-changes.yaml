@@ -13,17 +13,19 @@ policy:
 changes:
 
   llm-capability-aware-strict-fallback:
-    status: in_progress
+    status: ready
     github_issues: [144]
-    roadmap_state: scheduled
+    roadmap_state: review_required
     summary: >-
       Use explicit per-profile capabilities to select only verified strict JSON
       Schema fallbacks, expose truthful routing status and preserve typed failure
       evidence.
     evidence: >-
-      Implementation and focused tests pass in the working tree. Exact final-SHA
-      repository CI, package evidence and closure remain pending the issue #144
-      pull request.
+      Implementation SHA 1a82ed837782b32950e50da80dad2ca599934959 passed
+      repository consistency, Ruff, focused #144 regressions, R0, the complete
+      vnalpha suite, vnstock provider/canonical contracts and both package builds
+      in openstock-ci run #42. PR #152 is ready for final metadata validation and
+      review; archive after merge and lifecycle reconciliation under #148.
 
   production-market-context-v2:
     status: ready
