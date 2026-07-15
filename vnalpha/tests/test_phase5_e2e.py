@@ -230,7 +230,7 @@ class TestCanonicalOHLCV:
             INSERT INTO market_ohlcv_raw
             (ingestion_run_id, symbol, time, interval, open, high, low, close, volume,
              provider, quality_status, fetched_at)
-            VALUES (?, 'DEDUP', ?, '1D', 10.0, 11.0, 9.0, 99.9, 500000, 'prov_b', 'pass', '2024-01-05 00:00:00')
+            VALUES (?, 'DEDUP', ?, '1D', 99.0, 100.0, 98.0, 99.9, 500000, 'prov_b', 'pass', '2024-01-05 00:00:00')
             """,
             [run_id_b, same_time],
         )

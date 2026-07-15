@@ -1,143 +1,102 @@
-"""Build canonical OHLCV from raw ingestion data."""
+"""Audit-aware orchestration for validation-gated canonical OHLCV promotion."""
 
 from __future__ import annotations
 
-from typing import Optional
+from collections import defaultdict
+from datetime import datetime
 
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.ingestion.canonical_storage import (
+    count_canonical_rows,
+    delete_canonical_bar,
+    load_ranked_candidates,
+    persist_quarantine,
+    resolve_quarantines,
+    upsert_canonical,
+)
+from vnalpha.ingestion.canonical_validation import (
+    CanonicalCandidate,
+    validate_candidate,
+)
+from vnalpha.observability.audit import log_audit
+from vnalpha.observability.context import get_correlation_id, set_correlation_id
 
 logger = get_logger("ingestion.build_canonical")
 
 
 def build_canonical_ohlcv(
     conn: duckdb.DuckDBPyConnection,
-    symbol: Optional[str] = None,
+    symbol: str | None = None,
     interval: str = "1D",
-) -> dict:
-    """Promote raw OHLCV to canonical_ohlcv with deduplication.
+) -> dict[str, int]:
+    """Promote only validated raw OHLCV observations into canonical storage.
 
-    Strategy:
-    - For each (symbol, time, interval), pick the row with quality_status='pass',
-      preferring the most recently fetched. If no 'pass' row exists, take the
-      most recently fetched row regardless.
-    - Uses ROW_NUMBER() so NULL fetched_at is handled correctly.
-
-    Returns:
-        dict with "upserted" and "rejected" counts.
-    """
-    symbol_filter = "AND symbol = ?" if symbol else ""  # noqa: F841
-    outer_symbol_filter = "AND r.symbol = ?" if symbol else ""
-
-    query = f"""
-        INSERT INTO canonical_ohlcv
-        (symbol, time, interval, open, high, low, close, volume, selected_provider, quality_status, ingestion_run_id)
-        SELECT
-            symbol, time, interval, open, high, low, close, volume,
-            provider AS selected_provider,
-            quality_status,
-            ingestion_run_id
-        FROM (
-            SELECT *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY symbol, time, interval
-                    ORDER BY
-                        CASE WHEN quality_status = 'pass' THEN 0 ELSE 1 END,
-                        CASE WHEN fetched_at IS NOT NULL THEN fetched_at ELSE TIMESTAMP '1970-01-01' END DESC,
-                        ingestion_run_id DESC
-                ) AS rn
-            FROM market_ohlcv_raw r
-            WHERE r.interval = ?
-            {outer_symbol_filter}
-        ) ranked
-        WHERE rn = 1
-        ON CONFLICT (symbol, time, interval) DO UPDATE SET
-            open = excluded.open,
-            high = excluded.high,
-            low = excluded.low,
-            close = excluded.close,
-            volume = excluded.volume,
-            selected_provider = excluded.selected_provider,
-            quality_status = excluded.quality_status,
-            ingestion_run_id = excluded.ingestion_run_id
+    The highest-ranked raw candidate for each bar is the sole candidate that
+    can be promoted. If it violates a severe validation rule, its evidence is
+    quarantined and any canonical bar for that key is removed.
     """
 
-    # Positional params: one for WHERE interval = ?, optional second for symbol
-    params: list = [interval]
-    if symbol:
-        params.append(symbol)
-
+    if get_correlation_id() in {"", "unset"}:
+        set_correlation_id()
+    log_audit(
+        "CANONICAL_OHLCV_BUILD_STARTED",
+        "Canonical OHLCV validation started.",
+        extra={"interval": interval, "symbol": symbol or "ALL"},
+    )
+    transaction_started = False
     try:
-        conn.execute(query, params)
-
-        # --- Data quality validation: insert rejected rows for symbols with severe issues ---
-        # Query per-bar bad rows to record the actual bar date (not the job run date)
-        bad_rows_result = conn.execute(
-            f"""
-            SELECT symbol, CAST(time AS DATE) AS bar_date, selected_provider, ingestion_run_id
-            FROM canonical_ohlcv
-            WHERE interval = ?
-              AND (
-                  close IS NULL
-                  OR close <= 0
-                  OR high < low
-                  OR volume < 0
-              )
-            {(" AND symbol = ?" if symbol else "")}
-            ORDER BY symbol, time
-            """,
-            [interval] + ([symbol] if symbol else []),
-        ).fetchall()
+        conn.execute("BEGIN TRANSACTION")
+        transaction_started = True
+        grouped: defaultdict[tuple[str, datetime, str], list[CanonicalCandidate]] = (
+            defaultdict(list)
+        )
+        for candidate in load_ranked_candidates(conn, symbol, interval):
+            grouped[(candidate.symbol, candidate.timestamp, candidate.interval)].append(
+                candidate
+            )
 
         rejected = 0
-        import json as _json
-
-        for bad_symbol, bar_date, provider, ing_run_id in bad_rows_result:
-            try:
-                conn.execute(
-                    """
-                    INSERT INTO rejected_symbol
-                        (symbol, date, stage, reason, details_json, provider, ingestion_run_id, created_at)
-                    VALUES (?, ?, 'canonical', 'INVALID_OHLCV', ?, ?, ?, current_timestamp)
-                    ON CONFLICT (symbol, date, stage) DO UPDATE SET
-                        reason = excluded.reason,
-                        details_json = excluded.details_json,
-                        provider = excluded.provider,
-                        ingestion_run_id = excluded.ingestion_run_id
-                    """,
-                    [
-                        bad_symbol,
-                        str(bar_date),
-                        _json.dumps({"bar_date": str(bar_date)}),
-                        provider,
-                        ing_run_id,
-                    ],
-                )
+        for candidates in grouped.values():
+            selected_candidate = candidates[0]
+            rules = validate_candidate(selected_candidate, tuple(candidates[1:]))
+            if rules:
+                persist_quarantine(conn, selected_candidate, rules)
+                delete_canonical_bar(conn, selected_candidate)
                 rejected += 1
-            except Exception as e_rej:
-                logger.warning(
-                    "Failed to insert rejected_symbol for %s: %s", bad_symbol, e_rej
-                )
+            else:
+                upsert_canonical(conn, selected_candidate)
+                resolve_quarantines(conn, selected_candidate)
 
-        count_params = [interval]
-        count_where = " WHERE interval = ?"
-        if symbol:
-            count_params.append(symbol)
-            count_where += " AND symbol = ?"
-        count_result = conn.execute(
-            f"SELECT COUNT(*) FROM canonical_ohlcv{count_where}",
-            count_params,
-        ).fetchone()
-        upserted = count_result[0] if count_result else 0
+        canonical_count = count_canonical_rows(conn, symbol, interval)
+        conn.execute("COMMIT")
+        transaction_started = False
+        log_audit(
+            "CANONICAL_OHLCV_BUILD_COMPLETED",
+            "Canonical OHLCV validation completed.",
+            extra={
+                "canonical_count": canonical_count,
+                "interval": interval,
+                "rejected_count": rejected,
+                "symbol": symbol or "ALL",
+            },
+        )
         logger.info(
             "Canonical OHLCV built: upserted=%d rejected=%d symbol=%s interval=%s",
-            upserted,
+            canonical_count,
             rejected,
             symbol or "ALL",
             interval,
         )
-        return {"upserted": upserted, "rejected": rejected}
-    except Exception as e:
-        logger.error("build_canonical_ohlcv failed: %s", e)
+        return {"upserted": canonical_count, "rejected": rejected}
+    except Exception:  # noqa: BLE001
+        if transaction_started:
+            conn.execute("ROLLBACK")
+        log_audit(
+            "CANONICAL_OHLCV_BUILD_FAILED",
+            "Canonical OHLCV validation failed.",
+            status="FAILED",
+            extra={"interval": interval, "symbol": symbol or "ALL"},
+        )
         raise

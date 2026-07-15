@@ -78,6 +78,7 @@ def run_migrations(
     for ddl in ALL_DDL_MARKET_CONTEXT:
         conn.execute(ddl)
     _migrate_market_context_columns(conn)
+    _migrate_symbol_master_lifecycle_columns(conn)
     _migrate_feature_snapshot_columns(conn)
     _migrate_rejected_symbol_columns(conn)
     _migrate_candidate_outcome_columns(conn)
@@ -128,6 +129,29 @@ def _migrate_symbol_memory_columns(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         "ALTER TABLE memory_claim ADD COLUMN IF NOT EXISTS source_published_at DATE"
     )
+
+
+def _migrate_symbol_master_lifecycle_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add current lifecycle and taxonomy projection fields to legacy warehouses."""
+
+    for column, column_type in (
+        ("security_type", "VARCHAR"),
+        ("listing_date", "DATE"),
+        ("delisting_date", "DATE"),
+        ("lifecycle_status", "VARCHAR"),
+        ("sector_code", "VARCHAR"),
+        ("sector_name", "VARCHAR"),
+        ("industry_code", "VARCHAR"),
+        ("industry_name", "VARCHAR"),
+        ("taxonomy_name", "VARCHAR"),
+        ("taxonomy_version", "VARCHAR"),
+        ("classification_source", "VARCHAR"),
+        ("classification_effective_from", "TIMESTAMPTZ"),
+        ("last_seen_source_snapshot_id", "VARCHAR"),
+    ):
+        conn.execute(
+            f"ALTER TABLE symbol_master ADD COLUMN IF NOT EXISTS {column} {column_type}"
+        )
 
 
 def _migrate_research_answer_audit_columns(conn: duckdb.DuckDBPyConnection) -> None:

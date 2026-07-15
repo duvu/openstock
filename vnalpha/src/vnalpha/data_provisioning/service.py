@@ -52,6 +52,7 @@ class DataProvisioningRequest:
     min_score: float = 0.40
     benchmark: str = "VNINDEX"
     requested_date: str | None = None
+    authoritative_snapshot: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +182,7 @@ class DataProvisioningService:
                 start,
                 end,
                 resolved_date,
+                request.authoritative_snapshot,
             )
         else:
             _validate_build(
@@ -202,6 +204,7 @@ class DataProvisioningService:
             symbol=symbol,
             symbols=symbols,
             allow_all_symbols=request.allow_all_symbols,
+            authoritative_snapshot=request.authoritative_snapshot,
             start=start,
             end=end,
             date=resolved_date,
@@ -218,9 +221,10 @@ class DataProvisioningService:
     ) -> DataProvisioningResult:
         match request.operation, request.artifact:
             case "download", "symbols":
-                raw = _require_mapping(
-                    self._sync_symbols()(self.conn, source=request.source)
-                )
+                sync_kwargs: dict[str, object] = {"source": request.source}
+                if request.authoritative_snapshot:
+                    sync_kwargs["authoritative_snapshot"] = True
+                raw = _require_mapping(self._sync_symbols()(self.conn, **sync_kwargs))
                 counts = _counts(raw, "synced", "errors")
                 return _result(
                     request,
@@ -445,6 +449,7 @@ def _validate_download(
     start: str | None,
     end: str | None,
     request_date: str | None,
+    authoritative_snapshot: bool = False,
 ) -> None:
     if artifact not in {"symbols", "ohlcv", "index"}:
         raise DataProvisioningValidationError(
@@ -457,6 +462,10 @@ def _validate_download(
     ):
         raise DataProvisioningValidationError(
             "Data download symbols accepts only an optional --source."
+        )
+    if authoritative_snapshot and artifact != "symbols":
+        raise DataProvisioningValidationError(
+            "--authoritative is only valid for a symbol snapshot download."
         )
     if artifact == "ohlcv":
         selected = int(symbol is not None) + int(bool(symbols)) + int(allow_all_symbols)
