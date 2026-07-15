@@ -87,6 +87,23 @@ class DataProvisioningDependencies:
     generate_watchlist: Callable[..., object] | None = None
     build_market_regime: Callable[..., object] | None = None
     build_sector_strength: Callable[..., object] | None = None
+    sync_daily: Callable[..., object] | None = None
+    scan_ohlcv_gaps: Callable[..., object] | None = None
+    repair_ohlcv: Callable[..., object] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _MaintenanceFields:
+    operation: str
+    artifact: str
+    symbol: str | None
+    symbols: tuple[str, ...] | None
+    allow_all_symbols: bool
+    start: str | None
+    end: str | None
+    resolved_date: str | None
+    source: str | None
+    date_conn: duckdb.DuckDBPyConnection | None
 
 
 class DataProvisioningService:
@@ -169,9 +186,9 @@ class DataProvisioningService:
 
         if start and end and start > end:
             raise DataProvisioningValidationError("--start must not be after --end.")
-        if operation not in {"download", "build"}:
+        if operation not in {"download", "build", "sync", "gaps", "repair"}:
             raise DataProvisioningValidationError(
-                "Operation must be 'download' or 'build'."
+                "Operation must be download, build, sync, gaps, or repair."
             )
         if operation == "download":
             _validate_download(
@@ -184,7 +201,7 @@ class DataProvisioningService:
                 resolved_date,
                 request.authoritative_snapshot,
             )
-        else:
+        elif operation == "build":
             _validate_build(
                 artifact,
                 symbol,
@@ -196,6 +213,26 @@ class DataProvisioningService:
                 resolved_date,
                 request.top_n,
                 request.min_score,
+            )
+        else:
+            maintenance = _validate_maintenance(
+                _MaintenanceFields(
+                    operation=operation,
+                    artifact=artifact,
+                    symbol=symbol,
+                    symbols=symbols,
+                    allow_all_symbols=request.allow_all_symbols,
+                    start=start,
+                    end=end,
+                    resolved_date=resolved_date,
+                    source=source,
+                    date_conn=date_conn,
+                )
+            )
+            resolved_date, start, end = (
+                maintenance.resolved_date,
+                maintenance.start,
+                maintenance.end,
             )
 
         return DataProvisioningRequest(
@@ -373,6 +410,24 @@ class DataProvisioningService:
                     ),
                     lineage_extra=_object_lineage(build_result),
                 )
+            case "sync", "daily":
+                daily = self._sync_daily()(
+                    self.conn,
+                    _daily_sync_request(request),
+                )
+                return _daily_sync_result(request, correlation_id, daily)
+            case "gaps", "ohlcv":
+                gap_scan = self._scan_ohlcv_gaps()(
+                    self.conn,
+                    _gap_scan_request(request),
+                )
+                return _gap_scan_result(request, correlation_id, gap_scan)
+            case "repair", "ohlcv":
+                repair = self._repair_ohlcv()(
+                    self.conn,
+                    _repair_request(request),
+                )
+                return _repair_result(request, correlation_id, repair)
             case unreachable:
                 raise DataProvisioningValidationError(
                     f"Unsupported data request: {unreachable[0]} {unreachable[1]}."
@@ -439,6 +494,27 @@ class DataProvisioningService:
         from vnalpha.research_intelligence.sector import build_sector_strength
 
         return build_sector_strength
+
+    def _sync_daily(self) -> Callable[..., object]:
+        if self._dependencies.sync_daily is not None:
+            return self._dependencies.sync_daily
+        from vnalpha.ingestion.ohlcv_maintenance import DailyOHLCVSyncService
+
+        return DailyOHLCVSyncService().sync
+
+    def _scan_ohlcv_gaps(self) -> Callable[..., object]:
+        if self._dependencies.scan_ohlcv_gaps is not None:
+            return self._dependencies.scan_ohlcv_gaps
+        from vnalpha.ingestion.ohlcv_maintenance import OHLCVGapScanService
+
+        return OHLCVGapScanService().scan
+
+    def _repair_ohlcv(self) -> Callable[..., object]:
+        if self._dependencies.repair_ohlcv is not None:
+            return self._dependencies.repair_ohlcv
+        from vnalpha.ingestion.ohlcv_repair import OHLCVRepairService
+
+        return OHLCVRepairService().repair
 
 
 def _validate_download(
@@ -536,6 +612,198 @@ def _validate_build(
             raise DataProvisioningValidationError(
                 "--min-score must be between 0 and 1."
             )
+
+
+def _validate_maintenance(fields: _MaintenanceFields) -> _MaintenanceFields:
+    resolved_date = (
+        fields.resolved_date
+        or fields.end
+        or fields.start
+        or resolve_date(None, conn=fields.date_conn)
+    )
+    if fields.operation == "sync":
+        if fields.artifact != "daily":
+            raise DataProvisioningValidationError("Supported sync: daily.")
+        if (
+            fields.symbol is not None
+            or fields.symbols
+            or fields.allow_all_symbols
+            or fields.start is not None
+            or fields.end is not None
+            or fields.source is not None
+        ):
+            raise DataProvisioningValidationError(
+                "Data sync daily accepts only an optional --date."
+            )
+        return _MaintenanceFields(
+            operation=fields.operation,
+            artifact=fields.artifact,
+            symbol=fields.symbol,
+            symbols=fields.symbols,
+            allow_all_symbols=fields.allow_all_symbols,
+            start=fields.start,
+            end=fields.end,
+            resolved_date=resolved_date,
+            source=fields.source,
+            date_conn=fields.date_conn,
+        )
+    if fields.artifact != "ohlcv" or fields.symbol is None:
+        raise DataProvisioningValidationError(
+            f"Data {fields.operation} ohlcv requires exactly one symbol."
+        )
+    if fields.symbols or fields.allow_all_symbols:
+        raise DataProvisioningValidationError(
+            f"Data {fields.operation} ohlcv requires exactly one symbol."
+        )
+    if fields.operation == "gaps" and fields.source is not None:
+        raise DataProvisioningValidationError(
+            "Data gaps ohlcv does not accept --source."
+        )
+    return _MaintenanceFields(
+        operation=fields.operation,
+        artifact=fields.artifact,
+        symbol=fields.symbol,
+        symbols=fields.symbols,
+        allow_all_symbols=fields.allow_all_symbols,
+        start=fields.start or resolved_date,
+        end=fields.end or resolved_date,
+        resolved_date=resolved_date,
+        source=fields.source,
+        date_conn=fields.date_conn,
+    )
+
+
+def _daily_sync_request(request: DataProvisioningRequest):
+    from vnalpha.ingestion.ohlcv_maintenance import DailyOHLCVSyncRequest
+
+    return DailyOHLCVSyncRequest(
+        resolved_market_date=_required_date_value(request.date)
+    )
+
+
+def _gap_scan_request(request: DataProvisioningRequest):
+    from vnalpha.ingestion.ohlcv_maintenance import OHLCVGapScanRequest
+    from vnalpha.ingestion.trading_calendar import SessionRange
+
+    return OHLCVGapScanRequest(
+        symbol=_required_symbol(request.symbol),
+        interval=request.interval,
+        session_range=SessionRange(
+            start=_required_date_value(request.start),
+            end=_required_date_value(request.end),
+        ),
+    )
+
+
+def _repair_request(request: DataProvisioningRequest):
+    from vnalpha.ingestion.ohlcv_repair import OHLCVRepairRequest
+    from vnalpha.ingestion.trading_calendar import SessionRange
+
+    return OHLCVRepairRequest(
+        symbol=_required_symbol(request.symbol),
+        interval=request.interval,
+        session_range=SessionRange(
+            start=_required_date_value(request.start),
+            end=_required_date_value(request.end),
+        ),
+        source=request.source,
+    )
+
+
+def _daily_sync_result(
+    request: DataProvisioningRequest,
+    correlation_id: str,
+    raw: object,
+) -> DataProvisioningResult:
+    from vnalpha.ingestion.ohlcv_maintenance import DailyOHLCVSyncResult
+
+    if not isinstance(raw, DailyOHLCVSyncResult):
+        raise DataProvisioningAdapterError(
+            "Daily sync adapter returned an invalid result."
+        )
+    counts = {
+        "symbols": len(raw.batches),
+        "inserted": raw.rows_inserted,
+        "failed": sum(
+            batch.status is BatchIngestionStatus.FAILED for batch in raw.batches
+        ),
+    }
+    return _result(
+        request,
+        correlation_id,
+        counts=counts,
+        status=_provisioning_status(raw.status),
+        warnings=_count_warnings(counts, ("failed", "symbols failed")),
+    )
+
+
+def _gap_scan_result(
+    request: DataProvisioningRequest,
+    correlation_id: str,
+    raw: object,
+) -> DataProvisioningResult:
+    from vnalpha.ingestion.ohlcv_maintenance import OHLCVGapScanResult
+
+    if not isinstance(raw, OHLCVGapScanResult):
+        raise DataProvisioningAdapterError(
+            "OHLCV gap adapter returned an invalid result."
+        )
+    true_gap_count = len(raw.report.true_gap_dates)
+    counts = {
+        "observed": len(raw.report.gaps),
+        "true_gaps": true_gap_count,
+        "persisted": raw.persisted_count,
+    }
+    return _result(
+        request,
+        correlation_id,
+        counts=counts,
+        status=(
+            ProvisioningStatus.PARTIAL
+            if true_gap_count > 0
+            else ProvisioningStatus.SUCCESS
+        ),
+        warnings=(
+            (f"{true_gap_count} unresolved true OHLCV gaps.",)
+            if true_gap_count > 0
+            else ()
+        ),
+    )
+
+
+def _repair_result(
+    request: DataProvisioningRequest,
+    correlation_id: str,
+    raw: object,
+) -> DataProvisioningResult:
+    from vnalpha.ingestion.ohlcv_repair import OHLCVRepairResult
+
+    if not isinstance(raw, OHLCVRepairResult):
+        raise DataProvisioningAdapterError(
+            "OHLCV repair adapter returned an invalid result."
+        )
+    unresolved_count = len(raw.after.true_gap_dates)
+    counts = {
+        "before": len(raw.before.true_gap_dates),
+        "fetched": len(raw.fetched_dates),
+        "provider_empty": len(raw.provider_empty_dates),
+        "unresolved": unresolved_count,
+    }
+    return _result(
+        request,
+        correlation_id,
+        counts=counts,
+        status=(
+            ProvisioningStatus.PARTIAL
+            if unresolved_count > 0
+            else ProvisioningStatus.SUCCESS
+        ),
+        warnings=(
+            (f"{unresolved_count} true OHLCV gaps remain unresolved.",)
+            if unresolved_count > 0
+            else ()
+        ),
+    )
 
 
 def _normalize_required_text(value: object, label: str) -> str:

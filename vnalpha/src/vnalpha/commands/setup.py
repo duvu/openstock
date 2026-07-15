@@ -51,12 +51,16 @@ def build_default_registry() -> CommandRegistry:
             usage=(
                 "/data download <symbols|ohlcv SYMBOL|index [SYMBOL]> | "
                 "/data build <canonical SYMBOL|features SYMBOL --date DATE|score SYMBOL --date DATE|"
-                "market-regime --date DATE|sector-strength --date DATE>"
+                "market-regime --date DATE|sector-strength --date DATE> | "
+                "/data sync daily [--date DATE] | /data gaps SYMBOL [--from DATE] [--to DATE] | "
+                "/data repair ohlcv SYMBOL [--from DATE] [--to DATE]"
             ),
             examples=[
                 "/data download ohlcv FPT --start 2026-01-01",
                 "/data build features FPT --date 2026-07-10",
                 "/data build market-regime --date 2026-07-10",
+                "/data sync daily --date 2026-07-10",
+                "/data gaps FPT --from 2026-07-01 --to 2026-07-10",
             ],
             permissions=permission_names("data"),
             handler=handle_data,

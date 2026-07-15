@@ -132,6 +132,94 @@ def test_unapproved_source_is_rejected_before_provider_adapter_runs() -> None:
     sync_ohlcv.assert_not_called()
 
 
+def test_daily_sync_is_a_validated_incremental_provisioning_operation() -> None:
+    from vnalpha.data_provisioning.service import (
+        DataProvisioningDependencies,
+        DataProvisioningRequest,
+        DataProvisioningService,
+        ProvisioningStatus,
+    )
+    from vnalpha.ingestion.models import BatchIngestionStatus
+    from vnalpha.ingestion.ohlcv_maintenance import DailyOHLCVSyncResult
+
+    sync_daily = MagicMock(
+        return_value=DailyOHLCVSyncResult(
+            watermarks=(),
+            batches=(),
+            status=BatchIngestionStatus.SUCCESS,
+        )
+    )
+    service = DataProvisioningService(
+        MagicMock(),
+        dependencies=DataProvisioningDependencies(sync_daily=sync_daily),
+    )
+
+    result = service.execute(
+        DataProvisioningRequest(operation="sync", artifact="daily", date="2026-09-02")
+    )
+
+    assert result.status is ProvisioningStatus.SUCCESS
+    assert result.resolved_date == "2026-09-02"
+    assert result.counts["symbols"] == 0
+    sync_daily.assert_called_once()
+
+
+def test_gap_report_and_repair_preserve_distinct_partial_outcomes() -> None:
+    from datetime import date
+
+    from vnalpha.data_provisioning.service import (
+        DataProvisioningDependencies,
+        DataProvisioningRequest,
+        DataProvisioningService,
+        ProvisioningStatus,
+    )
+    from vnalpha.ingestion.ohlcv_gaps import OHLCVGap, OHLCVGapKind, OHLCVGapReport
+    from vnalpha.ingestion.ohlcv_maintenance import OHLCVGapScanResult
+    from vnalpha.ingestion.ohlcv_repair import OHLCVRepairResult
+
+    report = OHLCVGapReport(gaps=(OHLCVGap(date(2026, 9, 2), OHLCVGapKind.TRUE_GAP),))
+    scan_gaps = MagicMock(return_value=OHLCVGapScanResult(report, persisted_count=1))
+    repair_ohlcv = MagicMock(
+        return_value=OHLCVRepairResult(
+            before=report,
+            after=report,
+            fetched_dates=(date(2026, 9, 2),),
+            provider_empty_dates=(),
+        )
+    )
+    service = DataProvisioningService(
+        MagicMock(),
+        dependencies=DataProvisioningDependencies(
+            scan_ohlcv_gaps=scan_gaps,
+            repair_ohlcv=repair_ohlcv,
+        ),
+    )
+
+    gap_result = service.execute(
+        DataProvisioningRequest(
+            operation="gaps",
+            artifact="ohlcv",
+            symbol="FPT",
+            start="2026-09-01",
+            end="2026-09-02",
+        )
+    )
+    repair_result = service.execute(
+        DataProvisioningRequest(
+            operation="repair",
+            artifact="ohlcv",
+            symbol="FPT",
+            start="2026-09-01",
+            end="2026-09-02",
+        )
+    )
+
+    assert gap_result.status is ProvisioningStatus.PARTIAL
+    assert gap_result.counts == {"observed": 1, "true_gaps": 1, "persisted": 1}
+    assert repair_result.status is ProvisioningStatus.PARTIAL
+    assert repair_result.counts["unresolved"] == 1
+
+
 def test_canonical_requires_symbol_before_builder_runs() -> None:
     from vnalpha.data_provisioning.service import (
         DataProvisioningDependencies,
@@ -176,6 +264,15 @@ def test_data_cli_group_is_registered() -> None:
     assert result.exit_code == 0
     assert "download" in result.output
     assert "build" in result.output
+
+
+def test_data_cli_registers_incremental_ohlcv_maintenance_commands() -> None:
+    result = CliRunner().invoke(app, ["data", "--help"])
+
+    assert result.exit_code == 0
+    assert "sync" in result.output
+    assert "gaps" in result.output
+    assert "repair" in result.output
 
 
 def test_data_handler_uses_shared_service_and_renders_correlation() -> None:
@@ -255,6 +352,13 @@ def test_data_handler_rejects_unknown_options_before_service_execution() -> None
             "/data build sector-strength --date 2026-07-10",
             "build",
             "sector-strength",
+        ),
+        ("/data sync daily --date 2026-09-02", "sync", "daily"),
+        ("/data gaps FPT --from 2026-09-01 --to 2026-09-02", "gaps", "ohlcv"),
+        (
+            "/data repair ohlcv FPT --from 2026-09-01 --to 2026-09-02",
+            "repair",
+            "ohlcv",
         ),
     ],
 )

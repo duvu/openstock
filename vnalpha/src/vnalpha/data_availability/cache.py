@@ -13,6 +13,7 @@ class CacheEvidenceSnapshot(Protocol):
     target_date: str
     canonical_bars: int
     benchmark_bars: int
+    unresolved_true_gap_count: int
     feature_snapshot_exists: bool
     candidate_score_exists: bool
     candidate_score_as_of_date: str | None
@@ -28,7 +29,9 @@ def evaluate_cache_eligibility(
 
     score_fresh = _score_is_fresh(snapshot, policy)
     feature_present = snapshot.feature_snapshot_exists
-    canonical_sufficient = snapshot.canonical_bars >= policy.min_required_bars
+    canonical_history_sufficient = snapshot.canonical_bars >= policy.min_required_bars
+    canonical_gaps_resolved = snapshot.unresolved_true_gap_count == 0
+    canonical_sufficient = canonical_history_sufficient and canonical_gaps_resolved
     benchmark_sufficient = (
         not policy.require_benchmark_history
         or snapshot.benchmark_bars >= policy.min_required_bars
@@ -51,8 +54,10 @@ def evaluate_cache_eligibility(
         issues.append(EvidenceIssue.SCORE_STALE)
     if not feature_present:
         issues.append(EvidenceIssue.FEATURE_SNAPSHOT_MISSING)
-    if not canonical_sufficient:
+    if not canonical_history_sufficient:
         issues.append(EvidenceIssue.CANONICAL_HISTORY_INSUFFICIENT)
+    if not canonical_gaps_resolved:
+        issues.append(EvidenceIssue.CANONICAL_GAPS_UNRESOLVED)
     if not benchmark_sufficient:
         issues.append(EvidenceIssue.BENCHMARK_HISTORY_INSUFFICIENT)
     if not quality_acceptable:
