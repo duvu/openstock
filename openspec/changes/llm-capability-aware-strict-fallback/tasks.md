@@ -19,4 +19,4 @@
 ## 4. Validation
 
 - [x] 4.1 Add focused routing, gateway, error and status tests.
-- [ ] 4.2 Run repository consistency, Ruff, R0, full suite and package build on the final PR SHA.
+- [x] 4.2 Run repository consistency, Ruff, R0, full suite and package build on the final implementation SHA.
