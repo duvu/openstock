@@ -139,7 +139,19 @@ jobs:
         run: make verify-r0
 
       - name: Full vnalpha suite
-        run: make test-vnalpha
+        shell: bash
+        run: |
+          set -o pipefail
+          make test-vnalpha 2>&1 | tee vnalpha-full-suite.log
+
+      - name: Upload full vnalpha diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnalpha-full-suite-log
+          path: vnalpha-full-suite.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Build vnalpha package artifacts
         run: |
@@ -183,9 +195,22 @@ jobs:
           retention-days: 7
 
       - name: Provider and canonical contract tests
+        shell: bash
         run: |
-          cd vnstock
-          PYTHONPATH=. pytest -q tests/unit/core/provider tests/contracts/providers
+          set -o pipefail
+          (
+            cd vnstock
+            PYTHONPATH=. pytest -q tests/unit/core/provider tests/contracts/providers
+          ) 2>&1 | tee vnstock-contract-tests.log
+
+      - name: Upload vnstock contract diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnstock-contract-tests-log
+          path: vnstock-contract-tests.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Build vnstock package artifacts
         run: |
