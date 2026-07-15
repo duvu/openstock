@@ -18,6 +18,10 @@ The live delivery queue is maintained only in:
 
 Documents such as `07-implementation-roadmap.md` and `10-roadmap-phases.md` preserve earlier design history. They are non-authoritative and must not be used to infer current priority, dependency or completion status.
 
+## Document status convention
+
+Current architecture documents begin with an explicit `Status` block. Target capabilities are labelled as planned and linked to their owning issues. Historical documents are retained for context only. A target design must not be interpreted as evidence that a runtime surface already exists.
+
 ## Documentation map
 
 1. **Vision and scope** — product objective and permanent boundaries.
@@ -41,7 +45,7 @@ Documents such as `07-implementation-roadmap.md` and `10-roadmap-phases.md` pres
 - [Backtest and outcome tracking](05-backtest-and-outcome.md)
 - [AI layer](06-ai-layer.md)
 - [Initial repository structure](08-initial-repository-structure.md)
-- [Workspace service design](09-workspace-service-design.md)
+- [Workspace application design](09-workspace-service-design.md)
 - [Deployment architecture](11-deployment-architecture.md)
 - [Common implementation failures and prevention checklist](common-implementation-failures.md)
 - [Sandboxed compute](sandbox-compute.md)
