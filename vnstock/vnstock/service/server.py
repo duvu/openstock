@@ -99,7 +99,7 @@ class VnstockHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
-        query = parse_qs(parsed.query)
+        query = parse_qs(parsed.query, keep_blank_values=True)
 
         # ── Forbidden gate ────────────────────────────────────────────────
         if _is_forbidden(path):

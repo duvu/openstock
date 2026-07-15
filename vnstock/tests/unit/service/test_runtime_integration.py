@@ -263,7 +263,8 @@ class TestErrorHandling:
         assert status == 422
         assert body["error"] == "unsupported_dataset_for_provider"
 
-    def test_credential_like_query_parameter_is_rejected_before_fetch(self):
+    @pytest.mark.parametrize("key", ["token", "cookie", "fiinquant_password"])
+    def test_credential_like_query_parameter_is_rejected_before_fetch(self, key):
         fake = MagicMock()
         runtime_dependency.override_runtime(fake)
 
@@ -272,7 +273,7 @@ class TestErrorHandling:
         run_server("127.0.0.1", port, _stop_event=stop)
         time.sleep(0.15)
         status, body = _fetch(
-            f"http://127.0.0.1:{port}/v1/equity/ohlcv?symbol=FPT&token=not-logged"
+            f"http://127.0.0.1:{port}/v1/equity/ohlcv?symbol=FPT&{key}="
         )
         stop.set()
         runtime_dependency.reset_runtime()

@@ -48,15 +48,15 @@ _ALIASES: dict[str, str] = {
 # Query params forwarded to the runtime
 _RUNTIME_PARAMS = frozenset({"source", "validate", "quality_mode"})
 _INTEGER_DATA_PARAMS = frozenset({"count_back"})
-_SENSITIVE_DATA_PARAMS = frozenset(
+_SENSITIVE_DATA_PARAM_FRAGMENTS = frozenset(
     {
-        "access_token",
-        "api_key",
-        "apikey",
+        "api",
         "authorization",
-        "client_secret",
+        "cookie",
+        "credential",
         "password",
         "secret",
+        "session",
         "token",
         "username",
     }
@@ -119,7 +119,10 @@ def extract_data_params(query: dict[str, list[str]]) -> dict[str, str | int]:
     for key, values in query.items():
         if key in _RUNTIME_PARAMS or not values:
             continue
-        if key.lower().replace("-", "_") in _SENSITIVE_DATA_PARAMS:
+        normalized_key = key.lower().replace("-", "_")
+        if any(
+            fragment in normalized_key for fragment in _SENSITIVE_DATA_PARAM_FRAGMENTS
+        ):
             raise ValueError("Credential query parameters are not allowed.")
         value = values[0]
         if key in _INTEGER_DATA_PARAMS and value.isdecimal():

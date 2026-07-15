@@ -55,7 +55,7 @@ def test_fiinquantx_does_not_expose_forbidden_sdk_surfaces() -> None:
 def test_fiinquantx_normalizes_licensed_equity_ohlcv(monkeypatch) -> None:
     class FakeEvent:
         def get_data(self) -> pd.DataFrame:
-            return pd.DataFrame(
+            frame = pd.DataFrame(
                 {
                     "ticker": ["VCB"],
                     "timestamp": ["2026-07-14"],
@@ -68,6 +68,8 @@ def test_fiinquantx_normalizes_licensed_equity_ohlcv(monkeypatch) -> None:
                     "unverified_field": [1.0],
                 }
             )
+            frame.attrs["session_id"] = "not-logged"
+            return frame
 
     class FakeSession:
         def Fetch_Trading_Data(self, **_kwargs) -> FakeEvent:
@@ -108,6 +110,7 @@ def test_fiinquantx_normalizes_licensed_equity_ohlcv(monkeypatch) -> None:
     assert result.loc[0, "symbol"] == "VCB"
     assert pd.api.types.is_datetime64_any_dtype(result["time"])
     assert result.attrs["provider"] == "FIINQUANTX"
+    assert "session_id" not in result.attrs
 
 
 def test_fiinquantx_normalizes_current_membership_snapshot(monkeypatch) -> None:

@@ -155,11 +155,22 @@ def test_extract_data_params_parses_count_back_as_integer():
     assert result == {"symbol": "VCB", "count_back": 2}
 
 
-def test_extract_data_params_rejects_credential_like_keys():
+@pytest.mark.parametrize(
+    "key",
+    [
+        "password",
+        "fiinquant_password",
+        "credential",
+        "credentials",
+        "cookie",
+        "session_id",
+    ],
+)
+def test_extract_data_params_rejects_credential_like_keys(key):
     from vnstock.service.dataset_mapper import extract_data_params
 
     with pytest.raises(ValueError, match="Credential query parameters"):
-        extract_data_params({"symbol": ["VCB"], "password": ["not-logged"]})
+        extract_data_params({"symbol": ["VCB"], key: [""]})
 
 
 def test_request_logging_does_not_include_query_values(monkeypatch):

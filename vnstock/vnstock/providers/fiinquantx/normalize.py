@@ -23,7 +23,9 @@ def normalize_ohlcv(frame: pd.DataFrame, dataset: str) -> pd.DataFrame:
     columns = ["symbol", "time", "open", "high", "low", "close", "volume"]
     if "value" in normalized.columns:
         columns.append("value")
-    return normalized.loc[:, columns]
+    normalized = normalized.loc[:, columns]
+    normalized.attrs = {}
+    return normalized
 
 
 def normalize_membership(members: list[str], entity_id: str) -> pd.DataFrame:
