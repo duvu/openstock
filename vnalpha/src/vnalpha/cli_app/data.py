@@ -87,10 +87,17 @@ def build_canonical(
 def build_features(
     symbol: str = typer.Argument(..., help="Symbol to build."),
     date: str = typer.Option(..., "--date", help="As-of date (YYYY-MM-DD)."),
+    benchmark: str | None = typer.Option(
+        None, "--benchmark", help="Benchmark symbol for relative strength."
+    ),
 ) -> None:
     _run(
         DataProvisioningRequest(
-            operation="build", artifact="features", symbol=symbol, date=date
+            operation="build",
+            artifact="features",
+            symbol=symbol,
+            date=date,
+            benchmark=benchmark,
         )
     )
 

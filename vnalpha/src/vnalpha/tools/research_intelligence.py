@@ -682,7 +682,21 @@ def _feature_snapshot(
         """
         SELECT close, ma20, ma50, ma100, ma20_slope, ma50_slope,
                volume_ma20, volume_ratio, atr14, return_20d, return_60d,
-               rs_20d_vs_vnindex, rs_60d_vs_vnindex, distance_to_ma20,
+               COALESCE((SELECT relative_return FROM relative_strength_snapshot rs
+                         WHERE rs.symbol = feature_snapshot.symbol
+                           AND rs.date = feature_snapshot.date
+                           AND rs.horizon_sessions = 20
+                           AND rs.data_status = 'SUCCESS'
+                           AND rs.benchmark_symbol = json_extract_string(feature_snapshot.lineage_json, '$.benchmark_symbol')),
+                        rs_20d_vs_vnindex) AS rs_20d_vs_vnindex,
+               COALESCE((SELECT relative_return FROM relative_strength_snapshot rs
+                         WHERE rs.symbol = feature_snapshot.symbol
+                           AND rs.date = feature_snapshot.date
+                           AND rs.horizon_sessions = 60
+                           AND rs.data_status = 'SUCCESS'
+                           AND rs.benchmark_symbol = json_extract_string(feature_snapshot.lineage_json, '$.benchmark_symbol')),
+                        rs_60d_vs_vnindex) AS rs_60d_vs_vnindex,
+               distance_to_ma20,
                distance_to_52w_high, base_range_30d, close_strength,
                volatility_20d, as_of_bar_date::VARCHAR,
                benchmark_as_of_bar_date::VARCHAR, source_row_count,

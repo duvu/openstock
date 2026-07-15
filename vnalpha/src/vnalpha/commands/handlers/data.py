@@ -34,6 +34,7 @@ def handle_data(
         "end",
         "date",
         "source",
+        "benchmark",
         "from",
         "to",
     }
@@ -61,6 +62,7 @@ def handle_data(
         end=_range_option(parsed, "end", "to"),
         date=_option_value(parsed, "date"),
         source=_option_value(parsed, "source"),
+        benchmark=_option_value(parsed, "benchmark"),
     )
     provisioning_service = service or DataProvisioningService(conn)
     try:
