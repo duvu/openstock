@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
 
-from vnalpha.model_routing.models import ModelProfile
+from vnalpha.model_routing.models import ModelCapability, ModelProfile
 
 DEFAULT_MODEL_ID = ""
 
@@ -19,6 +19,9 @@ _DEFAULT_FALLBACKS: Mapping[ModelProfile, tuple[ModelProfile, ...]] = MappingPro
             ModelProfile.DEFAULT,
         ),
     }
+)
+_EMPTY_CAPABILITIES: Mapping[ModelProfile, frozenset[ModelCapability]] = MappingProxyType(
+    {profile: frozenset() for profile in ModelProfile}
 )
 
 
@@ -56,6 +59,20 @@ def _parse_fallbacks(profile: ModelProfile) -> tuple[ModelProfile, ...]:
     return tuple(parsed)
 
 
+def _parse_capabilities(profile: ModelProfile) -> frozenset[ModelCapability]:
+    key = profile.value.upper()
+    raw, configured = _first_env(f"VNALPHA_MODEL_CAPABILITIES_{key}")
+    parsed: set[ModelCapability] = set()
+    if configured:
+        for item in raw.split(","):
+            item = item.strip()
+            if item:
+                parsed.add(ModelCapability.parse(item))
+    if _parse_bool(os.environ.get(f"VNALPHA_MODEL_SUPPORTS_JSON_SCHEMA_{key}")):
+        parsed.add(ModelCapability.JSON_SCHEMA)
+    return frozenset(parsed)
+
+
 def _provider_from_model_id(model_id: str) -> str | None:
     if "/" not in model_id:
         return None
@@ -70,6 +87,9 @@ class ModelRoutingConfig:
     fallback_profiles: Mapping[ModelProfile, tuple[ModelProfile, ...]] = field(
         default_factory=lambda: _DEFAULT_FALLBACKS
     )
+    profile_capabilities: Mapping[
+        ModelProfile, frozenset[ModelCapability]
+    ] = field(default_factory=lambda: _EMPTY_CAPABILITIES)
     explicit_profiles: frozenset[ModelProfile] = frozenset()
     allow_raw_override: bool = False
 
@@ -120,6 +140,9 @@ class ModelRoutingConfig:
             fallback_profiles=MappingProxyType(
                 {profile: _parse_fallbacks(profile) for profile in ModelProfile}
             ),
+            profile_capabilities=MappingProxyType(
+                {profile: _parse_capabilities(profile) for profile in ModelProfile}
+            ),
             explicit_profiles=explicit_profiles,
             allow_raw_override=_parse_bool(
                 os.environ.get("VNALPHA_MODEL_ALLOW_RAW_OVERRIDE"), default=False
@@ -146,6 +169,14 @@ class ModelRoutingConfig:
                     raise ValueError(
                         f"Fallback profile '{fallback.value}' is not configured."
                     )
+        for profile, capabilities in self.profile_capabilities.items():
+            if not isinstance(profile, ModelProfile):
+                raise ValueError(f"Invalid capability profile: {profile!r}")
+            for capability in capabilities:
+                if not isinstance(capability, ModelCapability):
+                    raise ValueError(
+                        f"Invalid capability for profile '{profile.value}': {capability!r}"
+                    )
 
     def model_for(self, profile: ModelProfile) -> str:
         return self.profile_models[profile]
@@ -155,6 +186,16 @@ class ModelRoutingConfig:
 
     def fallback_chain(self, profile: ModelProfile) -> tuple[ModelProfile, ...]:
         return self.fallback_profiles.get(profile, ())
+
+    def capabilities_for(
+        self, profile: ModelProfile
+    ) -> frozenset[ModelCapability]:
+        return self.profile_capabilities.get(profile, frozenset())
+
+    def supports(
+        self, profile: ModelProfile, capability: ModelCapability | str
+    ) -> bool:
+        return ModelCapability.parse(capability) in self.capabilities_for(profile)
 
     def is_explicitly_configured(self, profile: ModelProfile) -> bool:
         return profile in self.explicit_profiles

@@ -25,6 +25,23 @@ class ModelProfile(str, Enum):
             ) from exc
 
 
+class ModelCapability(str, Enum):
+    JSON_SCHEMA = "json_schema"
+
+    @classmethod
+    def parse(cls, value: str | ModelCapability) -> ModelCapability:
+        if isinstance(value, cls):
+            return value
+        normalized = str(value).strip().lower().replace("-", "_")
+        try:
+            return cls(normalized)
+        except ValueError as exc:
+            allowed = ", ".join(capability.value for capability in cls)
+            raise ValueError(
+                f"Unknown model capability '{value}'. Expected one of: {allowed}."
+            ) from exc
+
+
 class ModelRouteStage(str, Enum):
     CLASSIFY = "classify"
     PLAN = "plan"
@@ -59,6 +76,10 @@ class ModelRouteDecision:
     provider: str | None = None
     override_source: str | None = None
     fallback_chain: tuple[ModelProfile, ...] = ()
+    capabilities: tuple[ModelCapability, ...] = ()
+
+    def supports(self, capability: ModelCapability | str) -> bool:
+        return ModelCapability.parse(capability) in self.capabilities
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -70,4 +91,5 @@ class ModelRouteDecision:
             "route_reason": self.route_reason,
             "override_source": self.override_source,
             "fallback_chain": [profile.value for profile in self.fallback_chain],
+            "capabilities": [capability.value for capability in self.capabilities],
         }
