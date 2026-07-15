@@ -1,34 +1,38 @@
 # vnalpha documentation
 
-`vnalpha` is designed as an OpenBB-inspired AI-assisted Research Workspace and Pattern Detection Platform for Vietnamese equities.
-
-The product is now explicitly split from the data layer:
+`vnalpha` is the terminal-first, AI-assisted research workspace in OpenStock. It consumes normalized data from `vnstock-service` and owns research evidence, analysis workflows and user interaction.
 
 ```text
-vnstock-service  = independent market data platform service
-vnalpha-service  = independent research workspace service
+vnstock-service  = independent data-only market platform
+vnalpha          = independent research workspace and evidence engine
 ```
 
-`vnalpha` should not call provider-specific market data endpoints directly. It should consume validated, normalized, and diagnosable data from `vnstock-service`, then own the research workspace layer: features, patterns, outcomes, watchlists, AI explanations, dashboards, reports, and journals.
+`vnalpha` must not call provider-specific data endpoints directly. Provider access, authentication and normalization belong in `vnstock`; `vnalpha` consumes canonical service contracts and then owns ingestion evidence, the DuckDB warehouse, features, patterns, outcomes, watchlists, research artifacts, grounded AI explanations and journals.
+
+## Canonical roadmap
+
+The live delivery queue is maintained only in:
+
+- [root ROADMAP.md](../../ROADMAP.md);
+- GitHub issue [#90 — OpenStock unified product roadmap](https://github.com/duvu/openstock/issues/90).
+
+Documents such as `07-implementation-roadmap.md` and `10-roadmap-phases.md` preserve earlier design history. They are non-authoritative and must not be used to infer current priority, dependency or completion status.
 
 ## Documentation map
 
-The documentation is organized around the main engineering concerns:
-
-1. **Vision and scope** — what the system should and should not do.
-2. **System architecture** — service split, workspace architecture, data stores, and execution flow.
-3. **Data pipeline** — how `vnstock-service` data is ingested, validated, canonicalized, and stored.
-4. **Pattern engine** — how price/volume patterns are represented, detected, scored, and invalidated.
-5. **Backtest and outcome tracking** — how every detected pattern is evaluated after 5/10/20/60 sessions.
-6. **AI layer** — how LLMs are used safely for explanation, critique, reporting, and research assistance.
-7. **Implementation roadmap** — the earlier implementation roadmap.
-8. **Repository structure** — a practical starting layout for the codebase.
-9. **Workspace service design** — service API, workspace modules, UI/API/agent boundaries.
-10. **Phased roadmap** — the end-to-end phase plan from workspace foundation to ML ranking.
-11. **Deployment architecture** — Docker data platform, DuckDB warehouse, and Debian terminal app deployment.
-12. **Implementation failure playbook** — recurring defects and the mandatory checklist for implementation and closure.
+1. **Vision and scope** — product objective and permanent boundaries.
+2. **System architecture** — service split, warehouse, application services and execution flow.
+3. **Data pipeline** — ingestion, validation, canonicalization, readiness and provenance.
+4. **Pattern engine** — structured price/volume pattern evidence.
+5. **Backtest and outcome tracking** — forward outcomes, event studies and the target point-in-time Backtest Lab.
+6. **AI layer** — safe classification, planning, deterministic tools and grounded synthesis.
+7. **Workspace interfaces** — Typer CLI, Textual TUI and optional read-only API boundaries.
+8. **Operations and hardening** — logging, packaging, evaluation, repair and implementation guardrails.
+9. **Historical planning documents** — earlier roadmaps retained for context only.
 
 ## Key documents
+
+### Current architecture and operation
 
 - [Vision and scope](01-vision-and-scope.md)
 - [System architecture](02-system-architecture.md)
@@ -36,10 +40,8 @@ The documentation is organized around the main engineering concerns:
 - [Pattern engine](04-pattern-engine.md)
 - [Backtest and outcome tracking](05-backtest-and-outcome.md)
 - [AI layer](06-ai-layer.md)
-- [Implementation roadmap](07-implementation-roadmap.md)
 - [Initial repository structure](08-initial-repository-structure.md)
 - [Workspace service design](09-workspace-service-design.md)
-- [Phased roadmap](10-roadmap-phases.md)
 - [Deployment architecture](11-deployment-architecture.md)
 - [Common implementation failures and prevention checklist](common-implementation-failures.md)
 - [Sandboxed compute](sandbox-compute.md)
@@ -50,81 +52,62 @@ The documentation is organized around the main engineering concerns:
 - [Closed-loop repair and validation](closed-loop-repair.md)
 - [Symbol knowledge memory](symbol-memory.md)
 
-## Design stance
+### Historical, non-authoritative planning
 
-The project should start as an end-of-day research workspace service:
+- [Earlier implementation roadmap](07-implementation-roadmap.md)
+- [Earlier phased roadmap](10-roadmap-phases.md)
 
-```text
-vnstock-service
-→ validated market data
-→ vnalpha-service ingestion
-→ canonical OHLCV
-→ feature store
-→ pivot engine
-→ pattern engine
-→ outcome tracker
-→ watchlist API
-→ workspace dashboard
-→ AI explanation / risk critique / journal
-```
-
-It should not start as:
+## Stable architecture
 
 ```text
-LLM sees chart
-→ LLM predicts price
-→ bot places order
+vnstock provider plugins
+→ PluginRuntime and canonical contracts
+→ local read-only vnstock service
+→ vnalpha ingestion and validation
+→ raw evidence + validation-gated canonical warehouse
+→ feature, score, regime, sector and outcome builders
+→ research-artifact and source-reference stores
+→ deterministic application services and tools
+→ Typer CLI + Textual TUI + optional read-only API
+→ grounded assistant synthesis
 ```
 
-The second approach is hard to audit, easy to overfit, and unsafe for real-money trading.
+The Textual TUI is the main interactive workspace. The CLI is the explicit operational and research command surface. Any API remains read-only and delegates to the same typed application services.
 
-## OpenBB-inspired direction
+## Research workflow direction
 
-`vnalpha` should be closer to a research workspace than a single-purpose scanner.
+A useful OpenStock workspace should allow the user to:
 
-The first useful workspace should allow a user to:
+- inspect market and data-readiness status;
+- build and review evidence-backed watchlists;
+- drill into one symbol or setup;
+- see trend, momentum, volume, relative strength, levels, regime and sector evidence;
+- review invalid or quarantined data and repair guidance;
+- compare outcomes and historical setup evidence;
+- run reproducible point-in-time research and backtests when their prerequisites are complete;
+- generate grounded AI explanations with source references and caveats;
+- maintain bounded, auditable research notes and symbol memory.
 
-- open a market overview;
-- inspect a pattern watchlist;
-- drill into one symbol or pattern instance;
-- view evidence features and chart context;
-- review failed breakouts;
-- compare outcomes by pattern type;
-- generate grounded AI explanations;
-- keep a research journal.
-
-## First target outcome
-
-The first useful version of `vnalpha` should produce a daily watchlist with clear evidence:
-
-- ticker;
-- pattern type;
-- pattern score;
-- setup status;
-- base range;
-- volume confirmation;
-- relative strength;
-- market regime;
-- risk flags;
-- invalidation level;
-- AI-generated explanation;
-- later forward outcome.
-
-Example:
+## Example research output
 
 ```text
 Ticker: FPT
-Pattern: ACCUMULATION_BREAKOUT
-Score: 86
-Status: CONFIRMED
+As of: 2026-07-14
+Setup: accumulation breakout
 Evidence:
-- 38-session base, 8.7% range
-- breakout volume 1.9x 20-session average
-- close strength 0.84
-- RS 20d +6.4% versus VN-Index
-Risk:
-- price 7.8% above MA20
-- sector confirmation weak
-Invalidation:
-- close back below breakout level or MA20
+- canonical history passed validation
+- breakout volume versus a declared baseline
+- relative strength versus an explicit benchmark
+- market-regime and sector snapshots with methodology/version lineage
+Risks:
+- missing or stale evidence is disclosed
+- invalidation conditions are deterministic
+Sources:
+- provider, ingestion run, builder versions and artifact references
 ```
+
+The labels and numbers in a real result must come from actual computation. Fixed-horizon proxies, aliases or incomplete methodology must not be presented as a completed backtest or investment recommendation.
+
+## Permanent boundary
+
+OpenStock remains inside the **read-only research boundary**. It does not expose broker login, order placement, account access, portfolio mutation, allocation, margin, transfers or trading execution. Stored documents, memory and model output remain untrusted evidence and cannot modify policies, tools or approval requirements.
