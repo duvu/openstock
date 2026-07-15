@@ -69,9 +69,9 @@ vnstock-auth = "vnstock.cli.auth:main"
 vnstock-serve = "vnstock.cli.serve:main"
 
 [project.urls]
-Documentation = "https://github.com/duvu/vnstock#readme"
-Source = "https://github.com/duvu/vnstock"
-IssueTracker = "https://github.com/duvu/vnstock/issues"
+Documentation = "https://github.com/duvu/openstock/tree/main/vnstock"
+Source = "https://github.com/duvu/openstock"
+IssueTracker = "https://github.com/duvu/openstock/issues"
 
 [tool.setuptools]
 include-package-data = true
