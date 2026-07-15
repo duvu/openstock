@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -55,6 +56,39 @@ ASSISTANT_TIMEOUT_DEFAULT = 30
 ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT = 16000
 ASSISTANT_MAX_RETRIES_DEFAULT = 2
 ASSISTANT_STORE_RAW_DEFAULT = False
+_SCHEMA_UNSUPPORTED_MARKERS = (
+    "json_schema",
+    "response_format",
+    "structured output",
+    "structured_output",
+    "unsupported schema",
+)
+
+
+def _schema_name(schema: Mapping[str, Any]) -> str:
+    candidate = str(schema.get("title") or schema.get("$id") or "vnalpha_response")
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", candidate).strip("_")
+    return (cleaned or "vnalpha_response")[:64]
+
+
+def _response_format(response_schema: dict[str, Any]) -> dict[str, Any]:
+    if response_schema == {"type": "json_object"}:
+        return {"type": "json_object"}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": _schema_name(response_schema),
+            "strict": True,
+            "schema": response_schema,
+        },
+    }
+
+
+def _schema_format_unsupported(status_code: int, response_text: str) -> bool:
+    if status_code != 400:
+        return False
+    lowered = response_text.lower()
+    return any(marker in lowered for marker in _SCHEMA_UNSUPPORTED_MARKERS)
 
 
 @dataclass
@@ -234,15 +268,21 @@ class LLMGatewayClient:
             "messages": messages,
             "max_tokens": self._config.max_output_tokens,
         }
+        structured_mode = "none"
         if response_schema:
-            payload["response_format"] = {"type": "json_object"}
+            payload["response_format"] = _response_format(response_schema)
+            structured_mode = payload["response_format"]["type"]
 
         emit_call_started(decision, route_metadata)
         started = time.monotonic()
         last_transport_error: Exception | None = None
-        for attempt in range(self._config.max_retries + 1):
+        schema_downgraded = False
+        retry_attempt = 0
+        call_count = 0
+        while retry_attempt <= self._config.max_retries:
             response_content_chars: int | None = None
             finish_reason: str | None = None
+            call_count += 1
             try:
                 response = httpx.post(
                     self._config.endpoint,
@@ -277,26 +317,43 @@ class LLMGatewayClient:
                         f"'{decision.model_id}' has empty completion content."
                     )
                 usage = data.get("usage", {})
+                usage_payload = dict(usage) if isinstance(usage, dict) else {}
+                usage_payload["structured_output_mode"] = structured_mode
+                usage_payload["structured_output_downgraded"] = schema_downgraded
                 latency_ms = (time.monotonic() - started) * 1000
                 emit_call_succeeded(
                     decision,
                     latency_ms=latency_ms,
-                    usage=usage,
+                    usage=usage_payload,
                     response_content_chars=response_content_chars,
                     finish_reason=finish_reason,
                     metadata=route_metadata,
                 )
-                return content, dict(usage) if isinstance(usage, dict) else {}
+                return content, usage_payload
             except httpx.TimeoutException as exc:
                 last_transport_error = exc
-                if attempt < self._config.max_retries:
+                if retry_attempt < self._config.max_retries:
+                    retry_attempt += 1
                     continue
+                break
             except httpx.RequestError as exc:
                 last_transport_error = exc
-                if attempt < self._config.max_retries:
+                if retry_attempt < self._config.max_retries:
+                    retry_attempt += 1
                     continue
+                break
             except httpx.HTTPStatusError as exc:
                 status_code = exc.response.status_code
+                if (
+                    response_schema
+                    and structured_mode == "json_schema"
+                    and not schema_downgraded
+                    and _schema_format_unsupported(status_code, exc.response.text)
+                ):
+                    payload["response_format"] = {"type": "json_object"}
+                    structured_mode = "json_object"
+                    schema_downgraded = True
+                    continue
                 error = LLMResponseError(
                     f"LLM HTTP {status_code}: {exc.response.text[:200]}"
                 )
@@ -304,7 +361,8 @@ class LLMGatewayClient:
                     status_code in {400, 404, 408, 409, 429} or status_code >= 500
                 )
                 retryable = status_code in {408, 409, 429} or status_code >= 500
-                if retryable and attempt < self._config.max_retries:
+                if retryable and retry_attempt < self._config.max_retries:
+                    retry_attempt += 1
                     continue
                 latency_ms = (time.monotonic() - started) * 1000
                 emit_call_failed(
@@ -313,7 +371,7 @@ class LLMGatewayClient:
                     latency_ms=latency_ms,
                     metadata=route_metadata,
                 )
-                _log_llm_error(decision.stage, error, attempt=attempt)
+                _log_llm_error(decision.stage, error, attempt=retry_attempt)
                 if fallbackable:
                     raise _FallbackableCallError(error) from exc
                 raise error from exc
@@ -330,7 +388,7 @@ class LLMGatewayClient:
                 _log_llm_error(
                     decision.stage,
                     exc,
-                    attempt=attempt,
+                    attempt=retry_attempt,
                     response_content_chars=response_content_chars,
                     finish_reason=finish_reason,
                 )
@@ -351,15 +409,14 @@ class LLMGatewayClient:
                 _log_llm_error(
                     decision.stage,
                     error,
-                    attempt=attempt,
+                    attempt=retry_attempt,
                     response_content_chars=response_content_chars,
                     finish_reason=finish_reason,
                 )
                 raise _FallbackableCallError(error) from exc
 
         timeout_error = LLMTimeoutError(
-            f"Model '{decision.model_id}' failed after "
-            f"{self._config.max_retries + 1} attempt(s)."
+            f"Model '{decision.model_id}' failed after {call_count} attempt(s)."
         )
         latency_ms = (time.monotonic() - started) * 1000
         emit_call_failed(

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from vnalpha.assistant.errors import IntentClassificationError
-from vnalpha.assistant.models import IntentResult
+from vnalpha.assistant.models import SUPPORTED_INTENTS, IntentResult
 from vnalpha.assistant.research_intelligence_intents import (
     INTENT_DESCRIPTIONS,
     INTENT_EXAMPLES,
@@ -74,7 +74,63 @@ _BASE_INTENT_LINES = [
     "- unsupported_or_unsafe: execution, unrestricted tools, or unsupported request",
 ]
 
-INTENT_CLASSIFICATION_SCHEMA: dict[str, str] = {"type": "json_object"}
+_FILTER_PROPERTIES: dict[str, dict[str, Any]] = {
+    "score": {"type": ["number", "null"]},
+    "min_score": {"type": ["number", "null"]},
+    "candidate_class": {"type": ["string", "null"]},
+    "class": {"type": ["string", "null"]},
+    "setup": {"type": ["string", "null"]},
+    "setup_type": {"type": ["string", "null"]},
+    "risk_flag": {"type": ["string", "null"]},
+}
+_ENTITY_PROPERTIES: dict[str, dict[str, Any]] = {
+    "symbol": {"type": ["string", "null"]},
+    "symbols": {"type": "array", "items": {"type": "string"}},
+    "date": {"type": ["string", "null"]},
+    "universe": {"type": ["string", "null"]},
+    "filters": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": sorted(_FILTER_PROPERTIES),
+        "properties": _FILTER_PROPERTIES,
+    },
+    "top": {"type": ["integer", "null"]},
+    "min_score": {"type": ["number", "null"]},
+    "setup_type": {"type": ["string", "null"]},
+    "horizon": {"type": ["integer", "null"]},
+    "horizon_sessions": {"type": ["integer", "null"]},
+    "note_text": {"type": ["string", "null"]},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "limit": {"type": ["integer", "null"]},
+    "purpose": {"type": ["string", "null"]},
+}
+
+INTENT_CLASSIFICATION_SCHEMA: dict[str, Any] = {
+    "title": "vnalpha_intent_classification",
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "intent",
+        "confidence",
+        "entities",
+        "needs_clarification",
+        "clarification_question",
+        "safety_flags",
+    ],
+    "properties": {
+        "intent": {"type": "string", "enum": sorted(SUPPORTED_INTENTS)},
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "entities": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": sorted(_ENTITY_PROPERTIES),
+            "properties": _ENTITY_PROPERTIES,
+        },
+        "needs_clarification": {"type": "boolean"},
+        "clarification_question": {"type": ["string", "null"]},
+        "safety_flags": {"type": "array", "items": {"type": "string"}},
+    },
+}
 
 _RESEARCH_INTENT_LINES = [
     f"- {name}: {description}" for name, description in INTENT_DESCRIPTIONS.items()
@@ -105,18 +161,30 @@ CLASSIFIER_SYSTEM_PROMPT = "\n".join(
         "- Use summarize_watchlist_deep for structure/sector/setup/risk synthesis; use summarize_watchlist for a short summary.",
         "- A research shortlist is not an execution or allocation list.",
         *_EXAMPLE_LINES,
-        "- Respond only with JSON matching: "
-        '{"intent":"<name>","confidence":0.0,"entities":{},'
-        '"needs_clarification":false,"clarification_question":null,"safety_flags":[]}',
+        "- Respond only with JSON matching the supplied response schema.",
+        "- Include every schema field. Use null, [], and an all-null filters object for unused entities.",
     ]
 )
 
+_SCHEMA_REPAIR_PROMPT = (
+    "The previous response did not satisfy the required JSON contract. Return exactly "
+    "one JSON object matching the supplied schema, with every required field present "
+    "and no markdown or explanatory text."
+)
 
-def _build_classifier_messages(user_prompt: str) -> list[dict]:
-    return [
+
+def _build_classifier_messages(
+    user_prompt: str,
+    *,
+    schema_repair: bool = False,
+) -> list[dict]:
+    messages = [
         {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
     ]
+    if schema_repair:
+        messages.append({"role": "system", "content": _SCHEMA_REPAIR_PROMPT})
+    return messages
 
 
 class IntentClassifier:
@@ -128,7 +196,7 @@ class IntentClassifier:
     def classify(
         self, user_prompt: str, *, session_id: str | None = None
     ) -> IntentResult:
-        """Classify intent with small-profile routing and one stronger JSON retry."""
+        """Classify intent and perform one explicit schema-repair retry if needed."""
         unsafe_category = _deterministic_precheck(user_prompt)
         if unsafe_category:
             self.last_usage = None
@@ -142,7 +210,10 @@ class IntentClassifier:
 
         self.last_raw_responses = []
         messages = _build_classifier_messages(user_prompt)
-        route_metadata = {"requires_deep_reasoning": False}
+        route_metadata: dict[str, Any] = {
+            "requires_deep_reasoning": False,
+            "schema_repair_retry": False,
+        }
         if session_id is not None:
             route_metadata["session_id"] = session_id
         try:
@@ -161,25 +232,26 @@ class IntentClassifier:
         try:
             result = parse_classifier_response(response_text, user_prompt)
         except IntentClassificationError:
+            retry_metadata = {**route_metadata, "schema_repair_retry": True}
             try:
                 response_text, usage = self._client.chat(
-                    messages,
+                    _build_classifier_messages(user_prompt, schema_repair=True),
                     response_schema=INTENT_CLASSIFICATION_SCHEMA,
                     stage="classify",
                     task_type=ModelTaskType.INTENT_CLASSIFICATION.value,
                     model_profile=ModelProfile.DEFAULT,
-                    route_metadata=route_metadata,
+                    route_metadata=retry_metadata,
                 )
                 self._capture_gateway_raw_responses()
                 result = parse_classifier_response(response_text, user_prompt)
             except IntentClassificationError as retry_exc:
                 raise IntentClassificationError(
-                    f"Invalid JSON from classifier after retry: {retry_exc}"
+                    f"Invalid JSON from classifier after schema-repair retry: {retry_exc}"
                 ) from retry_exc
             except Exception as exc:
                 self._capture_gateway_raw_responses()
                 raise IntentClassificationError(
-                    f"LLM classifier retry failed: {exc}"
+                    f"LLM classifier schema-repair retry failed: {exc}"
                 ) from exc
 
         self.last_usage = usage

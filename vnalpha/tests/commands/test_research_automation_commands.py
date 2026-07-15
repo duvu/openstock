@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
@@ -24,12 +25,33 @@ def research_connection(tmp_path: Path) -> Iterator[duckdb.DuckDBPyConnection]:
         run_migrations(conn=conn)
         conn.execute(
             "INSERT INTO feature_snapshot "
-            "(symbol, date, return_20d, rs_20d_vs_vnindex, base_range_30d, "
-            "volatility_20d, volume_ratio, feature_data_status, "
-            "feature_build_version, lineage_json) VALUES "
-            "('FPT', DATE '2026-07-01', 0.12, 0.04, 0.10, 0.02, 0.60, 'good', 'v1', '{}'), "
-            "('VNM', DATE '2026-07-01', 0.08, 0.01, 0.20, 0.05, 1.10, 'good', 'v1', '{}')"
+            "(symbol, date, close, return_20d, rs_20d_vs_vnindex, base_range_30d, "
+            "volatility_20d, volume_ratio, feature_data_status, as_of_bar_date, "
+            "benchmark_as_of_bar_date, feature_build_version, lineage_json) VALUES "
+            "('FPT', DATE '2026-07-01', 100, 0.12, 0.04, 0.10, 0.02, 0.60, "
+            "'good', DATE '2026-07-01', DATE '2026-07-01', 'v1', '{}'), "
+            "('VNM', DATE '2026-07-01', 80, 0.08, 0.01, 0.20, 0.05, 1.10, "
+            "'good', DATE '2026-07-01', DATE '2026-07-01', 'v1', '{}')"
         )
+        start = date(2026, 7, 1)
+        for symbol, base in (("FPT", 100.0), ("VNM", 80.0)):
+            for offset in range(15):
+                trading_date = start + timedelta(days=offset)
+                close = base + offset
+                conn.execute(
+                    "INSERT INTO canonical_ohlcv "
+                    "(symbol, time, interval, open, high, low, close, volume, "
+                    "selected_provider, quality_status, ingestion_run_id) "
+                    "VALUES (?, ?, '1D', ?, ?, ?, ?, 1000, 'FIXTURE', 'pass', 'run-1')",
+                    [
+                        symbol,
+                        trading_date,
+                        close - 0.5,
+                        close + 1.0,
+                        close - 1.0,
+                        close,
+                    ],
+                )
         yield conn
     reset_run_context()
 
@@ -169,7 +191,7 @@ def test_feature_help_uses_vietnamese_market_example() -> None:
             "RESEARCH_HYPOTHESIS_TESTED",
         ),
         (
-            "/experiment backtest breakout after accumulation base --horizon 10",
+            "/experiment event-study rs_20d_vs_vnindex > 0 --horizon 10",
             "offline_event_study",
             "OFFLINE_EVENT_STUDY_COMPLETED",
         ),
@@ -222,19 +244,55 @@ def test_pattern_scan_persists_candidate_table(
     assert Path(outputs["candidates_csv"]).is_file()
 
 
-def test_offline_event_study_is_labeled_and_refuses_live_execution(
+@pytest.mark.parametrize(
+    ("condition", "horizon"),
+    (
+        ("rs_20d_vs_vnindex > 0", 5),
+        ("volume_ratio >= 0.6", 10),
+    ),
+)
+def test_event_study_executes_condition_and_requested_horizon(
+    condition: str,
+    horizon: int,
     research_connection: duckdb.DuckDBPyConnection,
 ) -> None:
     result = _execute(
-        "/experiment backtest breakout after accumulation base --horizon 10",
+        f"/experiment event-study {condition} --horizon {horizon}",
         research_connection,
     )
-    assert "offline research event study" in str(result).lower()
-    assert "transaction costs" in str(result).lower()
 
+    assert result.status is CommandStatus.SUCCESS
+    content = result.panels[0].content
+    assert content["metrics"]["horizon_sessions"] == horizon
+    assert content["metrics"]["sample_size"] == 2
+    lineage = content["lineage"]
+    assert lineage["specification_hash"]
+    assert lineage["price_basis"] == "canonical_raw_unadjusted"
+    assert lineage["future_feature_selection"] is False
+    assert str(horizon) in lineage["outcome_definition"]
+
+
+def test_event_study_rejects_ambiguous_condition_and_backtest_alias(
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    with pytest.raises(CommandValidationError, match="ambiguous"):
+        _execute(
+            "/experiment event-study breakout after accumulation base --horizon 10",
+            research_connection,
+        )
+    with pytest.raises(CommandValidationError, match="alias is disabled"):
+        _execute(
+            "/experiment backtest rs_20d_vs_vnindex > 0 --horizon 10",
+            research_connection,
+        )
+
+
+def test_offline_event_study_refuses_live_execution(
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
     with pytest.raises(CommandValidationError):
-        _ = _execute(
-            "/experiment backtest deploy live trades through broker",
+        _execute(
+            "/experiment event-study deploy live trades through broker",
             research_connection,
         )
 

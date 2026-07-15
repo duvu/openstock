@@ -61,13 +61,15 @@ def _status_result(*, session_id: str | None = None) -> CommandResult:
     override = DEFAULT_OVERRIDE_STORE.get_current_override(session_id=session_id)
     last_route = get_last_route_decision()
     active_profile = override.session_profile or override.workspace_profile
+    distinct_models = _distinct_models(config)
+    routing_mode = "multi_model" if len(distinct_models) > 1 else "single_model"
     return CommandResult(
         status=CommandStatus.SUCCESS,
         title="/model status",
         summary=(
-            f"Active model override: {active_profile.value}."
+            f"Active model override: {active_profile.value}; routing mode: {routing_mode}."
             if active_profile is not None
-            else "Model routing policy is active with no override."
+            else f"Model routing policy is active in {routing_mode} mode."
         ),
         panels=[
             ResultPanel(
@@ -84,9 +86,12 @@ def _status_result(*, session_id: str | None = None) -> CommandResult:
                         if override.workspace_profile is not None
                         else None
                     ),
+                    "routing_mode": routing_mode,
+                    "distinct_model_count": len(distinct_models),
+                    "distinct_models": sorted(distinct_models),
                     "default_profile": ModelProfile.DEFAULT.value,
                     "resolved_models": _profile_models(config),
-                    "fallbacks": _fallbacks(config),
+                    "effective_fallbacks": _effective_fallbacks(config),
                     "last_route": (
                         last_route.to_dict() if last_route is not None else None
                     ),
@@ -98,14 +103,21 @@ def _status_result(*, session_id: str | None = None) -> CommandResult:
 
 def _profiles_result() -> CommandResult:
     config = _load_config()
+    distinct_models = _distinct_models(config)
     return CommandResult(
         status=CommandStatus.SUCCESS,
         title="/model profiles",
-        summary=f"{len(ModelProfile)} configured model profile(s).",
+        summary=(
+            f"{len(ModelProfile)} profile(s) resolve to "
+            f"{len(distinct_models)} distinct model(s)."
+        ),
         panels=[
             ResultPanel(
                 title="Configured Profiles",
                 content={
+                    "routing_mode": (
+                        "multi_model" if len(distinct_models) > 1 else "single_model"
+                    ),
                     "profiles": [
                         {
                             "profile": profile.value,
@@ -114,9 +126,8 @@ def _profiles_result() -> CommandResult:
                             "explicitly_configured": config.is_explicitly_configured(
                                 profile
                             ),
-                            "fallbacks": [
-                                fallback.value
-                                for fallback in config.fallback_chain(profile)
+                            "effective_fallbacks": _effective_fallbacks(config)[
+                                profile.value
                             ],
                         }
                         for profile in ModelProfile
@@ -215,20 +226,24 @@ def _explain_route_result(
         raise CommandValidationError(
             f"Unknown model route stage '{stage}'. Expected one of: {allowed}."
         )
+    config = _load_config()
     decision = resolve_model_route(
-        _load_config(),
+        config,
         stage=stage,
         task_type=task_type,
         override=DEFAULT_OVERRIDE_STORE.get_current_override(session_id=session_id),
     )
+    effective_fallbacks = _effective_fallbacks(config)[decision.profile.value]
+    payload = decision.to_dict()
+    payload["effective_fallbacks"] = effective_fallbacks
     return CommandResult(
         status=CommandStatus.SUCCESS,
         title="/model explain-route",
         summary=(
             f"{stage}/{task_type or '-'} routes to {decision.profile.value} "
-            f"({decision.model_id})."
+            f"({decision.model_id}); {len(effective_fallbacks)} effective fallback(s)."
         ),
-        panels=[ResultPanel(title="Route Decision", content=decision.to_dict())],
+        panels=[ResultPanel(title="Route Decision", content=payload)],
     )
 
 
@@ -255,8 +270,23 @@ def _profile_models(config: ModelRoutingConfig) -> dict[str, str]:
     return {profile.value: config.model_for(profile) for profile in ModelProfile}
 
 
-def _fallbacks(config: ModelRoutingConfig) -> dict[str, list[str]]:
-    return {
-        profile.value: [item.value for item in config.fallback_chain(profile)]
-        for profile in ModelProfile
-    }
+def _distinct_models(config: ModelRoutingConfig) -> set[str]:
+    return {config.model_for(profile) for profile in ModelProfile}
+
+
+def _effective_fallbacks(config: ModelRoutingConfig) -> dict[str, list[dict[str, str]]]:
+    result: dict[str, list[dict[str, str]]] = {}
+    for profile in ModelProfile:
+        primary_model = config.model_for(profile)
+        seen_models = {primary_model}
+        effective: list[dict[str, str]] = []
+        for fallback in config.fallback_chain(profile):
+            fallback_model = config.model_for(fallback)
+            if fallback_model in seen_models:
+                continue
+            seen_models.add(fallback_model)
+            effective.append(
+                {"profile": fallback.value, "model_id": fallback_model}
+            )
+        result[profile.value] = effective
+    return result

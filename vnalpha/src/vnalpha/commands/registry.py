@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable
 
 from vnalpha.commands.errors import UnknownCommandError
@@ -32,6 +32,7 @@ class CommandRegistry:
 
     def register(self, meta: CommandMeta) -> None:
         """Register a command. Raises ValueError on duplicate registration."""
+        meta = _current_metadata(meta)
         if meta.name in self._commands:
             raise ValueError(
                 f"Command '/{meta.name}' is already registered. "
@@ -51,17 +52,42 @@ class CommandRegistry:
         return sorted(self._commands.values(), key=lambda m: m.name)
 
     def names(self) -> list[str]:
-        """Return all registered command names."""
-        return sorted(self._commands.keys())
+        """Return discoverable names with ``help`` first, then alphabetical."""
+        names = sorted(self._commands.keys())
+        if "help" in self._commands:
+            names.remove("help")
+            names.insert(0, "help")
+        return names
 
     def execute(
         self,
         parsed: ParsedCommand,
         **handler_kwargs: Any,
     ) -> CommandResult:
-        """Dispatch a parsed command to its handler.
+        """Dispatch a parsed command to the handler.
 
         Extra keyword arguments are forwarded to the handler.
         """
         meta = self.get(parsed.command_name)
         return meta.handler(parsed, **handler_kwargs)
+
+
+def _current_metadata(meta: CommandMeta) -> CommandMeta:
+    """Reconcile metadata with enforced command semantics at registration time."""
+
+    if meta.name != "experiment":
+        return meta
+    return replace(
+        meta,
+        description="Run indicator experiments or deterministic offline event studies.",
+        usage=(
+            "/experiment indicator <description> [--universe VN30] "
+            "[--start YYYY-MM-DD] [--end YYYY-MM-DD] | "
+            "/experiment event-study <ALLOWLISTED_CONDITION> [--horizon N] "
+            "[--start YYYY-MM-DD] [--end YYYY-MM-DD]"
+        ),
+        examples=[
+            "/experiment indicator relative strength 20 sessions vs VNINDEX --universe VN30",
+            "/experiment event-study rs_20d_vs_vnindex > 0 --horizon 10",
+        ],
+    )

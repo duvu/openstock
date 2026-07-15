@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from vnalpha.observability.context import get_correlation_id, get_run_context
 from vnalpha.research_automation.artifact_writer import ResearchArtifactWriter
@@ -29,6 +29,9 @@ def persist_workflow_artifact(
     summary_body: str,
     metrics_csv: str | None = None,
     candidates_csv: str | None = None,
+    lineage_extra: Mapping[str, Any] | None = None,
+    validation_extra: Mapping[str, Any] | None = None,
+    reproducibility_extra: Mapping[str, Any] | None = None,
 ) -> ResearchArtifact:
     artifact_id = new_research_artifact_id(_artifact_prefix(artifact_type))
     run_dir, run_id = _run_identity()
@@ -46,38 +49,46 @@ def persist_workflow_artifact(
         "dataset_snapshot_id": resolution.dataset.snapshot_id,
         "source_table": resolution.dataset.dataset_name,
         "generated_code": False,
+        **dict(lineage_extra or {}),
     }
     status = (
         ResearchArtifactStatus.SUCCEEDED
         if resolution.sufficient
         else ResearchArtifactStatus.REJECTED
     )
-    result_payload = {
-        **result,
+    result_payload = dict(result)
+    result_payload.setdefault("sample_size", resolution.dataset.row_count)
+    result_payload.update(
+        {
+            "dataset_row_count": resolution.dataset.row_count,
+            "period_coverage": period_coverage,
+            "research_only": True,
+        }
+    )
+    summary = _summary(name, summary_body, caveats)
+    validation = {
+        "schema_valid": True,
+        "dataset_sufficient": resolution.sufficient,
         "sample_size": resolution.dataset.row_count,
         "period_coverage": period_coverage,
-        "research_only": True,
+        "warnings": list(resolution.warnings),
+        **dict(validation_extra or {}),
     }
-    summary = _summary(name, summary_body, caveats)
+    reproducibility_manifest = {
+        "artifact_type": artifact_type.value,
+        "parameters": parameters,
+        "dataset_snapshot_id": resolution.dataset.snapshot_id,
+        "deterministic_tool": True,
+        **dict(reproducibility_extra or {}),
+    }
     outputs = ResearchArtifactWriter(
         ResearchArtifactLayout(run_dir=run_dir, artifact_id=artifact_id)
     ).persist_outputs(
         result=result_payload,
         summary=summary,
         lineage=lineage,
-        validation={
-            "schema_valid": True,
-            "dataset_sufficient": resolution.sufficient,
-            "sample_size": resolution.dataset.row_count,
-            "period_coverage": period_coverage,
-            "warnings": list(resolution.warnings),
-        },
-        reproducibility_manifest={
-            "artifact_type": artifact_type.value,
-            "parameters": parameters,
-            "dataset_snapshot_id": resolution.dataset.snapshot_id,
-            "deterministic_tool": True,
-        },
+        validation=validation,
+        reproducibility_manifest=reproducibility_manifest,
         metrics_csv=metrics_csv,
         candidates_csv=candidates_csv,
     )

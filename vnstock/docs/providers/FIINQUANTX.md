@@ -50,7 +50,15 @@ fixtures, request parameters, logs, or responses:
 FIINQUANT_USERNAME=<licensed-account>
 FIINQUANT_PASSWORD=<licensed-secret>
 VNSTOCK_FIINQUANTX_LICENSED=true
+VNSTOCK_FIINQUANTX_SESSION_TTL=900
+VNSTOCK_FIINQUANTX_ACQUIRE_TIMEOUT=30
 ```
+
+The runtime caches one authenticated session for the configured TTL, allows one
+provider request at a time, closes expired sessions on replacement, and clears
+the cache after classified authentication/session failures. Rate-limit,
+entitlement, quota, invalid-request, schema and transient failures are exposed
+as stable typed errors without copying vendor response text.
 
 For the local service image, set `VNSTOCK_INSTALL_FIINQUANTX=true` at build
 time. The Docker Compose deployment publishes only `127.0.0.1:6900`.
@@ -69,6 +77,12 @@ time. The Docker Compose deployment publishes only `127.0.0.1:6900`.
 | Model training and derived analytics | Require a separate written license decision |
 | Synthetic fixtures | Allowed; must contain no credentials or licensed production values |
 
+`vnalpha` additionally requires
+`VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true` before it accepts
+`--source FIINQUANTX` for warehouse-bound sync or repair. The default is false.
+This flag records an operator decision; it does not create or expand license
+rights.
+
 ## Boundary and capabilities
 
 The provider is limited to synchronous, allowlisted data methods. Broker,
@@ -84,11 +98,17 @@ all broker/account/trading surfaces.
 Membership timestamps are local observation times. They are not effective
 dates and must not be used to infer historical index or sector composition.
 
-For OHLCV, the supported request controls are `symbol`, `count_back` (1 to
-10,000), and `interval=1D`. The provider sends the verified bounded SDK
-request policy (`adjusted=True`, `lasted=False`); callers cannot override
-those controls until their semantics are verified. Unknown vendor columns are
-dropped before the canonical response is returned.
+For OHLCV, supported request modes are:
+
+- `symbol`, `count_back` (1 to 10,000), `interval=1D`; or
+- `symbol`, bounded `start` plus `end`, `interval=1D`.
+
+`count_back` and date range are mutually exclusive. Open-ended date ranges are
+rejected before session creation. The provider sends the verified bounded SDK
+request policy (`adjusted=True`, `lasted=False`); callers cannot override those
+controls until their semantics are verified. The output metadata says
+`adjusted=requested_true`, not independently verified adjusted-price lineage.
+Unknown vendor columns are dropped before the canonical response is returned.
 
 Credentials must come from local environment or credential abstractions. They
 must never be passed as dataset parameters or written to logs, diagnostics,

@@ -219,15 +219,15 @@ def test_fiinquantx_capabilities_require_credentials(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize(
-    "params",
+    ("params", "error_pattern"),
     [
-        {"symbol": "VCB", "adjusted": "false"},
-        {"symbol": "VCB", "lasted": "true"},
-        {"symbol": "VCB", "start": "2026-07-01"},
+        ({"symbol": "VCB", "adjusted": "false"}, "Unsupported FiinQuantX parameters"),
+        ({"symbol": "VCB", "lasted": "true"}, "Unsupported FiinQuantX parameters"),
+        ({"symbol": "VCB", "start": "2026-07-01"}, "requires 'end'"),
     ],
 )
-def test_fiinquantx_rejects_unverified_ohlcv_controls_before_login(
-    monkeypatch, params
+def test_fiinquantx_rejects_unverified_or_unbounded_controls_before_login(
+    monkeypatch, params, error_pattern
 ) -> None:
     class FakeFiinSession:
         def __init__(self, **_kwargs) -> None:
@@ -246,7 +246,7 @@ def test_fiinquantx_rejects_unverified_ohlcv_controls_before_login(
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
     )
 
-    with pytest.raises(ValueError, match="Unsupported FiinQuantX parameters"):
+    with pytest.raises(ValueError, match=error_pattern):
         FiinQuantXProviderPlugin().fetch("equity.ohlcv", params)
 
 

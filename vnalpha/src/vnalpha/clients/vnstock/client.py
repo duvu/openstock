@@ -20,6 +20,7 @@ from vnalpha.clients.vnstock.schemas import (
     SymbolsResponse,
     VnstockResponse,
 )
+from vnalpha.clients.vnstock.source_policy import validate_persistence_source
 from vnalpha.core.config import get_config
 from vnalpha.core.logging import get_logger
 
@@ -80,6 +81,7 @@ class VnstockClient:
         source: Optional[str] = None,
     ) -> SymbolsResponse:
         """GET /v1/reference/symbols."""
+        source = validate_persistence_source(source)
         params = {}
         if source:
             params["source"] = source
@@ -94,7 +96,8 @@ class VnstockClient:
         interval: str = "1D",
         source: Optional[str] = None,
     ) -> OHLCVResponse:
-        """GET /v1/equity/ohlcv."""
+        """GET /v1/equity/ohlcv for warehouse-bound ingestion."""
+        source = validate_persistence_source(source)
         params: dict[str, str] = {"symbol": symbol, "interval": interval}
         if start:
             params["start"] = start
@@ -111,6 +114,7 @@ class VnstockClient:
         source: Optional[str] = None,
     ) -> VnstockResponse:
         """GET /v1/equity/quote."""
+        source = validate_persistence_source(source)
         params: dict[str, str] = {"symbol": symbol}
         if source:
             params["source"] = source
@@ -125,7 +129,8 @@ class VnstockClient:
         interval: str = "1D",
         source: Optional[str] = None,
     ) -> OHLCVResponse:
-        """GET /v1/index/ohlcv."""
+        """GET /v1/index/ohlcv for warehouse-bound ingestion."""
+        source = validate_persistence_source(source)
         params: dict[str, str] = {"symbol": symbol, "interval": interval}
         if start:
             params["start"] = start

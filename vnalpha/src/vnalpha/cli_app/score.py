@@ -27,7 +27,7 @@ def score(
         0.40, "--min-score", help="Minimum composite score threshold."
     ),
 ) -> None:
-    """Score candidate research setups for the given date and generate the watchlist."""
+    """Run the shared provisioning path that invokes ``generate_watchlist``."""
     set_correlation_id()
     with command_lifecycle("score"):
         from vnalpha.warehouse.connection import get_connection
