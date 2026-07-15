@@ -58,3 +58,27 @@ class LLMResponseError(LLMGatewayError):
 
 class LLMConfigError(LLMGatewayError):
     """Raised when the LLM gateway is misconfigured (e.g. missing API key)."""
+
+
+class LLMNoCompatibleFallbackError(LLMGatewayError):
+    """Raised when a failed strict route has no verified compatible fallback."""
+
+    error_code = "no_compatible_fallback"
+
+    def __init__(
+        self,
+        *,
+        stage: str,
+        primary_model: str,
+        required_capability: str,
+        primary_error: Exception,
+    ) -> None:
+        super().__init__(
+            f"Primary model '{primary_model}' failed for stage '{stage}', and no "
+            f"distinct configured fallback explicitly declares capability "
+            f"'{required_capability}'."
+        )
+        self.stage = stage
+        self.primary_model = primary_model
+        self.required_capability = required_capability
+        self.primary_error = primary_error
