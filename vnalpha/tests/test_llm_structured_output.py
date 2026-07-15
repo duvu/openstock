@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import copy
 import json
 
 import httpx
 import pytest
 
+from vnalpha.assistant.errors import LLMResponseError, LLMTimeoutError
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.intent import INTENT_CLASSIFICATION_SCHEMA
 from vnalpha.assistant.synthesizer import SYNTHESIS_RESPONSE_SCHEMA
@@ -40,7 +42,7 @@ def test_gateway_sends_strict_json_schema(monkeypatch) -> None:
 
     def fake_post(url, *, json, headers, timeout):
         del headers, timeout
-        payloads.append(json)
+        payloads.append(copy.deepcopy(json))
         return _success(
             url,
             '{"intent":"scan_candidates","confidence":1,"entities":{},'
@@ -70,7 +72,7 @@ def test_gateway_downgrades_once_when_endpoint_rejects_json_schema(monkeypatch) 
 
     def fake_post(url, *, json, headers, timeout):
         del headers, timeout
-        payloads.append(json)
+        payloads.append(copy.deepcopy(json))
         if len(payloads) == 1:
             return httpx.Response(
                 400,
@@ -116,7 +118,7 @@ def test_unrelated_http_400_does_not_trigger_schema_downgrade(monkeypatch) -> No
 
     def fake_post(url, *, json, headers, timeout):
         del headers, timeout
-        payloads.append(json)
+        payloads.append(copy.deepcopy(json))
         return httpx.Response(
             400,
             request=httpx.Request("POST", url),
@@ -125,7 +127,7 @@ def test_unrelated_http_400_does_not_trigger_schema_downgrade(monkeypatch) -> No
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
-    with pytest.raises(Exception, match="All configured model routes failed"):
+    with pytest.raises(LLMResponseError, match="LLM HTTP 400"):
         _client().chat(
             [{"role": "user", "content": "classify"}],
             response_schema=INTENT_CLASSIFICATION_SCHEMA,
@@ -148,7 +150,7 @@ def test_strict_schema_does_not_add_transport_retry_budget(monkeypatch) -> None:
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
-    with pytest.raises(Exception, match="All configured model routes failed"):
+    with pytest.raises(LLMTimeoutError, match="failed after 1 attempt"):
         _client().chat(
             [{"role": "user", "content": "classify"}],
             response_schema=INTENT_CLASSIFICATION_SCHEMA,
