@@ -101,9 +101,15 @@ def _insert_feature(conn: duckdb.DuckDBPyConnection, fixture: FeatureFixture) ->
 
 
 def _build(conn: duckdb.DuckDBPyConnection):
+    from vnalpha.research_intelligence.policy import LEGACY_SECTOR_STRENGTH_POLICY
     from vnalpha.research_intelligence.sector import build_sector_strength
 
-    return build_sector_strength(conn, TARGET_DATE, generated_at=GENERATED_AT)
+    return build_sector_strength(
+        conn,
+        TARGET_DATE,
+        generated_at=GENERATED_AT,
+        policy=LEGACY_SECTOR_STRENGTH_POLICY,
+    )
 
 
 def test_build_sector_strength_ranks_tied_scores_alphabetically_and_persists(

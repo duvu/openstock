@@ -5,11 +5,14 @@ from __future__ import annotations
 from datetime import date
 
 from vnalpha.data_availability.deep_readiness_models import ContextIssue
-from vnalpha.research_intelligence.breadth import MINIMUM_BREADTH_ROWS
 from vnalpha.research_intelligence.models import (
     MarketRegimeSnapshot,
     SectorStrengthSnapshot,
     SymbolSectorAlignment,
+)
+from vnalpha.research_intelligence.policy import (
+    PRODUCTION_MARKET_REGIME_POLICY,
+    PRODUCTION_SECTOR_STRENGTH_POLICY,
 )
 from vnalpha.research_intelligence.regime import (
     METHODOLOGY_VERSION as MARKET_METHODOLOGY_VERSION,
@@ -17,6 +20,21 @@ from vnalpha.research_intelligence.regime import (
 from vnalpha.research_intelligence.sector import (
     METHODOLOGY_VERSION as SECTOR_METHODOLOGY_VERSION,
 )
+
+
+def _lineage_float(lineage: object, key: str) -> float | None:
+    if not hasattr(lineage, "get"):
+        return None
+    try:
+        value = lineage.get(key)  # type: ignore[attr-defined]
+    except TypeError:
+        return None
+    if value in {None, ""}:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def market_issues(
@@ -38,10 +56,18 @@ def market_issues(
         return (ContextIssue.MARKET_REGIME_STALE,)
     if snapshot.methodology_version != MARKET_METHODOLOGY_VERSION:
         return (ContextIssue.MARKET_REGIME_QUALITY_UNACCEPTABLE,)
+
+    policy = PRODUCTION_MARKET_REGIME_POLICY
+    exchange_coverage = _lineage_float(snapshot.lineage, "exchange_coverage")
+    liquidity_coverage = _lineage_float(snapshot.lineage, "liquidity_coverage")
     if (
-        snapshot.breadth_eligible_count < MINIMUM_BREADTH_ROWS
+        snapshot.breadth_eligible_count < policy.minimum_eligible_symbols
         or snapshot.breadth_coverage is None
-        or snapshot.breadth_coverage < 1.0
+        or snapshot.breadth_coverage < policy.minimum_breadth_coverage
+        or exchange_coverage is None
+        or exchange_coverage < policy.minimum_exchange_coverage
+        or liquidity_coverage is None
+        or liquidity_coverage < policy.minimum_liquidity_coverage
     ):
         return (ContextIssue.MARKET_REGIME_INPUT_COVERAGE_INSUFFICIENT,)
     if snapshot.quality != "COMPLETE" or snapshot.regime == "INSUFFICIENT_DATA":
@@ -64,15 +90,43 @@ def sector_issues(
             if latest and latest[0].as_of_date != target_date
             else ContextIssue.SECTOR_STRENGTH_MISSING,
         )
-    snapshot = snapshots[0]
-    if snapshot.as_of_date != target_date:
+    first = snapshots[0]
+    if first.as_of_date != target_date:
         return (ContextIssue.SECTOR_STRENGTH_STALE,)
-    if snapshot.methodology_version != SECTOR_METHODOLOGY_VERSION:
+    if first.methodology_version != SECTOR_METHODOLOGY_VERSION:
         return (ContextIssue.SECTOR_INPUT_COVERAGE_INSUFFICIENT,)
-    if snapshot.metadata_coverage < 1.0 or snapshot.unclassified_count:
+
+    policy = PRODUCTION_SECTOR_STRENGTH_POLICY
+    if (
+        first.metadata_coverage < policy.minimum_metadata_coverage
+        or first.unclassified_count
+        or (_lineage_float(first.lineage, "taxonomy_coverage") or 0.0)
+        < policy.minimum_taxonomy_coverage
+    ):
         return (ContextIssue.SECTOR_METADATA_INSUFFICIENT,)
-    if snapshot.quality != "OK":
+    if (
+        first.quality != "OK"
+        or (_lineage_float(first.lineage, "liquidity_coverage") or 0.0)
+        < policy.minimum_liquidity_coverage
+    ):
         return (ContextIssue.SECTOR_INPUT_COVERAGE_INSUFFICIENT,)
+
+    for snapshot in snapshots:
+        sector_coverage = _lineage_float(snapshot.lineage, "sector_coverage")
+        sector_liquidity_coverage = _lineage_float(
+            snapshot.lineage, "sector_liquidity_coverage"
+        )
+        if (
+            snapshot.methodology_version != SECTOR_METHODOLOGY_VERSION
+            or snapshot.member_count < policy.minimum_sector_members
+            or snapshot.eligible_count < policy.minimum_eligible_members
+            or sector_coverage is None
+            or sector_coverage < policy.minimum_sector_coverage
+            or sector_liquidity_coverage is None
+            or sector_liquidity_coverage < policy.minimum_liquidity_coverage
+            or snapshot.quality != "OK"
+        ):
+            return (ContextIssue.SECTOR_INPUT_COVERAGE_INSUFFICIENT,)
     return ()
 
 
@@ -85,6 +139,8 @@ def alignment_issues(
     if alignment is None or alignment.sector is None:
         return (ContextIssue.SYMBOL_SECTOR_UNCLASSIFIED,)
     if alignment.snapshot is None:
+        return (ContextIssue.SECTOR_NOT_RANKABLE,)
+    if alignment.snapshot.methodology_version != SECTOR_METHODOLOGY_VERSION:
         return (ContextIssue.SECTOR_NOT_RANKABLE,)
     return ()
 

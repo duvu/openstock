@@ -1,0 +1,12 @@
+{
+  "market": {
+    "risk_on": {"regime": "RISK_ON", "quality": "COMPLETE", "methodology": "market-regime-v2"},
+    "risk_off": {"regime": "RISK_OFF", "quality": "COMPLETE", "methodology": "market-regime-v2"},
+    "mixed": {"regime": "MIXED", "quality": "COMPLETE", "methodology": "market-regime-v2"},
+    "insufficient_five_rows": {"regime": "INSUFFICIENT_DATA", "quality": "INCOMPLETE", "minimum_eligible_symbols": 20}
+  },
+  "sector": {
+    "production": {"methodology": "sector-strength-v2", "minimum_members": 5, "minimum_eligible": 4},
+    "outlier_and_concentration": {"minimum_outlier_adjustments": 1, "concentration_warning": true}
+  }
+}

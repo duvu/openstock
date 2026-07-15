@@ -142,9 +142,15 @@ def _insert_breadth(
 def _build(
     conn: duckdb.DuckDBPyConnection,
 ) -> MarketRegimeSnapshot:
+    from vnalpha.research_intelligence.policy import LEGACY_MARKET_REGIME_POLICY
     from vnalpha.research_intelligence.regime import build_market_regime
 
-    return build_market_regime(conn, TARGET_DATE, generated_at=GENERATED_AT)
+    return build_market_regime(
+        conn,
+        TARGET_DATE,
+        generated_at=GENERATED_AT,
+        policy=LEGACY_MARKET_REGIME_POLICY,
+    )
 
 
 def test_build_market_regime_persists_deterministic_risk_on_snapshot(
