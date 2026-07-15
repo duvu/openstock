@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from vnalpha.assistant.errors import IntentClassificationError
-from vnalpha.assistant.models import IntentResult
+from vnalpha.assistant.models import SUPPORTED_INTENTS, IntentResult
 from vnalpha.assistant.research_intelligence_intents import (
     INTENT_DESCRIPTIONS,
     INTENT_EXAMPLES,
@@ -74,7 +74,60 @@ _BASE_INTENT_LINES = [
     "- unsupported_or_unsafe: execution, unrestricted tools, or unsupported request",
 ]
 
-INTENT_CLASSIFICATION_SCHEMA: dict[str, str] = {"type": "json_object"}
+_ENTITY_PROPERTIES: dict[str, dict[str, Any]] = {
+    "symbol": {"type": ["string", "null"]},
+    "symbols": {"type": "array", "items": {"type": "string"}},
+    "date": {"type": ["string", "null"]},
+    "universe": {"type": ["string", "null"]},
+    "filters": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "score": {"type": ["number", "null"]},
+            "min_score": {"type": ["number", "null"]},
+            "candidate_class": {"type": ["string", "null"]},
+            "class": {"type": ["string", "null"]},
+            "setup": {"type": ["string", "null"]},
+            "setup_type": {"type": ["string", "null"]},
+            "risk_flag": {"type": ["string", "null"]},
+        },
+    },
+    "top": {"type": ["integer", "null"]},
+    "min_score": {"type": ["number", "null"]},
+    "setup_type": {"type": ["string", "null"]},
+    "horizon": {"type": ["integer", "null"]},
+    "horizon_sessions": {"type": ["integer", "null"]},
+    "note_text": {"type": ["string", "null"]},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "limit": {"type": ["integer", "null"]},
+    "purpose": {"type": ["string", "null"]},
+}
+
+INTENT_CLASSIFICATION_SCHEMA: dict[str, Any] = {
+    "title": "vnalpha_intent_classification",
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "intent",
+        "confidence",
+        "entities",
+        "needs_clarification",
+        "clarification_question",
+        "safety_flags",
+    ],
+    "properties": {
+        "intent": {"type": "string", "enum": sorted(SUPPORTED_INTENTS)},
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "entities": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": _ENTITY_PROPERTIES,
+        },
+        "needs_clarification": {"type": "boolean"},
+        "clarification_question": {"type": ["string", "null"]},
+        "safety_flags": {"type": "array", "items": {"type": "string"}},
+    },
+}
 
 _RESEARCH_INTENT_LINES = [
     f"- {name}: {description}" for name, description in INTENT_DESCRIPTIONS.items()
@@ -105,9 +158,7 @@ CLASSIFIER_SYSTEM_PROMPT = "\n".join(
         "- Use summarize_watchlist_deep for structure/sector/setup/risk synthesis; use summarize_watchlist for a short summary.",
         "- A research shortlist is not an execution or allocation list.",
         *_EXAMPLE_LINES,
-        "- Respond only with JSON matching: "
-        '{"intent":"<name>","confidence":0.0,"entities":{},'
-        '"needs_clarification":false,"clarification_question":null,"safety_flags":[]}',
+        "- Respond only with JSON matching the supplied response schema.",
     ]
 )
 
