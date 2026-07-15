@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from types import MappingProxyType
 
 import httpx
 import pytest
@@ -10,9 +11,13 @@ from vnalpha.assistant.errors import LLMResponseError, LLMTimeoutError
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.intent import INTENT_CLASSIFICATION_SCHEMA
 from vnalpha.assistant.synthesizer import SYNTHESIS_RESPONSE_SCHEMA
+from vnalpha.model_routing.config import ModelRoutingConfig
+from vnalpha.model_routing.models import ModelProfile
 
 
 def _client() -> LLMGatewayClient:
+    models = MappingProxyType({profile: "test-model" for profile in ModelProfile})
+    no_fallbacks = MappingProxyType({profile: () for profile in ModelProfile})
     return LLMGatewayClient(
         LLMGatewayConfig(
             model="test-model",
@@ -21,7 +26,12 @@ def _client() -> LLMGatewayClient:
             max_output_tokens=256,
             max_retries=0,
             store_raw=False,
-        )
+        ),
+        routing_config=ModelRoutingConfig(
+            default_model_id="test-model",
+            profile_models=models,
+            fallback_profiles=no_fallbacks,
+        ),
     )
 
 
