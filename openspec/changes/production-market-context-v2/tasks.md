@@ -24,4 +24,4 @@
 - [x] 4.2 Add golden fixtures for risk-on, risk-off, mixed, insufficient, sparse, outlier and concentration cases.
 - [x] 4.3 Preserve legacy builder regression tests through explicit `v1` policies.
 - [x] 4.4 Document the production methodology and compatibility boundary.
-- [ ] 4.5 Run full CI, package build and record exact final-SHA evidence before closing #84.
+- [x] 4.5 Run full CI, package build and record exact final-SHA evidence before closing #84. [evidence: `openstock-ci` run #35 passed on implementation SHA `661f35ce1aebe7bc8e56b6f7490686cd2cfaa9a2`]
