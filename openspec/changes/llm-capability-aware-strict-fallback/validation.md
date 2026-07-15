@@ -3,10 +3,14 @@
 ## Status
 
 ```text
-Implementation: complete in working tree
+Implementation: complete
 Focused routing/structured-output tests: pass
-Ruff changed-file checks: pass
-Repository CI and exact final SHA: pending pull request
+Ruff: pass
+R0: pass
+Complete vnalpha suite: pass
+vnstock provider/canonical contracts: pass
+Both package builds: pass
+Lifecycle: ready for review; archive after merge
 ```
 
 ## Required final commands
@@ -26,5 +30,6 @@ python -m build --wheel --sdist --no-isolation --outdir /tmp/vnalpha-dist ./vnal
 |---|---|---|---|---:|---|---|
 | 2026-07-15T15:25:00Z | `local source export + working tree` | 1.1–4.1 | focused capability, structured-output and model-routing tests | 0 | 28 tests passed | local command transcript |
 | 2026-07-15T15:25:00Z | `local source export + working tree` | 1.1–4.1 | Ruff check/format on changed Python files | 0 | all checks passed | local command transcript |
+| 2026-07-15T15:47:07Z | `1a82ed837782b32950e50da80dad2ca599934959` | 1.1–4.2 | `openstock-ci` run #42 (`29429616769`) | 0 | repository consistency, hygiene, secret scan, Compose, OpenSpec checker tests, Ruff, focused #144 regressions, R0, complete vnalpha suite, vnstock contracts and both package builds passed | GitHub Actions run and uploaded diagnostics |
 
-Final implementation SHA: `pending`
+Final implementation SHA: `1a82ed837782b32950e50da80dad2ca599934959`
