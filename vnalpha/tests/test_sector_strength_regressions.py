@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 import duckdb
 import pytest
 
+from vnalpha.research_intelligence.policy import LEGACY_SECTOR_STRENGTH_POLICY
 from vnalpha.research_intelligence.sector import build_sector_strength
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
@@ -66,7 +67,12 @@ def _insert_members(
 
 
 def _build(conn: duckdb.DuckDBPyConnection):
-    return build_sector_strength(conn, TARGET_DATE, generated_at=GENERATED_AT)
+    return build_sector_strength(
+        conn,
+        TARGET_DATE,
+        generated_at=GENERATED_AT,
+        policy=LEGACY_SECTOR_STRENGTH_POLICY,
+    )
 
 
 def test_rebuild_replaces_omitted_same_date_sectors_and_clears_no_rankable_state(

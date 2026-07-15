@@ -1,13 +1,20 @@
-"""Exact-date market breadth calculations."""
+"""Policy-aware market breadth calculations for one research as-of date."""
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+from statistics import median, pstdev
+from types import MappingProxyType
 
 import duckdb
 
-from vnalpha.warehouse.repositories import get_symbols_active
+from vnalpha.research_intelligence.policy import (
+    LEGACY_MARKET_REGIME_POLICY,
+    MarketRegimePolicy,
+)
 
 MINIMUM_BREADTH_ROWS = 5
 
@@ -18,71 +25,296 @@ class BreadthContext:
     eligible_count: int
     excluded_count: int
     coverage: float | None
+    exchange_coverage: float | None
+    exchange_metadata_coverage: float | None
+    liquidity_candidate_count: int
+    liquidity_coverage: float | None
     pct_above_ma20: float | None
     pct_above_ma50: float | None
     pct_positive_return20: float | None
+    advancers: int | None
+    decliners: int | None
+    unchanged: int | None
+    near_52w_high_count: int | None
+    median_return20: float | None
+    return20_dispersion: float | None
     excluded_symbols: tuple[str, ...]
+    security_type_excluded_symbols: tuple[str, ...]
+    exclusion_counts: Mapping[str, int]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "excluded_symbols", tuple(self.excluded_symbols))
+        object.__setattr__(
+            self,
+            "security_type_excluded_symbols",
+            tuple(self.security_type_excluded_symbols),
+        )
+        object.__setattr__(
+            self, "exclusion_counts", MappingProxyType(dict(self.exclusion_counts))
+        )
 
     @property
     def available(self) -> bool:
-        """Whether enough exact, usable features exist for breadth metrics."""
-        return self.eligible_count >= MINIMUM_BREADTH_ROWS
+        """Legacy compatibility check; production callers use ``available_for``."""
+        return self.available_for(LEGACY_MARKET_REGIME_POLICY)
+
+    def available_for(self, policy: MarketRegimePolicy) -> bool:
+        """Whether the context satisfies every hard gate in ``policy``."""
+        return (
+            self.eligible_count >= policy.minimum_eligible_symbols
+            and self.coverage is not None
+            and self.coverage >= policy.minimum_breadth_coverage
+            and self.exchange_coverage is not None
+            and self.exchange_coverage >= policy.minimum_exchange_coverage
+            and self.liquidity_coverage is not None
+            and self.liquidity_coverage >= policy.minimum_liquidity_coverage
+        )
+
+
+def _as_date(value: date | datetime) -> date:
+    return value.date() if isinstance(value, datetime) else value
+
+
+def _security_type_allowed(
+    security_type: str | None, policy: MarketRegimePolicy
+) -> bool:
+    normalized = (security_type or "").strip().upper()
+    if not normalized:
+        return policy.allow_missing_security_type
+    return normalized in policy.allowed_security_types
+
+
+def _empty_context(
+    *,
+    active_count: int,
+    excluded_symbols: list[str],
+    security_type_excluded_symbols: list[str],
+    exclusion_counts: Counter[str],
+    liquidity_candidate_count: int,
+    coverage: float | None,
+    exchange_coverage: float | None,
+    exchange_metadata_coverage: float | None,
+    liquidity_coverage: float | None,
+) -> BreadthContext:
+    return BreadthContext(
+        active_count=active_count,
+        eligible_count=0,
+        excluded_count=len(excluded_symbols),
+        coverage=coverage,
+        exchange_coverage=exchange_coverage,
+        exchange_metadata_coverage=exchange_metadata_coverage,
+        liquidity_candidate_count=liquidity_candidate_count,
+        liquidity_coverage=liquidity_coverage,
+        pct_above_ma20=None,
+        pct_above_ma50=None,
+        pct_positive_return20=None,
+        advancers=None,
+        decliners=None,
+        unchanged=None,
+        near_52w_high_count=None,
+        median_return20=None,
+        return20_dispersion=None,
+        excluded_symbols=tuple(excluded_symbols),
+        security_type_excluded_symbols=tuple(security_type_excluded_symbols),
+        exclusion_counts=dict(exclusion_counts),
+    )
 
 
 def load_breadth_context(
     conn: duckdb.DuckDBPyConnection,
     as_of_date: date,
     benchmark_symbol: str,
+    *,
+    policy: MarketRegimePolicy = LEGACY_MARKET_REGIME_POLICY,
 ) -> BreadthContext:
-    """Calculate breadth from active symbols with exact-date usable features."""
-    symbols = tuple(
-        symbol for symbol in get_symbols_active(conn) if symbol != benchmark_symbol
-    )
-    usable_rows: list[tuple[float, float, float, float]] = []
-    exclusions: list[str] = []
-    for symbol in symbols:
-        row = conn.execute(
+    """Calculate breadth from policy-eligible active symbols and feature evidence."""
+    membership_rows: list[tuple[str, str | None, str | None]] = conn.execute(
+        """
+        SELECT symbol, exchange, security_type
+        FROM symbol_master
+        WHERE is_active = TRUE
+          AND COALESCE(lifecycle_status, 'ACTIVE') = 'ACTIVE'
+        ORDER BY symbol
+        """
+    ).fetchall()
+
+    active_rows: list[tuple[str, str | None]] = []
+    security_type_excluded_symbols: list[str] = []
+    for symbol, exchange, security_type in membership_rows:
+        if symbol == benchmark_symbol:
+            continue
+        if not _security_type_allowed(security_type, policy):
+            security_type_excluded_symbols.append(symbol)
+            continue
+        active_rows.append((symbol, exchange.strip() if exchange else None))
+
+    feature_rows = {
+        row[0]: row[1:]
+        for row in conn.execute(
             """
-            SELECT close, ma20, ma50, return_20d
+            SELECT symbol, close, ma20, ma50, return_20d, volume_ma20,
+                   distance_to_52w_high, as_of_bar_date, feature_data_status,
+                   feature_profile, neutral_completeness
             FROM feature_snapshot
-            WHERE symbol = ? AND date = ? AND as_of_bar_date = ?
-              AND feature_data_status = 'EXACT_DATE'
-              AND feature_profile IN ('MINIMAL_20', 'STANDARD_120', 'FULL_252')
-              AND neutral_completeness = 'COMPLETE'
-              AND close IS NOT NULL AND ma20 IS NOT NULL AND ma50 IS NOT NULL
-              AND return_20d IS NOT NULL
+            WHERE date = ?
+            ORDER BY symbol
             """,
-            [symbol, as_of_date, as_of_date],
-        ).fetchone()
+            [as_of_date],
+        ).fetchall()
+    }
+
+    usable_rows: list[tuple[float, float, float, float, float | None]] = []
+    eligible_exchanges: set[str] = set()
+    active_exchanges = {exchange for _, exchange in active_rows if exchange}
+    eligible_with_exchange = 0
+    exclusions: list[str] = []
+    exclusion_counts: Counter[str] = Counter()
+    liquidity_candidate_count = 0
+
+    for symbol, exchange in active_rows:
+        row = feature_rows.get(symbol)
         if row is None:
             exclusions.append(symbol)
+            exclusion_counts["MISSING_FEATURE"] += 1
             continue
-        usable_rows.append((float(row[0]), float(row[1]), float(row[2]), float(row[3])))
-    active_count = len(symbols)
-    eligible_count = len(usable_rows)
-    excluded_count = len(exclusions)
-    coverage = eligible_count / active_count if active_count else None
-    if eligible_count < MINIMUM_BREADTH_ROWS:
-        return BreadthContext(
-            active_count=active_count,
-            eligible_count=eligible_count,
-            excluded_count=excluded_count,
-            coverage=coverage,
-            pct_above_ma20=None,
-            pct_above_ma50=None,
-            pct_positive_return20=None,
-            excluded_symbols=tuple(exclusions),
+        (
+            close,
+            ma20,
+            ma50,
+            return20,
+            volume_ma20,
+            distance_to_52w_high,
+            bar_date,
+            feature_status,
+            feature_profile,
+            neutral_completeness,
+        ) = row
+        if feature_profile not in policy.allowed_feature_profiles:
+            exclusions.append(symbol)
+            exclusion_counts["PROFILE_NOT_ALLOWED"] += 1
+            continue
+        if neutral_completeness != "COMPLETE":
+            exclusions.append(symbol)
+            exclusion_counts["INCOMPLETE_FEATURE_PROFILE"] += 1
+            continue
+        if bar_date is None:
+            exclusions.append(symbol)
+            exclusion_counts["MISSING_BAR_DATE"] += 1
+            continue
+        staleness_days = (as_of_date - _as_date(bar_date)).days
+        if staleness_days < 0 or staleness_days > policy.maximum_staleness_days:
+            exclusions.append(symbol)
+            exclusion_counts["STALE_FEATURE"] += 1
+            continue
+        if feature_status not in {"EXACT_DATE", "STALE_DATE"}:
+            exclusions.append(symbol)
+            exclusion_counts["UNUSABLE_FEATURE_STATUS"] += 1
+            continue
+        if any(value is None for value in (close, ma20, ma50, return20)):
+            exclusions.append(symbol)
+            exclusion_counts["MISSING_REQUIRED_VALUE"] += 1
+            continue
+
+        liquidity_candidate_count += 1
+        average_traded_value = (
+            float(close) * float(volume_ma20) if volume_ma20 is not None else None
         )
-    return BreadthContext(
+        if policy.minimum_average_traded_value > 0 and (
+            average_traded_value is None
+            or average_traded_value < policy.minimum_average_traded_value
+        ):
+            exclusions.append(symbol)
+            exclusion_counts["LOW_LIQUIDITY"] += 1
+            continue
+
+        usable_rows.append(
+            (
+                float(close),
+                float(ma20),
+                float(ma50),
+                float(return20),
+                None if distance_to_52w_high is None else float(distance_to_52w_high),
+            )
+        )
+        if exchange:
+            eligible_exchanges.add(exchange)
+            eligible_with_exchange += 1
+
+    active_count = len(active_rows)
+    eligible_count = len(usable_rows)
+    coverage = eligible_count / active_count if active_count else None
+    represented_exchange_coverage = (
+        len(eligible_exchanges) / len(active_exchanges) if active_exchanges else 0.0
+    )
+    exchange_metadata_coverage = (
+        eligible_with_exchange / eligible_count if eligible_count else 0.0
+    )
+    exchange_coverage = min(represented_exchange_coverage, exchange_metadata_coverage)
+    liquidity_coverage = (
+        eligible_count / liquidity_candidate_count if liquidity_candidate_count else 0.0
+    )
+
+    if not usable_rows:
+        return _empty_context(
+            active_count=active_count,
+            excluded_symbols=exclusions,
+            security_type_excluded_symbols=security_type_excluded_symbols,
+            exclusion_counts=exclusion_counts,
+            liquidity_candidate_count=liquidity_candidate_count,
+            coverage=coverage,
+            exchange_coverage=exchange_coverage,
+            exchange_metadata_coverage=exchange_metadata_coverage,
+            liquidity_coverage=liquidity_coverage,
+        )
+
+    returns = [row[3] for row in usable_rows]
+    context = BreadthContext(
         active_count=active_count,
         eligible_count=eligible_count,
-        excluded_count=excluded_count,
+        excluded_count=len(exclusions),
         coverage=coverage,
-        pct_above_ma20=sum(close > ma20 for close, ma20, _, _ in usable_rows)
+        exchange_coverage=exchange_coverage,
+        exchange_metadata_coverage=exchange_metadata_coverage,
+        liquidity_candidate_count=liquidity_candidate_count,
+        liquidity_coverage=liquidity_coverage,
+        pct_above_ma20=sum(close > ma20 for close, ma20, _, _, _ in usable_rows)
         / eligible_count,
-        pct_above_ma50=sum(close > ma50 for close, _, ma50, _ in usable_rows)
+        pct_above_ma50=sum(close > ma50 for close, _, ma50, _, _ in usable_rows)
         / eligible_count,
-        pct_positive_return20=sum(return20 > 0 for _, _, _, return20 in usable_rows)
-        / eligible_count,
+        pct_positive_return20=sum(value > 0 for value in returns) / eligible_count,
+        advancers=sum(value > 0 for value in returns),
+        decliners=sum(value < 0 for value in returns),
+        unchanged=sum(value == 0 for value in returns),
+        near_52w_high_count=sum(
+            distance is not None and distance >= -0.005 for *_, distance in usable_rows
+        ),
+        median_return20=median(returns),
+        return20_dispersion=pstdev(returns) if len(returns) > 1 else 0.0,
         excluded_symbols=tuple(exclusions),
+        security_type_excluded_symbols=tuple(security_type_excluded_symbols),
+        exclusion_counts=dict(exclusion_counts),
+    )
+    if context.available_for(policy):
+        return context
+    return BreadthContext(
+        active_count=context.active_count,
+        eligible_count=context.eligible_count,
+        excluded_count=context.excluded_count,
+        coverage=context.coverage,
+        exchange_coverage=context.exchange_coverage,
+        exchange_metadata_coverage=context.exchange_metadata_coverage,
+        liquidity_candidate_count=context.liquidity_candidate_count,
+        liquidity_coverage=context.liquidity_coverage,
+        pct_above_ma20=None,
+        pct_above_ma50=None,
+        pct_positive_return20=None,
+        advancers=None,
+        decliners=None,
+        unchanged=None,
+        near_52w_high_count=None,
+        median_return20=None,
+        return20_dispersion=None,
+        excluded_symbols=context.excluded_symbols,
+        security_type_excluded_symbols=context.security_type_excluded_symbols,
+        exclusion_counts=context.exclusion_counts,
     )

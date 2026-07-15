@@ -11,6 +11,19 @@ policy:
   research_only_boundary: true
 
 changes:
+
+  production-market-context-v2:
+    status: in_progress
+    github_issues: [84]
+    roadmap_state: scheduled
+    summary: >-
+      Preserve explicit v1 compatibility while making production market-regime
+      and sector-strength v2 policies the default for coverage, robust
+      aggregation and deep-analysis readiness.
+    evidence: >-
+      Local focused and related regression suites pass on the implementation
+      working tree. Exact final-SHA CI, package evidence and closure remain
+      pending the issue #84 pull request.
   fiinquantx-provider-integration:
     status: partial
     github_issues: [105, 106, 136]

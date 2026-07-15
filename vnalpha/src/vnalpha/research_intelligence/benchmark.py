@@ -76,13 +76,14 @@ def classify_trend(
     ma50_slope: float,
     *,
     required_values_available: bool,
+    minimum_ma50_slope: float = 0.0,
 ) -> Trend:
     """Classify trend from required close, moving-average, and slope inputs."""
     if not required_values_available:
         return "INSUFFICIENT_DATA"
-    if close > ma20 > ma50 and ma50_slope > 0:
+    if close > ma20 > ma50 and ma50_slope > minimum_ma50_slope:
         return "UPTREND"
-    if close < ma20 < ma50 and ma50_slope < 0:
+    if close < ma20 < ma50 and ma50_slope < -minimum_ma50_slope:
         return "DOWNTREND"
     return "MIXED"
 
@@ -91,11 +92,12 @@ def classify_volatility(
     volatility20: float,
     *,
     required_values_available: bool,
+    high_volatility_threshold: float = HIGH_VOLATILITY_THRESHOLD,
 ) -> Volatility:
     """Classify daily volatility against the annualized thirty-percent boundary."""
     if not required_values_available:
         return "INSUFFICIENT_DATA"
-    if volatility20 >= HIGH_VOLATILITY_THRESHOLD:
+    if volatility20 >= high_volatility_threshold:
         return "HIGH"
     return "NORMAL"
 
@@ -104,6 +106,9 @@ def load_benchmark_context(
     conn: duckdb.DuckDBPyConnection,
     as_of_date: date,
     benchmark_symbol: str,
+    *,
+    minimum_ma50_slope: float = 0.0,
+    high_volatility_threshold: float = HIGH_VOLATILITY_THRESHOLD,
 ) -> BenchmarkContext:
     """Load canonical benchmark data and derive its regime feature context."""
     benchmark = load_canonical_ohlcv(conn, benchmark_symbol, as_of_date.isoformat())
@@ -184,10 +189,12 @@ def load_benchmark_context(
             values[2],
             values[3],
             required_values_available=required_available,
+            minimum_ma50_slope=minimum_ma50_slope,
         ),
         volatility=classify_volatility(
             values[4],
             required_values_available=required_available,
+            high_volatility_threshold=high_volatility_threshold,
         ),
         caveats=tuple(caveats),
     )
