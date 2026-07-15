@@ -10,7 +10,11 @@ from urllib.parse import urlparse
 
 from vnalpha.model_routing.config import ModelRoutingConfig
 from vnalpha.model_routing.integration import GatewayRouteRequest, resolve_gateway_route
-from vnalpha.model_routing.models import ModelProfile, ModelRouteDecision
+from vnalpha.model_routing.models import (
+    ModelCapability,
+    ModelProfile,
+    ModelRouteDecision,
+)
 from vnalpha.model_routing.observability import (
     emit_call_failed,
     emit_call_started,
@@ -265,11 +269,13 @@ class LLMGatewayClient:
         strict_schema = bool(
             response_schema and response_schema != {"type": "json_object"}
         )
-        routes = (
-            (primary,)
-            if strict_schema
-            else (primary, *fallback_route_decisions(self._routing_config, primary))
+        required_capability = ModelCapability.JSON_SCHEMA if strict_schema else None
+        compatible_fallbacks = fallback_route_decisions(
+            self._routing_config,
+            primary,
+            required_capability=required_capability,
         )
+        routes = (primary, *compatible_fallbacks)
         previous: ModelRouteDecision | None = None
         last_error: Exception | None = None
 
@@ -294,6 +300,17 @@ class LLMGatewayClient:
             usage_payload["model_route"] = decision.to_dict()
             return content, usage_payload
 
+        if strict_schema and last_error is not None and not compatible_fallbacks:
+            from vnalpha.assistant.errors import LLMNoCompatibleFallbackError
+
+            compatibility_error = LLMNoCompatibleFallbackError(
+                stage=stage,
+                primary_model=primary.model_id,
+                required_capability=ModelCapability.JSON_SCHEMA.value,
+                primary_error=last_error,
+            )
+            _log_llm_error(stage, compatibility_error, cause=last_error)
+            raise compatibility_error from last_error
         if isinstance(last_error, LLMGatewayError):
             raise last_error
         fallback_error = LLMGatewayError(

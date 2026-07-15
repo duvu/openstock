@@ -20,8 +20,8 @@ _DEFAULT_FALLBACKS: Mapping[ModelProfile, tuple[ModelProfile, ...]] = MappingPro
         ),
     }
 )
-_EMPTY_CAPABILITIES: Mapping[ModelProfile, frozenset[ModelCapability]] = MappingProxyType(
-    {profile: frozenset() for profile in ModelProfile}
+_EMPTY_CAPABILITIES: Mapping[ModelProfile, frozenset[ModelCapability]] = (
+    MappingProxyType({profile: frozenset() for profile in ModelProfile})
 )
 
 
@@ -87,9 +87,9 @@ class ModelRoutingConfig:
     fallback_profiles: Mapping[ModelProfile, tuple[ModelProfile, ...]] = field(
         default_factory=lambda: _DEFAULT_FALLBACKS
     )
-    profile_capabilities: Mapping[
-        ModelProfile, frozenset[ModelCapability]
-    ] = field(default_factory=lambda: _EMPTY_CAPABILITIES)
+    profile_capabilities: Mapping[ModelProfile, frozenset[ModelCapability]] = field(
+        default_factory=lambda: _EMPTY_CAPABILITIES
+    )
     explicit_profiles: frozenset[ModelProfile] = frozenset()
     allow_raw_override: bool = False
 
@@ -187,9 +187,7 @@ class ModelRoutingConfig:
     def fallback_chain(self, profile: ModelProfile) -> tuple[ModelProfile, ...]:
         return self.fallback_profiles.get(profile, ())
 
-    def capabilities_for(
-        self, profile: ModelProfile
-    ) -> frozenset[ModelCapability]:
+    def capabilities_for(self, profile: ModelProfile) -> frozenset[ModelCapability]:
         return self.profile_capabilities.get(profile, frozenset())
 
     def supports(

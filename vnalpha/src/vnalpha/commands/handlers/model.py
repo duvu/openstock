@@ -11,8 +11,10 @@ from vnalpha.commands.models import (
 )
 from vnalpha.model_routing import (
     DEFAULT_OVERRIDE_STORE,
+    ModelCapability,
     ModelProfile,
     ModelRoutingConfig,
+    fallback_route_decisions,
     get_last_route_decision,
     resolve_model_route,
 )
@@ -128,7 +130,11 @@ def _status_result(*, session_id: str | None = None) -> CommandResult:
                     "distinct_models": sorted(distinct_models),
                     "default_profile": ModelProfile.DEFAULT.value,
                     "resolved_models": _profile_models(config),
+                    "profile_capabilities": _profile_capabilities(config),
                     "effective_fallbacks": _effective_fallbacks(config),
+                    "effective_strict_schema_fallbacks": _effective_fallbacks(
+                        config, required_capability=ModelCapability.JSON_SCHEMA
+                    ),
                     "last_route": (
                         last_route.to_dict() if last_route is not None else None
                     ),
@@ -163,9 +169,20 @@ def _profiles_result() -> CommandResult:
                             "explicitly_configured": config.is_explicitly_configured(
                                 profile
                             ),
+                            "capabilities": [
+                                capability.value
+                                for capability in sorted(
+                                    config.capabilities_for(profile),
+                                    key=lambda item: item.value,
+                                )
+                            ],
                             "effective_fallbacks": _effective_fallbacks(config)[
                                 profile.value
                             ],
+                            "effective_strict_schema_fallbacks": _effective_fallbacks(
+                                config,
+                                required_capability=ModelCapability.JSON_SCHEMA,
+                            )[profile.value],
                         }
                         for profile in ModelProfile
                     ],
@@ -271,8 +288,12 @@ def _explain_route_result(
         override=DEFAULT_OVERRIDE_STORE.get_current_override(session_id=session_id),
     )
     effective_fallbacks = _effective_fallbacks(config)[decision.profile.value]
+    strict_schema_fallbacks = _effective_fallbacks(
+        config, required_capability=ModelCapability.JSON_SCHEMA
+    )[decision.profile.value]
     payload = decision.to_dict()
     payload["effective_fallbacks"] = effective_fallbacks
+    payload["effective_strict_schema_fallbacks"] = strict_schema_fallbacks
     return CommandResult(
         status=CommandStatus.SUCCESS,
         title="/model explain-route",
@@ -318,17 +339,42 @@ def _distinct_models(config: ModelRoutingConfig) -> set[str]:
     return {config.model_for(profile) for profile in ModelProfile}
 
 
-def _effective_fallbacks(config: ModelRoutingConfig) -> dict[str, list[dict[str, str]]]:
-    result: dict[str, list[dict[str, str]]] = {}
+def _profile_capabilities(config: ModelRoutingConfig) -> dict[str, list[str]]:
+    return {
+        profile.value: [
+            capability.value
+            for capability in sorted(
+                config.capabilities_for(profile), key=lambda item: item.value
+            )
+        ]
+        for profile in ModelProfile
+    }
+
+
+def _effective_fallbacks(
+    config: ModelRoutingConfig,
+    *,
+    required_capability: ModelCapability | None = None,
+) -> dict[str, list[dict[str, object]]]:
+    result: dict[str, list[dict[str, object]]] = {}
     for profile in ModelProfile:
-        primary_model = config.model_for(profile)
-        seen_models = {primary_model}
-        effective: list[dict[str, str]] = []
-        for fallback in config.fallback_chain(profile):
-            fallback_model = config.model_for(fallback)
-            if fallback_model in seen_models:
-                continue
-            seen_models.add(fallback_model)
-            effective.append({"profile": fallback.value, "model_id": fallback_model})
-        result[profile.value] = effective
+        decision = resolve_model_route(
+            config,
+            stage="generic",
+            model_profile=profile,
+        )
+        result[profile.value] = [
+            {
+                "profile": fallback.profile.value,
+                "model_id": fallback.model_id,
+                "capabilities": [
+                    capability.value for capability in fallback.capabilities
+                ],
+            }
+            for fallback in fallback_route_decisions(
+                config,
+                decision,
+                required_capability=required_capability,
+            )
+        ]
     return result

@@ -4,7 +4,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from vnalpha.model_routing.config import ModelRoutingConfig
-from vnalpha.model_routing.models import ModelProfile, ModelRouteDecision
+from vnalpha.model_routing.models import (
+    ModelCapability,
+    ModelProfile,
+    ModelRouteDecision,
+)
 from vnalpha.model_routing.overrides import (
     ModelRouteOverride,
     resolve_override_with_source,
@@ -88,18 +92,31 @@ def decision_for_profile(
         fallback_chain=(
             config.fallback_chain(profile) if fallback_chain is None else fallback_chain
         ),
+        capabilities=tuple(
+            sorted(config.capabilities_for(profile), key=lambda item: item.value)
+        ),
     )
 
 
 def fallback_route_decisions(
-    config: ModelRoutingConfig, decision: ModelRouteDecision
+    config: ModelRoutingConfig,
+    decision: ModelRouteDecision,
+    *,
+    required_capability: ModelCapability | str | None = None,
 ) -> tuple[ModelRouteDecision, ...]:
+    required = (
+        ModelCapability.parse(required_capability)
+        if required_capability is not None
+        else None
+    )
     decisions: list[ModelRouteDecision] = []
     seen_profiles: set[ModelProfile] = {decision.profile}
     seen_model_ids: set[str] = {decision.model_id}
     for profile in decision.fallback_chain:
         model_id = config.model_for(profile)
         if profile in seen_profiles or model_id in seen_model_ids:
+            continue
+        if required is not None and not config.supports(profile, required):
             continue
         seen_profiles.add(profile)
         seen_model_ids.add(model_id)

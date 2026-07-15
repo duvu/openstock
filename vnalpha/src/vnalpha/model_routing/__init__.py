@@ -1,6 +1,7 @@
 from vnalpha.model_routing.config import ModelRoutingConfig
 from vnalpha.model_routing.integration import GatewayRouteRequest, resolve_gateway_route
 from vnalpha.model_routing.models import (
+    ModelCapability,
     ModelProfile,
     ModelRouteDecision,
     ModelRouteStage,
@@ -24,6 +25,7 @@ from vnalpha.model_routing.runtime import get_last_route_decision
 __all__ = [
     "DEFAULT_OVERRIDE_STORE",
     "GatewayRouteRequest",
+    "ModelCapability",
     "ModelOverrideStore",
     "ModelProfile",
     "ModelRouteDecision",
