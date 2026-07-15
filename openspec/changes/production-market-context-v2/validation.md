@@ -3,11 +3,11 @@
 ## Status
 
 ```text
-Implementation: complete in branch working tree
+Implementation: complete on pull request #145
 Focused policy tests: pass
 Related readiness/provisioning/repository tests: pass
 Ruff changed-file checks: pass
-Full CI and exact final SHA: pending pull request
+Full CI and exact final SHA: pending pull request validation
 ```
 
 ## Required final commands
