@@ -234,11 +234,31 @@ def _migrate_feature_snapshot_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("feature_build_version", "VARCHAR"),
         ("feature_generated_at", "TIMESTAMPTZ"),
         ("lineage_json", "VARCHAR"),
+        ("feature_profile", "VARCHAR"),
+        ("neutral_completeness", "VARCHAR"),
+        ("relative_strength_completeness", "VARCHAR"),
+        ("required_bar_count", "INTEGER"),
+        ("observed_bar_count", "INTEGER"),
+        ("missing_neutral_fields_json", "VARCHAR"),
+        ("missing_relative_strength_fields_json", "VARCHAR"),
+        ("feature_completeness_rule_version", "VARCHAR"),
     ]
     for col, col_type in cols:
         conn.execute(
             f"ALTER TABLE feature_snapshot ADD COLUMN IF NOT EXISTS {col} {col_type}"
         )
+    conn.execute(
+        "UPDATE feature_snapshot SET feature_profile = 'LEGACY_UNKNOWN' "
+        "WHERE feature_profile IS NULL"
+    )
+    conn.execute(
+        "UPDATE feature_snapshot SET neutral_completeness = 'LEGACY_UNKNOWN' "
+        "WHERE neutral_completeness IS NULL"
+    )
+    conn.execute(
+        "UPDATE feature_snapshot SET relative_strength_completeness = 'LEGACY_UNKNOWN' "
+        "WHERE relative_strength_completeness IS NULL"
+    )
 
 
 def _seed_benchmark_definitions(conn: duckdb.DuckDBPyConnection) -> None:

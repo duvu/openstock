@@ -441,6 +441,30 @@ def test_migration_adds_feature_metadata_columns_without_dropping_rows():
     assert "lineage_json" in col_names
 
 
+def test_migrations_mark_pre_profile_feature_rows_legacy_unknown():
+    from vnalpha.warehouse.migrations import run_migrations
+
+    # Given: a feature snapshot created before completeness evidence existed.
+    conn = _make_schema_without_metadata()
+    conn.execute(
+        "INSERT INTO feature_snapshot (symbol, date, close) VALUES ('FPT', '2024-01-01', 100.0)"
+    )
+
+    # When: the warehouse migration runs.
+    run_migrations(conn=conn)
+
+    # Then: the row remains readable but cannot claim a known profile.
+    row = conn.execute(
+        """
+        SELECT feature_profile, neutral_completeness,
+               relative_strength_completeness
+        FROM feature_snapshot
+        WHERE symbol = 'FPT'
+        """
+    ).fetchone()
+    assert row == ("LEGACY_UNKNOWN", "LEGACY_UNKNOWN", "LEGACY_UNKNOWN")
+
+
 # ---------------------------------------------------------------------------
 # Task 1.3.3 — Migrations add assistant/chat/outcome tables without dropping rows
 # ---------------------------------------------------------------------------

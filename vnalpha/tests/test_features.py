@@ -228,8 +228,8 @@ def _insert_ohlcv(conn, symbol, n=200, end_date="2024-06-28", seed=42):
     rows = [
         (
             symbol,
-            "1D",
             str(d.date()),
+            "1D",
             row["open"],
             row["high"],
             row["low"],
@@ -243,7 +243,14 @@ def _insert_ohlcv(conn, symbol, n=200, end_date="2024-06-28", seed=42):
         for d, row in df.iterrows()
     ]
     conn.executemany(
-        "INSERT INTO canonical_ohlcv VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
+        """
+        INSERT INTO canonical_ohlcv (
+            symbol, time, interval, open, high, low, close, volume,
+            selected_provider, quality_status, ingestion_run_id,
+            source_service_run_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        rows,
     )
     return df
 
@@ -322,6 +329,67 @@ def test_build_features_missing_benchmark():
     assert bench_count == 0
     # RS should be NULL (NaN stored as None in DuckDB)
     assert rs is None
+
+
+def test_build_features_persists_standard_profile_evidence():
+    # Given: exact-date symbol and benchmark data with STANDARD_120 history.
+    from vnalpha.features.build_features import build_features
+    from vnalpha.warehouse.migrations import run_migrations
+
+    conn = duckdb.connect()
+    run_migrations(conn)
+    target = "2024-06-28"
+    _insert_ohlcv(conn, "FPT", n=120, end_date=target)
+    _insert_ohlcv(conn, "VNINDEX", n=120, end_date=target, seed=99)
+
+    # When: the feature builder persists the snapshot.
+    assert build_features(conn, target, universe=["FPT"])["built"] == 1
+
+    # Then: profile evidence records complete neutral and RS requirements.
+    row = conn.execute(
+        """
+        SELECT feature_profile, neutral_completeness,
+               relative_strength_completeness, required_bar_count,
+               observed_bar_count, feature_completeness_rule_version
+        FROM feature_snapshot
+        WHERE symbol = 'FPT' AND date = ?
+        """,
+        [target],
+    ).fetchone()
+    assert row == (
+        "STANDARD_120",
+        "COMPLETE",
+        "COMPLETE",
+        120,
+        120,
+        "feature-completeness-v1",
+    )
+
+
+def test_build_features_keeps_neutral_evidence_when_benchmark_missing():
+    # Given: exact-date STANDARD_120 symbol data without a benchmark.
+    from vnalpha.features.build_features import build_features
+    from vnalpha.warehouse.migrations import run_migrations
+
+    conn = duckdb.connect()
+    run_migrations(conn)
+    target = "2024-06-28"
+    _insert_ohlcv(conn, "VNM", n=120, end_date=target)
+
+    # When: the feature builder persists the snapshot.
+    assert build_features(conn, target, universe=["VNM"])["built"] == 1
+
+    # Then: only relative-strength evidence is incomplete.
+    row = conn.execute(
+        """
+        SELECT neutral_completeness, relative_strength_completeness,
+               missing_relative_strength_fields_json
+        FROM feature_snapshot
+        WHERE symbol = 'VNM' AND date = ?
+        """,
+        [target],
+    ).fetchone()
+    assert row == ("COMPLETE", "INCOMPLETE", '["rs_20d", "rs_60d"]')
 
 
 def test_build_features_insufficient_history_skipped():

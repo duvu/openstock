@@ -160,6 +160,9 @@ def load_sector_input_context(
         JOIN symbol_master AS s ON s.symbol = f.symbol
         WHERE s.is_active = TRUE AND f.date = ? AND f.as_of_bar_date = ?
           AND f.feature_data_status = 'EXACT_DATE'
+          AND f.feature_profile IN ('STANDARD_120', 'FULL_252')
+          AND f.neutral_completeness = 'COMPLETE'
+          AND f.relative_strength_completeness = 'COMPLETE'
           AND f.close IS NOT NULL AND f.ma20 IS NOT NULL AND f.ma50 IS NOT NULL
           AND f.return_20d IS NOT NULL AND f.return_60d IS NOT NULL
           AND f.rs_20d_vs_vnindex IS NOT NULL AND f.rs_60d_vs_vnindex IS NOT NULL

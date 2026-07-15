@@ -34,6 +34,14 @@ METADATA_COLUMNS = (
     "feature_build_version",
     "feature_generated_at",
     "lineage_json",
+    "feature_profile",
+    "neutral_completeness",
+    "relative_strength_completeness",
+    "required_bar_count",
+    "observed_bar_count",
+    "missing_neutral_fields_json",
+    "missing_relative_strength_fields_json",
+    "feature_completeness_rule_version",
 )
 
 
@@ -44,14 +52,29 @@ def save_feature_snapshot(
     features: Mapping[str, float | None],
     metadata: Mapping[str, str | int | None] | None = None,
 ) -> None:
-    all_data_columns = (*FEATURE_COLUMNS, *METADATA_COLUMNS)
+    table_columns = {
+        str(row[0]) for row in conn.execute("DESCRIBE feature_snapshot").fetchall()
+    }
+    all_data_columns = tuple(
+        column
+        for column in (*FEATURE_COLUMNS, *METADATA_COLUMNS)
+        if column in table_columns
+    )
     columns = ("symbol", "date", *all_data_columns)
     row_metadata = metadata or {}
     values = [symbol, date_str]
-    values.extend(features.get(column) for column in FEATURE_COLUMNS)
-    values.extend(row_metadata.get(column) for column in METADATA_COLUMNS)
+    values.extend(
+        features.get(column) for column in FEATURE_COLUMNS if column in table_columns
+    )
+    values.extend(
+        row_metadata.get(column)
+        for column in METADATA_COLUMNS
+        if column in table_columns
+    )
     placeholders = ", ".join("?" for _ in columns)
-    update_set = ", ".join(f"{column} = excluded.{column}" for column in all_data_columns)
+    update_set = ", ".join(
+        f"{column} = excluded.{column}" for column in all_data_columns
+    )
     conn.execute(
         f"INSERT INTO feature_snapshot ({', '.join(columns)}) VALUES ({placeholders}) "
         f"ON CONFLICT (symbol, date) DO UPDATE SET {update_set}",

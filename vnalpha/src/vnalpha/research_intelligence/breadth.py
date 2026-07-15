@@ -47,6 +47,8 @@ def load_breadth_context(
             FROM feature_snapshot
             WHERE symbol = ? AND date = ? AND as_of_bar_date = ?
               AND feature_data_status = 'EXACT_DATE'
+              AND feature_profile IN ('MINIMAL_20', 'STANDARD_120', 'FULL_252')
+              AND neutral_completeness = 'COMPLETE'
               AND close IS NOT NULL AND ma20 IS NOT NULL AND ma50 IS NOT NULL
               AND return_20d IS NOT NULL
             """,

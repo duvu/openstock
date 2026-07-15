@@ -106,9 +106,8 @@ def pipeline_conn():
 
     finish_ingestion_run(conn, run_id, status="SUCCESS")
 
-    # Insert VNINDEX benchmark: 130 bars, "up" trend
     vnindex_run_id = create_ingestion_run(conn, "fixture", "/fixture/vnindex")
-    vnindex_rows = make_ohlcv_rows("VNINDEX", n_bars=130, base_price=1200.0, trend="up")
+    vnindex_rows = make_ohlcv_rows("VNINDEX", n_bars=163, base_price=1200.0, trend="up")
     insert_raw_ohlcv(
         conn,
         vnindex_run_id,
@@ -119,17 +118,15 @@ def pipeline_conn():
     )
     finish_ingestion_run(conn, vnindex_run_id, status="SUCCESS")
 
-    # Insert FPT: strong up trend, 130 bars
     fpt_run_id = create_ingestion_run(conn, "fixture", "/fixture/fpt")
-    fpt_rows = make_ohlcv_rows("FPT", n_bars=130, base_price=100.0, trend="strong_up")
+    fpt_rows = make_ohlcv_rows("FPT", n_bars=163, base_price=100.0, trend="strong_up")
     insert_raw_ohlcv(
         conn, fpt_run_id, "FPT", fpt_rows, provider="fixture", quality_status="pass"
     )
     finish_ingestion_run(conn, fpt_run_id, status="SUCCESS")
 
-    # Insert VNM: flat trend, 130 bars
     vnm_run_id = create_ingestion_run(conn, "fixture", "/fixture/vnm")
-    vnm_rows = make_ohlcv_rows("VNM", n_bars=130, base_price=80.0, trend="flat")
+    vnm_rows = make_ohlcv_rows("VNM", n_bars=163, base_price=80.0, trend="flat")
     insert_raw_ohlcv(
         conn, vnm_run_id, "VNM", vnm_rows, provider="fixture", quality_status="pass"
     )

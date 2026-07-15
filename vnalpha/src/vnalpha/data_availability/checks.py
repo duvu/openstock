@@ -78,8 +78,16 @@ def get_feature_snapshot_status(
 ) -> bool:
     """Return True if a feature_snapshot row exists for (symbol, date)."""
     row = conn.execute(
-        "SELECT 1 FROM feature_snapshot WHERE symbol = ? AND date = ? LIMIT 1",
-        [symbol, target_date],
+        """
+        SELECT 1 FROM feature_snapshot
+        WHERE symbol = ? AND date = ? AND as_of_bar_date = ?
+          AND feature_data_status = 'EXACT_DATE'
+          AND feature_profile IN ('STANDARD_120', 'FULL_252')
+          AND neutral_completeness = 'COMPLETE'
+          AND relative_strength_completeness = 'COMPLETE'
+        LIMIT 1
+        """,
+        [symbol, target_date, target_date],
     ).fetchone()
     return row is not None
 
@@ -266,7 +274,9 @@ def get_feature_snapshot_evidence(
         """
         SELECT as_of_bar_date::VARCHAR, benchmark_as_of_bar_date::VARCHAR,
                source_row_count, benchmark_row_count, feature_data_status,
-               feature_build_version, feature_generated_at::VARCHAR, lineage_json
+               feature_build_version, feature_generated_at::VARCHAR, lineage_json,
+               feature_profile, neutral_completeness,
+               relative_strength_completeness
         FROM feature_snapshot WHERE symbol = ? AND date = ? LIMIT 1
         """,
         [symbol, target_date],
@@ -286,15 +296,27 @@ def get_feature_snapshot_evidence(
         version,
         generated_at,
         lineage_raw,
+        feature_profile,
+        neutral_completeness,
+        relative_strength_completeness,
     ) = row
     lineage = _decode_lineage(lineage_raw)
+    available = (
+        _date_text(as_of_bar_date) == target_date
+        and str(status) == "EXACT_DATE"
+        and str(feature_profile) in {"STANDARD_120", "FULL_252"}
+        and str(neutral_completeness) == "COMPLETE"
+        and str(relative_strength_completeness) == "COMPLETE"
+    )
     return ArtifactEvidence(
         artifact=DataArtifact.FEATURE_SNAPSHOT,
-        available=True,
+        available=available,
         row_count=int(source_row_count) if source_row_count is not None else None,
         observed_as_of_date=_date_text(as_of_bar_date),
         freshness=_freshness(True, as_of_bar_date, target_date),
-        quality_status=str(status) if status else "unknown",
+        quality_status=(
+            str(status) if available and status else "INCOMPLETE_FEATURE_PROFILE"
+        ),
         lineage_status="complete" if lineage else "unknown",
         lineage_fields=_lineage_fields(lineage),
         provider=_lineage_value(lineage, "selected_provider", "provider"),

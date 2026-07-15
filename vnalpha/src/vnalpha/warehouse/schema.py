@@ -188,6 +188,14 @@ CREATE TABLE IF NOT EXISTS feature_snapshot (
     feature_build_version VARCHAR,
     feature_generated_at  TIMESTAMPTZ,
     lineage_json          VARCHAR,
+    feature_profile       VARCHAR,
+    neutral_completeness  VARCHAR,
+    relative_strength_completeness VARCHAR,
+    required_bar_count    INTEGER,
+    observed_bar_count    INTEGER,
+    missing_neutral_fields_json VARCHAR,
+    missing_relative_strength_fields_json VARCHAR,
+    feature_completeness_rule_version VARCHAR,
     PRIMARY KEY (symbol, date)
 )
 """
