@@ -104,6 +104,15 @@ class TestAskHelp:
 
 
 class TestAskFunctional:
+    @pytest.fixture(autouse=True)
+    def _configure_mock_llm_gateway(self, monkeypatch):
+        monkeypatch.setenv(
+            "VNALPHA_LLM_ENDPOINT",
+            "https://gateway.example.test/v1/chat/completions",
+        )
+        monkeypatch.setenv("VNALPHA_LLM_MODEL", "verified-test-model")
+        monkeypatch.setenv("VNALPHA_LLM_API_KEY", "dedicated-test-key")
+
     def test_ask_output_is_research_language(self):
         """Answer output must not contain buy/sell/order language."""
         with patch(
