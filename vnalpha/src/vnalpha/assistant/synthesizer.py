@@ -74,6 +74,46 @@ UNSAFE_CONTEXT_TERMS = TRADING_EXECUTION_PHRASES | frozenset(
     }
 )
 
+SYNTHESIS_RESPONSE_SCHEMA: dict[str, Any] = {
+    "title": "vnalpha_grounded_answer",
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "summary",
+        "basis",
+        "risks_caveats",
+        "tool_trace_summary",
+        "missing_data",
+        "grounded_source_refs",
+        "claim_source_refs",
+        "research_metadata",
+    ],
+    "properties": {
+        "summary": {"type": "string"},
+        "basis": {"type": "string"},
+        "risks_caveats": {"type": "string"},
+        "tool_trace_summary": {"type": "string"},
+        "missing_data": {"type": "array", "items": {"type": "string"}},
+        "grounded_source_refs": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        # Dynamic claim identifiers are intentionally disabled in strict mode.
+        # Groundedness remains enforced through the bounded source-reference list.
+        "claim_source_refs": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {},
+        },
+        # Runtime validation metadata is added deterministically after the model call.
+        "research_metadata": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {},
+        },
+    },
+}
+
 SYNTHESIZER_SYSTEM_PROMPT = """You are a research assistant for a Vietnamese stock market screening tool.
 
 Your role is to explain deterministic pipeline outputs as persisted research context.
@@ -87,20 +127,10 @@ STRICT RULES:
 6. Include basis, freshness, methodology, quality, lineage, risks, caveats, and missing data when available.
 7. Follow the supplied research template for research-intelligence intents.
 8. Use only values listed in valid_grounded_source_refs for grounded_source_refs.
-9. If claim_source_refs is present, map stable claim IDs only to valid_grounded_source_refs.
+9. Return claim_source_refs and research_metadata as empty objects; validation metadata is added by the application.
 10. Shortlist and scenario outputs are research-prioritization artifacts requiring human review.
 
-Respond only as JSON:
-{
-  "summary": "...",
-  "basis": "...",
-  "risks_caveats": "...",
-  "tool_trace_summary": "...",
-  "missing_data": [],
-  "grounded_source_refs": [],
-  "claim_source_refs": {},
-  "research_metadata": {}
-}
+Respond only with JSON matching the supplied response schema.
 """
 
 
@@ -223,6 +253,7 @@ class AnswerSynthesizer:
         try:
             response_text, usage = self._client.chat(
                 messages,
+                response_schema=SYNTHESIS_RESPONSE_SCHEMA,
                 stage="synthesize",
                 task_type=task_type,
                 route_metadata=route_metadata,
@@ -247,7 +278,6 @@ class AnswerSynthesizer:
         try:
             _validate_context_answer(plan, tool_outputs, answer)
         except SynthesisError:
-            # Existing market/sector behavior is intentionally fail-closed.
             if plan.intent in CONTEXT_INTENTS:
                 raise
             return self._deterministic_fallback(
