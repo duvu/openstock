@@ -1,0 +1,49 @@
+name: Apply production market context v2
+
+on:
+  push:
+    branches:
+      - agent/production-market-context-v2
+    paths:
+      - ".github/production-market-context-v2.patch.gz.b64"
+      - ".github/workflows/apply-production-market-context-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    name: Apply reviewed implementation patch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/production-market-context-v2
+          fetch-depth: 0
+
+      - name: Decode and validate patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode .github/production-market-context-v2.patch.gz.b64 \
+            | gzip --decompress > /tmp/production-market-context-v2.patch
+          git apply --check /tmp/production-market-context-v2.patch
+
+      - name: Apply patch and remove temporary bootstrap files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply /tmp/production-market-context-v2.patch
+          rm .github/production-market-context-v2.patch.gz.b64
+          rm .github/workflows/apply-production-market-context-v2.yml
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "openstock-ci"
+          git config user.email "openstock-ci@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(market-context): add production methodology v2"
+          git push origin HEAD:agent/production-market-context-v2
