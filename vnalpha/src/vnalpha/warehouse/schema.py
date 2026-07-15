@@ -142,6 +142,22 @@ CREATE TABLE IF NOT EXISTS canonical_ohlcv (
 )
 """
 
+OHLCV_GAP_OBSERVATION_DDL = """
+CREATE TABLE IF NOT EXISTS ohlcv_gap_observation (
+    symbol              VARCHAR NOT NULL,
+    interval            VARCHAR NOT NULL,
+    session_date        DATE NOT NULL,
+    gap_kind            VARCHAR NOT NULL,
+    calendar_version    VARCHAR NOT NULL,
+    first_observed_at   TIMESTAMPTZ NOT NULL,
+    last_observed_at    TIMESTAMPTZ NOT NULL,
+    correlation_id      VARCHAR NOT NULL,
+    resolved_at         TIMESTAMPTZ,
+    resolution_ref      VARCHAR,
+    PRIMARY KEY (symbol, interval, session_date)
+)
+"""
+
 FEATURE_SNAPSHOT_DDL = """
 CREATE TABLE IF NOT EXISTS feature_snapshot (
     symbol                VARCHAR NOT NULL,
@@ -251,6 +267,7 @@ ALL_DDL = [
     SYMBOL_CLASSIFICATION_HISTORY_DDL,
     MARKET_OHLCV_RAW_DDL,
     CANONICAL_OHLCV_DDL,
+    OHLCV_GAP_OBSERVATION_DDL,
     FEATURE_SNAPSHOT_DDL,
     CANDIDATE_SCORE_DDL,
     DAILY_WATCHLIST_DDL,

@@ -29,23 +29,36 @@ def handle_data(
         )
     if parsed.filters:
         raise CommandValidationError("Filters are not supported by /data.")
-    unsupported_options = set(parsed.options) - {"start", "end", "date", "source"}
+    unsupported_options = set(parsed.options) - {
+        "start",
+        "end",
+        "date",
+        "source",
+        "from",
+        "to",
+    }
     if unsupported_options:
         rendered_options = ", ".join(
             f"--{option}" for option in sorted(unsupported_options)
         )
         raise CommandValidationError(f"Unsupported option: {rendered_options}.")
-    if len(parsed.positional) < 2 or len(parsed.positional) > 3:
-        raise CommandValidationError(_usage())
-
-    operation, artifact = parsed.positional[:2]
-    symbol = parsed.positional[2] if len(parsed.positional) == 3 else None
+    operation = parsed.positional[0] if parsed.positional else ""
+    if operation == "gaps":
+        if len(parsed.positional) != 2:
+            raise CommandValidationError(_usage())
+        artifact = "ohlcv"
+        symbol = parsed.positional[1]
+    else:
+        if len(parsed.positional) < 2 or len(parsed.positional) > 3:
+            raise CommandValidationError(_usage())
+        artifact = parsed.positional[1]
+        symbol = parsed.positional[2] if len(parsed.positional) == 3 else None
     request = DataProvisioningRequest(
         operation=operation,
         artifact=artifact,
         symbol=symbol,
-        start=_option_value(parsed, "start"),
-        end=_option_value(parsed, "end"),
+        start=_range_option(parsed, "start", "from"),
+        end=_range_option(parsed, "end", "to"),
         date=_option_value(parsed, "date"),
         source=_option_value(parsed, "source"),
     )
@@ -71,6 +84,14 @@ def _option_value(parsed: ParsedCommand, name: str) -> str | None:
     if isinstance(value, bool):
         raise CommandValidationError(f"--{name} requires a value.")
     return value
+
+
+def _range_option(parsed: ParsedCommand, primary: str, alias: str) -> str | None:
+    primary_value = _option_value(parsed, primary)
+    alias_value = _option_value(parsed, alias)
+    if primary_value is not None and alias_value is not None:
+        raise CommandValidationError(f"Use only one of --{primary} or --{alias}.")
+    return primary_value or alias_value
 
 
 def _command_status(status: ProvisioningStatus) -> CommandStatus:
@@ -119,5 +140,7 @@ def _usage() -> str:
         "Use /data download <symbols|ohlcv SYMBOL|index [SYMBOL]> "
         "[--start YYYY-MM-DD] [--end YYYY-MM-DD] [--source PROVIDER] or "
         "/data build <canonical SYMBOL|features SYMBOL --date DATE|score SYMBOL --date DATE|"
-        "market-regime --date DATE|sector-strength --date DATE>."
+        "market-regime --date DATE|sector-strength --date DATE>, "
+        "/data sync daily [--date DATE], /data gaps SYMBOL [--from DATE] [--to DATE], "
+        "or /data repair ohlcv SYMBOL [--from DATE] [--to DATE]."
     )

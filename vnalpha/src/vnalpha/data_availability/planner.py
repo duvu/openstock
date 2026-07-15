@@ -26,6 +26,10 @@ from vnalpha.data_availability.models import (
     EvidenceIssue,
     evidence_issue_artifact,
 )
+from vnalpha.data_availability.ohlcv_gap_checks import (
+    UnresolvedTrueGapWindow,
+    count_unresolved_true_gaps,
+)
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
 
 
@@ -43,6 +47,7 @@ class EnsureDataSnapshot:
     quality_status: str | None = None
     lineage_fields: frozenset[str] = frozenset()
     artifact_evidence: tuple[ArtifactEvidence, ...] = ()
+    unresolved_true_gap_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +82,14 @@ def capture_availability_snapshot(
         candidate_score_as_of_date=score_evidence.as_of_bar_date,
         quality_status=score_evidence.quality_status,
         lineage_fields=score_evidence.lineage_fields,
+        unresolved_true_gap_count=count_unresolved_true_gaps(
+            conn,
+            UnresolvedTrueGapWindow(
+                symbol=symbol,
+                lookback_start=lookback_start,
+                target_date=target_date,
+            ),
+        ),
         artifact_evidence=(
             get_symbol_master_evidence(conn, symbol),
             get_ohlcv_evidence(

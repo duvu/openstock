@@ -17,8 +17,12 @@ from vnalpha.observability.commands import command_lifecycle
 app = typer.Typer(help="Explicit bounded data downloads and derived-data builds.")
 download_app = typer.Typer(help="Download approved raw market data.")
 build_app = typer.Typer(help="Build approved deterministic research artifacts.")
+sync_app = typer.Typer(help="Run bounded incremental market-data maintenance.")
+repair_app = typer.Typer(help="Repair bounded canonical OHLCV gaps.")
 app.add_typer(download_app, name="download")
 app.add_typer(build_app, name="build")
+app.add_typer(sync_app, name="sync")
+app.add_typer(repair_app, name="repair")
 
 
 @download_app.command("symbols")
@@ -119,6 +123,53 @@ def build_sector_strength(
     _run(
         DataProvisioningRequest(
             operation="build", artifact="sector-strength", date=date
+        )
+    )
+
+
+@sync_app.command("daily")
+def sync_daily(
+    date: str | None = typer.Option(None, "--date", help="Market date (YYYY-MM-DD)."),
+) -> None:
+    _run(DataProvisioningRequest(operation="sync", artifact="daily", date=date))
+
+
+@app.command("gaps")
+def gaps(
+    symbol: str = typer.Argument(..., help="Equity symbol."),
+    from_date: str | None = typer.Option(
+        None, "--from", help="Start date (YYYY-MM-DD)."
+    ),
+    to_date: str | None = typer.Option(None, "--to", help="End date (YYYY-MM-DD)."),
+) -> None:
+    _run(
+        DataProvisioningRequest(
+            operation="gaps",
+            artifact="ohlcv",
+            symbol=symbol,
+            start=from_date,
+            end=to_date,
+        )
+    )
+
+
+@repair_app.command("ohlcv")
+def repair_ohlcv(
+    symbol: str = typer.Argument(..., help="Equity symbol."),
+    from_date: str | None = typer.Option(
+        None, "--from", help="Start date (YYYY-MM-DD)."
+    ),
+    to_date: str | None = typer.Option(None, "--to", help="End date (YYYY-MM-DD)."),
+    source: str | None = typer.Option(None, "--source", help="Preferred provider."),
+) -> None:
+    _run(
+        DataProvisioningRequest(
+            operation="repair",
+            artifact="ohlcv",
+            symbol=symbol,
+            start=from_date,
+            end=to_date,
+            source=source,
         )
     )
 

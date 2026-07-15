@@ -1,0 +1,60 @@
+"""Vietnam trading-session calendar contracts used by OHLCV maintenance."""
+
+from dataclasses import dataclass
+from datetime import date, timedelta
+
+
+class InvalidSessionRangeError(ValueError):
+    """Raised when a calendar session range is inverted."""
+
+
+class InvalidSessionOverlapError(ValueError):
+    """Raised when a requested overlap cannot include a session."""
+
+
+@dataclass(frozen=True, slots=True)
+class SessionRange:
+    """Inclusive range of market dates to inspect."""
+
+    start: date
+    end: date
+
+    def __post_init__(self) -> None:
+        if self.start > self.end:
+            raise InvalidSessionRangeError(
+                "Session range start must not be after its end."
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class VietnamSessionCalendar:
+    """Versioned weekday calendar with explicit Vietnam-market holidays."""
+
+    holidays: frozenset[date] = frozenset()
+    version: str = "vn-session-v1"
+
+    def sessions(self, session_range: SessionRange) -> tuple[date, ...]:
+        """Return inclusive sessions, excluding weekends and configured holidays."""
+        sessions: list[date] = []
+        current_date = session_range.start
+        while current_date <= session_range.end:
+            if self.is_session(current_date):
+                sessions.append(current_date)
+            current_date += timedelta(days=1)
+        return tuple(sessions)
+
+    def is_session(self, market_date: date) -> bool:
+        """Return whether the supplied date is a configured trading session."""
+        return market_date.weekday() < 5 and market_date not in self.holidays
+
+    def rewind_sessions(self, market_date: date, session_count: int) -> date:
+        """Return the first date in an inclusive trailing session overlap."""
+        if session_count < 1:
+            raise InvalidSessionOverlapError("Session overlap must be at least one.")
+        current_date = market_date
+        remaining = session_count - 1
+        while remaining > 0:
+            current_date -= timedelta(days=1)
+            if self.is_session(current_date):
+                remaining -= 1
+        return current_date

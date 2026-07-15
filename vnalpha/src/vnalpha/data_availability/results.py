@@ -65,6 +65,11 @@ def finalise_result(
             "Insufficient canonical bars: "
             f"{snapshot.canonical_bars} < {policy.min_required_bars} required."
         )
+    if snapshot.unresolved_true_gap_count > 0:
+        result.warnings.append(
+            "Unresolved canonical OHLCV gaps: "
+            f"{snapshot.unresolved_true_gap_count}. Run a bounded OHLCV repair."
+        )
     if (
         policy.require_benchmark_history
         and snapshot.benchmark_bars < policy.min_required_bars

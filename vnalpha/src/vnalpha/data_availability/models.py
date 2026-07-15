@@ -43,6 +43,7 @@ class EvidenceIssue(str, Enum):
     SCORE_STALE = "score_stale"
     FEATURE_SNAPSHOT_MISSING = "feature_snapshot_missing"
     CANONICAL_HISTORY_INSUFFICIENT = "canonical_history_insufficient"
+    CANONICAL_GAPS_UNRESOLVED = "canonical_gaps_unresolved"
     BENCHMARK_HISTORY_INSUFFICIENT = "benchmark_history_insufficient"
     QUALITY_UNACCEPTABLE = "quality_unacceptable"
     LINEAGE_INCOMPLETE = "lineage_incomplete"
@@ -60,7 +61,10 @@ def evidence_issue_artifact(issue: EvidenceIssue) -> DataArtifact:
         return DataArtifact.CANDIDATE_SCORE
     if issue is EvidenceIssue.FEATURE_SNAPSHOT_MISSING:
         return DataArtifact.FEATURE_SNAPSHOT
-    if issue is EvidenceIssue.CANONICAL_HISTORY_INSUFFICIENT:
+    if issue in {
+        EvidenceIssue.CANONICAL_HISTORY_INSUFFICIENT,
+        EvidenceIssue.CANONICAL_GAPS_UNRESOLVED,
+    }:
         return DataArtifact.CANONICAL_OHLCV
     return DataArtifact.BENCHMARK_OHLCV
 
