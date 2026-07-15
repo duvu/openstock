@@ -1,34 +1,42 @@
-# openstock docker-compose.yml
-# Runs vnstock-service (Docker) + vnalpha CLI on host.
+# Canonical OpenStock single-host deployment.
 #
-# Start:  docker compose up -d
-# Stop:   docker compose down
+# Required host directories (override with environment variables when needed):
+#   OPENSTOCK_WAREHOUSE_DIR=/var/lib/openstock/warehouse
+#   VNSTOCK_CONFIG_DIR=/var/lib/openstock/vnstock-config
 #
-# vnalpha pipeline (run on host, connects to vnstock-service at :6900):
-#   vnalpha init
-#   vnalpha sync symbols
-#   vnalpha sync ohlcv --universe VN30
-#   vnalpha build canonical
-#   vnalpha build features
-#   vnalpha score
-#   vnalpha watchlist
-#   vnalpha tui
+# Prepare production defaults:
+#   sudo install -d -m 0755 /var/lib/openstock/warehouse
+#   sudo install -d -m 0755 /var/lib/openstock/vnstock-config
 #
-# Warehouse: ~/.local/share/openstock/warehouse/warehouse.duckdb (host)
+# Start the data service:
+#   docker compose up -d vnstock-service
+#
+# Run one-shot pipeline jobs:
+#   docker compose --profile job run --rm vnalpha-worker init
+#   docker compose --profile job run --rm vnalpha-worker sync symbols
+#   docker compose --profile job run --rm vnalpha-worker build canonical
+#
+# Configure credentialed providers separately:
+#   docker compose --profile login run --rm vnstock-login status
 
 services:
   vnstock-service:
     build:
       context: ./vnstock
       dockerfile: Dockerfile
+      args:
+        INSTALL_FIINQUANTX: ${VNSTOCK_INSTALL_FIINQUANTX:-false}
     image: vnstock-service:latest
     container_name: vnstock-service
     ports:
       - "127.0.0.1:6900:6900"
     volumes:
-      - "${HOME}/.config/vnstock:/home/vnstock/.config/vnstock:ro"
+      - "${VNSTOCK_CONFIG_DIR:-/var/lib/openstock/vnstock-config}:/home/vnstock/.config/vnstock:ro"
     environment:
-      - PYTHONUNBUFFERED=1
+      PYTHONUNBUFFERED: "1"
+      FIINQUANT_USERNAME: ${FIINQUANT_USERNAME:-}
+      FIINQUANT_PASSWORD: ${FIINQUANT_PASSWORD:-}
+      VNSTOCK_FIINQUANTX_LICENSED: ${VNSTOCK_FIINQUANTX_LICENSED:-false}
     restart: unless-stopped
     healthcheck:
       test:
@@ -43,23 +51,47 @@ services:
       retries: 3
       start_period: 10s
 
+  vnstock-login:
+    build:
+      context: ./vnstock
+      dockerfile: Dockerfile
+      args:
+        INSTALL_FIINQUANTX: ${VNSTOCK_INSTALL_FIINQUANTX:-false}
+    image: vnstock-service:latest
+    profiles:
+      - login
+    volumes:
+      - "${VNSTOCK_CONFIG_DIR:-/var/lib/openstock/vnstock-config}:/home/vnstock/.config/vnstock"
+    environment:
+      FIINQUANT_USERNAME: ${FIINQUANT_USERNAME:-}
+      FIINQUANT_PASSWORD: ${FIINQUANT_PASSWORD:-}
+      VNSTOCK_FIINQUANTX_LICENSED: ${VNSTOCK_FIINQUANTX_LICENSED:-false}
+    entrypoint: ["vnstock-auth"]
+    command: ["status"]
+
   vnalpha-worker:
     build:
       context: ./vnalpha
       dockerfile: Dockerfile
     image: vnalpha-worker:latest
-    container_name: vnalpha-worker
     profiles:
       - job
     volumes:
       - warehouse:/warehouse
     environment:
-      - PYTHONUNBUFFERED=1
-      - VNSTOCK_SERVICE_URL=http://vnstock-service:6900
-      - VNALPHA_WAREHOUSE_PATH=/warehouse/warehouse.duckdb
-      - VNALPHA_LLM_ENDPOINT=${VNALPHA_LLM_ENDPOINT:-http://ya-router:7071/v1/chat/completions}
-      - VNALPHA_LLM_MODEL=${VNALPHA_LLM_MODEL:-provider/default-model}
-      - VNALPHA_LLM_API_KEY=${VNALPHA_LLM_API_KEY}
+      PYTHONUNBUFFERED: "1"
+      VNSTOCK_SERVICE_URL: http://vnstock-service:6900
+      VNALPHA_WAREHOUSE_PATH: /warehouse/warehouse.duckdb
+      VNALPHA_LOG_LEVEL: ${VNALPHA_LOG_LEVEL:-INFO}
+      VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED: ${VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED:-false}
+      VNALPHA_LLM_ENDPOINT: ${VNALPHA_LLM_ENDPOINT:-http://ya-router:7071/v1/chat/completions}
+      VNALPHA_LLM_MODEL: ${VNALPHA_LLM_MODEL:-}
+      VNALPHA_LLM_API_KEY: ${VNALPHA_LLM_API_KEY:-}
+      VNALPHA_LLM_STORE_RAW: ${VNALPHA_LLM_STORE_RAW:-false}
+      VNALPHA_MODEL_SMALL: ${VNALPHA_MODEL_SMALL:-}
+      VNALPHA_MODEL_DEFAULT: ${VNALPHA_MODEL_DEFAULT:-}
+      VNALPHA_MODEL_REASONING: ${VNALPHA_MODEL_REASONING:-}
+      VNALPHA_MODEL_LONG_CONTEXT: ${VNALPHA_MODEL_LONG_CONTEXT:-}
     depends_on:
       vnstock-service:
         condition: service_healthy
@@ -70,4 +102,4 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /home/beou/.local/share/openstock/warehouse
+      device: ${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}
