@@ -6,7 +6,11 @@ import json
 import httpx
 import pytest
 
-from vnalpha.assistant.errors import LLMResponseError, LLMTimeoutError
+from vnalpha.assistant.errors import (
+    LLMNoCompatibleFallbackError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.intent import INTENT_CLASSIFICATION_SCHEMA
 from vnalpha.assistant.synthesizer import SYNTHESIS_RESPONSE_SCHEMA
@@ -128,13 +132,15 @@ def test_unrelated_http_400_does_not_trigger_schema_downgrade(monkeypatch) -> No
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
-    with pytest.raises(LLMResponseError, match="LLM HTTP 400"):
+    with pytest.raises(LLMNoCompatibleFallbackError) as captured:
         _client().chat(
             [{"role": "user", "content": "classify"}],
             response_schema=INTENT_CLASSIFICATION_SCHEMA,
             stage="classify",
         )
 
+    assert isinstance(captured.value.primary_error, LLMResponseError)
+    assert "LLM HTTP 400" in str(captured.value.primary_error)
     assert len(payloads) == 1
     assert payloads[0]["response_format"]["type"] == "json_schema"
 
@@ -152,11 +158,13 @@ def test_strict_schema_does_not_add_transport_retry_budget(monkeypatch) -> None:
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
-    with pytest.raises(LLMTimeoutError, match="failed after 1 attempt"):
+    with pytest.raises(LLMNoCompatibleFallbackError) as captured:
         _client().chat(
             [{"role": "user", "content": "classify"}],
             response_schema=INTENT_CLASSIFICATION_SCHEMA,
             stage="classify",
         )
 
+    assert isinstance(captured.value.primary_error, LLMTimeoutError)
+    assert "failed after 1 attempt" in str(captured.value.primary_error)
     assert calls == 1
