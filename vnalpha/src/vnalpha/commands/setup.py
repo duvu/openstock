@@ -85,10 +85,10 @@ def build_default_registry() -> CommandRegistry:
         CommandMeta(
             name="experiment",
             description="Run indicator experiments or offline research event studies.",
-            usage="/experiment indicator <description> [--universe VN30] [--start YYYY-MM-DD] [--end YYYY-MM-DD] | /experiment backtest <event-study-description> [--horizon N]",
+            usage="/experiment indicator <description> [--universe VN30] [--start YYYY-MM-DD] [--end YYYY-MM-DD] | /experiment event-study <ALLOWLISTED_CONDITION> [--horizon N]",
             examples=[
                 "/experiment indicator relative strength 20 sessions vs VNINDEX --universe VN30",
-                "/experiment backtest FPT accumulation breakout --horizon 10",
+                "/experiment event-study rs_20d_vs_vnindex > 0 --horizon 10",
             ],
             permissions=permission_names("experiment"),
             handler=handle_experiment,

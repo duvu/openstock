@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import json
-from types import MappingProxyType
 
 import httpx
 import pytest
@@ -11,13 +10,9 @@ from vnalpha.assistant.errors import LLMResponseError, LLMTimeoutError
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.intent import INTENT_CLASSIFICATION_SCHEMA
 from vnalpha.assistant.synthesizer import SYNTHESIS_RESPONSE_SCHEMA
-from vnalpha.model_routing.config import ModelRoutingConfig
-from vnalpha.model_routing.models import ModelProfile
 
 
 def _client() -> LLMGatewayClient:
-    models = MappingProxyType(dict.fromkeys(ModelProfile, "test-model"))
-    no_fallbacks = MappingProxyType(dict.fromkeys(ModelProfile, ()))
     return LLMGatewayClient(
         LLMGatewayConfig(
             model="test-model",
@@ -26,12 +21,7 @@ def _client() -> LLMGatewayClient:
             max_output_tokens=256,
             max_retries=0,
             store_raw=False,
-        ),
-        routing_config=ModelRoutingConfig(
-            default_model_id="test-model",
-            profile_models=models,
-            fallback_profiles=no_fallbacks,
-        ),
+        )
     )
 
 
@@ -124,6 +114,7 @@ def test_gateway_downgrades_once_when_endpoint_rejects_json_schema(monkeypatch) 
 
 def test_unrelated_http_400_does_not_trigger_schema_downgrade(monkeypatch) -> None:
     monkeypatch.setenv("VNALPHA_LLM_API_KEY", "test")
+    monkeypatch.setenv("VNALPHA_MODEL_SMALL", "strict-primary-model")
     payloads: list[dict] = []
 
     def fake_post(url, *, json, headers, timeout):
@@ -150,6 +141,7 @@ def test_unrelated_http_400_does_not_trigger_schema_downgrade(monkeypatch) -> No
 
 def test_strict_schema_does_not_add_transport_retry_budget(monkeypatch) -> None:
     monkeypatch.setenv("VNALPHA_LLM_API_KEY", "test")
+    monkeypatch.setenv("VNALPHA_MODEL_SMALL", "strict-primary-model")
     calls = 0
 
     def fake_post(url, *, json, headers, timeout):
