@@ -12,6 +12,19 @@ policy:
 
 changes:
 
+  llm-capability-aware-strict-fallback:
+    status: in_progress
+    github_issues: [144]
+    roadmap_state: scheduled
+    summary: >-
+      Use explicit per-profile capabilities to select only verified strict JSON
+      Schema fallbacks, expose truthful routing status and preserve typed failure
+      evidence.
+    evidence: >-
+      Implementation and focused tests pass in the working tree. Exact final-SHA
+      repository CI, package evidence and closure remain pending the issue #144
+      pull request.
+
   production-market-context-v2:
     status: ready
     github_issues: [84]
