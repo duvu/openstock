@@ -51,8 +51,12 @@ class CommandRegistry:
         return sorted(self._commands.values(), key=lambda m: m.name)
 
     def names(self) -> list[str]:
-        """Return all registered command names."""
-        return sorted(self._commands.keys())
+        """Return discoverable names with ``help`` first, then alphabetical."""
+        names = sorted(self._commands.keys())
+        if "help" in self._commands:
+            names.remove("help")
+            names.insert(0, "help")
+        return names
 
     def execute(
         self,
