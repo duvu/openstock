@@ -102,6 +102,8 @@ class FiinQuantXProviderPlugin:
                     lasted=False,
                 )
                 result = normalize_ohlcv(event.get_data(), dataset)
+                result = result.sort_values("time").tail(params.get("count_back", 100))
+                result = result.reset_index(drop=True)
             else:
                 result = normalize_membership(
                     session.TickerList(ticker=str(params["symbol"]).upper()),

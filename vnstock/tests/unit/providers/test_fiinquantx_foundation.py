@@ -248,3 +248,46 @@ def test_fiinquantx_rejects_unverified_ohlcv_controls_before_login(
 
     with pytest.raises(ValueError, match="Unsupported FiinQuantX parameters"):
         FiinQuantXProviderPlugin().fetch("equity.ohlcv", params)
+
+
+def test_fiinquantx_enforces_requested_ohlcv_row_limit(monkeypatch) -> None:
+    class FakeEvent:
+        def get_data(self) -> pd.DataFrame:
+            return pd.DataFrame(
+                {
+                    "ticker": ["VCB", "VCB", "VCB"],
+                    "timestamp": ["2026-07-12", "2026-07-13", "2026-07-14"],
+                    "open": [100.0, 101.0, 102.0],
+                    "high": [101.0, 102.0, 103.0],
+                    "low": [99.0, 100.0, 101.0],
+                    "close": [100.5, 101.5, 102.5],
+                    "volume": [10.0, 11.0, 12.0],
+                }
+            )
+
+    class FakeSession:
+        def Fetch_Trading_Data(self, **_kwargs) -> FakeEvent:
+            return FakeEvent()
+
+    class FakeFiinSession:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def login(self) -> FakeSession:
+            return FakeSession()
+
+    module = ModuleType("FiinQuantX")
+    module.FiinSession = FakeFiinSession
+    monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
+    monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
+    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+    monkeypatch.setattr(
+        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
+        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
+    )
+
+    result = FiinQuantXProviderPlugin().fetch(
+        "equity.ohlcv", {"symbol": "VCB", "count_back": 1}
+    )
+
+    assert len(result) == 1
