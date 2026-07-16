@@ -13,17 +13,20 @@ policy:
 changes:
 
   corporate-action-ingestion:
-    status: in_progress
+    status: ready
     github_issues: [112]
-    roadmap_state: scheduled
+    roadmap_state: review_required
     summary: >-
       Add provider-independent corporate-action evidence, raw-first canonical
       reconciliation, immutable revisions, quarantine and affected-range signals
       without calculating adjusted prices.
     evidence: >-
-      Provider contracts, KBS/VCI adapters, warehouse tables, bounded sync/status
-      commands and focused offline tests are implemented on the issue #112 branch.
-      Exact final-SHA full CI and package evidence remain pending the pull request.
+      Implementation source SHA 3b6d990d93248fcf11e0650a8e3c8417411056dd and
+      validated head 83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed passed repository
+      consistency, documentation contracts, Ruff, focused issue #112 regressions,
+      R0, the complete vnalpha suite, vnstock provider/canonical contracts, both
+      package builds and Required merge gate in openstock-ci run #71. PR #154 is
+      ready for final metadata validation and review; archive after merge.
 
   required-ci-merge-gates:
     status: partial
