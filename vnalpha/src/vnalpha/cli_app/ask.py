@@ -41,7 +41,7 @@ def register(app: typer.Typer) -> None:
             from rich.text import Text
 
             from vnalpha.assistant.app import AssistantApp
-            from vnalpha.assistant.errors import AssistantError
+            from vnalpha.assistant.errors import AssistantError, LLMConfigError
             from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
             from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
             from vnalpha.warehouse.connection import get_connection
@@ -62,6 +62,15 @@ def register(app: typer.Typer) -> None:
                 result, plan = assistant.ask(
                     question, date=resolved_date, no_execute=no_execute
                 )
+            except LLMConfigError as exc:
+                # Natural-language chat is unavailable; deterministic slash and
+                # data commands remain usable (issue #165 degraded mode).
+                error_console.print(
+                    f"[yellow]Natural-language chat is unavailable: {exc}[/yellow]\n"
+                    "[dim]Deterministic slash and data commands remain usable. "
+                    "Run 'vnalpha preflight' to diagnose the LLM route.[/dim]"
+                )
+                raise typer.Exit(code=1) from exc
             except AssistantError as exc:
                 error_console.print(f"[red]Assistant error: {exc}[/red]")
                 raise typer.Exit(code=1) from exc
