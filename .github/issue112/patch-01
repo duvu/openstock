@@ -1,0 +1,400 @@
++@status_app.command("corporate-actions")
++def status_corporate_actions(
++    symbol: str | None = typer.Argument(None, help="Optional equity symbol."),
++    start: str | None = typer.Option(None, "--start", help="Start date (YYYY-MM-DD)."),
++    end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD)."),
++) -> None:
++    from vnalpha.ingestion.corporate_actions import corporate_action_status
++    from vnalpha.warehouse.connection import get_connection
++    from vnalpha.warehouse.migrations import run_migrations
++
++    conn = get_connection()
++    run_migrations(conn=conn)
++    typer.echo(
++        json.dumps(
++            corporate_action_status(conn, symbol=symbol, start=start, end=end),
++            sort_keys=True,
++        )
++    )
++
++
+ @build_app.command("canonical")
+ def build_canonical(
+     symbol: str = typer.Argument(..., help="Symbol to canonicalize."),
+diff --git a/vnalpha/src/vnalpha/cli_app/sync.py b/vnalpha/src/vnalpha/cli_app/sync.py
+index f6c2f3c..51d5a3d 100644
+--- a/vnalpha/src/vnalpha/cli_app/sync.py
++++ b/vnalpha/src/vnalpha/cli_app/sync.py
+@@ -149,6 +149,40 @@ def sync_index_cmd(
+         )
+ 
+ 
++@app.command("corporate-actions")
++def sync_corporate_actions_cmd(
++    symbol: str = typer.Argument(..., help="Equity symbol."),
++    start: Optional[str] = typer.Option(None, "--start"),
++    end: Optional[str] = typer.Option(None, "--end"),
++    source: Optional[str] = typer.Option(None, "--source"),
++):
++    """Sync bounded corporate-action evidence without calculating adjusted prices."""
++    set_correlation_id()
++    with command_lifecycle("sync corporate-actions"):
++        from vnalpha.warehouse.connection import get_connection
++        from vnalpha.warehouse.migrations import run_migrations
++
++        conn = get_connection()
++        run_migrations(conn=conn)
++        result = _execute(
++            conn,
++            DataProvisioningRequest(
++                "download",
++                "corporate-actions",
++                symbol=symbol,
++                start=start,
++                end=end,
++                source=source,
++            ),
++        )
++        typer.echo(
++            "Corporate-action sync complete: "
++            f"{result.counts.get('canonical_inserted', 0)} inserted, "
++            f"{result.counts.get('revised', 0)} revised, "
++            f"{result.counts.get('quarantined', 0)} quarantined"
++        )
++
++
+ def _execute(
+     conn, request: DataProvisioningRequest, *, exit_on_failure: bool = True
+ ) -> DataProvisioningResult:
+diff --git a/vnalpha/src/vnalpha/clients/vnstock/client.py b/vnalpha/src/vnalpha/clients/vnstock/client.py
+index c0d90a8..66a1fd9 100644
+--- a/vnalpha/src/vnalpha/clients/vnstock/client.py
++++ b/vnalpha/src/vnalpha/clients/vnstock/client.py
+@@ -108,6 +108,25 @@ class VnstockClient:
+         raw = self._get("/v1/equity/ohlcv", params)
+         return OHLCVResponse.model_validate(raw)
+ 
++    def get_corporate_actions(
++        self,
++        symbol: str,
++        start: Optional[str] = None,
++        end: Optional[str] = None,
++        source: Optional[str] = None,
++    ) -> VnstockResponse:
++        """GET normalized corporate-action evidence for bounded ingestion."""
++        source = validate_persistence_source(source)
++        params: dict[str, str] = {"symbol": symbol}
++        if start:
++            params["start"] = start
++        if end:
++            params["end"] = end
++        if source:
++            params["source"] = source
++        raw = self._get("/v1/reference/corporate-actions", params)
++        return VnstockResponse.model_validate(raw)
++
+     def get_equity_quote(
+         self,
+         symbol: str,
+diff --git a/vnalpha/src/vnalpha/data_provisioning/service.py b/vnalpha/src/vnalpha/data_provisioning/service.py
+index ca7159b..6879740 100644
+--- a/vnalpha/src/vnalpha/data_provisioning/service.py
++++ b/vnalpha/src/vnalpha/data_provisioning/service.py
+@@ -82,6 +82,7 @@ class DataProvisioningDependencies:
+     sync_symbols: Callable[..., object] | None = None
+     sync_ohlcv: Callable[..., object] | None = None
+     sync_index: Callable[..., object] | None = None
++    sync_corporate_actions: Callable[..., object] | None = None
+     build_canonical: Callable[..., object] | None = None
+     build_features: Callable[..., object] | None = None
+     generate_watchlist: Callable[..., object] | None = None
+@@ -303,6 +304,49 @@ class DataProvisioningService:
+                     terminal_reason=batch.terminal_reason,
+                     error=_ohlcv_terminal_error(batch),
+                 )
++            case "download", "corporate-actions":
++                raw = _require_mapping(
++                    self._sync_corporate_actions()(
++                        self.conn,
++                        symbol=request.symbol,
++                        start=request.start,
++                        end=request.end,
++                        source=request.source,
++                    )
++                )
++                counts = _counts(
++                    raw,
++                    "observed",
++                    "raw_inserted",
++                    "canonical_inserted",
++                    "unchanged",
++                    "revised",
++                    "conflicts",
++                    "quarantined",
++                    "affected_ranges",
++                )
++                raw_status = str(raw.get("status") or "FAILED").upper()
++                status = (
++                    ProvisioningStatus.SUCCESS
++                    if raw_status in {"COMPLETE", "EMPTY"}
++                    else ProvisioningStatus.PARTIAL
++                    if raw_status == "PARTIAL"
++                    else ProvisioningStatus.FAILED
++                )
++                return _result(
++                    request,
++                    correlation_id,
++                    counts=counts,
++                    status=status,
++                    warnings=_count_warnings(
++                        counts,
++                        ("quarantined", "corporate actions quarantined"),
++                        ("conflicts", "corporate action conflicts"),
++                    ),
++                    raw_result=raw,
++                    error=str(raw.get("error")) if raw.get("error") else None,
++                    terminal_reason=raw_status,
++                )
+             case "download", "index":
+                 raw = _require_mapping(
+                     self._sync_index()(
+@@ -453,6 +497,13 @@ class DataProvisioningService:
+ 
+         return sync_ohlcv
+ 
++    def _sync_corporate_actions(self) -> Callable[..., object]:
++        if self._dependencies.sync_corporate_actions is not None:
++            return self._dependencies.sync_corporate_actions
++        from vnalpha.ingestion.corporate_actions import sync_corporate_actions
++
++        return sync_corporate_actions
++
+     def _sync_index(self) -> Callable[..., object]:
+         if self._dependencies.sync_index is not None:
+             return self._dependencies.sync_index
+@@ -527,9 +578,9 @@ def _validate_download(
+     request_date: str | None,
+     authoritative_snapshot: bool = False,
+ ) -> None:
+-    if artifact not in {"symbols", "ohlcv", "index"}:
++    if artifact not in {"symbols", "ohlcv", "index", "corporate-actions"}:
+         raise DataProvisioningValidationError(
+-            "Supported downloads: symbols, ohlcv, index."
++            "Supported downloads: symbols, ohlcv, index, corporate-actions."
+         )
+     if request_date is not None:
+         raise DataProvisioningValidationError("--date is only valid for data builds.")
+@@ -549,6 +600,15 @@ def _validate_download(
+             raise DataProvisioningValidationError(
+                 "Data download ohlcv requires exactly one symbol selection or an explicit all-symbols policy."
+             )
++    if artifact == "corporate-actions":
++        if symbol is None or symbols or allow_all_symbols:
++            raise DataProvisioningValidationError(
++                "Data download corporate-actions requires exactly one symbol."
++            )
++        if authoritative_snapshot:
++            raise DataProvisioningValidationError(
++                "Data download corporate-actions does not accept --authoritative-snapshot."
++            )
+     if artifact == "index" and (symbols or allow_all_symbols):
+         raise DataProvisioningValidationError(
+             "Data download index accepts at most one index symbol."
+diff --git a/vnalpha/src/vnalpha/ingestion/corporate_actions.py b/vnalpha/src/vnalpha/ingestion/corporate_actions.py
+new file mode 100644
+index 0000000..b0c4e91
+--- /dev/null
++++ b/vnalpha/src/vnalpha/ingestion/corporate_actions.py
+@@ -0,0 +1,697 @@
++"""Bounded corporate-action ingestion, revisioning and reconciliation."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import uuid
++from collections.abc import Mapping
++from dataclasses import dataclass
++from datetime import date
++from typing import Any
++
++import duckdb
++
++from vnalpha.clients.vnstock.client import VnstockClient
++from vnalpha.clients.vnstock.errors import VnstockClientError, VnstockHTTPError
++from vnalpha.warehouse.repositories import create_ingestion_run, finish_ingestion_run
++
++CONTRACT_VERSION = "corporate-actions-v1"
++SUPPORTED_ACTION_TYPES = frozenset(
++    {
++        "CASH_DIVIDEND",
++        "STOCK_DIVIDEND",
++        "STOCK_BONUS",
++        "SPLIT",
++        "CONSOLIDATION",
++        "RIGHTS_ISSUE",
++        "REFERENCE_PRICE_ADJUSTMENT",
++        "ADDITIONAL_LISTING",
++        "SYMBOL_CHANGE",
++        "DELISTING",
++    }
++)
++_RATIO_ACTIONS = frozenset(
++    {"STOCK_DIVIDEND", "STOCK_BONUS", "SPLIT", "CONSOLIDATION", "RIGHTS_ISSUE"}
++)
++
++
++@dataclass(frozen=True)
++class _RecordOutcome:
++    outcome: str
++    raw_inserted: bool
++    conflict: bool = False
++    affected: bool = False
++
++
++def sync_corporate_actions(
++    conn: duckdb.DuckDBPyConnection,
++    *,
++    symbol: str,
++    start: str | None = None,
++    end: str | None = None,
++    source: str | None = None,
++    client: VnstockClient | None = None,
++    base_url: str | None = None,
++) -> dict[str, Any]:
++    """Fetch, preserve and reconcile corporate-action evidence for one symbol."""
++    symbol = symbol.strip().upper()
++    owned = client is None
++    if owned:
++        client = VnstockClient(base_url=base_url) if base_url else VnstockClient()
++    run_id = create_ingestion_run(
++        conn,
++        source_service="vnstock-service",
++        source_endpoint="/v1/reference/corporate-actions",
++        universe=symbol,
++        params={"symbol": symbol, "start": start, "end": end, "source": source},
++    )
++    counts = {
++        "observed": 0,
++        "raw_inserted": 0,
++        "canonical_inserted": 0,
++        "unchanged": 0,
++        "revised": 0,
++        "conflicts": 0,
++        "quarantined": 0,
++        "affected_ranges": 0,
++    }
++    try:
++        response = client.get_corporate_actions(
++            symbol=symbol, start=start, end=end, source=source
++        )
++        provider = str(response.meta.provider).strip().upper()
++        conn.execute("BEGIN TRANSACTION")
++        for record in response.data:
++            counts["observed"] += 1
++            record_outcome = _ingest_record(
++                conn,
++                run_id=run_id,
++                provider=provider,
++                requested_symbol=symbol,
++                record=record,
++            )
++            counts[record_outcome.outcome] += 1
++            counts["raw_inserted"] += int(record_outcome.raw_inserted)
++            counts["conflicts"] += int(record_outcome.conflict)
++            counts["affected_ranges"] += int(record_outcome.affected)
++        status = (
++            "EMPTY"
++            if counts["observed"] == 0
++            else "COMPLETE"
++            if counts["quarantined"] == 0 and counts["conflicts"] == 0
++            else "PARTIAL"
++        )
++        conn.execute("COMMIT")
++        _persist_run_outcome(conn, run_id=run_id, status=status, counts=counts)
++        finish_ingestion_run(conn, run_id, status)
++        return {"run_id": run_id, "status": status, **counts}
++    except VnstockHTTPError as exc:
++        try:
++            conn.execute("ROLLBACK")
++        except duckdb.Error:
++            pass
++        unsupported = exc.status_code == 404 and "unsupported" in exc.body.lower()
++        status = "UNSUPPORTED" if unsupported else "FAILED"
++        error = {
++            "stage": "corporate_actions",
++            "type": type(exc).__name__,
++            "status_code": exc.status_code,
++        }
++        _persist_run_outcome(
++            conn, run_id=run_id, status=status, counts=counts, error=error
++        )
++        finish_ingestion_run(conn, run_id, status, error=error)
++        return {
++            "run_id": run_id,
++            "status": status,
++            "error": "Provider does not support corporate actions."
++            if unsupported
++            else "Corporate-action provider request failed.",
++            **counts,
++        }
++    except VnstockClientError as exc:
++        try:
++            conn.execute("ROLLBACK")
++        except duckdb.Error:
++            pass
++        error = {"stage": "corporate_actions", "type": type(exc).__name__}
++        _persist_run_outcome(
++            conn, run_id=run_id, status="FAILED", counts=counts, error=error
++        )
++        finish_ingestion_run(conn, run_id, "FAILED", error=error)
++        return {
++            "run_id": run_id,
++            "status": "FAILED",
++            "error": "Corporate-action provider request failed.",
++            **counts,
++        }
++    except Exception as exc:
++        try:
++            conn.execute("ROLLBACK")
++        except duckdb.Error:
++            pass
++        error = {"stage": "corporate_actions", "type": type(exc).__name__}
++        _persist_run_outcome(
++            conn, run_id=run_id, status="FAILED", counts=counts, error=error
++        )
++        finish_ingestion_run(conn, run_id, "FAILED", error=error)
++        raise
++    finally:
++        if owned:
++            client.close()
++
++
++def _persist_run_outcome(
++    conn: duckdb.DuckDBPyConnection,
++    *,
++    run_id: str,
++    status: str,
++    counts: Mapping[str, int],
++    error: Mapping[str, Any] | None = None,
++) -> None:
++    requested_count = 1
++    success_count = 1 if status in {"COMPLETE", "PARTIAL"} else 0
++    empty_count = 1 if status == "EMPTY" else 0
++    failed_count = 1 if status in {"FAILED", "UNSUPPORTED"} else 0
++    invalid_count = int(counts.get("quarantined", 0)) + int(counts.get("conflicts", 0))
++    conn.execute(
++        """
++        UPDATE ingestion_run
++        SET requested_count = ?, success_count = ?, empty_count = ?,
++            failed_count = ?, invalid_count = ?, diagnostics_json = ?,
++            terminal_reason = ?, error_json = COALESCE(?, error_json)
++        WHERE ingestion_run_id = ?
++        """,
++        [
++            requested_count,
++            success_count,
++            empty_count,
++            failed_count,
++            invalid_count,
++            json.dumps({"counts": dict(counts)}, sort_keys=True),
