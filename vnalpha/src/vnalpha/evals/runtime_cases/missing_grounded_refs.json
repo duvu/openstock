@@ -1,63 +1,116 @@
 {
-  "case_id": "missing_grounded_refs",
-  "request": {
-    "current_user_prompt": "Give me a deep research review of FPT on 2026-07-01.",
-    "workspace_context": null,
-    "date": "2026-07-01"
-  },
-  "classifier_response": {
-    "intent": "deep_analyze_symbol",
-    "confidence": 0.99,
-    "entities": {"symbols": ["FPT"], "date": "2026-07-01"},
-    "needs_clarification": false,
-    "clarification_question": null,
-    "safety_flags": []
-  },
-  "synthesis_response": {
-    "summary": "Persisted research context for FPT is available.",
-    "basis": "Seeded candidate, feature, level, freshness, and lineage artifacts support this review.",
-    "risks_caveats": "Research-only context; persisted evidence may become stale.",
-    "tool_trace_summary": "analysis.deep_symbol completed.",
-    "missing_data": [],
-    "grounded_source_refs": [],
-    "research_metadata": {}
-  },
-  "tool_outputs": [
-    {
-      "tool_name": "analysis.deep_symbol",
-      "arguments": {"symbol": "FPT", "date": "2026-07-01"},
-      "data": {
-        "symbol": "FPT",
-        "as_of_date": "2026-07-01",
-        "candidate": {"candidate_class": "WATCH_CANDIDATE"},
-        "feature_context": {"status": "AVAILABLE"},
-        "levels": {"status": "AVAILABLE"},
-        "freshness": {"status": "CURRENT"},
-        "lineage": {"source": "fixture"},
+    "case_id": "missing_grounded_refs",
+    "request": {
+        "current_user_prompt": "Give me a deep research review of FPT on 2026-07-01.",
+        "workspace_context": null,
+        "date": "2026-07-01"
+    },
+    "classifier_response": {
+        "intent": "deep_analyze_symbol",
+        "confidence": 0.99,
+        "entities": {
+            "symbols": [
+                "FPT"
+            ],
+            "date": "2026-07-01"
+        },
+        "needs_clarification": false,
+        "clarification_question": null,
+        "safety_flags": []
+    },
+    "synthesis_response": {
+        "summary": "Persisted research context for FPT is available.",
+        "basis": "Seeded candidate, feature, level, freshness, and lineage artifacts support this review.",
+        "risks_caveats": "Research-only context; persisted evidence may become stale.",
+        "tool_trace_summary": "analysis.deep_symbol completed.",
         "missing_data": [],
-        "caveats": []
-      },
-      "artifact_refs": ["fixture://runtime/missing_refs"],
-      "summary": "Seeded deep-symbol payload.",
-      "warnings": []
-    }
-  ],
-  "expected": {
-    "outcome": "answer",
-    "intent": "deep_analyze_symbol",
-    "plan": [
-      {
-        "tool_name": "analysis.deep_symbol",
-        "arguments": {"symbol": "FPT", "date": "2026-07-01"}
-      }
+        "grounded_source_refs": [],
+        "research_metadata": {}
+    },
+    "tool_outputs": [
+        {
+            "tool_name": "data.ensure_current_symbol",
+            "arguments": {
+                "symbol": "FPT",
+                "date": "2026-07-01"
+            },
+            "data": {
+                "symbol": "FPT",
+                "outcome": "READY",
+                "reused_fresh_data": true,
+                "refreshed": false,
+                "actions": [],
+                "warnings": [],
+                "errors": [],
+                "remediation": []
+            },
+            "artifact_refs": [],
+            "summary": "Current-symbol data ready for FPT (replay seed).",
+            "warnings": []
+        },
+        {
+            "tool_name": "analysis.deep_symbol",
+            "arguments": {
+                "symbol": "FPT",
+                "date": "2026-07-01"
+            },
+            "data": {
+                "symbol": "FPT",
+                "as_of_date": "2026-07-01",
+                "candidate": {
+                    "candidate_class": "WATCH_CANDIDATE"
+                },
+                "feature_context": {
+                    "status": "AVAILABLE"
+                },
+                "levels": {
+                    "status": "AVAILABLE"
+                },
+                "freshness": {
+                    "status": "CURRENT"
+                },
+                "lineage": {
+                    "source": "fixture"
+                },
+                "missing_data": [],
+                "caveats": []
+            },
+            "artifact_refs": [
+                "fixture://runtime/missing_refs"
+            ],
+            "summary": "Seeded deep-symbol payload.",
+            "warnings": []
+        }
     ],
-    "successful_trace_tools": ["analysis.deep_symbol"],
-    "groundedness_status": "PASS",
-    "policy_status": "PASS",
-    "fallback_used": true,
-    "audit_status": "persisted",
-    "required_missing_data": [],
-    "forbidden_source_refs": [],
-    "claim_source_refs": {}
-  }
+    "expected": {
+        "outcome": "answer",
+        "intent": "deep_analyze_symbol",
+        "plan": [
+            {
+                "tool_name": "data.ensure_current_symbol",
+                "arguments": {
+                    "symbol": "FPT",
+                    "date": "2026-07-01"
+                }
+            },
+            {
+                "tool_name": "analysis.deep_symbol",
+                "arguments": {
+                    "symbol": "FPT",
+                    "date": "2026-07-01"
+                }
+            }
+        ],
+        "successful_trace_tools": [
+            "data.ensure_current_symbol",
+            "analysis.deep_symbol"
+        ],
+        "groundedness_status": "PASS",
+        "policy_status": "PASS",
+        "fallback_used": true,
+        "audit_status": "persisted",
+        "required_missing_data": [],
+        "forbidden_source_refs": [],
+        "claim_source_refs": {}
+    }
 }
