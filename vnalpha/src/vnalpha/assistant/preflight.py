@@ -36,17 +36,17 @@ from vnalpha.assistant.errors import (
 # A minimal structured probe: the smallest strict json_schema request that
 # exercises the required JSON_SCHEMA capability end to end. It carries no user
 # or prompt content beyond a fixed health token.
+#
+# This is a bare JSON Schema object. LLMGatewayClient.chat() wraps it into the
+# provider ``response_format`` envelope itself, so passing a full
+# ``{"type": "json_schema", ...}`` envelope here would double-wrap the schema
+# and be rejected by the gateway as an invalid schema.
 _PROBE_SCHEMA: dict = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "assistant_preflight_probe",
-        "schema": {
-            "type": "object",
-            "properties": {"ok": {"type": "boolean"}},
-            "required": ["ok"],
-            "additionalProperties": False,
-        },
-    },
+    "type": "object",
+    "title": "assistant_preflight_probe",
+    "properties": {"ok": {"type": "boolean"}},
+    "required": ["ok"],
+    "additionalProperties": False,
 }
 _PROBE_MESSAGES: list[dict] = [
     {"role": "user", "content": 'Reply with {"ok": true}.'},

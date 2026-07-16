@@ -61,6 +61,31 @@ def get_canonical_ohlcv_status(
     return row[0] if row else 0
 
 
+def get_latest_canonical_bar_date(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    target_date: str,
+) -> Optional[str]:
+    """Return the latest canonical OHLCV bar date at or before *target_date*.
+
+    Returns an ISO ``YYYY-MM-DD`` string, or ``None`` when the symbol has no
+    canonical bars in range. Used to decide whether an incremental OHLCV sync is
+    warranted when history is otherwise sufficient but stale.
+    """
+    row = conn.execute(
+        """
+        SELECT MAX(CAST(time AS DATE))::VARCHAR FROM canonical_ohlcv
+        WHERE symbol = ?
+          AND interval = '1D'
+          AND CAST(time AS DATE) <= ?
+        """,
+        [symbol, target_date],
+    ).fetchone()
+    if row and row[0]:
+        return row[0]
+    return None
+
+
 def get_benchmark_status(
     conn: duckdb.DuckDBPyConnection,
     benchmark: str,

@@ -115,6 +115,30 @@ class TestGetCanonicalOhlcvStatus:
         assert count == 1
 
 
+class TestGetLatestCanonicalBarDate:
+    def test_no_bars_returns_none(self):
+        from vnalpha.data_availability.checks import get_latest_canonical_bar_date
+
+        conn = _fresh_conn()
+        assert get_latest_canonical_bar_date(conn, "FPT", "2025-01-10") is None
+
+    def test_returns_latest_bar_at_or_before_target(self):
+        from vnalpha.data_availability.checks import get_latest_canonical_bar_date
+
+        conn = _fresh_conn()
+        for d in ["2025-01-02", "2025-01-03", "2025-01-06"]:
+            _insert_canonical_bar(conn, "FPT", d)
+        assert get_latest_canonical_bar_date(conn, "FPT", "2025-01-10") == "2025-01-06"
+
+    def test_ignores_bars_after_target(self):
+        from vnalpha.data_availability.checks import get_latest_canonical_bar_date
+
+        conn = _fresh_conn()
+        _insert_canonical_bar(conn, "FPT", "2025-01-06")
+        _insert_canonical_bar(conn, "FPT", "2025-01-20")
+        assert get_latest_canonical_bar_date(conn, "FPT", "2025-01-10") == "2025-01-06"
+
+
 class TestGetFeatureSnapshotStatus:
     def test_missing_returns_false(self):
         from vnalpha.data_availability.checks import get_feature_snapshot_status

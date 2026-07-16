@@ -37,9 +37,27 @@ def _today_vn() -> str:
 
 
 def _latest_research_date(conn: "duckdb.DuckDBPyConnection") -> Optional[str]:
-    """Return the latest date present in daily_watchlist, or None if empty."""
+    """Return the latest date with available market data, or None if none exists.
+
+    Prefers the latest ``daily_watchlist`` date (a materialised research
+    session), but falls back to the latest canonical OHLCV bar date when the
+    watchlist has not been generated yet. Without this fallback, "analyse today"
+    on a fresh warehouse resolves to a calendar date that has no ingested bars,
+    features, or scores — which fails deep-analysis readiness even though
+    perfectly good data exists for the most recent trading session.
+    """
+    watchlist_date = _latest_table_date(conn, "daily_watchlist", "date")
+    if watchlist_date is not None:
+        return watchlist_date
+    return _latest_table_date(conn, "canonical_ohlcv", "CAST(time AS DATE)")
+
+
+def _latest_table_date(
+    conn: "duckdb.DuckDBPyConnection", table: str, date_expr: str
+) -> Optional[str]:
+    """Return ``MAX(date_expr)`` from *table* as an ISO string, or None."""
     try:
-        row = conn.execute("SELECT MAX(date)::VARCHAR FROM daily_watchlist").fetchone()
+        row = conn.execute(f"SELECT MAX({date_expr})::VARCHAR FROM {table}").fetchone()
     except duckdb.CatalogException:
         return None
     if row and row[0]:
@@ -55,9 +73,9 @@ def resolve_date(
 
     Accepted values:
     - None or "today" → today's date in Asia/Ho_Chi_Minh timezone.
-      If *conn* is provided, falls back to the latest available research
-      date in daily_watchlist when no data exists for today (e.g. weekends,
-      holidays, or data not yet ingested).
+      If *conn* is provided, falls back to the latest available data date
+      (daily_watchlist, else latest canonical OHLCV bar) when it precedes
+      today (e.g. weekends, holidays, or data not yet ingested).
     - "YYYY-MM-DD" → validated and returned as-is (explicit override,
       calendar-unaware — no DB lookup performed).
 
