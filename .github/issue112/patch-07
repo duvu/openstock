@@ -1,0 +1,148 @@
++                raise ValueError("'page_size' must be between 1 and 500.")
++ 
++     def fetch(self, dataset: str, params: dict[str, Any]) -> pd.DataFrame:
++         if dataset not in _SUPPORTED_DATASETS:
++@@ -86,6 +111,7 @@ class KBSProviderPlugin:
++             "index.ohlcv": self._fetch_index_ohlcv,
++             "reference.symbols": self._fetch_reference_symbols,
++             "reference.company_info": self._fetch_company_info,
+++            "reference.corporate_actions": self._fetch_corporate_actions,
++             "fundamental.balance_sheet": self._fetch_balance_sheet,
++             "fundamental.income_statement": self._fetch_income_statement,
++             "fundamental.cash_flow": self._fetch_cash_flow,
++@@ -150,6 +176,25 @@ class KBSProviderPlugin:
++         df.attrs.setdefault("dataset", "reference.symbols")
++         return df
++ 
+++    def _fetch_corporate_actions(self, params: dict[str, Any]) -> pd.DataFrame:
+++        from vnstock.explorer.kbs.company import Company
+++
+++        symbol = str(params["symbol"]).strip().upper()
+++        company = Company(symbol=symbol, show_log=params.get("show_log", False))
+++        frame = company.events(
+++            event_type=params.get("event_type"),
+++            page=int(params.get("page", 1)),
+++            page_size=int(params.get("page_size", 500)),
+++            show_log=params.get("show_log", False),
+++        )
+++        return normalize_corporate_actions(
+++            frame,
+++            provider="KBS",
+++            symbol=symbol,
+++            start=params.get("start"),
+++            end=params.get("end"),
+++        )
+++
++     def _fetch_company_info(self, params: dict[str, Any]) -> pd.DataFrame:
++         from vnstock.explorer.kbs.company import Company
++ 
++diff --git a/vnstock/vnstock/providers/vci/capabilities.py b/vnstock/vnstock/providers/vci/capabilities.py
++index c7f71b6..be13046 100644
++--- a/vnstock/vnstock/providers/vci/capabilities.py
+++++ b/vnstock/vnstock/providers/vci/capabilities.py
++@@ -48,6 +48,14 @@ VCI_CAPABILITIES: dict = {
++         "intervals": [],
++         "notes": "Full symbol listing with ICB industry classification.",
++     },
+++    "reference.corporate_actions": {
+++        "supported": True,
+++        "status": "partial",
+++        "auth_required": False,
+++        "intervals": [],
+++        "request_modes": ["symbol_date_range"],
+++        "notes": "Provider event feed normalized as market-data evidence; not an official disclosure source.",
+++    },
++     "reference.company_info": {
++         "supported": True,
++         "status": "stable",
++diff --git a/vnstock/vnstock/providers/vci/plugin.py b/vnstock/vnstock/providers/vci/plugin.py
++index 85eb17d..cc85278 100644
++--- a/vnstock/vnstock/providers/vci/plugin.py
+++++ b/vnstock/vnstock/providers/vci/plugin.py
++@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
++ 
++ import pandas as pd
++ 
+++from vnstock.core.corporate_actions import normalize_corporate_actions
++ from vnstock.core.provider.exceptions import (
++     ProviderFetchError,
++     UnsupportedDatasetForProviderError,
++@@ -40,6 +41,30 @@ class VCIProviderPlugin:
++             "reference.symbols",
++         ):
++             raise ValueError(f"'symbol' is required for dataset '{dataset}'.")
+++        if dataset == "reference.corporate_actions":
+++            for key in ("start", "end"):
+++                value = params.get(key)
+++                if value:
+++                    try:
+++                        pd.Timestamp(value)
+++                    except (TypeError, ValueError) as exc:
+++                        raise ValueError(f"'{key}' must be an ISO date.") from exc
+++            if (
+++                params.get("start")
+++                and params.get("end")
+++                and pd.Timestamp(params["start"]) > pd.Timestamp(params["end"])
+++            ):
+++                raise ValueError("'start' must not be after 'end'.")
+++            page = params.get("page", 0)
+++            page_size = params.get("page_size", 500)
+++            if isinstance(page, bool) or not isinstance(page, int) or page < 0:
+++                raise ValueError("'page' must be a non-negative integer.")
+++            if (
+++                isinstance(page_size, bool)
+++                or not isinstance(page_size, int)
+++                or not 1 <= page_size <= 500
+++            ):
+++                raise ValueError("'page_size' must be between 1 and 500.")
++ 
++     def fetch(self, dataset: str, params: dict[str, Any]) -> pd.DataFrame:
++         if dataset not in _SUPPORTED_DATASETS:
++@@ -77,6 +102,7 @@ class VCIProviderPlugin:
++             "index.ohlcv": self._fetch_equity_ohlcv,
++             "reference.symbols": self._fetch_reference_symbols,
++             "reference.company_info": self._fetch_company_info,
+++            "reference.corporate_actions": self._fetch_corporate_actions,
++             "fundamental.balance_sheet": self._fetch_balance_sheet,
++             "fundamental.income_statement": self._fetch_income_statement,
++             "fundamental.cash_flow": self._fetch_cash_flow,
++@@ -137,6 +163,27 @@ class VCIProviderPlugin:
++         df.attrs.setdefault("dataset", "reference.symbols")
++         return df
++ 
+++    def _fetch_corporate_actions(self, params: dict[str, Any]) -> pd.DataFrame:
+++        from vnstock.explorer.vci.company import Company
+++
+++        symbol = str(params["symbol"]).strip().upper()
+++        company = Company(symbol=symbol, show_log=params.get("show_log", False))
+++        raw = company._fetch_events(
+++            event_codes="DIV,ISS,MOVE,NLIS,RETU,SUSP,OTHE",
+++            from_date=str(params.get("start") or "").replace("-", "") or None,
+++            to_date=str(params.get("end") or "").replace("-", "") or None,
+++            page=int(params.get("page", 0)),
+++            size=int(params.get("page_size", 500)),
+++        )
+++        frame = pd.DataFrame(raw)
+++        return normalize_corporate_actions(
+++            frame,
+++            provider="VCI",
+++            symbol=symbol,
+++            start=params.get("start"),
+++            end=params.get("end"),
+++        )
+++
++     def _fetch_company_info(self, params: dict[str, Any]) -> pd.DataFrame:
++         from vnstock.explorer.vci.company import Company
++ 
++diff --git a/vnstock/vnstock/service/dataset_mapper.py b/vnstock/vnstock/service/dataset_mapper.py
++index 9297874..3b33be5 100644
++--- a/vnstock/vnstock/service/dataset_mapper.py
+++++ b/vnstock/vnstock/service/dataset_mapper.py
++@@ -28,6 +28,7 @@ _CANONICAL: dict[str, str] = {
++     "/v1/equity/intraday-trades": "equity.intraday_trades",
++     "/v1/index/ohlcv": "index.ohlcv",
++     "/v1/reference/symbols": "reference.symbols",
+++    "/v1/reference/corporate-actions": "reference.corporate_actions",
++     "/v1/reference/index-membership": "reference.index_membership_snapshot",
++     "/v1/reference/sector-membership": "reference.sector_membership_snapshot",
++     "/v1/company/info": "reference.company_info",
