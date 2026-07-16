@@ -1,0 +1,169 @@
+diff --git a/vnalpha/src/vnalpha/cli_app/data.py b/vnalpha/src/vnalpha/cli_app/data.py
+index 6d1b7dc..f037cc9 100644
+--- a/vnalpha/src/vnalpha/cli_app/data.py
++++ b/vnalpha/src/vnalpha/cli_app/data.py
+@@ -83,16 +83,7 @@ def download_corporate_actions(
+     end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD)."),
+     source: str | None = typer.Option(None, "--source", help="Preferred provider."),
+ ) -> None:
+-    _run(
+-        DataProvisioningRequest(
+-            operation="download",
+-            artifact="corporate-actions",
+-            symbol=symbol,
+-            start=start,
+-            end=end,
+-            source=source,
+-        )
+-    )
++    _run_corporate_actions(symbol=symbol, start=start, end=end, source=source)
+ 
+ 
+ @status_app.command("corporate-actions")
+@@ -222,6 +213,32 @@ def repair_ohlcv(
+     )
+ 
+ 
++def _run_corporate_actions(
++    *, symbol: str, start: str | None, end: str | None, source: str | None
++) -> None:
++    from vnalpha.ingestion.corporate_actions import sync_corporate_actions
++    from vnalpha.warehouse.connection import get_connection
++    from vnalpha.warehouse.migrations import run_migrations
++
++    normalized_symbol = symbol.strip().upper()
++    if not normalized_symbol:
++        raise typer.BadParameter("symbol must not be empty")
++    set_correlation_id()
++    with command_lifecycle("data download corporate-actions"):
++        conn = get_connection()
++        run_migrations(conn=conn)
++        result = sync_corporate_actions(
++            conn,
++            symbol=normalized_symbol,
++            start=start,
++            end=end,
++            source=source,
++        )
++        typer.echo(json.dumps(result, sort_keys=True))
++        if result["status"] == "FAILED":
++            raise typer.Exit(code=1)
++
++
+ def _run(request: DataProvisioningRequest) -> None:
+     set_correlation_id()
+     command = f"data {request.operation} {request.artifact}"
+diff --git a/vnalpha/src/vnalpha/cli_app/sync.py b/vnalpha/src/vnalpha/cli_app/sync.py
+index 51d5a3d..3400dbf 100644
+--- a/vnalpha/src/vnalpha/cli_app/sync.py
++++ b/vnalpha/src/vnalpha/cli_app/sync.py
+@@ -157,30 +157,32 @@ def sync_corporate_actions_cmd(
+     source: Optional[str] = typer.Option(None, "--source"),
+ ):
+     """Sync bounded corporate-action evidence without calculating adjusted prices."""
++    from vnalpha.ingestion.corporate_actions import sync_corporate_actions
++    from vnalpha.warehouse.connection import get_connection
++    from vnalpha.warehouse.migrations import run_migrations
++
++    normalized_symbol = symbol.strip().upper()
++    if not normalized_symbol:
++        raise typer.BadParameter("symbol must not be empty")
+     set_correlation_id()
+     with command_lifecycle("sync corporate-actions"):
+-        from vnalpha.warehouse.connection import get_connection
+-        from vnalpha.warehouse.migrations import run_migrations
+-
+         conn = get_connection()
+         run_migrations(conn=conn)
+-        result = _execute(
++        result = sync_corporate_actions(
+             conn,
+-            DataProvisioningRequest(
+-                "download",
+-                "corporate-actions",
+-                symbol=symbol,
+-                start=start,
+-                end=end,
+-                source=source,
+-            ),
++            symbol=normalized_symbol,
++            start=start,
++            end=end,
++            source=source,
+         )
+         typer.echo(
+             "Corporate-action sync complete: "
+-            f"{result.counts.get('canonical_inserted', 0)} inserted, "
+-            f"{result.counts.get('revised', 0)} revised, "
+-            f"{result.counts.get('quarantined', 0)} quarantined"
++            f"{result.get('canonical_inserted', 0)} inserted, "
++            f"{result.get('revised', 0)} revised, "
++            f"{result.get('quarantined', 0)} quarantined"
+         )
++        if result["status"] == "FAILED":
++            raise typer.Exit(code=1)
+ 
+ 
+ def _execute(
+diff --git a/vnalpha/src/vnalpha/data_provisioning/service.py b/vnalpha/src/vnalpha/data_provisioning/service.py
+index 6879740..ca7159b 100644
+--- a/vnalpha/src/vnalpha/data_provisioning/service.py
++++ b/vnalpha/src/vnalpha/data_provisioning/service.py
+@@ -82,7 +82,6 @@ class DataProvisioningDependencies:
+     sync_symbols: Callable[..., object] | None = None
+     sync_ohlcv: Callable[..., object] | None = None
+     sync_index: Callable[..., object] | None = None
+-    sync_corporate_actions: Callable[..., object] | None = None
+     build_canonical: Callable[..., object] | None = None
+     build_features: Callable[..., object] | None = None
+     generate_watchlist: Callable[..., object] | None = None
+@@ -304,49 +303,6 @@ class DataProvisioningService:
+                     terminal_reason=batch.terminal_reason,
+                     error=_ohlcv_terminal_error(batch),
+                 )
+-            case "download", "corporate-actions":
+-                raw = _require_mapping(
+-                    self._sync_corporate_actions()(
+-                        self.conn,
+-                        symbol=request.symbol,
+-                        start=request.start,
+-                        end=request.end,
+-                        source=request.source,
+-                    )
+-                )
+-                counts = _counts(
+-                    raw,
+-                    "observed",
+-                    "raw_inserted",
+-                    "canonical_inserted",
+-                    "unchanged",
+-                    "revised",
+-                    "conflicts",
+-                    "quarantined",
+-                    "affected_ranges",
+-                )
+-                raw_status = str(raw.get("status") or "FAILED").upper()
+-                status = (
+-                    ProvisioningStatus.SUCCESS
+-                    if raw_status in {"COMPLETE", "EMPTY"}
+-                    else ProvisioningStatus.PARTIAL
+-                    if raw_status == "PARTIAL"
+-                    else ProvisioningStatus.FAILED
+-                )
+-                return _result(
+-                    request,
+-                    correlation_id,
+-                    counts=counts,
+-                    status=status,
+-                    warnings=_count_warnings(
+-                        counts,
+-                        ("quarantined", "corporate actions quarantined"),
+-                        ("conflicts", "corporate action conflicts"),
+-                    ),
+-                    raw_result=raw,
+-                    error=str(raw.get("error")) if raw.get("error") else None,
+-                    terminal_reason=raw_status,
+-                )
+             case "download", "index":
+                 raw = _require_mapping(
+                     self._sync_index()(
