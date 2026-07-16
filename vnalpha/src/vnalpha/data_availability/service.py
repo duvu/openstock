@@ -58,6 +58,7 @@ class EnsureRequest:
     policy: DataAvailabilityPolicy
     client: VnstockClient | None
     lock_dir: Path | None
+    force_refresh: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +69,7 @@ class NormalizedEnsureRequest:
     policy: DataAvailabilityPolicy
     client: VnstockClient | None
     lock_dir: Path | None
+    force_refresh: bool = False
 
 
 def execute_planned_actions(
@@ -104,6 +106,7 @@ def ensure_data_availability(
         policy=request.policy,
         client=request.client,
         lock_dir=request.lock_dir,
+        force_refresh=request.force_refresh,
     )
     result = EnsureDataResult(
         symbol=symbol, target_date=target_date, status=EnsureDataStatus.FAILED
@@ -121,10 +124,14 @@ def ensure_data_availability(
         log_ensure_started(symbol, target_date)
         snapshot = _snapshot(normalised_request)
         eligibility = evaluate_cache_eligibility(snapshot, request.policy)
-        if eligibility.eligible:
+        if eligibility.eligible and not normalised_request.force_refresh:
             return cache_hit_result(result, snapshot)
-        result.cache_rejection_reasons.extend(eligibility.reasons)
-        log_ensure_cache_rejected(symbol, target_date, eligibility.reasons)
+        if normalised_request.force_refresh and eligibility.eligible:
+            result.cache_rejection_reasons.append("force_refresh")
+            log_ensure_cache_rejected(symbol, target_date, ("force_refresh",))
+        else:
+            result.cache_rejection_reasons.extend(eligibility.reasons)
+            log_ensure_cache_rejected(symbol, target_date, eligibility.reasons)
 
         first_plan = plan_data_availability(snapshot, request.policy)
         context = _action_context(normalised_request, snapshot, dependencies)
@@ -143,11 +150,14 @@ def ensure_data_availability(
 
         plan = plan_data_availability(snapshot, normalised_request.policy)
         context = _action_context(normalised_request, snapshot, dependencies)
-        _run_actions(
-            tuple(action for action in plan.actions if action in _PROVISION_ACTIONS),
-            context,
-            result,
+        provision_actions = tuple(
+            action for action in plan.actions if action in _PROVISION_ACTIONS
         )
+        if normalised_request.force_refresh:
+            provision_actions = _augment_refresh_provision_actions(
+                provision_actions, snapshot, normalised_request.policy
+            )
+        _run_actions(provision_actions, context, result)
         snapshot = _snapshot(normalised_request)
         feature_plan = plan_data_availability(snapshot, normalised_request.policy)
         context = _action_context(normalised_request, snapshot, dependencies)
@@ -158,6 +168,10 @@ def ensure_data_availability(
             feature_actions = (
                 EnsureDataAction.FEATURES_BUILT,
                 EnsureDataAction.SCORED,
+            )
+        if normalised_request.force_refresh:
+            feature_actions = _augment_refresh_feature_actions(
+                feature_actions, snapshot, normalised_request.policy
             )
         _run_actions(
             tuple(
@@ -197,6 +211,56 @@ def _action_context(
         client=request.client,
         dependencies=dependencies,
     )
+
+
+def _augment_refresh_provision_actions(
+    planned: tuple[EnsureDataAction, ...],
+    snapshot: EnsureDataSnapshot,
+    policy: DataAvailabilityPolicy,
+) -> tuple[EnsureDataAction, ...]:
+    """Add bounded incremental OHLCV/canonical refresh when data already exists.
+
+    An explicit refresh performs bounded incremental work even when the snapshot
+    would otherwise be treated as fresh. It never downgrades the auto-sync policy
+    and it only adds work for symbols/benchmarks already present.
+    """
+
+    if not policy.auto_sync:
+        return planned
+    actions = list(planned)
+    if snapshot.canonical_bars >= policy.min_required_bars:
+        for action in (
+            EnsureDataAction.OHLCV_SYNCED,
+            EnsureDataAction.CANONICAL_BUILT,
+        ):
+            if action not in actions:
+                actions.append(action)
+    if (
+        policy.require_benchmark_history
+        and snapshot.benchmark_bars >= policy.min_required_bars
+    ):
+        for action in (
+            EnsureDataAction.BENCHMARK_SYNCED,
+            EnsureDataAction.BENCHMARK_CANONICAL_BUILT,
+        ):
+            if action not in actions:
+                actions.append(action)
+    ordered = tuple(action for action in _PROVISION_ACTIONS if action in actions)
+    return ordered
+
+
+def _augment_refresh_feature_actions(
+    planned: tuple[EnsureDataAction, ...],
+    snapshot: EnsureDataSnapshot,
+    policy: DataAvailabilityPolicy,
+) -> tuple[EnsureDataAction, ...]:
+    """Rebuild features and re-score during an explicit refresh when possible."""
+
+    if not policy.auto_sync:
+        return planned
+    if snapshot.canonical_bars >= policy.min_required_bars:
+        return (EnsureDataAction.FEATURES_BUILT, EnsureDataAction.SCORED)
+    return planned
 
 
 def _run_actions(

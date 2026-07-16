@@ -12,6 +12,21 @@ policy:
 
 changes:
 
+  chat-data-provisioning-contract:
+    status: in_progress
+    github_issues: [163]
+    roadmap_state: scheduled
+    summary: >-
+      Make bounded current-symbol data provisioning one explicit, idempotent,
+      correlation-traced application operation shared by natural-language chat
+      and slash commands, replacing the fetch_data refusal and the hidden
+      executor-only pre-step.
+    evidence: >-
+      Implementation on branch agent/issue-163-chat-provisioning. Focused tests
+      in tests/test_issue_163_chat_provisioning.py plus updated planner,
+      executor, groundedness and deep-readiness regressions pass locally.
+      Final required-CI evidence on the merge SHA is pending the PR.
+
   corporate-action-ingestion:
     status: ready
     github_issues: [112]

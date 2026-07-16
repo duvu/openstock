@@ -36,8 +36,30 @@ from vnalpha.data_availability.planner import (
     compute_lookback_start,
 )
 from vnalpha.data_availability.policy import DEFAULT_POLICY
+from vnalpha.data_provisioning.ensure_current_symbol import (
+    CurrentSymbolReadyResult,
+    ProvisioningOutcome,
+)
 from vnalpha.observability.context import get_correlation_id
 from vnalpha.warehouse.migrations import run_migrations
+
+
+def _blocked_provisioning(readiness: ReadinessResult) -> CurrentSymbolReadyResult:
+    """Wrap a failed ReadinessResult as a FAILED provisioning result."""
+    return CurrentSymbolReadyResult(
+        symbol=readiness.symbol,
+        outcome=ProvisioningOutcome.FAILED,
+        correlation_id=readiness.correlation_id,
+        requested_date=readiness.requested_date,
+        resolved_date=readiness.resolved_date,
+        actions=(),
+        reused_fresh_data=False,
+        refreshed=False,
+        warnings=readiness.warnings,
+        errors=readiness.errors,
+        remediation=(),
+        readiness=readiness,
+    )
 
 
 def _ensure_result(
@@ -717,8 +739,8 @@ def test_analyze_returns_data_readiness_without_calling_deep_tool_when_blocked(
     )
     monkeypatch.setattr(
         analyze_handler,
-        "ensure_deep_analysis_ready",
-        lambda _conn, _symbol, _date, **_kwargs: readiness,
+        "ensure_current_symbol_ready",
+        lambda _conn, _symbol, _date, **_kwargs: _blocked_provisioning(readiness),
     )
 
     class ToolExecutor:
@@ -877,8 +899,8 @@ def test_tui_command_path_renders_blocked_readiness_without_calling_tool(
     )
     monkeypatch.setattr(
         analyze_handler,
-        "ensure_deep_analysis_ready",
-        lambda _conn, _symbol, _date, **_kwargs: readiness,
+        "ensure_current_symbol_ready",
+        lambda _conn, _symbol, _date, **_kwargs: _blocked_provisioning(readiness),
     )
     conn = duckdb.connect()
     run_migrations(conn=conn)

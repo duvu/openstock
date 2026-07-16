@@ -84,6 +84,7 @@ jobs:
           print("\n".join(lines[:2] + [lines[-1]]))
           PY
       - name: Upload source and history-scan artifacts
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: openstock-source-${{ github.sha }}

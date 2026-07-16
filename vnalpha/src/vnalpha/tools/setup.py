@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from vnalpha.data_availability.deep_readiness_models import ContextRequirement
 from vnalpha.policy.tool_policy import TOOL_PERMISSIONS_BY_NAME
 from vnalpha.tools.errors import ToolExecutionError
 from vnalpha.tools.models import ToolPermission, ToolSpec
@@ -12,6 +13,7 @@ TOOL_PERMISSIONS: dict[str, ToolPermission] = dict(TOOL_PERMISSIONS_BY_NAME)
 
 def build_local_tool_registry(conn) -> LocalToolRegistry:
     """Build a LocalToolRegistry wired to a live DuckDB connection."""
+    from vnalpha.tools.ensure_current_symbol import ensure_current_symbol
     from vnalpha.tools.fetch import fetch_symbol_data
     from vnalpha.tools.lineage import get_symbol_lineage
     from vnalpha.tools.notes import create_note, list_sessions
@@ -240,6 +242,14 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
     )
     registry.register(
         ToolSpec(
+            name="data.ensure_current_symbol",
+            description="Provision and validate the minimum current-symbol analysis inputs",
+            permission=ToolPermission.WRITE_DATA,
+        ),
+        lambda **kwargs: _ensure_current_symbol(ensure_current_symbol, conn, **kwargs),
+    )
+    registry.register(
+        ToolSpec(
             name="data.fetch",
             description="Fetch OHLCV data for a symbol from vnstock-service into the warehouse",
             permission=ToolPermission.WRITE_DATA,
@@ -346,4 +356,25 @@ def _fetch_data(impl, conn, **kwargs):
         start=kwargs.get("start"),
         end=kwargs.get("end"),
         interval=kwargs.get("interval", "1D"),
+    )
+
+
+def _ensure_current_symbol(impl, conn, **kwargs):
+    symbol = kwargs.get("symbol")
+    if symbol is None:
+        raise ToolExecutionError(
+            "data.ensure_current_symbol requires 'symbol' argument."
+        )
+    return impl(
+        conn,
+        symbol=symbol,
+        date=kwargs.get("date"),
+        refresh=kwargs.get("refresh", False),
+        market_regime_requirement=kwargs.get(
+            "market_regime_requirement", ContextRequirement.NOT_REQUESTED
+        ),
+        sector_strength_requirement=kwargs.get(
+            "sector_strength_requirement", ContextRequirement.NOT_REQUESTED
+        ),
+        correlation_id=kwargs.get("correlation_id"),
     )

@@ -27,6 +27,12 @@ class SeededToolArgumentsError(RuntimeError):
         )
 
 
+# The explicit provisioning tool injects a runtime correlation_id argument
+# (issue #163); replay seeds cannot know it ahead of time, so it is ignored
+# when comparing seeded against actual arguments.
+_RUNTIME_INJECTED_ARGS = frozenset({"correlation_id"})
+
+
 def build_seeded_tool_registry(case: RuntimeReplayCase) -> LocalToolRegistry:
     registry = LocalToolRegistry()
     for seed in case.tool_outputs:
@@ -43,11 +49,16 @@ def build_seeded_tool_registry(case: RuntimeReplayCase) -> LocalToolRegistry:
 
 def _seeded_implementation(seed: SeededToolOutput):
     def execute(**arguments: JsonValue) -> ToolOutput:
-        if arguments != seed.arguments:
+        compared = {
+            key: value
+            for key, value in arguments.items()
+            if key not in _RUNTIME_INJECTED_ARGS
+        }
+        if compared != seed.arguments:
             raise SeededToolArgumentsError(
                 tool_name=seed.tool_name,
                 expected=seed.arguments,
-                actual=arguments,
+                actual=compared,
             )
         data = dict(seed.data)
         data["artifact_refs"] = list(seed.artifact_refs)
@@ -60,7 +71,12 @@ def _seeded_implementation(seed: SeededToolOutput):
     return execute
 
 
-def _skip_data_ensure(_conn: duckdb.DuckDBPyConnection, _step: ToolPlanStep) -> None:
+def _skip_data_ensure(
+    _conn: duckdb.DuckDBPyConnection,
+    _step: ToolPlanStep,
+    *,
+    explicitly_provisioned: bool = False,
+) -> None:
     return None
 
 

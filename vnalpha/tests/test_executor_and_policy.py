@@ -180,10 +180,10 @@ class TestExecutorAllowlist:
     ):
         events: list[str] = []
 
-        def track_ensure(conn, step):
+        def track_ensure(conn, step, *, explicitly_provisioned=False):
             events.append("ensure")
 
-        def track_execute(step):
+        def track_execute(step, *, correlation_id=None):
             events.append("execute")
             return {}
 
@@ -198,10 +198,10 @@ class TestExecutorAllowlist:
     def test_executor_runs_supported_note_tool(self, executor, monkeypatch):
         events: list[str] = []
 
-        def track_ensure(conn, step):
+        def track_ensure(conn, step, *, explicitly_provisioned=False):
             events.append("ensure")
 
-        def track_execute(step):
+        def track_execute(step, *, correlation_id=None):
             events.append("execute")
             return {"tool_name": step.tool_name}
 
@@ -227,10 +227,10 @@ class TestExecutorAllowlist:
         # Then: it rejects before either ensure or tool execution occurs
         events: list[str] = []
 
-        def track_ensure(conn, step):
+        def track_ensure(conn, step, *, explicitly_provisioned=False):
             events.append("ensure")
 
-        def track_execute(step):
+        def track_execute(step, *, correlation_id=None):
             events.append("execute")
             return {}
 
@@ -248,10 +248,10 @@ class TestExecutorAllowlist:
         # Then: deterministic ensure runs before the tool implementation
         events: list[str] = []
 
-        def track_ensure(conn, step):
+        def track_ensure(conn, step, *, explicitly_provisioned=False):
             events.append("ensure")
 
-        def track_execute(step):
+        def track_execute(step, *, correlation_id=None):
             events.append("execute")
             return {"tool_name": step.tool_name}
 

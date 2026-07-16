@@ -46,7 +46,7 @@ def _answer_response() -> tuple[str, dict]:
 
 
 def _tool_outputs(plan):
-    step = plan.steps[0]
+    step = next(s for s in plan.steps if s.tool_name == "analysis.deep_symbol")
     return {
         step.step_id: {
             "data": {
@@ -114,7 +114,8 @@ def test_assistant_app_persists_validated_research_answer_audit(monkeypatch):
     assert len(audits) == 1
     assert audits[0]["research_answer_audit_id"] == audit_id
     assert audits[0]["intent"] == "deep_analyze_symbol"
-    assert audits[0]["tools"] == ["analysis.deep_symbol"]
+    # Provisioning now appears explicitly in the tool/audit trace (issue #163).
+    assert audits[0]["tools"] == ["data.ensure_current_symbol", "analysis.deep_symbol"]
     assert audits[0]["artifact_refs"] == ["candidate_score:FPT:2026-07-10"]
     assert audits[0]["groundedness_status"] == "PASS"
     assert audits[0]["policy_status"] == "PASS"

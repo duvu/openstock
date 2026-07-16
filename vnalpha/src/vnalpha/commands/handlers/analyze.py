@@ -17,10 +17,8 @@ from vnalpha.commands.models import (
     ResultPanel,
 )
 from vnalpha.commands.normalizers import normalize_symbol
-from vnalpha.data_availability.deep_readiness import (
-    ContextRequirement,
-    ensure_deep_analysis_ready,
-)
+from vnalpha.data_availability.deep_readiness import ContextRequirement
+from vnalpha.data_provisioning import ensure_current_symbol_ready
 
 
 def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
@@ -47,24 +45,36 @@ def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
     date = optional_date(parsed)
     market_regime_requirement = _requirement(parsed, "with-regime")
     sector_strength_requirement = _requirement(parsed, "with-sector")
-    readiness = ensure_deep_analysis_ready(
+    provisioning = ensure_current_symbol_ready(
         conn,
         symbol,
         date,
         market_regime_requirement=market_regime_requirement,
         sector_strength_requirement=sector_strength_requirement,
     )
+    readiness = provisioning.readiness
     readiness_panel = ResultPanel(
         title="Data Readiness",
-        content=readiness.to_panel_dict(),
+        content=readiness.to_panel_dict()
+        if readiness is not None
+        else {"status": provisioning.outcome.value},
     )
-    if not readiness.is_ready:
+    if not provisioning.is_ready or readiness is None:
+        summary = (
+            readiness.failure_summary()
+            if readiness is not None
+            else (
+                provisioning.errors[0]
+                if provisioning.errors
+                else "Current-symbol data could not be provisioned."
+            )
+        )
         return CommandResult(
             status=CommandStatus.FAILED,
             title=f"/analyze — {symbol}",
-            summary=readiness.failure_summary(),
+            summary=summary,
             panels=[readiness_panel],
-            warnings=[*readiness.warnings, *readiness.errors],
+            warnings=[*provisioning.warnings, *provisioning.errors],
         )
     tool_executor = workflow_tool_executor(kwargs, title="/analyze")
     if isinstance(tool_executor, CommandResult):

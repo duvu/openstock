@@ -17,6 +17,10 @@ from vnalpha.data_availability.deep_readiness import (
     ReadinessResult,
 )
 from vnalpha.data_availability.models import EnsureDataResult, EnsureDataStatus
+from vnalpha.data_provisioning.ensure_current_symbol import (
+    CurrentSymbolReadyResult,
+    ProvisioningOutcome,
+)
 from vnalpha.tools.models import ToolOutput
 
 
@@ -184,7 +188,19 @@ def test_analyze_flags_drive_readiness_and_deep_tool_requirements(monkeypatch) -
     ):
         observed_readiness["market"] = market_regime_requirement
         observed_readiness["sector"] = sector_strength_requirement
-        return ready
+        return CurrentSymbolReadyResult(
+            symbol="FPT",
+            outcome=ProvisioningOutcome.READY,
+            correlation_id="analyze-context",
+            requested_date="2026-07-10",
+            resolved_date="2026-07-10",
+            actions=(),
+            reused_fresh_data=False,
+            refreshed=False,
+            warnings=(),
+            errors=(),
+            readiness=ready,
+        )
 
     class ToolExecutor:
         def call(self, _name, **kwargs):
@@ -192,7 +208,7 @@ def test_analyze_flags_drive_readiness_and_deep_tool_requirements(monkeypatch) -
             observed_tool["sector"] = kwargs["sector_strength_requirement"]
             return ToolOutput(data={"as_of_date": "2026-07-10"})
 
-    monkeypatch.setattr(analyze_handler, "ensure_deep_analysis_ready", ensure)
+    monkeypatch.setattr(analyze_handler, "ensure_current_symbol_ready", ensure)
     parsed = ParsedCommand(
         command_name="analyze",
         positional=["FPT"],

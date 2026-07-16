@@ -367,15 +367,31 @@ class TestPlanBuilder:
         assert len(plan.steps) == 1
         assert plan.steps[0].tool_name == "lineage.get_symbol_lineage"
 
-    def test_fetch_data_intent_is_refused_with_explicit_command_guidance(self):
-        # Given: an assistant request to mutate warehouse data
+    def test_fetch_data_intent_provisions_current_symbol_explicitly(self):
+        # Given: an assistant request to update current-symbol data
         # When: the deterministic planner builds the fetch_data intent
-        # Then: it returns a refusal rather than an autonomous data.fetch step
+        # Then: it emits one explicit bounded provisioning step (issue #163),
+        #       not the legacy refusal and not an unrestricted data.fetch step.
         plan = self.builder.build(_make_intent("fetch_data", {"symbol": "FPT"}))
+        assert not plan.is_refusal()
+        assert [step.tool_name for step in plan.steps] == ["data.ensure_current_symbol"]
+        step = plan.steps[0]
+        assert step.arguments["symbol"] == "FPT"
+        assert step.arguments["refresh"] is True
+
+    def test_fetch_data_without_symbol_refuses(self):
+        plan = self.builder.build(_make_intent("fetch_data", {}))
         assert plan.is_refusal()
         assert plan.steps == []
-        assert plan.refusal_reason is not None
-        assert "explicit" in plan.refusal_reason.lower()
+
+    def test_deep_analysis_plan_provisions_before_analysis(self):
+        plan = self.builder.build(
+            _make_intent("deep_analyze_symbol", {"symbol": "FPT"})
+        )
+        assert [step.tool_name for step in plan.steps] == [
+            "data.ensure_current_symbol",
+            "analysis.deep_symbol",
+        ]
 
     def test_validation_rejects_unknown_tool(self):
         bad_step = ToolPlanStep(

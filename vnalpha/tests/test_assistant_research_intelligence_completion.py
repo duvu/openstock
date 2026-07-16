@@ -22,8 +22,12 @@ def _deep_plan():
     )
 
 
+def _analysis_step(plan):
+    return next(step for step in plan.steps if step.tool_name == "analysis.deep_symbol")
+
+
 def _deep_payload(plan):
-    step = plan.steps[0]
+    step = _analysis_step(plan)
     artifact_ref = "candidate_score:FPT:2026-07-10"
     return {
         step.step_id: {
@@ -75,7 +79,7 @@ def test_research_prompt_contains_template_and_bounded_source_refs():
     assert "Required payload fields" in context["research_template"]
     assert artifact_ref in context["valid_grounded_source_refs"]
     assert (
-        f"tool:analysis.deep_symbol:{plan.steps[0].step_id}"
+        f"tool:analysis.deep_symbol:{_analysis_step(plan).step_id}"
         in context["valid_grounded_source_refs"]
     )
 
