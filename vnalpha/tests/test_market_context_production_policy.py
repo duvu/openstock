@@ -317,3 +317,153 @@ def test_deep_readiness_rejects_partial_production_sector_metadata(
     assert sector_issues(
         list(result.snapshots), list(result.snapshots), TARGET_DATE, False
     ) == (ContextIssue.SECTOR_METADATA_INSUFFICIENT,)
+
+
+# ---------------------------------------------------------------------------
+# #151 — metadata/taxonomy coverage thresholds govern readiness directly.
+# ---------------------------------------------------------------------------
+
+from vnalpha.research_intelligence.models import SectorStrengthSnapshot  # noqa: E402
+from vnalpha.research_intelligence.policy import (  # noqa: E402
+    PRODUCTION_SECTOR_STRENGTH_POLICY,
+)
+from vnalpha.research_intelligence.sector import (  # noqa: E402
+    METHODOLOGY_VERSION as SECTOR_METHODOLOGY_VERSION,
+)
+
+_POLICY = PRODUCTION_SECTOR_STRENGTH_POLICY
+
+
+def _readiness_snapshot(
+    *,
+    metadata_coverage: float,
+    unclassified_count: int,
+    taxonomy_coverage: float,
+    liquidity_coverage: float = 0.90,
+) -> SectorStrengthSnapshot:
+    """A rankable snapshot whose only readiness variables are the coverages.
+
+    Every per-snapshot policy gate (members, eligibility, sector coverage,
+    liquidity, quality, methodology) is satisfied, so ``sector_issues`` is
+    driven solely by the metadata/taxonomy coverage values under test.
+    """
+    lineage = {
+        "taxonomy_coverage": f"{taxonomy_coverage}",
+        "liquidity_coverage": f"{liquidity_coverage}",
+        "sector_coverage": "0.90",
+        "sector_liquidity_coverage": "0.90",
+    }
+    return SectorStrengthSnapshot(
+        as_of_date=TARGET_DATE,
+        sector="Technology",
+        rank=1,
+        member_count=_POLICY.minimum_sector_members,
+        eligible_count=_POLICY.minimum_eligible_members,
+        median_return20=0.02,
+        median_return60=0.03,
+        median_rs20_vs_vnindex=0.01,
+        median_rs60_vs_vnindex=0.01,
+        pct_above_ma20=0.60,
+        pct_above_ma50=0.55,
+        leadership_count=1,
+        score=0.5,
+        rotation="STABLE",
+        metadata_coverage=metadata_coverage,
+        unclassified_count=unclassified_count,
+        quality="OK",
+        caveats=(),
+        lineage=lineage,
+        methodology_version=SECTOR_METHODOLOGY_VERSION,
+        generated_at=GENERATED_AT,
+    )
+
+
+def _issues_for(snapshot: SectorStrengthSnapshot) -> tuple[ContextIssue, ...]:
+    return sector_issues([snapshot], [snapshot], TARGET_DATE, False)
+
+
+def test_readiness_rule_derives_from_policy_metadata_threshold() -> None:
+    """The effective readiness rule is exactly the versioned policy threshold."""
+    assert _POLICY.minimum_metadata_coverage == pytest.approx(0.80)
+    assert _POLICY.minimum_taxonomy_coverage == pytest.approx(0.70)
+
+
+def test_metadata_coverage_boundary_79_percent_rejected() -> None:
+    # Just below the 80% threshold with one unclassified symbol.
+    snapshot = _readiness_snapshot(
+        metadata_coverage=0.79, unclassified_count=1, taxonomy_coverage=0.95
+    )
+    assert _issues_for(snapshot) == (ContextIssue.SECTOR_METADATA_INSUFFICIENT,)
+
+
+def test_metadata_coverage_boundary_80_percent_accepted() -> None:
+    # Exactly at the threshold: bounded missing classification is permitted even
+    # though unclassified_count is non-zero (this is the #151 regression).
+    snapshot = _readiness_snapshot(
+        metadata_coverage=0.80, unclassified_count=3, taxonomy_coverage=0.95
+    )
+    assert _issues_for(snapshot) == ()
+
+
+def test_metadata_coverage_boundary_99_percent_accepted() -> None:
+    snapshot = _readiness_snapshot(
+        metadata_coverage=0.99, unclassified_count=1, taxonomy_coverage=0.95
+    )
+    assert _issues_for(snapshot) == ()
+
+
+def test_metadata_coverage_boundary_100_percent_accepted() -> None:
+    snapshot = _readiness_snapshot(
+        metadata_coverage=1.00, unclassified_count=0, taxonomy_coverage=1.00
+    )
+    assert _issues_for(snapshot) == ()
+
+
+def test_taxonomy_coverage_boundary_69_percent_rejected_distinctly() -> None:
+    # Metadata coverage is fine (>= 80%) but taxonomy coverage is below 70%:
+    # this is a DISTINCT diagnostic from missing classification.
+    snapshot = _readiness_snapshot(
+        metadata_coverage=0.90, unclassified_count=1, taxonomy_coverage=0.69
+    )
+    assert _issues_for(snapshot) == (ContextIssue.SECTOR_TAXONOMY_INSUFFICIENT,)
+
+
+def test_taxonomy_coverage_boundary_70_percent_accepted() -> None:
+    snapshot = _readiness_snapshot(
+        metadata_coverage=0.90, unclassified_count=1, taxonomy_coverage=0.70
+    )
+    assert _issues_for(snapshot) == ()
+
+
+def test_metadata_failure_takes_precedence_over_taxonomy() -> None:
+    # Both below threshold: missing classification is reported first because
+    # taxonomy coverage is only meaningful over classified symbols.
+    snapshot = _readiness_snapshot(
+        metadata_coverage=0.50, unclassified_count=5, taxonomy_coverage=0.50
+    )
+    assert _issues_for(snapshot) == (ContextIssue.SECTOR_METADATA_INSUFFICIENT,)
+
+
+def test_deep_readiness_accepts_bounded_missing_classification(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    """End-to-end: >=80% active metadata coverage with one unclassified symbol
+    is READY, proving the declared threshold governs behavior (was rejected by
+    the unconditional unclassified_count gate before #151)."""
+    # 9 classified Technology + 1 unclassified => active_metadata_coverage = 0.90.
+    for number in range(9):
+        _insert_symbol_feature(conn, f"C{number}", sector="Technology")
+    _insert_symbol_feature(conn, "UX0", sector=None, taxonomy=False)
+
+    result = build_sector_strength(conn, TARGET_DATE, generated_at=GENERATED_AT)
+
+    assert result.snapshots
+    snapshot = result.snapshots[0]
+    assert snapshot.unclassified_count == 1
+    assert snapshot.metadata_coverage == pytest.approx(0.90)
+    assert (
+        sector_issues(
+            list(result.snapshots), list(result.snapshots), TARGET_DATE, False
+        )
+        == ()
+    )

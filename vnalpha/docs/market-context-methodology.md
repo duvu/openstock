@@ -49,6 +49,36 @@ The overall snapshot set additionally requires at least 80% sector metadata,
 70% taxonomy coverage and 70% liquidity coverage. Sparse or incomplete sectors
 are excluded or explicitly degraded with caveats.
 
+## Classification-metadata readiness contract
+
+Readiness for classification metadata is derived **directly** from the versioned
+policy thresholds; no additional unconditional check may override them:
+
+- Sector metadata coverage (`active_metadata_coverage`, equal to
+  `1 − unclassified_count / active_count`) must be at least
+  `minimum_metadata_coverage` (80% in `sector-strength-v2`). **Bounded missing
+  classification is permitted:** a non-zero `unclassified_count` does not fail
+  readiness on its own, because it is already encoded in the coverage ratio.
+  Residual unclassified symbols above the threshold are disclosed as caveats.
+- Taxonomy name/version coverage (over the classified members) must be at least
+  `minimum_taxonomy_coverage` (70%).
+
+These two conditions have different remediation paths and are surfaced as
+distinct typed diagnostics:
+
+| Condition | Typed issue |
+|---|---|
+| Metadata coverage below `minimum_metadata_coverage` | `SECTOR_METADATA_INSUFFICIENT` |
+| Taxonomy coverage below `minimum_taxonomy_coverage` | `SECTOR_TAXONOMY_INSUFFICIENT` |
+
+Below-threshold coverage is therefore distinguished from ambiguous or invalid
+classification (which surfaces through build quality and per-snapshot input
+coverage). When both metadata and taxonomy coverage are below threshold, the
+missing-classification diagnostic takes precedence because taxonomy coverage is
+only meaningful over already-classified members. Snapshot lineage records the
+effective policy values (`policy_minimum_metadata_coverage`,
+`policy_minimum_taxonomy_coverage`) used by readiness.
+
 ## Robust aggregation
 
 Production sector return and relative-strength values are winsorized at the
