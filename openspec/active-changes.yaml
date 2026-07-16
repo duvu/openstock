@@ -12,8 +12,25 @@ policy:
 
 changes:
 
-  mvp1-startup-preflight:
+  mvp1-golden-acceptance:
     status: in_progress
+    github_issues: [167]
+    roadmap_state: scheduled
+    summary: >-
+      One automated golden conversation proving the MVP1 chat vertical slice end
+      to end on the real code path from an empty warehouse: provisioning, real
+      canonical/feature/scoring builders, deep analysis, synthesis, groundedness,
+      audit and symbol-knowledge projection; plus fresh reuse, explicit refresh,
+      fail-closed service failure and slash/NL contract parity.
+    evidence: >-
+      Implementation on branch agent/issue-167-e2e-acceptance. Golden test in
+      tests/test_issue_167_golden_conversation.py passes locally (real builders
+      produce FPT score ~0.76; fresh reuse makes no new fetch; failure fails
+      closed). Required-CI on the final release SHA and one sanitized
+      installed-host smoke run are pending the PR.
+
+  mvp1-startup-preflight:
+    status: ready
     github_issues: [166]
     roadmap_state: scheduled
     summary: >-
