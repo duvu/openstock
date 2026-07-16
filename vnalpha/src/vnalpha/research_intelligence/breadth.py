@@ -147,9 +147,7 @@ def _load_pit_membership(
                 continue
             if (classification.lifecycle_status or "ACTIVE").upper() != "ACTIVE":
                 continue
-            rows.append(
-                (symbol, classification.exchange, classification.security_type)
-            )
+            rows.append((symbol, classification.exchange, classification.security_type))
         return rows, "symbol_classification_history", universe.resolver_version
 
     fallback = conn.execute(

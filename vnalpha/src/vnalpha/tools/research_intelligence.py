@@ -898,9 +898,7 @@ def _symbol_sector_map(
 
         if history_is_available(conn):
             for symbol in symbols:
-                classification = resolve_symbol_classification(
-                    conn, symbol, as_of_date
-                )
+                classification = resolve_symbol_classification(conn, symbol, as_of_date)
                 if classification is not None:
                     result[symbol] = classification.sector
     return result
