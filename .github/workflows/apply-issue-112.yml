@@ -26,7 +26,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/issue112/patch-* > /tmp/issue112.patch
+          : > /tmp/issue112.patch
+          cat .github/issue112/patch-00 >> /tmp/issue112.patch
+          cat .github/issue112/patch-01 >> /tmp/issue112.patch
+          cat .github/issue112/patch-02 >> /tmp/issue112.patch
+          awk 'NR < 106 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-03 >> /tmp/issue112.patch
+          awk 'NR < 279 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-04 >> /tmp/issue112.patch
+          awk 'NR < 12 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-05 >> /tmp/issue112.patch
+          awk 'NR < 343 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-06 >> /tmp/issue112.patch
+          awk 'NR < 2 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-07 >> /tmp/issue112.patch
           echo 'e230fe58319caebd3f353500bc325d21a2b7b8383661425d7bdcaa8427fa5efe  /tmp/issue112.patch' | sha256sum --check --strict
           git apply --check /tmp/issue112.patch
 
