@@ -83,16 +83,7 @@ def download_corporate_actions(
     end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD)."),
     source: str | None = typer.Option(None, "--source", help="Preferred provider."),
 ) -> None:
-    _run(
-        DataProvisioningRequest(
-            operation="download",
-            artifact="corporate-actions",
-            symbol=symbol,
-            start=start,
-            end=end,
-            source=source,
-        )
-    )
+    _run_corporate_actions(symbol=symbol, start=start, end=end, source=source)
 
 
 @status_app.command("corporate-actions")
@@ -220,6 +211,32 @@ def repair_ohlcv(
             source=source,
         )
     )
+
+
+def _run_corporate_actions(
+    *, symbol: str, start: str | None, end: str | None, source: str | None
+) -> None:
+    from vnalpha.ingestion.corporate_actions import sync_corporate_actions
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        raise typer.BadParameter("symbol must not be empty")
+    set_correlation_id()
+    with command_lifecycle("data download corporate-actions"):
+        conn = get_connection()
+        run_migrations(conn=conn)
+        result = sync_corporate_actions(
+            conn,
+            symbol=normalized_symbol,
+            start=start,
+            end=end,
+            source=source,
+        )
+        typer.echo(json.dumps(result, sort_keys=True))
+        if result["status"] == "FAILED":
+            raise typer.Exit(code=1)
 
 
 def _run(request: DataProvisioningRequest) -> None:

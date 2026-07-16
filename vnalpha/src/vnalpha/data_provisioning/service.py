@@ -82,7 +82,6 @@ class DataProvisioningDependencies:
     sync_symbols: Callable[..., object] | None = None
     sync_ohlcv: Callable[..., object] | None = None
     sync_index: Callable[..., object] | None = None
-    sync_corporate_actions: Callable[..., object] | None = None
     build_canonical: Callable[..., object] | None = None
     build_features: Callable[..., object] | None = None
     generate_watchlist: Callable[..., object] | None = None
@@ -304,49 +303,6 @@ class DataProvisioningService:
                     terminal_reason=batch.terminal_reason,
                     error=_ohlcv_terminal_error(batch),
                 )
-            case "download", "corporate-actions":
-                raw = _require_mapping(
-                    self._sync_corporate_actions()(
-                        self.conn,
-                        symbol=request.symbol,
-                        start=request.start,
-                        end=request.end,
-                        source=request.source,
-                    )
-                )
-                counts = _counts(
-                    raw,
-                    "observed",
-                    "raw_inserted",
-                    "canonical_inserted",
-                    "unchanged",
-                    "revised",
-                    "conflicts",
-                    "quarantined",
-                    "affected_ranges",
-                )
-                raw_status = str(raw.get("status") or "FAILED").upper()
-                status = (
-                    ProvisioningStatus.SUCCESS
-                    if raw_status in {"COMPLETE", "EMPTY"}
-                    else ProvisioningStatus.PARTIAL
-                    if raw_status == "PARTIAL"
-                    else ProvisioningStatus.FAILED
-                )
-                return _result(
-                    request,
-                    correlation_id,
-                    counts=counts,
-                    status=status,
-                    warnings=_count_warnings(
-                        counts,
-                        ("quarantined", "corporate actions quarantined"),
-                        ("conflicts", "corporate action conflicts"),
-                    ),
-                    raw_result=raw,
-                    error=str(raw.get("error")) if raw.get("error") else None,
-                    terminal_reason=raw_status,
-                )
             case "download", "index":
                 raw = _require_mapping(
                     self._sync_index()(
@@ -497,13 +453,6 @@ class DataProvisioningService:
 
         return sync_ohlcv
 
-    def _sync_corporate_actions(self) -> Callable[..., object]:
-        if self._dependencies.sync_corporate_actions is not None:
-            return self._dependencies.sync_corporate_actions
-        from vnalpha.ingestion.corporate_actions import sync_corporate_actions
-
-        return sync_corporate_actions
-
     def _sync_index(self) -> Callable[..., object]:
         if self._dependencies.sync_index is not None:
             return self._dependencies.sync_index
@@ -578,9 +527,9 @@ def _validate_download(
     request_date: str | None,
     authoritative_snapshot: bool = False,
 ) -> None:
-    if artifact not in {"symbols", "ohlcv", "index", "corporate-actions"}:
+    if artifact not in {"symbols", "ohlcv", "index"}:
         raise DataProvisioningValidationError(
-            "Supported downloads: symbols, ohlcv, index, corporate-actions."
+            "Supported downloads: symbols, ohlcv, index."
         )
     if request_date is not None:
         raise DataProvisioningValidationError("--date is only valid for data builds.")
@@ -599,15 +548,6 @@ def _validate_download(
         if selected != 1:
             raise DataProvisioningValidationError(
                 "Data download ohlcv requires exactly one symbol selection or an explicit all-symbols policy."
-            )
-    if artifact == "corporate-actions":
-        if symbol is None or symbols or allow_all_symbols:
-            raise DataProvisioningValidationError(
-                "Data download corporate-actions requires exactly one symbol."
-            )
-        if authoritative_snapshot:
-            raise DataProvisioningValidationError(
-                "Data download corporate-actions does not accept --authoritative-snapshot."
             )
     if artifact == "index" and (symbols or allow_all_symbols):
         raise DataProvisioningValidationError(

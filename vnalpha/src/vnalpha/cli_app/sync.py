@@ -157,30 +157,32 @@ def sync_corporate_actions_cmd(
     source: Optional[str] = typer.Option(None, "--source"),
 ):
     """Sync bounded corporate-action evidence without calculating adjusted prices."""
+    from vnalpha.ingestion.corporate_actions import sync_corporate_actions
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        raise typer.BadParameter("symbol must not be empty")
     set_correlation_id()
     with command_lifecycle("sync corporate-actions"):
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
-
         conn = get_connection()
         run_migrations(conn=conn)
-        result = _execute(
+        result = sync_corporate_actions(
             conn,
-            DataProvisioningRequest(
-                "download",
-                "corporate-actions",
-                symbol=symbol,
-                start=start,
-                end=end,
-                source=source,
-            ),
+            symbol=normalized_symbol,
+            start=start,
+            end=end,
+            source=source,
         )
         typer.echo(
             "Corporate-action sync complete: "
-            f"{result.counts.get('canonical_inserted', 0)} inserted, "
-            f"{result.counts.get('revised', 0)} revised, "
-            f"{result.counts.get('quarantined', 0)} quarantined"
+            f"{result.get('canonical_inserted', 0)} inserted, "
+            f"{result.get('revised', 0)} revised, "
+            f"{result.get('quarantined', 0)} quarantined"
         )
+        if result["status"] == "FAILED":
+            raise typer.Exit(code=1)
 
 
 def _execute(

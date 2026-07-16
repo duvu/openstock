@@ -7,13 +7,6 @@ import pytest
 
 from vnalpha.clients.vnstock.errors import VnstockHTTPError
 from vnalpha.clients.vnstock.schemas import ResponseMeta, VnstockResponse
-from vnalpha.data_provisioning.service import (
-    DataProvisioningDependencies,
-    DataProvisioningRequest,
-    DataProvisioningService,
-    DataProvisioningValidationError,
-    ProvisioningStatus,
-)
 from vnalpha.ingestion.corporate_actions import (
     corporate_action_status,
     sync_corporate_actions,
@@ -404,36 +397,3 @@ def test_status_reports_canonical_quarantine_and_affected_ranges(conn) -> None:
     assert status["quarantined"] == 0
     assert status["unresolved_affected_ranges"] == 1
     assert status["latest_run"]["status"] == "COMPLETE"
-
-
-def test_data_provisioning_requires_one_symbol_and_surfaces_partial(conn) -> None:
-    with pytest.raises(DataProvisioningValidationError, match="exactly one symbol"):
-        DataProvisioningService.validate_request(
-            DataProvisioningRequest("download", "corporate-actions")
-        )
-
-    def fake_sync(*_: object, **__: object) -> dict:
-        return {
-            "run_id": "run-1",
-            "status": "PARTIAL",
-            "observed": 2,
-            "raw_inserted": 2,
-            "canonical_inserted": 1,
-            "unchanged": 0,
-            "revised": 0,
-            "conflicts": 0,
-            "quarantined": 1,
-            "affected_ranges": 1,
-        }
-
-    service = DataProvisioningService(
-        conn,
-        dependencies=DataProvisioningDependencies(sync_corporate_actions=fake_sync),
-    )
-    result = service.execute(
-        DataProvisioningRequest(
-            "download", "corporate-actions", symbol="SSI", source="VCI"
-        )
-    )
-    assert result.status is ProvisioningStatus.PARTIAL
-    assert result.counts["quarantined"] == 1
