@@ -127,4 +127,7 @@ def test_assistant_app_persists_validated_research_answer_audit(monkeypatch):
     assert session[0] == "SUCCESS"
     persisted_answer = json.loads(session[1])
     assert persisted_answer["research_metadata"]["research_answer_audit_id"] == audit_id
+    # Knowledge projection runs on the validated deep-analysis turn (issue #164);
+    # here no artifacts are persisted so it projects nothing but still reports.
+    assert "knowledge_projection" in answer.research_metadata
     conn.close()
