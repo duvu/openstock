@@ -121,3 +121,46 @@ class TestResolveDateWithConn:
         """Without conn, returns Asia/Ho_Chi_Minh today."""
         result = resolve_date("today")
         assert result == _today_vn()
+
+    def test_falls_back_to_canonical_ohlcv_when_watchlist_empty(self):
+        """When daily_watchlist is empty, resolve to the latest OHLCV bar date.
+
+        Regression: on a fresh warehouse (no materialised watchlist) "analyse
+        today" resolved to a calendar date with no ingested bars, which failed
+        deep-analysis readiness even though good data existed for the most
+        recent trading session.
+        """
+        conn = self._make_conn([])
+        conn.execute(
+            """
+            CREATE TABLE canonical_ohlcv (
+                symbol VARCHAR, time TIMESTAMP, interval VARCHAR,
+                open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume BIGINT
+            )
+            """
+        )
+        for d in ["2026-01-02", "2026-01-05"]:
+            conn.execute(
+                "INSERT INTO canonical_ohlcv VALUES ('FPT', ?, '1D', 1, 1, 1, 1, 1)",
+                [f"{d} 07:00:00"],
+            )
+        assert resolve_date(None, conn=conn) == "2026-01-05"
+        conn.close()
+
+    def test_watchlist_takes_precedence_over_canonical_ohlcv(self):
+        """A materialised watchlist date wins over the raw OHLCV fallback."""
+        conn = self._make_conn(["2026-01-03"])
+        conn.execute(
+            """
+            CREATE TABLE canonical_ohlcv (
+                symbol VARCHAR, time TIMESTAMP, interval VARCHAR,
+                open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume BIGINT
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO canonical_ohlcv VALUES ('FPT', '2026-01-05 07:00:00', "
+            "'1D', 1, 1, 1, 1, 1)"
+        )
+        assert resolve_date(None, conn=conn) == "2026-01-03"
+        conn.close()

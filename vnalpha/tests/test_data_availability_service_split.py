@@ -69,6 +69,68 @@ def test_planning_includes_only_missing_actions() -> None:
     assert plan.actions == (EnsureDataAction.SCORED,)
 
 
+def test_planning_triggers_incremental_sync_when_canonical_is_stale() -> None:
+    """Sufficient-but-stale history should still trigger a bounded OHLCV sync.
+
+    Regression: analysing a date newer than the latest ingested bar previously
+    only rebuilt features on the stale window (never fetching fresh bars), so
+    deep-analysis readiness failed even though provisioning "succeeded".
+    """
+    from vnalpha.data_availability.planner import (
+        EnsureDataSnapshot,
+        plan_data_availability,
+    )
+
+    snapshot = EnsureDataSnapshot(
+        symbol="FPT",
+        target_date="2026-07-16",
+        lookback_start="2025-05-22",
+        symbol_known=True,
+        canonical_bars=514,
+        benchmark_bars=514,
+        feature_snapshot_exists=True,
+        candidate_score_exists=True,
+        latest_canonical_bar_date="2026-07-08",
+        latest_benchmark_bar_date="2026-07-08",
+    )
+
+    plan = plan_data_availability(snapshot, DataAvailabilityPolicy())
+
+    assert plan.actions == (
+        EnsureDataAction.OHLCV_SYNCED,
+        EnsureDataAction.CANONICAL_BUILT,
+        EnsureDataAction.BENCHMARK_SYNCED,
+        EnsureDataAction.BENCHMARK_CANONICAL_BUILT,
+        EnsureDataAction.FEATURES_BUILT,
+        EnsureDataAction.SCORED,
+    )
+
+
+def test_planning_reuses_fresh_canonical_when_bar_date_matches_target() -> None:
+    """No sync when the latest bar already covers the target date."""
+    from vnalpha.data_availability.planner import (
+        EnsureDataSnapshot,
+        plan_data_availability,
+    )
+
+    snapshot = EnsureDataSnapshot(
+        symbol="FPT",
+        target_date="2026-07-08",
+        lookback_start="2025-05-14",
+        symbol_known=True,
+        canonical_bars=514,
+        benchmark_bars=514,
+        feature_snapshot_exists=True,
+        candidate_score_exists=False,
+        latest_canonical_bar_date="2026-07-08",
+        latest_benchmark_bar_date="2026-07-08",
+    )
+
+    plan = plan_data_availability(snapshot, DataAvailabilityPolicy())
+
+    assert plan.actions == (EnsureDataAction.SCORED,)
+
+
 def test_service_executes_actions_in_order_after_partial_failure() -> None:
     from vnalpha.data_availability.service import execute_planned_actions
 
