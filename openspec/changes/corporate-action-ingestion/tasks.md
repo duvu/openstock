@@ -17,3 +17,9 @@
 - [x] 3.1 Update current vnstock/vnalpha documentation in the implementation PR.
 - [x] 3.2 Add focused fixtures for supported action types, empty, revision, conflict and quarantine cases.
 - [x] 3.3 Run repository consistency, focused tests, full CI and both package builds on the exact final SHA.
+
+## 4. Post-review truthfulness fixes
+
+- [x] 4.1 Make `sync corporate-actions` and `data download corporate-actions` exit nonzero and report the real status (not a hardcoded "complete" message) when the provider returns `UNSUPPORTED`, matching the already-typed ingestion status.
+- [x] 4.2 Stop reporting a raw payload that is still quarantined from a prior run as `unchanged`; report it as `quarantined` again (without inserting a duplicate raw/quarantine row) so repeat syncs cannot report `COMPLETE` while known-invalid evidence remains unresolved.
+- [x] 4.3 Add regression tests for both fixes (CLI exit-code coverage for `UNSUPPORTED`, and a repeat-sync-of-quarantined-record test).

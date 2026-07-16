@@ -81,6 +81,14 @@ def _ingest_record(
         ],
     )
     if before is not None:
+        still_quarantined = conn.execute(
+            "SELECT 1 FROM corporate_action_quarantine WHERE raw_evidence_id = ? LIMIT 1",
+            [raw_evidence_id],
+        ).fetchone()
+        if still_quarantined is not None:
+            # Same payload was quarantined before; report it as quarantined
+            # again (no duplicate row) instead of masking it as "unchanged".
+            return _RecordOutcome("quarantined", False)
         return _RecordOutcome("unchanged", False)
 
     rules = _validation_rules(conn, raw, requested_symbol=requested_symbol)

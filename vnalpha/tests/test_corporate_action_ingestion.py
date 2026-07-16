@@ -329,6 +329,32 @@ def test_malformed_evidence_is_quarantined(conn, mutation, expected_rule) -> Non
     assert expected_rule in rules
 
 
+def test_repeated_quarantined_evidence_reports_quarantined_not_unchanged(
+    conn,
+) -> None:
+    event = _cash_event()
+    event["cash_amount"] = None
+    event["content_hash"] = "hash-repeat-quarantine"
+
+    first = sync_corporate_actions(
+        conn, symbol="SSI", client=FakeCorporateActionClient([event])
+    )
+    second = sync_corporate_actions(
+        conn, symbol="SSI", client=FakeCorporateActionClient([event])
+    )
+
+    assert first["status"] == "PARTIAL"
+    assert first["quarantined"] == 1
+    assert second["status"] == "PARTIAL"
+    assert second["quarantined"] == 1
+    assert second["unchanged"] == 0
+    assert second["raw_inserted"] == 0
+    assert (
+        conn.execute("SELECT COUNT(*) FROM corporate_action_quarantine").fetchone()[0]
+        == 1
+    )
+
+
 def test_unknown_symbol_identity_is_quarantined(conn) -> None:
     event = _cash_event()
     event["symbol"] = "UNKNOWN"

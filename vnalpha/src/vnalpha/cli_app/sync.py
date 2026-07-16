@@ -175,14 +175,20 @@ def sync_corporate_actions_cmd(
             end=end,
             source=source,
         )
+        status = str(result.get("status", "FAILED"))
+        if status in {"FAILED", "UNSUPPORTED"}:
+            typer.echo(
+                result.get("error") or f"Corporate-action sync {status.lower()}.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
         typer.echo(
-            "Corporate-action sync complete: "
+            f"Corporate-action sync {status.lower()}: "
             f"{result.get('canonical_inserted', 0)} inserted, "
             f"{result.get('revised', 0)} revised, "
-            f"{result.get('quarantined', 0)} quarantined"
+            f"{result.get('quarantined', 0)} quarantined, "
+            f"{result.get('conflicts', 0)} conflicts"
         )
-        if result["status"] == "FAILED":
-            raise typer.Exit(code=1)
 
 
 def _execute(

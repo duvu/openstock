@@ -235,7 +235,7 @@ def _run_corporate_actions(
             source=source,
         )
         typer.echo(json.dumps(result, sort_keys=True))
-        if result["status"] == "FAILED":
+        if result["status"] in {"FAILED", "UNSUPPORTED"}:
             raise typer.Exit(code=1)
 
 
