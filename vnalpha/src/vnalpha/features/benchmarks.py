@@ -50,7 +50,7 @@ def resolve_benchmark(
     """Resolve one active, applicable benchmark for a common-equity symbol."""
 
     normalized_symbol = symbol.upper().strip()
-    exchange, security_type = _symbol_classification(conn, normalized_symbol)
+    exchange, security_type = _symbol_classification(conn, normalized_symbol, as_of)
     if security_type is not None and security_type != "COMMON_EQUITY":
         raise BenchmarkSelectionError(
             normalized_symbol, "symbol is not a common equity"
@@ -81,8 +81,33 @@ def resolve_benchmark(
 
 
 def _symbol_classification(
-    conn: duckdb.DuckDBPyConnection, symbol: str
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    as_of: date | None = None,
 ) -> tuple[str | None, str | None]:
+    """Resolve (exchange, security_type) for benchmark selection.
+
+    When ``as_of`` is given, the classification effective on that date is read
+    from ``symbol_classification_history`` so historical feature construction
+    uses the exchange/security-type in force then (avoiding survivorship and
+    reclassification bias). Falls back to the current ``symbol_master``
+    projection when no classification history exists for the symbol.
+    """
+    if as_of is not None:
+        from vnalpha.warehouse.point_in_time import resolve_symbol_classification
+
+        classification = resolve_symbol_classification(conn, symbol, as_of)
+        if classification is not None:
+            exchange = (
+                classification.exchange.upper() if classification.exchange else None
+            )
+            security_type = (
+                classification.security_type.upper()
+                if classification.security_type
+                else None
+            )
+            return exchange, security_type
+
     row = conn.execute(
         "SELECT exchange, security_type FROM symbol_master WHERE symbol = ? LIMIT 1",
         [symbol],

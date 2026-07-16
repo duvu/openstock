@@ -96,6 +96,31 @@ A traded-value concentration ratio above 45% is disclosed as a concentration
 warning. Outlier adjustment counts, concentration and taxonomy versions are
 stored in lineage.
 
+## Point-in-time membership and classification
+
+Every dated/as-of historical path resolves symbol identity and classification
+through the shared resolver in `vnalpha/warehouse/point_in_time.py`
+(`resolve_universe`, `resolve_symbol_classification`) over
+`symbol_classification_history`, rather than reading current state from
+`symbol_master`. This avoids survivorship and taxonomy look-ahead bias when an
+old date is recomputed:
+
+- a symbol listed after the requested date is excluded from the universe;
+- a symbol delisted on or before the requested date is excluded;
+- exchange, security type, sector, industry, taxonomy name and version use the
+  interval effective on the requested date;
+- overlapping/ambiguous history rows resolve deterministically (latest
+  `effective_from`, then highest `source_snapshot_id`) and the symbol is flagged
+  ambiguous so production callers can treat it as degraded evidence.
+
+Production breadth and sector builders use this resolver. Snapshot lineage
+records `membership_basis` (`symbol_classification_history` or the compatibility
+`symbol_master` path), `membership_resolver_version` and, for the resolver, the
+coverage/known-symbol counts. `symbol_master` remains the current-state
+convenience view; current/latest commands may read it explicitly. Warehouses
+without any classification history fall back to the current `symbol_master`
+projection so existing/current-only data remains usable.
+
 ## Determinism and boundaries
 
 The same warehouse inputs, policy and generation timestamp produce the same

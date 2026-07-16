@@ -69,7 +69,7 @@ def deep_symbol_analysis(
     score = get_candidate_score(conn, normalized_symbol, target_date)
     feature = _feature_snapshot(conn, normalized_symbol, target_date)
     bars = _recent_bars(conn, normalized_symbol, target_date, limit=60)
-    symbol_metadata = _symbol_metadata(conn, normalized_symbol)
+    symbol_metadata = _symbol_metadata(conn, normalized_symbol, target_date)
     market = get_market_regime(conn, target_date)
     sector = get_symbol_alignment(conn, normalized_symbol, target_date)
     quality = _latest_quality(conn, normalized_symbol, target_date)
@@ -232,7 +232,7 @@ def summarize_watchlist_deep(
         )
 
     rows = get_watchlist_rich(conn, target_date)
-    sectors = _symbol_sector_map(conn, [row["symbol"] for row in rows])
+    sectors = _symbol_sector_map(conn, [row["symbol"] for row in rows], target_date)
     market = get_market_regime(conn, target_date)
     if not rows:
         caveat = f"The persisted watchlist for {target_date} is empty."
@@ -325,7 +325,7 @@ def generate_shortlist(
 
     watchlist_rows = get_watchlist_rich(conn, target_date)
     rows = [row for row in watchlist_rows if float(row.get("score") or 0) >= threshold]
-    sectors = _symbol_sector_map(conn, [row["symbol"] for row in rows])
+    sectors = _symbol_sector_map(conn, [row["symbol"] for row in rows], target_date)
     sector_scores = _sector_score_map(conn, target_date)
     ranked: list[dict[str, Any]] = []
     for row in rows:
@@ -796,26 +796,54 @@ def _level_context(
     }
 
 
-def _symbol_metadata(conn: duckdb.DuckDBPyConnection, symbol: str) -> dict[str, Any]:
-    row = conn.execute(
-        "SELECT symbol, exchange, name, sector, industry, is_active FROM symbol_master WHERE symbol = ?",
+def _symbol_metadata(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    as_of_date: object | None = None,
+) -> dict[str, Any]:
+    """Return identity metadata for a symbol.
+
+    When ``as_of_date`` is provided the exchange, sector and industry are
+    resolved point-in-time from ``symbol_classification_history`` (the
+    classification effective on that date) so dated research output is not
+    contaminated by later reclassification. ``name`` is not historized and is
+    always taken from the current ``symbol_master`` projection. Falls back to
+    current state when no classification history exists for the symbol.
+    """
+    current = conn.execute(
+        "SELECT symbol, exchange, name, sector, industry, is_active "
+        "FROM symbol_master WHERE symbol = ?",
         [symbol],
     ).fetchone()
-    if row is None:
-        return {
-            "symbol": symbol,
-            "exchange": None,
-            "name": None,
-            "sector": None,
-            "industry": None,
-        }
-    return dict(
-        zip(
-            ["symbol", "exchange", "name", "sector", "industry", "is_active"],
-            row,
-            strict=True,
+    base = {
+        "symbol": symbol,
+        "exchange": None,
+        "name": None,
+        "sector": None,
+        "industry": None,
+    }
+    if current is not None:
+        base = dict(
+            zip(
+                ["symbol", "exchange", "name", "sector", "industry", "is_active"],
+                current,
+                strict=True,
+            )
         )
-    )
+
+    if as_of_date is not None:
+        from vnalpha.warehouse.point_in_time import resolve_symbol_classification
+
+        classification = resolve_symbol_classification(conn, symbol, as_of_date)
+        if classification is not None:
+            base["exchange"] = classification.exchange
+            base["sector"] = classification.sector
+            base["industry"] = classification.industry_name
+            base["classification_as_of"] = str(as_of_date)
+            base["classification_source_snapshot_id"] = (
+                classification.source_snapshot_id
+            )
+    return base
 
 
 def _latest_quality(
@@ -842,8 +870,17 @@ def _latest_quality(
 
 
 def _symbol_sector_map(
-    conn: duckdb.DuckDBPyConnection, symbols: list[str]
+    conn: duckdb.DuckDBPyConnection,
+    symbols: list[str],
+    as_of_date: object | None = None,
 ) -> dict[str, str | None]:
+    """Map each symbol to its sector.
+
+    When ``as_of_date`` is provided the sector is resolved point-in-time from
+    ``symbol_classification_history`` so a dated watchlist/shortlist is not
+    joined against a later sector reclassification. Symbols without history on
+    that date fall back to the current ``symbol_master`` sector.
+    """
     if not symbols:
         return {}
     placeholders = ",".join("?" for _ in symbols)
@@ -851,7 +888,22 @@ def _symbol_sector_map(
         f"SELECT symbol, sector FROM symbol_master WHERE symbol IN ({placeholders})",
         symbols,
     ).fetchall()
-    return {row[0]: row[1] for row in rows}
+    result: dict[str, str | None] = {row[0]: row[1] for row in rows}
+
+    if as_of_date is not None:
+        from vnalpha.warehouse.point_in_time import (
+            history_is_available,
+            resolve_symbol_classification,
+        )
+
+        if history_is_available(conn):
+            for symbol in symbols:
+                classification = resolve_symbol_classification(
+                    conn, symbol, as_of_date
+                )
+                if classification is not None:
+                    result[symbol] = classification.sector
+    return result
 
 
 def _sector_score_map(

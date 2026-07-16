@@ -14,14 +14,20 @@ class SymbolTaxonomyAsOf:
     """A historical taxonomy classification selected for one as-of instant."""
 
     symbol: str
+    exchange: str | None
     security_type: str
     lifecycle_status: str
+    listing_date: object | None
+    delisting_date: object | None
     sector_code: str | None
     sector_name: str | None
     industry_code: str | None
     industry_name: str | None
     taxonomy_name: str
     taxonomy_version: str
+    effective_from: object | None
+    effective_to: object | None
+    source_snapshot_id: str
 
 
 def start_symbol_source_snapshot(
@@ -140,8 +146,10 @@ def get_symbol_taxonomy_as_of(
 
     row = conn.execute(
         """
-        SELECT symbol, security_type, lifecycle_status, sector_code, sector_name,
-               industry_code, industry_name, taxonomy_name, taxonomy_version
+        SELECT symbol, exchange, security_type, lifecycle_status,
+               listing_date, delisting_date, sector_code, sector_name,
+               industry_code, industry_name, taxonomy_name, taxonomy_version,
+               effective_from, effective_to, source_snapshot_id
         FROM symbol_classification_history
         WHERE symbol = ? AND effective_from <= ?
           AND (effective_to IS NULL OR effective_to > ?)
@@ -221,7 +229,7 @@ def _record_classification_revision(
 ) -> None:
     current = conn.execute(
         """
-        SELECT security_type, lifecycle_status, listing_date, delisting_date,
+        SELECT exchange, security_type, lifecycle_status, listing_date, delisting_date,
                sector_code, sector_name, industry_code, industry_name,
                taxonomy_name, taxonomy_version, classification_source
         FROM symbol_classification_history
@@ -245,12 +253,12 @@ def _record_classification_revision(
         """
         INSERT INTO symbol_classification_history (
             symbol, effective_from, source_snapshot_id, classification_source,
-            security_type, lifecycle_status, listing_date, delisting_date,
+            exchange, security_type, lifecycle_status, listing_date, delisting_date,
             sector_code, sector_name, industry_code, industry_name, taxonomy_name,
             taxonomy_version
         )
         VALUES (?, COALESCE(CAST(? AS TIMESTAMPTZ), current_timestamp), ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?)
+                ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             taxonomy.symbol,
@@ -264,6 +272,7 @@ def _record_classification_revision(
 
 def _classification_values(taxonomy: SymbolTaxonomy) -> tuple[object, ...]:
     return (
+        taxonomy.exchange,
         taxonomy.security_type,
         taxonomy.lifecycle_status,
         taxonomy.listing_date,

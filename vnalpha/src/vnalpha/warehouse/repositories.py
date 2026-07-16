@@ -898,14 +898,19 @@ def get_symbol_sector_alignment(
     symbol: str,
     as_of_date: date | str | None = None,
 ) -> SymbolSectorAlignment | None:
-    """Return a symbol's persisted sector and exact or latest sector snapshot."""
-    row: tuple[str | None] | None = conn.execute(
-        "SELECT sector FROM symbol_master WHERE symbol = ?", [symbol]
-    ).fetchone()
-    if row is None:
+    """Return a symbol's sector and exact or latest sector snapshot.
+
+    When ``as_of_date`` is provided, the sector is resolved point-in-time from
+    ``symbol_classification_history`` (the classification effective on that
+    date) rather than the current ``symbol_master`` value, so a historical
+    alignment is not contaminated by a later sector reclassification. When
+    ``as_of_date`` is ``None`` the current ``symbol_master`` sector is used
+    (current-state semantics). Legacy warehouses without classification history
+    fall back to the current sector so existing dated data remains readable.
+    """
+    sector = _resolve_alignment_sector(conn, symbol, as_of_date)
+    if sector is _SYMBOL_UNKNOWN:
         return None
-    source_sector: str | None = row[0]
-    sector = source_sector.strip() if source_sector is not None else ""
     if not sector:
         return SymbolSectorAlignment(symbol=symbol, sector=None, snapshot=None)
     snapshots = (
@@ -915,3 +920,41 @@ def get_symbol_sector_alignment(
     )
     snapshot = next((item for item in snapshots if item.sector == sector), None)
     return SymbolSectorAlignment(symbol=symbol, sector=sector, snapshot=snapshot)
+
+
+# Sentinel distinguishing "symbol does not exist" from "symbol has no sector".
+_SYMBOL_UNKNOWN: Any = object()
+
+
+def _resolve_alignment_sector(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    as_of_date: date | str | None,
+) -> str | Any:
+    """Resolve the sector for an alignment, point-in-time when a date is given."""
+    if as_of_date is not None:
+        from vnalpha.warehouse.point_in_time import (
+            history_is_available,
+            resolve_symbol_classification,
+        )
+
+        if history_is_available(conn):
+            classification = resolve_symbol_classification(conn, symbol, as_of_date)
+            if classification is None:
+                # Symbol not eligible/known on that date. Fall through to
+                # current-state existence check so a symbol that simply lacks
+                # history but exists today is still reported (compat), while an
+                # unknown symbol returns None.
+                exists = conn.execute(
+                    "SELECT 1 FROM symbol_master WHERE symbol = ?", [symbol]
+                ).fetchone()
+                return "" if exists is not None else _SYMBOL_UNKNOWN
+            return classification.sector or ""
+
+    row: tuple[str | None] | None = conn.execute(
+        "SELECT sector FROM symbol_master WHERE symbol = ?", [symbol]
+    ).fetchone()
+    if row is None:
+        return _SYMBOL_UNKNOWN
+    source_sector: str | None = row[0]
+    return source_sector.strip() if source_sector is not None else ""

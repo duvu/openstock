@@ -123,7 +123,11 @@ def _lineage(
         "benchmark_row_count": str(benchmark.row_count),
         "benchmark_bar_date": benchmark.bar_date.isoformat(),
         "benchmark_freshness": benchmark.freshness,
-        "breadth_input": "symbol_master,feature_snapshot",
+        "breadth_input": f"{breadth.membership_basis},feature_snapshot",
+        "breadth_membership_basis": breadth.membership_basis,
+        "breadth_membership_resolver_version": (
+            breadth.membership_resolver_version or ""
+        ),
         "breadth_active_count": str(breadth.active_count),
         "breadth_eligible_count": str(breadth.eligible_count),
         "breadth_excluded_count": str(breadth.excluded_count),

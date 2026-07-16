@@ -83,6 +83,8 @@ class SectorInputContext:
     eligible_rows: tuple[FeatureRow, ...]
     security_type_excluded_symbols: tuple[str, ...]
     exclusion_counts: Mapping[str, int]
+    membership_basis: str = "symbol_master"
+    membership_resolver_version: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "active_symbols", tuple(self.active_symbols))
@@ -275,22 +277,43 @@ class SectorAggregate:
         return "STABLE"
 
 
-def load_sector_input_context(
+def _load_pit_membership(
     conn: duckdb.DuckDBPyConnection,
     as_of_date: date,
-    *,
-    policy: SectorStrengthPolicy = LEGACY_SECTOR_STRENGTH_POLICY,
-) -> SectorInputContext:
-    """Load active membership and feature rows under a versioned policy."""
-    membership_rows: list[
-        tuple[
-            str,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-        ]
-    ] = conn.execute(
+) -> tuple[
+    list[tuple[str, str | None, str | None, str | None, str | None]],
+    str,
+    str | None,
+]:
+    """Return (rows, membership_basis, resolver_version).
+
+    Rows are (symbol, sector, security_type, taxonomy_name, taxonomy_version).
+    Point-in-time from classification history when available; otherwise the
+    current ``symbol_master`` active projection.
+    """
+    from vnalpha.warehouse.point_in_time import history_is_available, resolve_universe
+
+    if history_is_available(conn):
+        universe = resolve_universe(conn, as_of_date)
+        rows: list[tuple[str, str | None, str | None, str | None, str | None]] = []
+        for symbol in universe.symbols:
+            classification = universe.get(symbol)
+            if classification is None:
+                continue
+            if (classification.lifecycle_status or "ACTIVE").upper() != "ACTIVE":
+                continue
+            rows.append(
+                (
+                    symbol,
+                    classification.sector,
+                    classification.security_type,
+                    classification.taxonomy_name,
+                    classification.taxonomy_version,
+                )
+            )
+        return rows, "symbol_classification_history", universe.resolver_version
+
+    fallback = conn.execute(
         """
         SELECT symbol, COALESCE(NULLIF(sector_name, ''), sector), security_type,
                taxonomy_name, taxonomy_version
@@ -300,6 +323,27 @@ def load_sector_input_context(
         ORDER BY symbol
         """
     ).fetchall()
+    return fallback, "symbol_master", None
+
+
+def load_sector_input_context(
+    conn: duckdb.DuckDBPyConnection,
+    as_of_date: date,
+    *,
+    policy: SectorStrengthPolicy = LEGACY_SECTOR_STRENGTH_POLICY,
+) -> SectorInputContext:
+    """Load active membership and feature rows under a versioned policy.
+
+    Membership, sector and taxonomy are resolved point-in-time from
+    ``symbol_classification_history`` for ``as_of_date`` when that history
+    exists, so recomputing an old date uses the classification effective then
+    (excluding not-yet-listed and already-delisted symbols and honoring sector
+    reclassification). Falls back to the current ``symbol_master`` projection
+    for legacy/current-only warehouses.
+    """
+    membership_rows, membership_basis, membership_resolver_version = (
+        _load_pit_membership(conn, as_of_date)
+    )
 
     active_symbols: list[str] = []
     sector_by_symbol: dict[str, str] = {}
@@ -431,6 +475,8 @@ def load_sector_input_context(
         eligible_rows=tuple(eligible_rows),
         security_type_excluded_symbols=tuple(security_type_excluded_symbols),
         exclusion_counts=dict(exclusion_counts),
+        membership_basis=membership_basis,
+        membership_resolver_version=membership_resolver_version,
     )
 
 

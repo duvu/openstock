@@ -41,6 +41,8 @@ class BreadthContext:
     excluded_symbols: tuple[str, ...]
     security_type_excluded_symbols: tuple[str, ...]
     exclusion_counts: Mapping[str, int]
+    membership_basis: str = "symbol_master"
+    membership_resolver_version: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "excluded_symbols", tuple(self.excluded_symbols))
@@ -95,6 +97,8 @@ def _empty_context(
     exchange_coverage: float | None,
     exchange_metadata_coverage: float | None,
     liquidity_coverage: float | None,
+    membership_basis: str = "symbol_master",
+    membership_resolver_version: str | None = None,
 ) -> BreadthContext:
     return BreadthContext(
         active_count=active_count,
@@ -117,7 +121,47 @@ def _empty_context(
         excluded_symbols=tuple(excluded_symbols),
         security_type_excluded_symbols=tuple(security_type_excluded_symbols),
         exclusion_counts=dict(exclusion_counts),
+        membership_basis=membership_basis,
+        membership_resolver_version=membership_resolver_version,
     )
+
+
+def _load_pit_membership(
+    conn: duckdb.DuckDBPyConnection,
+    as_of_date: date,
+) -> tuple[list[tuple[str, str | None, str | None]], str, str | None]:
+    """Return (rows, membership_basis, resolver_version).
+
+    Rows are (symbol, exchange, security_type) for the as-of active universe.
+    Uses the point-in-time classification history when available; otherwise
+    falls back to the current ``symbol_master`` active projection.
+    """
+    from vnalpha.warehouse.point_in_time import history_is_available, resolve_universe
+
+    if history_is_available(conn):
+        universe = resolve_universe(conn, as_of_date)
+        rows: list[tuple[str, str | None, str | None]] = []
+        for symbol in universe.symbols:
+            classification = universe.get(symbol)
+            if classification is None:
+                continue
+            if (classification.lifecycle_status or "ACTIVE").upper() != "ACTIVE":
+                continue
+            rows.append(
+                (symbol, classification.exchange, classification.security_type)
+            )
+        return rows, "symbol_classification_history", universe.resolver_version
+
+    fallback = conn.execute(
+        """
+        SELECT symbol, exchange, security_type
+        FROM symbol_master
+        WHERE is_active = TRUE
+          AND COALESCE(lifecycle_status, 'ACTIVE') = 'ACTIVE'
+        ORDER BY symbol
+        """
+    ).fetchall()
+    return fallback, "symbol_master", None
 
 
 def load_breadth_context(
@@ -127,16 +171,18 @@ def load_breadth_context(
     *,
     policy: MarketRegimePolicy = LEGACY_MARKET_REGIME_POLICY,
 ) -> BreadthContext:
-    """Calculate breadth from policy-eligible active symbols and feature evidence."""
-    membership_rows: list[tuple[str, str | None, str | None]] = conn.execute(
-        """
-        SELECT symbol, exchange, security_type
-        FROM symbol_master
-        WHERE is_active = TRUE
-          AND COALESCE(lifecycle_status, 'ACTIVE') = 'ACTIVE'
-        ORDER BY symbol
-        """
-    ).fetchall()
+    """Calculate breadth from policy-eligible active symbols and feature evidence.
+
+    Membership, exchange and security type are resolved point-in-time from
+    ``symbol_classification_history`` for the requested ``as_of_date`` when that
+    history exists, so a symbol listed after the date is excluded and one
+    delisted on/before it is dropped. When no classification history exists the
+    loader falls back to the current ``symbol_master`` projection (compat path
+    for legacy/current-only warehouses).
+    """
+    membership_rows, membership_basis, membership_resolver_version = (
+        _load_pit_membership(conn, as_of_date)
+    )
 
     active_rows: list[tuple[str, str | None]] = []
     security_type_excluded_symbols: list[str] = []
@@ -265,6 +311,8 @@ def load_breadth_context(
             exchange_coverage=exchange_coverage,
             exchange_metadata_coverage=exchange_metadata_coverage,
             liquidity_coverage=liquidity_coverage,
+            membership_basis=membership_basis,
+            membership_resolver_version=membership_resolver_version,
         )
 
     returns = [row[3] for row in usable_rows]
@@ -293,6 +341,8 @@ def load_breadth_context(
         excluded_symbols=tuple(exclusions),
         security_type_excluded_symbols=tuple(security_type_excluded_symbols),
         exclusion_counts=dict(exclusion_counts),
+        membership_basis=membership_basis,
+        membership_resolver_version=membership_resolver_version,
     )
     if context.available_for(policy):
         return context
@@ -317,4 +367,6 @@ def load_breadth_context(
         excluded_symbols=context.excluded_symbols,
         security_type_excluded_symbols=context.security_type_excluded_symbols,
         exclusion_counts=context.exclusion_counts,
+        membership_basis=context.membership_basis,
+        membership_resolver_version=context.membership_resolver_version,
     )

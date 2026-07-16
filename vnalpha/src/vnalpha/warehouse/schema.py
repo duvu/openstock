@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS symbol_classification_history (
     effective_to        TIMESTAMPTZ,
     source_snapshot_id  VARCHAR NOT NULL,
     classification_source VARCHAR NOT NULL,
+    exchange            VARCHAR,
     security_type       VARCHAR NOT NULL,
     lifecycle_status    VARCHAR NOT NULL,
     listing_date        DATE,
