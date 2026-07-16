@@ -1,0 +1,400 @@
+diff --git a/.github/workflows/openstock-ci.yml b/.github/workflows/openstock-ci.yml
+index aec36e4..948c319 100644
+--- a/.github/workflows/openstock-ci.yml
++++ b/.github/workflows/openstock-ci.yml
+@@ -116,6 +116,8 @@ jobs:
+             tests/test_llm_structured_output.py::test_strict_schema_does_not_add_transport_retry_budget \
+             tests/test_llm_fail_closed_config.py \
+             tests/test_llm_capability_fallback.py \
++            tests/test_corporate_action_ingestion.py \
++            tests/test_vnstock_corporate_action_client.py \
+             tests/test_safety_boundary.py::test_no_hard_forbidden_terms \
+             tests/test_safety_boundary.py::test_static_scan_source_files_for_forbidden_terms
+ 
+@@ -188,7 +190,9 @@ jobs:
+               tests/unit/core/provider \
+               tests/unit/providers/test_fiinquantx_foundation.py \
+               tests/unit/providers/test_fiinquantx_runtime_hardening.py \
+-              tests/contracts/providers
++              tests/contracts/providers \
++              tests/contracts/test_corporate_action_contract.py \
++              tests/contracts/test_builtin_provider_capabilities.py
+           ) 2>&1 | tee vnstock-contract-tests.log
+ 
+       - name: Upload vnstock contract diagnostics
+diff --git a/openspec/active-changes.yaml b/openspec/active-changes.yaml
+index 365cdc2..900ff81 100644
+--- a/openspec/active-changes.yaml
++++ b/openspec/active-changes.yaml
+@@ -1,6 +1,6 @@
+ # Registry for non-archived OpenSpec lifecycle and evidence.
+ # GitHub issue #90 owns roadmap priority and execution order.
+-reviewed_at: 2026-07-15
++reviewed_at: 2026-07-16
+ policy:
+   active_directory: openspec/changes
+   archive_directory: openspec/changes/archive
+@@ -12,6 +12,19 @@ policy:
+ 
+ changes:
+ 
++  corporate-action-ingestion:
++    status: in_progress
++    github_issues: [112]
++    roadmap_state: scheduled
++    summary: >-
++      Add provider-independent corporate-action evidence, raw-first canonical
++      reconciliation, immutable revisions, quarantine and affected-range signals
++      without calculating adjusted prices.
++    evidence: >-
++      Provider contracts, KBS/VCI adapters, warehouse tables, bounded sync/status
++      commands and focused offline tests are implemented on the issue #112 branch.
++      Exact final-SHA full CI and package evidence remain pending the pull request.
++
+   required-ci-merge-gates:
+     status: partial
+     github_issues: [147]
+diff --git a/openspec/changes/corporate-action-ingestion/.openspec.yaml b/openspec/changes/corporate-action-ingestion/.openspec.yaml
+new file mode 100644
+index 0000000..cd2ce7e
+--- /dev/null
++++ b/openspec/changes/corporate-action-ingestion/.openspec.yaml
+@@ -0,0 +1,2 @@
++schema: spec-driven
++created: 2026-07-16
+diff --git a/openspec/changes/corporate-action-ingestion/design.md b/openspec/changes/corporate-action-ingestion/design.md
+new file mode 100644
+index 0000000..38eaca7
+--- /dev/null
++++ b/openspec/changes/corporate-action-ingestion/design.md
+@@ -0,0 +1,65 @@
++# Design: Corporate-action ingestion
++
++## Boundaries
++
++`vnstock` owns provider access and normalization. `vnalpha` owns persistence,
++validation and reconciliation. Neither layer infers an action from a price gap.
++KBS and VCI are market-data evidence sources; they are not labelled as official
++issuer disclosures.
++
++## Provider contract
++
++The dataset is `reference.corporate_actions`. Every row includes a provider event
++ID, symbol, normalized action type, source reference/version, content hash and
++raw source payload. Dates and economic terms are optional because providers may
++publish partial records; vnalpha decides whether the record can be canonical.
++Ratios use one provider-independent convention: new/resulting shares per existing
++share, while the original provider wording remains available in `ratio_text`.
++
++KBS and VCI declare the capability as `partial`. Empty responses are valid empty
++results. Other providers remain unsupported unless they implement the same
++contract explicitly.
++
++## Canonical storage
++
++Raw evidence is inserted before canonical validation. Four additional contracts
++separate failure boundaries:
++
++- `corporate_action`: immutable canonical revisions and current status;
++- `corporate_action_source_link`: source-to-revision provenance;
++- `corporate_action_quarantine`: malformed, unclassified or unresolved identity;
++- `corporate_action_affected_range`: deterministic invalidation input for #113.
++
++## Identity and revisions
++
++A provider event ID is stable within a provider. A changed content hash for the
++same provider event reuses the canonical action ID and creates a new revision.
++Identical evidence from another provider links to the existing revision. A
++materially different revision for the same symbol/action/date is retained and
++all current alternatives are marked `CONFLICT`; no provider silently wins. A
++provider revision supersedes only that provider's prior revision. If the revised
++terms match another current source, the conflict converges to the shared active
++revision; otherwise the remaining alternatives stay `CONFLICT`.
++
++## Validation
++
++Canonical promotion requires:
++
++- known action taxonomy;
++- at least one relevant date;
++- positive cash amount for cash dividends;
++- positive ratio for stock/bonus/split/consolidation/rights events;
++- non-negative subscription terms;
++- symbol identity present in current or historical lifecycle storage.
++
++Rejected records remain queryable in quarantine with stable rule IDs.
++
++## Commands
++
++```text
++vnalpha sync corporate-actions SYMBOL [--start DATE --end DATE --source PROVIDER]
++vnalpha data download corporate-actions SYMBOL [...]
++vnalpha data status corporate-actions [SYMBOL]
++```
++
++All commands are read-only with respect to brokers, accounts and execution.
+diff --git a/openspec/changes/corporate-action-ingestion/proposal.md b/openspec/changes/corporate-action-ingestion/proposal.md
+new file mode 100644
+index 0000000..9f5b7a4
+--- /dev/null
++++ b/openspec/changes/corporate-action-ingestion/proposal.md
+@@ -0,0 +1,32 @@
++## Why
++
++OpenStock currently has raw and canonical OHLCV but no provider-independent
++corporate-action evidence. Mechanical dividends, splits, rights issues and
++listing changes therefore cannot be reconciled or used safely by the later
++adjustment engine.
++
++Issue #112 introduces the evidence and ingestion boundary only. It does not
++calculate adjustment factors or change downstream price basis.
++
++## What Changes
++
++- add `reference.corporate_actions` to the vnstock contract registry and service;
++- normalize bounded KBS and VCI company-event feeds into a common taxonomy while
++  preserving the complete provider payload and content hash;
++- persist raw evidence before validation;
++- add canonical revision, source-link, quarantine and affected-range tables;
++- make repeated sync idempotent and preserve revised or conflicting evidence;
++- add bounded sync/status commands to vnalpha;
++- update tests, required CI and current data-contract documentation together.
++
++## Capabilities
++
++### Added Capabilities
++
++- `corporate-action-ingestion`: provider-independent action evidence,
++  reconciliation, revisions, conflicts, quarantine and affected-range signals.
++
++## Impact
++
++#113 may consume accepted canonical actions and affected ranges after this
++change. No adjusted-price output is produced by this issue.
+diff --git a/openspec/changes/corporate-action-ingestion/specs/corporate-action-ingestion/spec.md b/openspec/changes/corporate-action-ingestion/specs/corporate-action-ingestion/spec.md
+new file mode 100644
+index 0000000..48e9d68
+--- /dev/null
++++ b/openspec/changes/corporate-action-ingestion/specs/corporate-action-ingestion/spec.md
+@@ -0,0 +1,67 @@
++## ADDED Requirements
++
++### Requirement: Provider-independent corporate-action evidence
++
++OpenStock SHALL expose a canonical `reference.corporate_actions` provider
++contract with stable IDs, normalized action types, relevant dates and terms,
++source provenance, content hashes and preserved raw payloads.
++
++#### Scenario: Provider returns no actions
++
++- **WHEN** a supported provider returns a valid empty response
++- **THEN** the result is distinguishable from unsupported or failed access
++- **AND** the exact canonical columns remain present
++
++### Requirement: Raw-first validation
++
++OpenStock SHALL persist source evidence before deciding whether an action may be
++promoted to the canonical action registry.
++
++#### Scenario: Malformed action terms
++
++- **WHEN** a cash dividend has no positive cash amount or a ratio action has no
++  positive ratio
++- **THEN** the evidence remains in raw storage
++- **AND** a quarantine record identifies the failed validation rules
++- **AND** no canonical action is created
++
++### Requirement: Idempotent revision lineage
++
++OpenStock SHALL make repeated ingestion idempotent and preserve every material
++revision instead of overwriting prior evidence.
++
++#### Scenario: Provider revises one event
++
++- **WHEN** the same provider/event ID arrives with changed canonical terms
++- **THEN** a new revision supersedes the prior revision
++- **AND** an affected-range signal identifies the earliest relevant date
++
++### Requirement: Conflict preservation
++
++OpenStock SHALL preserve conflicting current source evidence without selecting a
++winner implicitly.
++
++#### Scenario: Two providers disagree
++
++- **WHEN** two sources report materially different terms for the same
++  symbol/action/date
++- **THEN** both revisions remain queryable
++- **AND** the current canonical status is `CONFLICT`
++- **AND** the sync result is partial rather than complete
++
++#### Scenario: One provider revises conflicting terms
++
++- **WHEN** one source revises its event after a cross-provider conflict
++- **THEN** only that source's prior revision is superseded
++- **AND** matching revised terms converge to one shared active revision
++- **AND** non-matching current alternatives remain preserved as `CONFLICT`
++
++### Requirement: Lifecycle-aware symbol resolution
++
++OpenStock SHALL reconcile action symbols against current or historical symbol
++identity and SHALL quarantine unresolved identities.
++
++### Requirement: Scope separation
++
++Issue #112 SHALL NOT calculate adjustment factors, adjusted OHLCV or downstream
++price-basis propagation. Those remain owned by #113 and #114.
+diff --git a/openspec/changes/corporate-action-ingestion/tasks.md b/openspec/changes/corporate-action-ingestion/tasks.md
+new file mode 100644
+index 0000000..33026c1
+--- /dev/null
++++ b/openspec/changes/corporate-action-ingestion/tasks.md
+@@ -0,0 +1,19 @@
++## 1. vnstock provider contract
++
++- [x] 1.1 Register `reference.corporate_actions` and its canonical columns.
++- [x] 1.2 Add deterministic action taxonomy, dates, terms, provenance and hashes.
++- [x] 1.3 Add bounded KBS/VCI provider adapters and truthful partial capabilities.
++- [x] 1.4 Add the canonical HTTP service path and contract tests.
++
++## 2. vnalpha canonical ingestion
++
++- [x] 2.1 Add raw evidence, canonical revision, source-link, quarantine and affected-range tables.
++- [x] 2.2 Implement raw-first validation and symbol lifecycle resolution.
++- [x] 2.3 Implement idempotency, supersession and cross-provider conflict preservation.
++- [x] 2.4 Add bounded client, provisioning, sync and status surfaces.
++
++## 3. Documentation and validation
++
++- [x] 3.1 Update current vnstock/vnalpha documentation in the implementation PR.
++- [x] 3.2 Add focused fixtures for supported action types, empty, revision, conflict and quarantine cases.
++- [ ] 3.3 Run repository consistency, focused tests, full CI and both package builds on the exact final SHA.
+diff --git a/openspec/changes/corporate-action-ingestion/validation.md b/openspec/changes/corporate-action-ingestion/validation.md
+new file mode 100644
+index 0000000..0423cbd
+--- /dev/null
++++ b/openspec/changes/corporate-action-ingestion/validation.md
+@@ -0,0 +1,36 @@
++# Validation: Corporate-action ingestion
++
++## Status
++
++```text
++Provider contract and normalization: implemented
++Warehouse raw/canonical/revision contracts: implemented
++Bounded sync and status commands: implemented
++Focused offline tests: pass
++Full repository CI and exact final SHA: pending pull request
++```
++
++## Required final commands
++
++```bash
++python scripts/check-repo-consistency.py
++cd vnstock && ruff check . && ruff format --check .
++cd vnstock && pytest -q tests/contracts/test_corporate_action_contract.py tests/contracts/test_builtin_provider_capabilities.py
++cd vnalpha && pytest -q tests/test_corporate_action_ingestion.py tests/test_vnstock_corporate_action_client.py
++make verify-r0
++make test-vnalpha
++python -m build --wheel --sdist --no-isolation --outdir /tmp/vnalpha-dist ./vnalpha
++python -m build --wheel --sdist --no-isolation --outdir /tmp/vnstock-dist ./vnstock
++```
++
++## Evidence
++
++| UTC timestamp | Commit SHA | Phase/task | Command | Exit | Result summary | Evidence artifact |
++|---|---|---|---|---:|---|---|
++| 2026-07-16T00:10:00Z | `local source export + working tree` | 1.1–2.4 | focused vnstock corporate-action and provider-capability contracts | 0 | 135 tests passed | local command transcript |
++| 2026-07-16T00:10:00Z | `local source export + working tree` | 2.1–2.4 | focused vnalpha client, ingestion, revision, conflict and provisioning tests | 0 | 16 tests passed | local command transcript |
++| 2026-07-16T00:20:00Z | `local source export + working tree` | 1.1–1.4 | required vnstock provider/canonical contract selection | 0 | 508 tests passed | local command transcript |
++| 2026-07-16T00:35:00Z | `local source export + working tree` | 2.1–3.2 | R0 constituent suite | 0 | 70 tests reached 100% | local command transcript |
++| 2026-07-16T00:40:00Z | `local source export + working tree` | 1.1–3.2 | Ruff, repository consistency and both wheel/sdist builds | 0 | all checks and builds passed | local command transcript |
++
++Final implementation SHA: `pending pull request`
+diff --git a/vnalpha/docs/03-data-pipeline.md b/vnalpha/docs/03-data-pipeline.md
+index 91b81eb..1eb205c 100644
+--- a/vnalpha/docs/03-data-pipeline.md
++++ b/vnalpha/docs/03-data-pipeline.md
+@@ -31,6 +31,20 @@ vnstock-service request
+ Reference-data flow additionally preserves symbol source snapshots, membership
+ and point-in-time classification history before updating `symbol_master`.
+ 
++Corporate-action flow is separate from OHLCV promotion:
++
++```text
++vnstock reference.corporate_actions
++→ corporate_action_raw_evidence
++→ validation + corporate_action_quarantine
++→ immutable corporate_action revisions + source links
++→ corporate_action_affected_range
++```
++
++KBS and VCI feeds are recorded as `MARKET_DATA_PROVIDER` evidence, not official
++issuer disclosures. This pipeline does not calculate adjusted prices; #113 owns
++factor and adjusted-series derivation.
++
+ ## Storage layers
+ 
+ ### Ingestion evidence
+@@ -131,6 +145,8 @@ vnalpha init
+ vnalpha sync symbols
+ vnalpha sync ohlcv --universe VN30 --start 2024-01-01
+ vnalpha sync index --symbol VNINDEX --start 2024-01-01
++vnalpha sync corporate-actions SSI --start 2024-01-01 --source VCI
++vnalpha data status corporate-actions SSI
+ vnalpha build canonical
+ vnalpha build features --date today
+ vnalpha score --date today
+diff --git a/vnalpha/docs/README.md b/vnalpha/docs/README.md
+index 7ea2fb2..bf6cf42 100644
+--- a/vnalpha/docs/README.md
++++ b/vnalpha/docs/README.md
+@@ -40,7 +40,7 @@ Current architecture documents begin with an explicit `Status` block. Target cap
+ 
+ - [Vision and scope](01-vision-and-scope.md)
+ - [System architecture](02-system-architecture.md)
+-- [Data pipeline](03-data-pipeline.md)
++- [Data pipeline](03-data-pipeline.md) — includes corporate-action raw/canonical/revision boundaries
+ - [Market context methodology](market-context-methodology.md)
+ - [Pattern engine](04-pattern-engine.md)
+ - [Backtest and outcome tracking](05-backtest-and-outcome.md)
+diff --git a/vnalpha/src/vnalpha/cli_app/data.py b/vnalpha/src/vnalpha/cli_app/data.py
+index ff23384..6d1b7dc 100644
+--- a/vnalpha/src/vnalpha/cli_app/data.py
++++ b/vnalpha/src/vnalpha/cli_app/data.py
+@@ -19,10 +19,12 @@ download_app = typer.Typer(help="Download approved raw market data.")
+ build_app = typer.Typer(help="Build approved deterministic research artifacts.")
+ sync_app = typer.Typer(help="Run bounded incremental market-data maintenance.")
+ repair_app = typer.Typer(help="Repair bounded canonical OHLCV gaps.")
++status_app = typer.Typer(help="Inspect bounded data-ingestion status.")
+ app.add_typer(download_app, name="download")
+ app.add_typer(build_app, name="build")
+ app.add_typer(sync_app, name="sync")
+ app.add_typer(repair_app, name="repair")
++app.add_typer(status_app, name="status")
+ 
+ 
+ @download_app.command("symbols")
+@@ -74,6 +76,45 @@ def download_index(
+     )
+ 
+ 
++@download_app.command("corporate-actions")
++def download_corporate_actions(
++    symbol: str = typer.Argument(..., help="Equity symbol."),
++    start: str | None = typer.Option(None, "--start", help="Start date (YYYY-MM-DD)."),
++    end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD)."),
++    source: str | None = typer.Option(None, "--source", help="Preferred provider."),
++) -> None:
++    _run(
++        DataProvisioningRequest(
++            operation="download",
++            artifact="corporate-actions",
++            symbol=symbol,
++            start=start,
++            end=end,
++            source=source,
++        )
++    )
++
++
