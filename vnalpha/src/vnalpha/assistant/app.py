@@ -422,6 +422,10 @@ class AssistantApp:
                 **answer.research_metadata,
                 "research_answer_audit_id": audit_id,
             }
+            # The audit above raises unless groundedness and policy both passed,
+            # so reaching here means the answer is validated. Project its
+            # deterministic evidence into symbol knowledge (issue #164).
+            self._project_analysis_evidence(prepared.plan, tool_outputs, answer)
         finish_assistant_session(
             self._conn,
             prepared.assistant_session_id,
@@ -519,6 +523,49 @@ class AssistantApp:
             raise SynthesisError(
                 f"Research answer audit persistence failed: {exc}"
             ) from exc
+
+    def _project_analysis_evidence(
+        self,
+        plan: AssistantPlan,
+        tool_outputs: dict,
+        answer: AssistantAnswer,
+    ) -> None:
+        """Project a validated deep-analysis turn's evidence into symbol memory.
+
+        Best-effort and fail-open: a projection failure is recorded on the
+        answer's research metadata as a caveat but never fails the validated
+        answer (issue #164).
+        """
+        if plan.intent != "deep_analyze_symbol":
+            return
+        try:
+            from vnalpha.observability.context import get_correlation_id
+            from vnalpha.symbol_memory.projection import project_analysis_evidence
+
+            correlation_id = get_correlation_id() or plan.intent
+            result = project_analysis_evidence(
+                self._conn,
+                tool_outputs,
+                correlation_id=correlation_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            from vnalpha.core.logging import get_logger
+
+            get_logger("assistant.app").warning(
+                "Symbol knowledge projection failed: %s", exc
+            )
+            answer.research_metadata = {
+                **answer.research_metadata,
+                "knowledge_projection": {
+                    "projected": [],
+                    "warnings": [f"Symbol knowledge projection failed: {exc}"],
+                },
+            }
+            return
+        answer.research_metadata = {
+            **answer.research_metadata,
+            "knowledge_projection": result.to_trace_dict(),
+        }
 
     def _llm_model(self) -> str:
         config = getattr(self._llm, "config", None)

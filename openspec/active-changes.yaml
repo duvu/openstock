@@ -13,7 +13,7 @@ policy:
 changes:
 
   chat-data-provisioning-contract:
-    status: in_progress
+    status: ready
     github_issues: [163]
     roadmap_state: scheduled
     summary: >-
@@ -22,10 +22,27 @@ changes:
       and slash commands, replacing the fetch_data refusal and the hidden
       executor-only pre-step.
     evidence: >-
-      Implementation on branch agent/issue-163-chat-provisioning. Focused tests
-      in tests/test_issue_163_chat_provisioning.py plus updated planner,
-      executor, groundedness and deep-readiness regressions pass locally.
-      Final required-CI evidence on the merge SHA is pending the PR.
+      Merged to main via PR #168 with all required CI checks green. Focused
+      tests in tests/test_issue_163_chat_provisioning.py plus updated planner,
+      executor, groundedness, deep-readiness and evals-runtime regressions.
+
+  symbol-knowledge-projection:
+    status: in_progress
+    github_issues: [164]
+    roadmap_state: scheduled
+    summary: >-
+      After a successful chat deep-analysis, project the turn's validated
+      deterministic evidence (candidate score, feature-quality snapshot,
+      market-regime context) into the per-symbol knowledge base idempotently
+      with provenance and lifecycle controls, reusing the existing symbol-memory
+      ingestion/lifecycle/compaction and source-grounding guards. Never promote
+      raw chat text or LLM prose.
+    evidence: >-
+      Implementation on branch agent/issue-164-evidence-projection. Focused
+      tests in tests/test_issue_164_evidence_projection.py cover first
+      projection, idempotency, supersession, rejected prose, failed/partial
+      analysis and next-turn retrieval. Final required-CI evidence on the merge
+      SHA is pending the PR.
 
   corporate-action-ingestion:
     status: ready
