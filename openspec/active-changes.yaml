@@ -12,6 +12,22 @@ policy:
 
 changes:
 
+  assistant-llm-preflight:
+    status: in_progress
+    github_issues: [165]
+    roadmap_state: scheduled
+    summary: >-
+      Add a bounded, typed, redaction-safe assistant LLM startup preflight that
+      verifies one MVP1 model route (config, credentials, routing, reachability,
+      auth, model visibility, structured-output capability and route identity),
+      a `vnalpha preflight` CLI, degraded-mode messaging in `ask`, and an
+      upgraded openstock-verify assistant check.
+    evidence: >-
+      Implementation on branch agent/issue-165-llm-preflight. Focused tests in
+      tests/test_issue_165_llm_preflight.py use a fake gateway (no live network)
+      and cover every typed code, redaction safety and the CLI. Real redacted
+      production smoke evidence and final CI on the merge SHA are pending the PR.
+
   chat-data-provisioning-contract:
     status: ready
     github_issues: [163]

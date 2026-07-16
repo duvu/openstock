@@ -351,10 +351,17 @@ check_assistant() {
     skip "6.13 Assistant check: VNALPHA_LLM_API_KEY not configured"
     return
   fi
-  if command -v vnalpha &>/dev/null && vnalpha ask --no-execute "test" &>/dev/null 2>&1; then
-    ok "6.13 Assistant check: plan-preview OK"
+  if ! command -v vnalpha &>/dev/null; then
+    warn "6.13 Assistant check: vnalpha CLI not found"
+    return
+  fi
+  # Typed, redaction-safe LLM route preflight (issue #165). Prefer it over a
+  # coarse plan-preview so operators see the exact failure mode. Natural-language
+  # chat being unavailable is a WARN, not a FAIL — deterministic commands work.
+  if vnalpha preflight &>/dev/null 2>&1; then
+    ok "6.13 Assistant check: LLM route preflight READY"
   else
-    warn "6.13 Assistant check: failed (LLM endpoint may be unavailable)"
+    warn "6.13 Assistant check: LLM route unavailable (run 'vnalpha preflight')"
   fi
 }
 
