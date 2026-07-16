@@ -1,0 +1,400 @@
++            status,
++            json.dumps(dict(error), sort_keys=True) if error else None,
++            run_id,
++        ],
++    )
++
++
++def corporate_action_status(
++    conn: duckdb.DuckDBPyConnection,
++    *,
++    symbol: str | None = None,
++    start: str | None = None,
++    end: str | None = None,
++) -> dict[str, Any]:
++    clauses: list[str] = []
++    params: list[Any] = []
++    if symbol:
++        clauses.append("symbol = ?")
++        params.append(symbol.strip().upper())
++    if start:
++        clauses.append(
++            "COALESCE(ex_date, effective_date, record_date, announced_at) >= ?"
++        )
++        params.append(start)
++    if end:
++        clauses.append(
++            "COALESCE(ex_date, effective_date, record_date, announced_at) <= ?"
++        )
++        params.append(end)
++    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
++    rows = conn.execute(
++        f"""
++        SELECT canonical_status, COUNT(*)
++        FROM corporate_action
++        {where}
++        GROUP BY canonical_status
++        """,
++        params,
++    ).fetchall()
++    status_counts = {str(status): int(count) for status, count in rows}
++    quarantine_clauses: list[str] = []
++    quarantine_params: list[Any] = []
++    if symbol:
++        quarantine_clauses.append("symbol = ?")
++        quarantine_params.append(symbol.strip().upper())
++    quarantine_where = (
++        f"WHERE {' AND '.join(quarantine_clauses)}" if quarantine_clauses else ""
++    )
++    quarantined = conn.execute(
++        f"SELECT COUNT(*) FROM corporate_action_quarantine {quarantine_where}",
++        quarantine_params,
++    ).fetchone()[0]
++    unresolved = conn.execute(
++        "SELECT COUNT(*) FROM corporate_action_affected_range WHERE resolved_at IS NULL"
++        + (" AND symbol = ?" if symbol else ""),
++        [symbol.strip().upper()] if symbol else [],
++    ).fetchone()[0]
++    latest = conn.execute(
++        """
++        SELECT ingestion_run_id, status, started_at, finished_at
++        FROM ingestion_run
++        WHERE source_endpoint = '/v1/reference/corporate-actions'
++          AND (? IS NULL OR universe = ?)
++        ORDER BY started_at DESC
++        LIMIT 1
++        """,
++        [
++            symbol.strip().upper() if symbol else None,
++            symbol.strip().upper() if symbol else None,
++        ],
++    ).fetchone()
++    return {
++        "symbol": symbol.strip().upper() if symbol else None,
++        "canonical_status_counts": status_counts,
++        "quarantined": int(quarantined),
++        "unresolved_affected_ranges": int(unresolved),
++        "latest_run": (
++            {
++                "run_id": latest[0],
++                "status": latest[1],
++                "started_at": str(latest[2]),
++                "finished_at": str(latest[3]) if latest[3] else None,
++            }
++            if latest
++            else None
++        ),
++    }
++
++
++def _ingest_record(
++    conn: duckdb.DuckDBPyConnection,
++    *,
++    run_id: str,
++    provider: str,
++    requested_symbol: str,
++    record: Mapping[str, Any],
++) -> _RecordOutcome:
++    raw = dict(record)
++    provider_event_id = str(raw.get("provider_event_id") or "").strip()
++    content_hash = str(raw.get("content_hash") or "").strip()
++    payload_json = str(
++        raw.get("source_payload_json") or json.dumps(raw, sort_keys=True)
++    )
++    raw_evidence_id = _sha256(provider, provider_event_id, content_hash)
++    before = conn.execute(
++        "SELECT 1 FROM corporate_action_raw_evidence WHERE raw_evidence_id = ?",
++        [raw_evidence_id],
++    ).fetchone()
++    conn.execute(
++        """
++        INSERT OR IGNORE INTO corporate_action_raw_evidence
++        (raw_evidence_id, ingestion_run_id, provider, provider_event_id, symbol,
++         source_reference, source_version, content_hash, payload_json, quality_status, diagnostics_json)
++        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++        """,
++        [
++            raw_evidence_id,
++            run_id,
++            provider,
++            provider_event_id,
++            str(raw.get("symbol") or requested_symbol).upper(),
++            str(raw.get("source_reference") or ""),
++            str(raw.get("source_version") or CONTRACT_VERSION),
++            content_hash,
++            payload_json,
++            raw.get("quality_status"),
++            None,
++        ],
++    )
++    if before is not None:
++        return _RecordOutcome("unchanged", False)
++
++    rules = _validation_rules(conn, raw, requested_symbol=requested_symbol)
++    if rules:
++        _quarantine(
++            conn,
++            run_id=run_id,
++            provider=provider,
++            raw_evidence_id=raw_evidence_id,
++            record=raw,
++            rules=rules,
++        )
++        return _RecordOutcome("quarantined", True)
++
++    symbol = str(raw.get("symbol") or requested_symbol).upper()
++    action_type = str(raw["action_type"])
++    anchor = _anchor_date(raw)
++    prior_link = conn.execute(
++        """
++        SELECT link.action_id, link.revision_id
++        FROM corporate_action_source_link AS link
++        JOIN corporate_action_raw_evidence AS raw
++          ON raw.raw_evidence_id = link.raw_evidence_id
++        WHERE link.provider = ? AND link.provider_event_id = ?
++        ORDER BY raw.observed_at DESC, link.raw_evidence_id DESC
++        LIMIT 1
++        """,
++        [provider, provider_event_id],
++    ).fetchone()
++    action_id = (
++        prior_link[0] if prior_link else _sha256(symbol, action_type, anchor)[:32]
++    )
++    revision_hash = _revision_hash(raw)
++    existing_same = conn.execute(
++        """SELECT revision_id, canonical_status
++           FROM corporate_action
++           WHERE action_id = ? AND revision_hash = ?""",
++        [action_id, revision_hash],
++    ).fetchone()
++    if existing_same:
++        existing_revision_id, _ = existing_same
++        if prior_link is not None and prior_link[1] != existing_revision_id:
++            _supersede_source_revision(
++                conn,
++                prior_revision_id=prior_link[1],
++                replacement_revision_id=existing_revision_id,
++            )
++            _link_source(
++                conn,
++                provider=provider,
++                provider_event_id=provider_event_id,
++                raw_evidence_id=raw_evidence_id,
++                action_id=action_id,
++                revision_id=existing_revision_id,
++            )
++            conflict = _refresh_current_revision_statuses(
++                conn, action_id=action_id, preferred_revision_id=existing_revision_id
++            )
++            conn.execute(
++                "UPDATE corporate_action SET last_seen_at = current_timestamp WHERE revision_id = ?",
++                [existing_revision_id],
++            )
++            _insert_affected_range(
++                conn,
++                action_id=action_id,
++                revision_id=existing_revision_id,
++                symbol=symbol,
++                affected_from=anchor,
++                reason="REVISED_ACTION",
++            )
++            return _RecordOutcome("revised", True, conflict=conflict, affected=True)
++        _link_source(
++            conn,
++            provider=provider,
++            provider_event_id=provider_event_id,
++            raw_evidence_id=raw_evidence_id,
++            action_id=action_id,
++            revision_id=existing_revision_id,
++        )
++        conn.execute(
++            "UPDATE corporate_action SET last_seen_at = current_timestamp WHERE revision_id = ?",
++            [existing_revision_id],
++        )
++        return _RecordOutcome("unchanged", True)
++
++    active = conn.execute(
++        """SELECT revision_id, revision_number, canonical_status
++           FROM corporate_action
++           WHERE action_id = ? AND canonical_status IN ('ACTIVE', 'CONFLICT')
++           ORDER BY revision_number DESC""",
++        [action_id],
++    ).fetchall()
++    same_source_revision = prior_link is not None
++    supersedes = prior_link[1] if prior_link else None
++    remaining = [row for row in active if row[0] != supersedes]
++    if same_source_revision:
++        revision_number = max((row[1] for row in active), default=0) + 1
++        status = "CONFLICT" if remaining else "ACTIVE"
++        outcome = "revised"
++        reason = "REVISED_ACTION"
++        if supersedes:
++            conn.execute(
++                "UPDATE corporate_action SET canonical_status='SUPERSEDED' WHERE revision_id=?",
++                [supersedes],
++            )
++        for revision_id, _, _ in remaining:
++            conn.execute(
++                "UPDATE corporate_action SET canonical_status='CONFLICT' WHERE revision_id=?",
++                [revision_id],
++            )
++    elif active:
++        for revision_id, _, _ in active:
++            conn.execute(
++                "UPDATE corporate_action SET canonical_status='CONFLICT' WHERE revision_id=?",
++                [revision_id],
++            )
++        revision_number = max(row[1] for row in active) + 1
++        status = "CONFLICT"
++        outcome = "canonical_inserted"
++        reason = "CONFLICT"
++    else:
++        revision_number = 1
++        status = "ACTIVE"
++        outcome = "canonical_inserted"
++        reason = "NEW_ACTION"
++
++    revision_id = _sha256(action_id, revision_hash)[:40]
++    affected_from = anchor
++    conn.execute(
++        """
++        INSERT INTO corporate_action
++        (revision_id, action_id, revision_number, symbol, action_type, announced_at, ex_date,
++         record_date, effective_date, cash_amount, ratio, ratio_text, subscription_price,
++         reference_price, currency, title, revision_hash, canonical_status,
++         supersedes_revision_id, affected_from_date, contract_version, diagnostics_json)
++        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++        """,
++        [
++            revision_id,
++            action_id,
++            revision_number,
++            symbol,
++            action_type,
++            raw.get("announced_at"),
++            raw.get("ex_date"),
++            raw.get("record_date"),
++            raw.get("effective_date"),
++            raw.get("cash_amount"),
++            raw.get("ratio"),
++            raw.get("ratio_text"),
++            raw.get("subscription_price"),
++            raw.get("reference_price"),
++            raw.get("currency"),
++            raw.get("title"),
++            revision_hash,
++            status,
++            supersedes,
++            affected_from,
++            CONTRACT_VERSION,
++            json.dumps({"source_authority": "MARKET_DATA_PROVIDER"}, sort_keys=True),
++        ],
++    )
++    if supersedes:
++        conn.execute(
++            "UPDATE corporate_action SET superseded_by_revision_id=? WHERE revision_id=?",
++            [revision_id, supersedes],
++        )
++    _link_source(
++        conn,
++        provider=provider,
++        provider_event_id=provider_event_id,
++        raw_evidence_id=raw_evidence_id,
++        action_id=action_id,
++        revision_id=revision_id,
++    )
++    _insert_affected_range(
++        conn,
++        action_id=action_id,
++        revision_id=revision_id,
++        symbol=symbol,
++        affected_from=affected_from,
++        reason=reason,
++    )
++    return _RecordOutcome(outcome, True, conflict=status == "CONFLICT", affected=True)
++
++
++def _supersede_source_revision(
++    conn: duckdb.DuckDBPyConnection,
++    *,
++    prior_revision_id: str,
++    replacement_revision_id: str,
++) -> None:
++    conn.execute(
++        """UPDATE corporate_action
++           SET canonical_status='SUPERSEDED', superseded_by_revision_id=?
++           WHERE revision_id=?""",
++        [replacement_revision_id, prior_revision_id],
++    )
++
++
++def _refresh_current_revision_statuses(
++    conn: duckdb.DuckDBPyConnection,
++    *,
++    action_id: str,
++    preferred_revision_id: str,
++) -> bool:
++    current = conn.execute(
++        """SELECT revision_id
++           FROM corporate_action
++           WHERE action_id=? AND canonical_status IN ('ACTIVE', 'CONFLICT')""",
++        [action_id],
++    ).fetchall()
++    current_ids = [row[0] for row in current]
++    conflict = any(revision_id != preferred_revision_id for revision_id in current_ids)
++    status = "CONFLICT" if conflict else "ACTIVE"
++    conn.execute(
++        "UPDATE corporate_action SET canonical_status=? WHERE revision_id=?",
++        [status, preferred_revision_id],
++    )
++    if conflict:
++        conn.execute(
++            """UPDATE corporate_action SET canonical_status='CONFLICT'
++               WHERE action_id=? AND revision_id<>?
++                 AND canonical_status IN ('ACTIVE', 'CONFLICT')""",
++            [action_id, preferred_revision_id],
++        )
++    return conflict
++
++
++def _insert_affected_range(
++    conn: duckdb.DuckDBPyConnection,
++    *,
++    action_id: str,
++    revision_id: str,
++    symbol: str,
++    affected_from: date | str,
++    reason: str,
++) -> None:
++    conn.execute(
++        """INSERT INTO corporate_action_affected_range
++           (signal_id, action_id, revision_id, symbol, affected_from_date, reason)
++           VALUES (?, ?, ?, ?, ?, ?)""",
++        [str(uuid.uuid4()), action_id, revision_id, symbol, affected_from, reason],
++    )
++
++
++def _validation_rules(
++    conn: duckdb.DuckDBPyConnection, record: Mapping[str, Any], *, requested_symbol: str
++) -> list[str]:
++    rules: list[str] = []
++    symbol = str(record.get("symbol") or requested_symbol).strip().upper()
++    if not record.get("provider_event_id"):
++        rules.append("MISSING_PROVIDER_EVENT_ID")
++    if not record.get("content_hash"):
++        rules.append("MISSING_CONTENT_HASH")
++    if not record.get("source_reference"):
++        rules.append("MISSING_SOURCE_REFERENCE")
++    if not record.get("source_version"):
++        rules.append("MISSING_SOURCE_VERSION")
++    if symbol != requested_symbol.strip().upper():
++        rules.append("SYMBOL_MISMATCH")
++    action_type = str(record.get("action_type") or "")
++    if action_type not in SUPPORTED_ACTION_TYPES:
++        rules.append("UNSUPPORTED_ACTION_TYPE")
++    if _anchor_date(record) is None:
++        rules.append("MISSING_ACTION_DATE")
++    if action_type == "CASH_DIVIDEND" and not _positive(record.get("cash_amount")):
++        rules.append("INVALID_CASH_AMOUNT")
++    if action_type in _RATIO_ACTIONS and not _positive(record.get("ratio")):
++        rules.append("INVALID_RATIO")
