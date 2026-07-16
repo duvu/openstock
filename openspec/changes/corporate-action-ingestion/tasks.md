@@ -16,4 +16,4 @@
 
 - [x] 3.1 Update current vnstock/vnalpha documentation in the implementation PR.
 - [x] 3.2 Add focused fixtures for supported action types, empty, revision, conflict and quarantine cases.
-- [ ] 3.3 Run repository consistency, focused tests, full CI and both package builds on the exact final SHA.
+- [x] 3.3 Run repository consistency, focused tests, full CI and both package builds on the exact final SHA.
