@@ -6,7 +6,14 @@ from vnstock.ui._base import BaseDetailUI
 
 
 class EquityMarket(BaseDetailUI):
-    """Equity market data."""
+    """Equity market data.
+
+    These datasets are migrated to the canonical plugin-runtime contract.
+    Every request is served through :meth:`BaseDetailUI._plugin_dispatch`
+    (the fail-closed :class:`PluginRuntime` boundary) and never silently
+    drops into legacy explorer dispatch. A provider that cannot serve the
+    request returns a typed failure to the caller.
+    """
 
     @optimize_execution("UI")
     def ohlcv(
@@ -18,13 +25,11 @@ class EquityMarket(BaseDetailUI):
         source: str = "kbs",
         **kwargs,
     ) -> Any:
-        """Get historical OHLCV data."""
+        """Get historical OHLCV data via the canonical ``equity.ohlcv`` dataset."""
         # Handle parameter aliases
         interval = kwargs.pop("resolution", interval)
         count_back = kwargs.pop("length", count)
 
-        # Try PluginRuntime path first; fall back to legacy if PluginRuntime
-        # cannot serve this request (e.g., provider not yet migrated).
         params = {
             "symbol": self.symbol,
             "start": start,
@@ -33,58 +38,36 @@ class EquityMarket(BaseDetailUI):
             "count_back": count_back,
             **{k: v for k, v in kwargs.items() if k not in ("source",)},
         }
-        result = self._plugin_dispatch(
+        return self._plugin_dispatch(
             "equity.ohlcv",
             params,
             source=source,
-            allow_legacy_fallback=True,
-        )
-        if result is not None:
-            return result
-        # Legacy fallback
-        return self._dispatch(
-            "equity_market",
-            "ohlcv",
-            start=start,
-            end=end,
-            interval=interval,
-            count_back=count_back,
-            source=source,
-            **kwargs,
         )
 
     @optimize_execution("UI")
     def trades(self, source: str = "kbs", **kwargs) -> Any:
-        """Get intraday trades."""
+        """Get intraday trades via the canonical ``equity.intraday_trades`` dataset."""
         kwargs.pop("interval", None)
 
         params = {
             "symbol": self.symbol,
             **{k: v for k, v in kwargs.items() if k not in ("source",)},
         }
-        result = self._plugin_dispatch(
+        return self._plugin_dispatch(
             "equity.intraday_trades",
             params,
             source=source,
-            allow_legacy_fallback=True,
         )
-        if result is not None:
-            return result
-        return self._dispatch("equity_market", "trades", source=source, **kwargs)
 
     @optimize_execution("UI")
     def quote(self, source: str = "kbs", **kwargs) -> Any:
-        """Get real-time quote snapshot."""
+        """Get real-time quote snapshot via the canonical ``equity.quote`` dataset."""
         params = {
             "symbol": self.symbol,
             **{k: v for k, v in kwargs.items() if k not in ("source",)},
         }
-        result = self._plugin_dispatch(
+        return self._plugin_dispatch(
             "equity.quote",
             params,
             source=source,
-            allow_legacy_fallback=True,
         )
-        if result is not None:
-            return result
-        return self._dispatch("equity_market", "quote", source=source, **kwargs)

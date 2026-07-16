@@ -178,11 +178,12 @@ class TestPluginDispatchIntegration:
             df = ui._plugin_dispatch("equity.ohlcv", {"symbol": "FPT"})
         assert isinstance(df, pd.DataFrame)
 
-    def test_plugin_dispatch_fallback_returns_none(self):
-        """When PluginRuntime raises and allow_legacy_fallback=True, returns None."""
+    def test_plugin_dispatch_compat_fallback_only_on_capability_absence(self):
+        """allow_legacy_fallback returns None only when the platform has no
+        provider for the dataset AND no explicit source was requested."""
         from vnstock.ui._base import BaseUI
 
-        # Use a runtime that will fail (no providers)
+        # Use a runtime that will fail (no providers) -> UnsupportedDatasetError.
         reg = PluginRegistry()
         empty_rt = PluginRuntime(registry=reg)
 
@@ -199,10 +200,31 @@ class TestPluginDispatchIntegration:
                 )
         assert result is None
         assert len(w) == 1
-        assert "Falling back to legacy dispatch" in str(w[0].message)
+        assert "COMPAT_LEGACY_DISPATCH" in str(w[0].message)
+
+    def test_plugin_dispatch_explicit_source_never_falls_back(self):
+        """An explicitly selected provider never crosses the compat boundary,
+        even when allow_legacy_fallback=True and the dataset is unsupported."""
+        from vnstock.core.provider.exceptions import VnstockPlatformError
+        from vnstock.ui._base import BaseUI
+
+        reg = PluginRegistry()
+        empty_rt = PluginRuntime(registry=reg)
+
+        ui = BaseUI()
+        with patch("vnstock.core.runtime.default_runtime", return_value=empty_rt):
+            # Explicit source that cannot be served raises a typed platform
+            # error (never returns None / never re-routes to legacy dispatch).
+            with pytest.raises(VnstockPlatformError):
+                ui._plugin_dispatch(
+                    "equity.ohlcv",
+                    {},
+                    source="KBS",
+                    allow_legacy_fallback=True,
+                )
 
     def test_plugin_dispatch_no_fallback_raises(self):
-        """When PluginRuntime raises and allow_legacy_fallback=False, re-raises."""
+        """When allow_legacy_fallback=False, capability absence re-raises typed."""
         from vnstock.core.provider.exceptions import UnsupportedDatasetError
         from vnstock.ui._base import BaseUI
 
@@ -214,6 +236,87 @@ class TestPluginDispatchIntegration:
             with pytest.raises(UnsupportedDatasetError):
                 ui._plugin_dispatch("equity.ohlcv", {}, allow_legacy_fallback=False)
 
+    def test_plugin_dispatch_provider_failure_never_falls_back(self):
+        """A provider fetch failure is a typed error, not a compat signal:
+        allow_legacy_fallback=True must NOT swallow it into a legacy retry."""
+        from vnstock.core.provider.exceptions import ProviderFetchError
+        from vnstock.ui._base import BaseUI
+
+        class BrokenPlugin(FakeProviderPlugin):
+            def fetch(self, dataset, params):
+                raise RuntimeError("provider boom")
+
+        reg = PluginRegistry()
+        reg.register(BrokenPlugin("BROKEN"))
+        rt = PluginRuntime(registry=reg, health_store=InMemoryProviderHealthStore())
+
+        ui = BaseUI()
+        with patch("vnstock.core.runtime.default_runtime", return_value=rt):
+            with pytest.raises(ProviderFetchError):
+                ui._plugin_dispatch("equity.ohlcv", {}, allow_legacy_fallback=True)
+
+    def test_migrated_equity_ohlcv_does_not_fall_back(self):
+        """Market().equity.ohlcv routes through the runtime and surfaces typed
+        failures instead of silently invoking legacy _dispatch."""
+        from vnstock.core.provider.exceptions import ProviderFetchError
+
+        class BrokenPlugin(FakeProviderPlugin):
+            def fetch(self, dataset, params):
+                raise RuntimeError("provider boom")
+
+        reg = PluginRegistry()
+        reg.register(BrokenPlugin("KBS"))
+        rt = PluginRuntime(registry=reg, health_store=InMemoryProviderHealthStore())
+
+        from vnstock.ui.domains.market.equity import EquityMarket
+
+        equity = EquityMarket(symbol="FPT")
+        called = {"legacy": False}
+
+        def _fail_dispatch(*args, **kwargs):
+            called["legacy"] = True
+            raise AssertionError("legacy _dispatch must not be reached")
+
+        with patch("vnstock.core.runtime.default_runtime", return_value=rt):
+            with patch.object(EquityMarket, "_dispatch", _fail_dispatch):
+                with pytest.raises(ProviderFetchError):
+                    equity.ohlcv(source="KBS")
+        assert called["legacy"] is False
+
+
+class TestMigratedApiArchitecture:
+    """Architecture guards: migrated canonical APIs stay fail-closed."""
+
+    def test_equity_module_does_not_enable_legacy_fallback(self):
+        """The migrated equity module must not re-introduce implicit fallback.
+
+        A regression that sets allow_legacy_fallback=True on any migrated
+        dataset would silently bypass PluginRuntime's typed failure semantics.
+        """
+        import inspect
+
+        from vnstock.ui.domains.market import equity as equity_module
+
+        source = inspect.getsource(equity_module)
+        assert "allow_legacy_fallback" not in source, (
+            "Migrated equity datasets must not use allow_legacy_fallback; "
+            "PluginRuntime is the fail-closed boundary."
+        )
+
+    def test_equity_methods_pass_explicit_source(self):
+        """Every migrated equity method delegates to _plugin_dispatch with an
+        explicit source, so it can never auto-fall-back to a legacy path."""
+        import inspect
+
+        from vnstock.ui.domains.market.equity import EquityMarket
+
+        for name in ("ohlcv", "trades", "quote"):
+            src = inspect.getsource(getattr(EquityMarket, name))
+            assert "_plugin_dispatch" in src, f"{name} must use _plugin_dispatch"
+            assert "self._dispatch(" not in src, (
+                f"{name} must not call legacy _dispatch directly"
+            )
+
 
 # ---------------------------------------------------------------------------
 # default_plugin_registry smoke test
@@ -221,7 +324,7 @@ class TestPluginDispatchIntegration:
 
 
 class TestDefaultPluginRegistryIntegration:
-    def test_all_7_providers_registered(self):
+    def test_all_builtin_providers_registered(self):
         reg = default_plugin_registry()
         assert set(reg.names()) == {
             "KBS",
@@ -231,6 +334,7 @@ class TestDefaultPluginRegistryIntegration:
             "FMARKET",
             "MSN",
             "FMP",
+            "FIINQUANTX",
         }
 
     def test_kbs_and_vci_support_equity_ohlcv(self):
@@ -255,4 +359,5 @@ class TestDefaultPluginRegistryIntegration:
             "FMARKET",
             "MSN",
             "FMP",
+            "FIINQUANTX",
         }

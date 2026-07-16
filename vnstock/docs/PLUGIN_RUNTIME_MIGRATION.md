@@ -74,17 +74,23 @@ df = rt.fetch("equity.ohlcv", {"symbol": "FPT"})
 
 ## Public API migration
 
-The `BaseUI._plugin_dispatch()` method routes calls through `PluginRuntime`.
-Migrated methods use `_plugin_dispatch` with `allow_legacy_fallback=True` to
-ensure backward compatibility during the transition period.
+The `BaseUI._plugin_dispatch()` method is the fail-closed routing boundary for
+migrated canonical datasets. A migrated dataset either serves the request
+through its canonical provider contract or raises a **typed** failure; it never
+silently drops into legacy explorer dispatch.
 
-### Migrated methods (Phase 3.5)
+### Migrated methods (fail-closed)
 
 | Public method | Dataset | Legacy fallback |
 |---------------|---------|-----------------|
-| `Market().equity.ohlcv(...)` | `equity.ohlcv` | Yes (temporary) |
-| `Market().equity.quote(...)` | `equity.quote` | Yes (temporary) |
-| `Market().equity.trades(...)` | `equity.intraday_trades` | Yes (temporary) |
+| `Market().equity.ohlcv(...)` | `equity.ohlcv` | No — typed failure |
+| `Market().equity.quote(...)` | `equity.quote` | No — typed failure |
+| `Market().equity.trades(...)` | `equity.intraday_trades` | No — typed failure |
+
+These methods call `_plugin_dispatch()` **without** `allow_legacy_fallback`, so
+authentication, entitlement, rate-limit, invalid-request, schema/contract,
+cooldown, disabled-provider and provider-fetch failures all propagate to the
+caller as typed exceptions.
 
 ### Non-migrated methods
 
@@ -92,17 +98,24 @@ All other public methods continue to use `BaseUI._dispatch()` and the legacy
 routing table in `vnstock/ui/_registry.py`. These will be migrated in future
 phases.
 
-## Legacy fallback policy
+## Compatibility boundary policy
 
-- `allow_legacy_fallback=True` — PluginRuntime failure is caught, a
-  `RuntimeWarning` is emitted, and the caller falls back to `_dispatch()`.
-  This is the default for migrated public methods during Phase 3.5.
-- `allow_legacy_fallback=False` — PluginRuntime failure propagates to the
-  caller. Use this in batch/ingestion pipelines where silent fallback is
-  unacceptable.
+`allow_legacy_fallback` is an **opt-in compatibility boundary for genuinely
+non-migrated capabilities only**. Its semantics are deliberately narrow:
 
-Migrated datasets will move to `allow_legacy_fallback=False` once all
-providers are stable (Phase 4+).
+- Only a *capability-absence* signal — `UnsupportedDatasetError` or
+  `NoProviderForDatasetError` (the plugin platform has no provider for the
+  dataset at all) — may cross the boundary.
+- It applies **only** when no explicit `source` was requested. An explicitly
+  selected provider never falls back to another provider or to a legacy path.
+- When the boundary is crossed, a `RuntimeWarning` tagged
+  `COMPAT_LEGACY_DISPATCH` is emitted and `None` is returned so the caller can
+  re-route through `_dispatch()`.
+- Every other failure — authentication, entitlement, rate limit, invalid
+  request, schema/contract drift, cooldown, disabled provider, provider fetch —
+  always propagates as a typed exception, regardless of `allow_legacy_fallback`.
+
+Migrated datasets do not set this flag; they are fully fail-closed.
 
 ## DataResult metadata
 
