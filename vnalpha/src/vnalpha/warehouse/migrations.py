@@ -82,6 +82,7 @@ def run_migrations(
         conn.execute(ddl)
     _migrate_market_context_columns(conn)
     _migrate_symbol_master_lifecycle_columns(conn)
+    _migrate_symbol_classification_history_columns(conn)
     _migrate_feature_snapshot_columns(conn)
     _seed_benchmark_definitions(conn)
     _backfill_legacy_relative_strength(conn)
@@ -133,6 +134,17 @@ def _migrate_assistant_prompt_columns(conn: duckdb.DuckDBPyConnection) -> None:
 def _migrate_symbol_memory_columns(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         "ALTER TABLE memory_claim ADD COLUMN IF NOT EXISTS source_published_at DATE"
+    )
+
+
+def _migrate_symbol_classification_history_columns(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    """Add point-in-time identity columns to legacy classification history."""
+
+    conn.execute(
+        "ALTER TABLE symbol_classification_history "
+        "ADD COLUMN IF NOT EXISTS exchange VARCHAR"
     )
 
 

@@ -61,7 +61,9 @@ def _build_lineage(
     excluded_symbols = context.excluded_symbols
     weights = policy.score_weights
     return {
-        "input": "symbol_master,feature_snapshot",
+        "input": f"{context.membership_basis},feature_snapshot",
+        "membership_basis": context.membership_basis,
+        "membership_resolver_version": context.membership_resolver_version or "",
         "active_symbol_count": str(active_count),
         "eligible_symbol_count": str(eligible_count),
         "excluded_symbol_count": str(len(excluded_symbols)),
