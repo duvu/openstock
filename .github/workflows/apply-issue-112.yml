@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apply:
-    name: Apply verified issue 112 source
+    name: Apply verified issue 112 reconciliation refactor
     if: >-
       github.event.pull_request.head.ref == 'agent/issue-112-corporate-actions' &&
       github.event.pull_request.head.repo.full_name == github.repository
@@ -22,30 +22,23 @@ jobs:
           ref: agent/issue-112-corporate-actions
           fetch-depth: 0
 
-      - name: Reassemble and verify reviewable patch
+      - name: Reassemble and verify validated refactor
         shell: bash
         run: |
           set -euo pipefail
-          : > /tmp/issue112.patch
-          cat .github/issue112/patch-00 >> /tmp/issue112.patch
-          cat .github/issue112/patch-01 >> /tmp/issue112.patch
-          cat .github/issue112/patch-02 >> /tmp/issue112.patch
-          awk 'NR < 106 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-03 >> /tmp/issue112.patch
-          awk 'NR < 279 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-04 >> /tmp/issue112.patch
-          awk 'NR < 12 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-05 >> /tmp/issue112.patch
-          awk 'NR < 343 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-06 >> /tmp/issue112.patch
-          awk 'NR < 2 { print; next } { sub(/^\+/, ""); print }' .github/issue112/patch-07 >> /tmp/issue112.patch
-          echo 'e230fe58319caebd3f353500bc325d21a2b7b8383661425d7bdcaa8427fa5efe  /tmp/issue112.patch' | sha256sum --check --strict
-          git apply --check /tmp/issue112.patch
+          cat .github/issue112-refactor/part-* > /tmp/issue112-refactor.patch
+          echo '0ac348c06d629fe78424785b4b095ea8e1e43dd7258e42fa467a687444f294d2  /tmp/issue112-refactor.patch' | sha256sum --check --strict
+          git apply --check /tmp/issue112-refactor.patch
 
-      - name: Apply source and remove temporary patch chunks
+      - name: Apply refactor and remove temporary bootstrap
         shell: bash
         run: |
           set -euo pipefail
-          git apply /tmp/issue112.patch
-          rm -rf .github/issue112
+          git apply /tmp/issue112-refactor.patch
+          rm -rf .github/issue112-refactor
+          rm .github/workflows/apply-issue-112.yml
 
-      - name: Stage verified implementation
+      - name: Stage verified final implementation
         shell: bash
         run: |
           set -euo pipefail
@@ -53,28 +46,28 @@ jobs:
           git diff --cached --check
           git status --short
 
-      - name: Commit verified implementation
+      - name: Commit verified final implementation
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'openstock-ci'
           git config user.email 'openstock-ci@users.noreply.github.com'
-          git commit --no-verify -m 'feat(corporate-actions): add canonical ingestion contracts'
+          git commit --no-verify -m 'refactor(corporate-actions): separate reconciliation boundary'
           printf 'commit=%s\ntree=%s\nparent=%s\n' \
             "$(git rev-parse HEAD)" \
             "$(git rev-parse HEAD^{tree})" \
-            "$(git rev-parse HEAD^)" > /tmp/issue112-commit.txt
-          cat /tmp/issue112-commit.txt
+            "$(git rev-parse HEAD^)" > /tmp/issue112-final-commit.txt
+          cat /tmp/issue112-final-commit.txt
 
-      - name: Upload verified commit identity
+      - name: Upload verified final commit identity
         uses: actions/upload-artifact@v4
         with:
-          name: issue112-verified-commit
-          path: /tmp/issue112-commit.txt
+          name: issue112-final-verified-commit
+          path: /tmp/issue112-final-commit.txt
           if-no-files-found: error
           retention-days: 1
 
-      - name: Attempt implementation branch push
+      - name: Attempt final branch push
         shell: bash
         run: |
           set -euo pipefail
