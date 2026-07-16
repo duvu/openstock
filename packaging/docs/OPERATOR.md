@@ -82,6 +82,7 @@ This installs:
 
 ```bash
 sudo install -m 0755 packaging/scripts/openstock-verify           /usr/bin/
+sudo install -m 0755 packaging/scripts/openstock-mvp1-start        /usr/bin/
 sudo install -m 0755 packaging/scripts/openstock-backup-warehouse  /usr/bin/
 sudo install -m 0755 packaging/scripts/openstock-restore-warehouse /usr/bin/
 ```
@@ -94,6 +95,23 @@ openstock-verify
 
 All required checks should show `[OK]`. `[WARN]` lines are informational;
 `[FAIL]` lines need attention before using the platform.
+
+### Step 7: One-command MVP1 startup (chat vertical slice)
+
+For the MVP1 chat vertical slice, one idempotent command validates persistent
+paths, starts and health-checks `vnstock-service`, migrates the warehouse, runs
+the read-only MVP1 preflight and launches the TUI:
+
+```bash
+openstock-mvp1-start                # start everything and open the TUI
+openstock-mvp1-start --no-launch    # prepare, then print the exact launch command
+openstock-verify --mvp1             # read-only MVP1 preflight only (safe to re-run)
+```
+
+`openstock-verify --mvp1` reports service health, warehouse path/disk,
+knowledge path, LLM route readiness (`vnalpha preflight`), backup/restore
+availability and release metadata. Blockers exit non-zero; degraded LLM or
+optional dependencies are `[WARN]` and leave deterministic commands usable.
 
 ---
 
