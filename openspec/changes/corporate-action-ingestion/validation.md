@@ -11,6 +11,7 @@ Implementation source SHA: 3b6d990d93248fcf11e0650a8e3c8417411056dd
 Validated implementation head: 83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed
 Validated metadata head: 88b30df00b17a3ee11f619258dc5b98ef872e7ae
 Final ledger head: 334b0cdb4c7d7a14044059b9fe48613c2fe107f2
+Post-review truthful-status fix head: 256efb516c680da6c0c576be16680965902db23e
 Required GitHub Actions validation: pass
 ```
 
@@ -40,7 +41,12 @@ python -m build --wheel --sdist --no-isolation --outdir /tmp/vnstock-dist ./vnst
 | 2026-07-16T01:45:00Z | `88b30df00b17a3ee11f619258dc5b98ef872e7ae` | lifecycle metadata | `openstock-ci` run #74 (`29466729009`) | 0 | all component jobs and Required merge gate passed after completing tasks and setting the active change to ready/review_required | GitHub Actions run and diagnostics |
 | 2026-07-16T02:35:00Z | `334b0cdb4c7d7a14044059b9fe48613c2fe107f2` | final ledger | `openstock-ci` run #75 (`29466974193`) | 0 | repository consistency, full vnalpha, vnstock contracts, both package builds and Required merge gate passed with the completed validation ledger | GitHub Actions run and diagnostics |
 
+| 2026-07-16T04:29:00Z | `256efb516c680da6c0c576be16680965902db23e` | 4.1–4.3 | `openstock-ci` run for the post-review fix (`29471289334`) | 0 | repository consistency, focused/full vnalpha suite, vnstock contracts and package, and Required merge gate passed on the post-review truthful-status fix | GitHub Actions run and diagnostics |
+
+Post-review fix source SHA: `256efb516c680da6c0c576be16680965902db23e`
+
 Final implementation source SHA: `3b6d990d93248fcf11e0650a8e3c8417411056dd`
 Validated implementation head: `83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed`
 Validated metadata head: `88b30df00b17a3ee11f619258dc5b98ef872e7ae`
 Final ledger head: `334b0cdb4c7d7a14044059b9fe48613c2fe107f2`
+Post-review truthful-status fix head: `256efb516c680da6c0c576be16680965902db23e`
