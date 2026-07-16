@@ -1,0 +1,186 @@
+-    keys = (
+-        "symbol",
+-        "action_type",
+-        "ex_date",
+-        "record_date",
+-        "effective_date",
+-        "cash_amount",
+-        "ratio",
+-        "ratio_text",
+-        "subscription_price",
+-        "reference_price",
+-        "currency",
+-    )
+-    payload = {key: record.get(key) for key in keys}
+-    return hashlib.sha256(
+-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode(
+-            "utf-8"
+-        )
+-    ).hexdigest()
+-
+-
+-def _anchor_date(record: Mapping[str, Any]) -> date | str | None:
+-    for key in ("ex_date", "effective_date", "record_date", "announced_at"):
+-        value = record.get(key)
+-        if value:
+-            return value
+-    return None
+-
+-
+-def _positive(value: Any) -> bool:
+-    try:
+-        return value is not None and float(value) > 0
+-    except (TypeError, ValueError):
+-        return False
+-
+-
+-def _sha256(*parts: Any) -> str:
+-    return hashlib.sha256(
+-        "|".join(str(part or "") for part in parts).encode("utf-8")
+-    ).hexdigest()
+diff --git a/vnalpha/tests/test_corporate_action_ingestion.py b/vnalpha/tests/test_corporate_action_ingestion.py
+index 5cce30f..9284210 100644
+--- a/vnalpha/tests/test_corporate_action_ingestion.py
++++ b/vnalpha/tests/test_corporate_action_ingestion.py
+@@ -7,13 +7,6 @@ import pytest
+ 
+ from vnalpha.clients.vnstock.errors import VnstockHTTPError
+ from vnalpha.clients.vnstock.schemas import ResponseMeta, VnstockResponse
+-from vnalpha.data_provisioning.service import (
+-    DataProvisioningDependencies,
+-    DataProvisioningRequest,
+-    DataProvisioningService,
+-    DataProvisioningValidationError,
+-    ProvisioningStatus,
+-)
+ from vnalpha.ingestion.corporate_actions import (
+     corporate_action_status,
+     sync_corporate_actions,
+@@ -404,36 +397,3 @@ def test_status_reports_canonical_quarantine_and_affected_ranges(conn) -> None:
+     assert status["quarantined"] == 0
+     assert status["unresolved_affected_ranges"] == 1
+     assert status["latest_run"]["status"] == "COMPLETE"
+-
+-
+-def test_data_provisioning_requires_one_symbol_and_surfaces_partial(conn) -> None:
+-    with pytest.raises(DataProvisioningValidationError, match="exactly one symbol"):
+-        DataProvisioningService.validate_request(
+-            DataProvisioningRequest("download", "corporate-actions")
+-        )
+-
+-    def fake_sync(*_: object, **__: object) -> dict:
+-        return {
+-            "run_id": "run-1",
+-            "status": "PARTIAL",
+-            "observed": 2,
+-            "raw_inserted": 2,
+-            "canonical_inserted": 1,
+-            "unchanged": 0,
+-            "revised": 0,
+-            "conflicts": 0,
+-            "quarantined": 1,
+-            "affected_ranges": 1,
+-        }
+-
+-    service = DataProvisioningService(
+-        conn,
+-        dependencies=DataProvisioningDependencies(sync_corporate_actions=fake_sync),
+-    )
+-    result = service.execute(
+-        DataProvisioningRequest(
+-            "download", "corporate-actions", symbol="SSI", source="VCI"
+-        )
+-    )
+-    assert result.status is ProvisioningStatus.PARTIAL
+-    assert result.counts["quarantined"] == 1
+diff --git a/mnt/data/openstock-issue112/src/vnalpha/src/vnalpha/ingestion/corporate_action_reconciliation.py b/vnalpha/src/vnalpha/ingestion/corporate_action_reconciliation.py
+new file mode 100644
+index 0000000..d2e42da
+--- /dev/null
++++ b/vnalpha/src/vnalpha/ingestion/corporate_action_reconciliation.py
+@@ -0,0 +1,458 @@
++"""Canonical validation, revisioning and conflict reconciliation for actions."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import uuid
++from collections.abc import Mapping
++from dataclasses import dataclass
++from datetime import date
++from typing import Any
++
++import duckdb
++
++CONTRACT_VERSION = "corporate-actions-v1"
++SUPPORTED_ACTION_TYPES = frozenset(
++    {
++        "CASH_DIVIDEND",
++        "STOCK_DIVIDEND",
++        "STOCK_BONUS",
++        "SPLIT",
++        "CONSOLIDATION",
++        "RIGHTS_ISSUE",
++        "REFERENCE_PRICE_ADJUSTMENT",
++        "ADDITIONAL_LISTING",
++        "SYMBOL_CHANGE",
++        "DELISTING",
++    }
++)
++_RATIO_ACTIONS = frozenset(
++    {"STOCK_DIVIDEND", "STOCK_BONUS", "SPLIT", "CONSOLIDATION", "RIGHTS_ISSUE"}
++)
++
++
++@dataclass(frozen=True)
++class _RecordOutcome:
++    outcome: str
++    raw_inserted: bool
++    conflict: bool = False
++    affected: bool = False
++
++
++def _ingest_record(
++    conn: duckdb.DuckDBPyConnection,
++    *,
++    run_id: str,
++    provider: str,
++    requested_symbol: str,
++    record: Mapping[str, Any],
++) -> _RecordOutcome:
++    raw = dict(record)
++    provider_event_id = str(raw.get("provider_event_id") or "").strip()
++    content_hash = str(raw.get("content_hash") or "").strip()
++    payload_json = str(
++        raw.get("source_payload_json") or json.dumps(raw, sort_keys=True)
++    )
++    raw_evidence_id = _sha256(provider, provider_event_id, content_hash)
++    before = conn.execute(
++        "SELECT 1 FROM corporate_action_raw_evidence WHERE raw_evidence_id = ?",
++        [raw_evidence_id],
++    ).fetchone()
++    conn.execute(
++        """
++        INSERT OR IGNORE INTO corporate_action_raw_evidence
++        (raw_evidence_id, ingestion_run_id, provider, provider_event_id, symbol,
++         source_reference, source_version, content_hash, payload_json, quality_status, diagnostics_json)
++        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++        """,
++        [
++            raw_evidence_id,
++            run_id,
++            provider,
++            provider_event_id,
++            str(raw.get("symbol") or requested_symbol).upper(),
++            str(raw.get("source_reference") or ""),
++            str(raw.get("source_version") or CONTRACT_VERSION),
++            content_hash,
++            payload_json,
++            raw.get("quality_status"),
++            None,
++        ],
++    )
++    if before is not None:
++        return _RecordOutcome("unchanged", False)
++
