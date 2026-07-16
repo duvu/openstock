@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+# openstock-restore-warehouse — guarded, verified restore of the DuckDB warehouse
+# from a timestamped backup.
+#
+# Usage:
+#   openstock-restore-warehouse --backup PATH [--wait SECONDS] [--yes] [--help]
+#   openstock-restore-warehouse --latest    [--wait SECONDS] [--yes] [--help]
+#
+# Options:
+#   --backup PATH   Restore from an explicit backup file.
+#   --latest        Restore from the most recent warehouse-*.duckdb backup.
+#   --wait SECONDS  Block up to SECONDS waiting for the writer lock (default: 0).
+#   --yes           Do not prompt for interactive confirmation.
+#
+# Safety contract:
+#   1. Acquires the SAME exclusive flock used by pipeline writers.
+#   2. Verifies the chosen backup (read-only bounded scan) BEFORE touching the
+#      live warehouse.
+#   3. Takes a pre-restore backup of the current warehouse.
+#   4. Replaces the warehouse atomically (copy to temp on the same filesystem,
+#      then mv). A failed restore leaves the original warehouse intact.
+#   5. Verifies the restored warehouse; on failure, rolls back to the
+#      pre-restore copy.
+#
+# Install: sudo install -m 0755 packaging/scripts/openstock-restore-warehouse /usr/bin/
+
+set -uo pipefail
+
+LOCK_FILE="${OPENSTOCK_LOCK_FILE:-/run/openstock-pipeline.lock}"
+LOCK_FD=200
+WAIT_SECONDS=0
+ASSUME_YES=false
+BACKUP_PATH=""
+USE_LATEST=false
+
+RUN_ID="restore_$(date -u +%Y%m%dT%H%M%S)_$$"
+LOG_ROOT="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
+LOG_DIR="${LOG_ROOT}/runs/${RUN_ID}"
+mkdir -p "${LOG_DIR}" 2>/dev/null || true
+
+_json_escape() {
+  local s="$1"
+  printf '%s' "$s" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr -d '\000-\031'
+}
+
+log_jsonl() {
+  local event_type="$1"
+  local summary="${2:-}"
+  local status="${3:-OK}"
+  local escaped_summary
+  escaped_summary="$(_json_escape "${summary}")"
+  printf '{"ts":"%s","event_type":"%s","run_id":"%s","correlation_id":"%s","summary":"%s","status":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "${event_type}" \
+    "${RUN_ID}" \
+    "${RUN_ID}" \
+    "${escaped_summary}" \
+    "${status}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
+}
+
+usage() {
+  echo "Usage: openstock-restore-warehouse (--backup PATH | --latest) [--wait SECONDS] [--yes]"
+  echo "  --backup PATH   Restore from an explicit backup file."
+  echo "  --latest        Restore from the most recent warehouse-*.duckdb backup."
+  echo "  --wait SECONDS  Block up to SECONDS waiting for the writer lock (default: 0)."
+  echo "  --yes           Do not prompt for interactive confirmation."
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --backup)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "[FAIL] --backup requires a path argument." >&2; exit 1
+      fi
+      BACKUP_PATH="$1"; shift ;;
+    --backup=*) BACKUP_PATH="${1#--backup=}"; shift ;;
+    --latest) USE_LATEST=true; shift ;;
+    --wait)
+      shift
+      if [ "$#" -eq 0 ] || ! printf '%s' "${1:-}" | grep -Eq '^[0-9]+$'; then
+        echo "[FAIL] --wait requires a non-negative integer argument." >&2; exit 1
+      fi
+      WAIT_SECONDS="$1"; shift ;;
+    --wait=*)
+      WAIT_SECONDS="${1#--wait=}"
+      if ! printf '%s' "$WAIT_SECONDS" | grep -Eq '^[0-9]+$'; then
+        echo "[FAIL] --wait requires a non-negative integer argument." >&2; exit 1
+      fi
+      shift ;;
+    --yes) ASSUME_YES=true; shift ;;
+    --help) usage; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+if [ -n "$BACKUP_PATH" ] && [ "$USE_LATEST" = "true" ]; then
+  echo "[FAIL] Pass exactly one of --backup PATH or --latest." >&2; exit 1
+fi
+if [ -z "$BACKUP_PATH" ] && [ "$USE_LATEST" != "true" ]; then
+  echo "[FAIL] Pass exactly one of --backup PATH or --latest." >&2
+  usage >&2; exit 1
+fi
+
+# Source platform env if available
+if [ -f /etc/openstock/openstock.env ]; then
+  set -a
+  # shellcheck source=/dev/null
+  . /etc/openstock/openstock.env
+  set +a
+fi
+
+WAREHOUSE_PATH="${OPENSTOCK_WAREHOUSE_PATH:-/var/lib/openstock/warehouse/warehouse.duckdb}"
+WAREHOUSE_DIR="${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}"
+BACKUP_DIR="${WAREHOUSE_DIR}/backups"
+
+verify_duckdb_file() {
+  local db_path="$1"
+  local python_bin=""
+  if ! python_bin="$(command -v python3 2>/dev/null)" \
+    && ! python_bin="$(command -v python 2>/dev/null)"; then
+    echo "[WARN] No python runtime found; skipping DuckDB verification." >&2
+    return 0
+  fi
+  local rc=0
+  "$python_bin" - "$db_path" <<'PY' || rc=$?
+import sys
+
+try:
+    import duckdb
+except Exception:  # noqa: BLE001
+    sys.exit(97)
+
+path = sys.argv[1]
+try:
+    con = duckdb.connect(path, read_only=True)
+except Exception as exc:  # noqa: BLE001
+    print(f"open failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+    sys.exit(1)
+try:
+    tables = con.execute(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = 'main'"
+    ).fetchall()
+    for (name,) in tables:
+        con.execute(f'SELECT count(*) FROM "{name}"').fetchone()
+except Exception as exc:  # noqa: BLE001
+    print(f"scan failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+    sys.exit(1)
+finally:
+    con.close()
+print(f"verified tables={len(tables)}")
+sys.exit(0)
+PY
+  if [ "$rc" -eq 97 ]; then
+    echo "[WARN] duckdb python module not available; skipping DuckDB verification." >&2
+    return 0
+  fi
+  return "$rc"
+}
+
+# Resolve --latest
+if [ "$USE_LATEST" = "true" ]; then
+  BACKUP_PATH="$(ls -1t "${BACKUP_DIR}"/warehouse-*.duckdb 2>/dev/null | head -1 || true)"
+  if [ -z "$BACKUP_PATH" ]; then
+    echo "[FAIL] No backups found in ${BACKUP_DIR}." >&2
+    log_jsonl "RESTORE_FAILED" "No backups found dir=${BACKUP_DIR}" "FAILED"
+    exit 1
+  fi
+fi
+
+if [ ! -f "$BACKUP_PATH" ]; then
+  echo "[FAIL] Backup file not found: $BACKUP_PATH" >&2
+  log_jsonl "RESTORE_FAILED" "Backup file not found path=${BACKUP_PATH}" "FAILED"
+  exit 1
+fi
+
+# --- acquire the same exclusive writer lock ---
+mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
+if ! eval "exec ${LOCK_FD}>\"${LOCK_FILE}\"" 2>/dev/null; then
+  echo "[FAIL] Cannot open lock file for writing: $LOCK_FILE" >&2
+  log_jsonl "RESTORE_FAILED" "Cannot open lock file lock_file=${LOCK_FILE}" "FAILED"
+  exit 1
+fi
+
+if [ "$WAIT_SECONDS" -gt 0 ]; then
+  lock_ok=false; flock -w "$WAIT_SECONDS" "$LOCK_FD" && lock_ok=true
+else
+  lock_ok=false; flock -n "$LOCK_FD" && lock_ok=true
+fi
+if [ "$lock_ok" != "true" ]; then
+  echo "[FAIL] A writer job holds the pipeline lock ($LOCK_FILE). Restore aborted." >&2
+  echo "       Stop pipeline services, or retry with --wait SECONDS." >&2
+  log_jsonl "RESTORE_FAILED" "Restore blocked by active writer lock lock_file=${LOCK_FILE}" "FAILED"
+  exit 1
+fi
+
+log_jsonl "RESTORE_STARTED" "Restore started src=${BACKUP_PATH} dest=${WAREHOUSE_PATH}" "STARTED"
+
+# 1. Verify the source backup BEFORE touching the live warehouse.
+echo "[INFO] Verifying source backup: $BACKUP_PATH"
+if ! verify_duckdb_file "$BACKUP_PATH"; then
+  echo "[FAIL] Source backup failed verification; nothing changed." >&2
+  log_jsonl "RESTORE_FAILED" "Source backup verification failed path=${BACKUP_PATH}" "FAILED"
+  exit 1
+fi
+
+if [ "$ASSUME_YES" != "true" ]; then
+  echo "About to restore:"
+  echo "  from: $BACKUP_PATH"
+  echo "  into: $WAREHOUSE_PATH"
+  printf "Proceed? [y/N] "
+  read -r reply
+  case "$reply" in
+    y|Y|yes|YES) ;;
+    *) echo "[INFO] Restore cancelled."; log_jsonl "RESTORE_CANCELLED" "User cancelled restore" "OK"; exit 0 ;;
+  esac
+fi
+
+mkdir -p "$WAREHOUSE_DIR" "$BACKUP_DIR"
+
+# 2. Pre-restore backup of the current warehouse (if one exists).
+PRE_RESTORE_PATH=""
+if [ -f "$WAREHOUSE_PATH" ]; then
+  PRE_RESTORE_TS="$(date +%Y%m%d-%H%M%S)"
+  PRE_RESTORE_PATH="${BACKUP_DIR}/pre-restore-${PRE_RESTORE_TS}.duckdb"
+  echo "[INFO] Saving pre-restore snapshot: $PRE_RESTORE_PATH"
+  if ! cp "$WAREHOUSE_PATH" "$PRE_RESTORE_PATH" 2>/dev/null; then
+    echo "[FAIL] Could not create pre-restore snapshot; aborting." >&2
+    rm -f "$PRE_RESTORE_PATH" 2>/dev/null || true
+    log_jsonl "RESTORE_FAILED" "Pre-restore snapshot failed dest=${PRE_RESTORE_PATH}" "FAILED"
+    exit 1
+  fi
+  log_jsonl "RESTORE_PRE_BACKUP" "Pre-restore snapshot created dest=${PRE_RESTORE_PATH}" "OK"
+fi
+
+# 3. Atomic replacement: copy the backup to a temp file on the SAME filesystem
+#    (warehouse dir), then mv into place. mv within a filesystem is atomic.
+TMP_RESTORE_PATH="${WAREHOUSE_PATH}.restore.$$"
+if ! cp "$BACKUP_PATH" "$TMP_RESTORE_PATH" 2>/dev/null; then
+  echo "[FAIL] Could not stage restore copy; original warehouse unchanged." >&2
+  rm -f "$TMP_RESTORE_PATH" 2>/dev/null || true
+  log_jsonl "RESTORE_FAILED" "Staging copy failed src=${BACKUP_PATH}" "FAILED"
+  exit 1
+fi
+
+if ! mv -f "$TMP_RESTORE_PATH" "$WAREHOUSE_PATH" 2>/dev/null; then
+  echo "[FAIL] Atomic replace failed; original warehouse unchanged." >&2
+  rm -f "$TMP_RESTORE_PATH" 2>/dev/null || true
+  log_jsonl "RESTORE_FAILED" "Atomic replace failed dest=${WAREHOUSE_PATH}" "FAILED"
+  exit 1
+fi
+
+# 4. Verify the restored warehouse; roll back on failure.
+echo "[INFO] Verifying restored warehouse: $WAREHOUSE_PATH"
+if ! verify_duckdb_file "$WAREHOUSE_PATH"; then
+  echo "[FAIL] Restored warehouse failed verification; rolling back." >&2
+  if [ -n "$PRE_RESTORE_PATH" ] && [ -f "$PRE_RESTORE_PATH" ]; then
+    if mv -f "$PRE_RESTORE_PATH" "$WAREHOUSE_PATH" 2>/dev/null; then
+      echo "[OK] Rolled back to pre-restore warehouse."
+      log_jsonl "RESTORE_ROLLED_BACK" "Rolled back to pre-restore snapshot dest=${WAREHOUSE_PATH}" "OK"
+    else
+      echo "[FAIL] Rollback failed; pre-restore snapshot remains at $PRE_RESTORE_PATH" >&2
+      log_jsonl "RESTORE_FAILED" "Rollback move failed snapshot=${PRE_RESTORE_PATH}" "FAILED"
+    fi
+  else
+    echo "[WARN] No pre-restore snapshot available to roll back to." >&2
+  fi
+  log_jsonl "RESTORE_FAILED" "Restored warehouse verification failed dest=${WAREHOUSE_PATH}" "FAILED"
+  exit 1
+fi
+
+echo "[OK] Restore complete: $WAREHOUSE_PATH (from $BACKUP_PATH)"
+log_jsonl "RESTORE_COMPLETED" "Restore complete src=${BACKUP_PATH} dest=${WAREHOUSE_PATH}" "OK"
+echo "[INFO] Run 'openstock-verify' to confirm platform health before re-enabling the pipeline."

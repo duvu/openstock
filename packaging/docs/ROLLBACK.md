@@ -113,45 +113,35 @@ process holds the warehouse open.
 ls -lht /var/lib/openstock/warehouse/backups/
 ```
 
-Backups are named `warehouse_YYYYMMDD_HHMMSS.duckdb`. Pick the timestamp
+Backups are named `warehouse-YYYYMMDD-HHMMSS.duckdb`. Pick the timestamp
 you want to restore to.
 
-### Step 4: Back up the current (broken) warehouse first
+### Step 4: Restore with the guarded restore script
 
-Before overwriting, preserve the current file in case you need it for
-diagnosis:
+Use `openstock-restore-warehouse` rather than a manual `cp`. It performs the
+full safe sequence under the exclusive writer lock:
 
-```bash
-sudo cp /var/lib/openstock/warehouse/warehouse.duckdb \
-        /var/lib/openstock/warehouse/warehouse.duckdb.pre-restore
-```
-
-### Step 5: Take a fresh backup with the flock guard
-
-The `openstock-backup-warehouse` script uses `flock` to prevent running
-while a writer job holds the lock. If a job is somehow still running, the
-script will wait or fail rather than producing a corrupt backup. Because you
-stopped all services above, the lock is free:
+1. verifies the chosen backup **before** touching the live warehouse;
+2. takes a `pre-restore-*.duckdb` snapshot of the current warehouse;
+3. replaces the warehouse atomically;
+4. verifies the restored warehouse and rolls back to the pre-restore snapshot
+   if verification fails.
 
 ```bash
-sudo openstock-backup-warehouse
+# Restore a specific backup:
+sudo openstock-restore-warehouse --backup \
+     /var/lib/openstock/warehouse/backups/warehouse-<timestamp>.duckdb --yes
+
+# Or restore the most recent backup:
+sudo openstock-restore-warehouse --latest --yes
 ```
 
-If you want to skip the age check and force a fresh backup regardless of
-when the last one was taken, pass `--force`:
+Because you stopped all services above, the writer lock is free and the restore
+proceeds immediately. If a writer is somehow still active, pass
+`--wait SECONDS` to block for it, or stop the services first. A failed restore
+always leaves a usable warehouse in place.
 
-```bash
-sudo openstock-backup-warehouse --force
-```
-
-### Step 6: Copy the chosen backup into place
-
-```bash
-sudo cp /var/lib/openstock/warehouse/backups/warehouse_<timestamp>.duckdb \
-        /var/lib/openstock/warehouse/warehouse.duckdb
-```
-
-### Step 7: Restart the platform
+### Step 5: Restart the platform
 
 ```bash
 sudo systemctl start openstock-data-platform

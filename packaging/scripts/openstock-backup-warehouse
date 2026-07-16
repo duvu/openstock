@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
-# openstock-backup-warehouse — create a timestamped backup of the DuckDB warehouse
-# Usage: openstock-backup-warehouse [--force]
-#   --force  Bypass the pipeline lock check
+# openstock-backup-warehouse — create a verified, transaction-safe backup of the
+# DuckDB warehouse.
+#
+# Usage: openstock-backup-warehouse [--wait SECONDS] [--force] [--help]
+#   --wait SECONDS  Block up to SECONDS waiting for the writer lock (default: 0,
+#                   i.e. fail immediately if a writer holds the lock).
+#   --force         Skip the backup-verification step ONLY. It does NOT bypass
+#                   the writer lock: a backup is never taken while a writer job
+#                   holds the exclusive pipeline lock.
+#
+# The backup acquires the SAME exclusive flock used by pipeline writers
+# (see openstock-run-pipeline), copies the warehouse while holding the lock,
+# then opens the copy read-only and runs a bounded integrity scan.
 #
 # Install: sudo install -m 0755 packaging/scripts/openstock-backup-warehouse /usr/bin/
 
-set -euo pipefail
+set -uo pipefail
 
-LOCK_FILE="/run/openstock-pipeline.lock"
+LOCK_FILE="${OPENSTOCK_LOCK_FILE:-/run/openstock-pipeline.lock}"
+LOCK_FD=200
+WAIT_SECONDS=0
 FORCE=false
 
 RUN_ID="backup_$(date -u +%Y%m%dT%H%M%S)_$$"
@@ -15,7 +27,7 @@ LOG_ROOT="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
 LOG_DIR="${LOG_ROOT}/runs/${RUN_ID}"
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
 
-# --- safe JSONL helper (task 6.1, 6.2) ---
+# --- safe JSONL helper ---
 _json_escape() {
   local s="$1"
   printf '%s' "$s" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr -d '\000-\031'
@@ -36,15 +48,31 @@ log_jsonl() {
     "${status}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
 }
 
-for arg in "$@"; do
-  case "$arg" in
-    --force) FORCE=true ;;
-    --help)
-      echo "Usage: openstock-backup-warehouse [--force]"
-      echo "  --force  Bypass the pipeline lock check"
-      exit 0
-      ;;
-    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+usage() {
+  echo "Usage: openstock-backup-warehouse [--wait SECONDS] [--force] [--help]"
+  echo "  --wait SECONDS  Block up to SECONDS waiting for the writer lock (default: 0)."
+  echo "  --force         Skip backup verification only; never bypasses the writer lock."
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --force) FORCE=true; shift ;;
+    --wait)
+      shift
+      if [ "$#" -eq 0 ] || ! printf '%s' "${1:-}" | grep -Eq '^[0-9]+$'; then
+        echo "[FAIL] --wait requires a non-negative integer argument." >&2
+        exit 1
+      fi
+      WAIT_SECONDS="$1"; shift ;;
+    --wait=*)
+      WAIT_SECONDS="${1#--wait=}"
+      if ! printf '%s' "$WAIT_SECONDS" | grep -Eq '^[0-9]+$'; then
+        echo "[FAIL] --wait requires a non-negative integer argument." >&2
+        exit 1
+      fi
+      shift ;;
+    --help) usage; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; usage >&2; exit 1 ;;
   esac
 done
 
@@ -60,15 +88,85 @@ WAREHOUSE_PATH="${OPENSTOCK_WAREHOUSE_PATH:-/var/lib/openstock/warehouse/warehou
 WAREHOUSE_DIR="${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}"
 BACKUP_DIR="${WAREHOUSE_DIR}/backups"
 
-# Writer-job guard — task 8.2: log BACKUP_FAILED when lock file held
-if [ -f "$LOCK_FILE" ] && [ "$FORCE" = "false" ]; then
-  echo "[FAIL] Pipeline lock file $LOCK_FILE exists. A writer job may be running." >&2
-  echo "       Use --force to override." >&2
-  log_jsonl "BACKUP_FAILED" "Backup blocked by pipeline lock lock_file=${LOCK_FILE}" "FAILED"
+# --- bounded, read-only integrity verification of a DuckDB file ---
+# Opens the file read-only, then full-scans every user table so that
+# block-level corruption is surfaced. Returns non-zero on any failure.
+# Emits a warning (and returns success) only when no DuckDB runtime exists.
+verify_duckdb_file() {
+  local db_path="$1"
+  local python_bin=""
+  if ! python_bin="$(command -v python3 2>/dev/null)" \
+    && ! python_bin="$(command -v python 2>/dev/null)"; then
+    echo "[WARN] No python runtime found; skipping backup verification." >&2
+    log_jsonl "BACKUP_VERIFY_SKIPPED" "No python runtime for verification path=${db_path}" "OK"
+    return 0
+  fi
+  local rc=0
+  "$python_bin" - "$db_path" <<'PY' || rc=$?
+import sys
+
+try:
+    import duckdb
+except Exception:  # noqa: BLE001 — runtime not present; caller treats as skip
+    sys.exit(97)
+
+path = sys.argv[1]
+try:
+    con = duckdb.connect(path, read_only=True)
+except Exception as exc:  # noqa: BLE001
+    print(f"open failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+    sys.exit(1)
+try:
+    tables = con.execute(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = 'main'"
+    ).fetchall()
+    for (name,) in tables:
+        con.execute(f'SELECT count(*) FROM "{name}"').fetchone()
+except Exception as exc:  # noqa: BLE001
+    print(f"scan failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+    sys.exit(1)
+finally:
+    con.close()
+print(f"verified tables={len(tables)}")
+sys.exit(0)
+PY
+  if [ "$rc" -eq 97 ]; then
+    echo "[WARN] duckdb python module not available; skipping backup verification." >&2
+    log_jsonl "BACKUP_VERIFY_SKIPPED" "duckdb module missing for verification path=${db_path}" "OK"
+    return 0
+  fi
+  return "$rc"
+}
+
+# --- acquire the same exclusive writer lock (never bypassed) ---
+mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
+if ! eval "exec ${LOCK_FD}>\"${LOCK_FILE}\"" 2>/dev/null; then
+  echo "[FAIL] Cannot open lock file for writing: $LOCK_FILE" >&2
+  log_jsonl "BACKUP_FAILED" "Cannot open lock file lock_file=${LOCK_FILE}" "FAILED"
   exit 1
 fi
 
-# task 8.3: log BACKUP_FAILED when warehouse missing
+if [ "$WAIT_SECONDS" -gt 0 ]; then
+  lock_ok=false
+  if flock -w "$WAIT_SECONDS" "$LOCK_FD"; then
+    lock_ok=true
+  fi
+else
+  lock_ok=false
+  if flock -n "$LOCK_FD"; then
+    lock_ok=true
+  fi
+fi
+
+if [ "$lock_ok" != "true" ]; then
+  echo "[FAIL] A writer job holds the pipeline lock ($LOCK_FILE). Backup aborted." >&2
+  echo "       Retry after the writer finishes, or use --wait SECONDS." >&2
+  log_jsonl "BACKUP_FAILED" "Backup blocked by active writer lock lock_file=${LOCK_FILE}" "FAILED"
+  exit 1
+fi
+
+# Lock is held for the remainder of the run; released automatically on exit.
 if [ ! -f "$WAREHOUSE_PATH" ]; then
   echo "[FAIL] Warehouse not found at: $WAREHOUSE_PATH" >&2
   log_jsonl "BACKUP_FAILED" "Backup failed warehouse not found path=${WAREHOUSE_PATH}" "FAILED"
@@ -79,28 +177,41 @@ mkdir -p "$BACKUP_DIR"
 
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_PATH="${BACKUP_DIR}/warehouse-${TIMESTAMP}.duckdb"
+TMP_BACKUP_PATH="${BACKUP_PATH}.partial"
 
 echo "[INFO] Backing up $WAREHOUSE_PATH -> $BACKUP_PATH"
 log_jsonl "BACKUP_STARTED" "Backup started src=${WAREHOUSE_PATH} dest=${BACKUP_PATH}" "STARTED"
 
-# task 8.4: log BACKUP_FAILED on copy failure
-if ! cp "$WAREHOUSE_PATH" "$BACKUP_PATH" 2>/dev/null; then
-  echo "[FAIL] Backup copy failed: $WAREHOUSE_PATH -> $BACKUP_PATH" >&2
+# Copy to a .partial file first so an interrupted copy never looks like a
+# finished backup. The exclusive lock guarantees no writer mutates the source.
+if ! cp "$WAREHOUSE_PATH" "$TMP_BACKUP_PATH" 2>/dev/null; then
+  echo "[FAIL] Backup copy failed: $WAREHOUSE_PATH -> $TMP_BACKUP_PATH" >&2
+  rm -f "$TMP_BACKUP_PATH" 2>/dev/null || true
   log_jsonl "BACKUP_FAILED" "Backup copy failed src=${WAREHOUSE_PATH} dest=${BACKUP_PATH}" "FAILED"
   exit 1
 fi
 
-if [ -f "$BACKUP_PATH" ]; then
-  echo "[OK] Backup created: $BACKUP_PATH"
-  log_jsonl "BACKUP_CREATED" "Backup created dest=${BACKUP_PATH}" "OK"
+if [ "$FORCE" = "true" ]; then
+  echo "[WARN] --force: skipping backup verification."
+  log_jsonl "BACKUP_VERIFY_SKIPPED" "Verification skipped by --force dest=${BACKUP_PATH}" "OK"
 else
-  echo "[FAIL] Backup failed: file not found after copy" >&2
-  log_jsonl "BACKUP_FAILED" "Backup file missing after copy dest=${BACKUP_PATH}" "FAILED"
+  echo "[INFO] Verifying backup integrity (read-only scan): $TMP_BACKUP_PATH"
+  if ! verify_duckdb_file "$TMP_BACKUP_PATH"; then
+    echo "[FAIL] Backup verification failed; discarding corrupt copy." >&2
+    rm -f "$TMP_BACKUP_PATH" 2>/dev/null || true
+    log_jsonl "BACKUP_FAILED" "Backup verification failed dest=${BACKUP_PATH}" "FAILED"
+    exit 1
+  fi
+  log_jsonl "BACKUP_VERIFIED" "Backup verified dest=${BACKUP_PATH}" "OK"
+fi
+
+# Atomically publish the verified backup under its final name.
+if ! mv -f "$TMP_BACKUP_PATH" "$BACKUP_PATH" 2>/dev/null; then
+  echo "[FAIL] Could not finalize backup: $TMP_BACKUP_PATH -> $BACKUP_PATH" >&2
+  rm -f "$TMP_BACKUP_PATH" 2>/dev/null || true
+  log_jsonl "BACKUP_FAILED" "Backup finalize failed dest=${BACKUP_PATH}" "FAILED"
   exit 1
 fi
 
-# task 8.7: placeholder restore stub — restore script is not currently implemented.
-# When openstock-restore-warehouse is added, it should call:
-#   log_jsonl "RESTORE_STARTED" "Restore started src=${BACKUP_PATH}" "STARTED"
-#   log_jsonl "RESTORE_COMPLETED" "Restore complete dest=${WAREHOUSE_PATH}" "OK"
-#   log_jsonl "RESTORE_FAILED" "Restore failed ..." "FAILED"
+echo "[OK] Backup created: $BACKUP_PATH"
+log_jsonl "BACKUP_CREATED" "Backup created dest=${BACKUP_PATH}" "OK"
