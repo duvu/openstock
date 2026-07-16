@@ -23,6 +23,20 @@ _INTRADAY_REQUIRED_COLUMNS = ["time", "price", "volume", "match_type"]
 pytestmark = pytest.mark.contract
 
 
+@pytest.fixture
+def vci_trading_session():
+    """Keep offline intraday contracts independent from wall-clock market status."""
+    with patch(
+        "vnstock.explorer.vci.quote.trading_hours",
+        return_value={
+            "is_trading_hour": True,
+            "data_status": "trading",
+            "time": "10:00:00",
+        },
+    ):
+        yield
+
+
 def _load_fixture(name: str):
     path = _FIXTURES / name
     with open(path, encoding="utf-8") as f:
@@ -120,7 +134,7 @@ class TestVCIIntradayContract:
         assert "matchVol" in item
         assert "matchType" in item
 
-    def test_fixture_parses_to_intraday_dataframe(self):
+    def test_fixture_parses_to_intraday_dataframe(self, vci_trading_session):
         """VCI intraday adapter should parse raw fixture to normalized DataFrame."""
         data = _load_fixture("intraday_raw.json")
 
@@ -135,7 +149,7 @@ class TestVCIIntradayContract:
         for col in _INTRADAY_REQUIRED_COLUMNS:
             assert col in df.columns, f"Missing column: {col}"
 
-    def test_intraday_no_raw_keys_in_output(self):
+    def test_intraday_no_raw_keys_in_output(self, vci_trading_session):
         """VCI raw intraday field names must not appear in output DataFrame."""
         data = _load_fixture("intraday_raw.json")
 
@@ -149,7 +163,7 @@ class TestVCIIntradayContract:
         overlap = raw_keys & set(df.columns)
         assert overlap == set(), f"Raw field names still in output: {overlap}"
 
-    def test_intraday_match_type_values(self):
+    def test_intraday_match_type_values(self, vci_trading_session):
         """match_type values in normalized output should be non-empty strings."""
         data = _load_fixture("intraday_raw.json")
 
@@ -200,7 +214,7 @@ class TestVCIContractDoesNotCallNetwork:
         assert call_count == 1
         assert len(df) > 0
 
-    def test_no_network_call_for_intraday(self):
+    def test_no_network_call_for_intraday(self, vci_trading_session):
         data = _load_fixture("intraday_raw.json")
         call_count = 0
 

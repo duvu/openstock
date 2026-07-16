@@ -1,6 +1,6 @@
 # Registry for non-archived OpenSpec lifecycle and evidence.
 # GitHub issue #90 owns roadmap priority and execution order.
-reviewed_at: 2026-07-15
+reviewed_at: 2026-07-16
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
@@ -11,6 +11,22 @@ policy:
   research_only_boundary: true
 
 changes:
+
+  corporate-action-ingestion:
+    status: ready
+    github_issues: [112]
+    roadmap_state: review_required
+    summary: >-
+      Add provider-independent corporate-action evidence, raw-first canonical
+      reconciliation, immutable revisions, quarantine and affected-range signals
+      without calculating adjusted prices.
+    evidence: >-
+      Implementation source SHA 3b6d990d93248fcf11e0650a8e3c8417411056dd and
+      validated head 83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed passed repository
+      consistency, documentation contracts, Ruff, focused issue #112 regressions,
+      R0, the complete vnalpha suite, vnstock provider/canonical contracts, both
+      package builds and Required merge gate in openstock-ci run #71. PR #154 is
+      ready for final metadata validation and review; archive after merge.
 
   required-ci-merge-gates:
     status: partial

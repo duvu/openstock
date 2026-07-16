@@ -229,6 +229,53 @@ def test_legacy_sync_rejects_invalid_universe_before_opening_warehouse(
     run_migrations.assert_not_called()
 
 
+def _unsupported_corporate_action_result() -> dict:
+    return {
+        "run_id": "run-unsupported",
+        "status": "UNSUPPORTED",
+        "error": "Provider does not support corporate actions.",
+        "observed": 0,
+        "raw_inserted": 0,
+        "canonical_inserted": 0,
+        "unchanged": 0,
+        "revised": 0,
+        "conflicts": 0,
+        "quarantined": 0,
+        "affected_ranges": 0,
+    }
+
+
+def test_sync_corporate_actions_cli_exits_nonzero_on_unsupported(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "vnalpha.ingestion.corporate_actions.sync_corporate_actions",
+        lambda *_args, **_kwargs: _unsupported_corporate_action_result(),
+    )
+    monkeypatch.setattr("vnalpha.warehouse.connection.get_connection", MagicMock())
+    monkeypatch.setattr("vnalpha.warehouse.migrations.run_migrations", MagicMock())
+
+    cli_result = CliRunner().invoke(sync_cli.app, ["corporate-actions", "SSI"])
+
+    assert cli_result.exit_code == 1
+    assert "Provider does not support corporate actions." in cli_result.output
+
+
+def test_data_download_corporate_actions_cli_exits_nonzero_on_unsupported(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "vnalpha.ingestion.corporate_actions.sync_corporate_actions",
+        lambda *_args, **_kwargs: _unsupported_corporate_action_result(),
+    )
+    monkeypatch.setattr("vnalpha.warehouse.connection.get_connection", MagicMock())
+    monkeypatch.setattr("vnalpha.warehouse.migrations.run_migrations", MagicMock())
+
+    cli_result = CliRunner().invoke(
+        data_cli.app, ["download", "corporate-actions", "SSI"]
+    )
+
+    assert cli_result.exit_code == 1
+
+
 def test_tui_default_date_is_not_injected_into_bounded_data_download() -> None:
     from vnalpha.commands.executor import CommandExecutor
 

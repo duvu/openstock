@@ -116,6 +116,8 @@ jobs:
             tests/test_llm_structured_output.py::test_strict_schema_does_not_add_transport_retry_budget \
             tests/test_llm_fail_closed_config.py \
             tests/test_llm_capability_fallback.py \
+            tests/test_corporate_action_ingestion.py \
+            tests/test_vnstock_corporate_action_client.py \
             tests/test_safety_boundary.py::test_no_hard_forbidden_terms \
             tests/test_safety_boundary.py::test_static_scan_source_files_for_forbidden_terms
 
@@ -188,7 +190,9 @@ jobs:
               tests/unit/core/provider \
               tests/unit/providers/test_fiinquantx_foundation.py \
               tests/unit/providers/test_fiinquantx_runtime_hardening.py \
-              tests/contracts/providers
+              tests/contracts/providers \
+              tests/contracts/test_corporate_action_contract.py \
+              tests/contracts/test_builtin_provider_capabilities.py
           ) 2>&1 | tee vnstock-contract-tests.log
 
       - name: Upload vnstock contract diagnostics

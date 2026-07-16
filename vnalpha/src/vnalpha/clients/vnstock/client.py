@@ -108,6 +108,25 @@ class VnstockClient:
         raw = self._get("/v1/equity/ohlcv", params)
         return OHLCVResponse.model_validate(raw)
 
+    def get_corporate_actions(
+        self,
+        symbol: str,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> VnstockResponse:
+        """GET normalized corporate-action evidence for bounded ingestion."""
+        source = validate_persistence_source(source)
+        params: dict[str, str] = {"symbol": symbol}
+        if start:
+            params["start"] = start
+        if end:
+            params["end"] = end
+        if source:
+            params["source"] = source
+        raw = self._get("/v1/reference/corporate-actions", params)
+        return VnstockResponse.model_validate(raw)
+
     def get_equity_quote(
         self,
         symbol: str,

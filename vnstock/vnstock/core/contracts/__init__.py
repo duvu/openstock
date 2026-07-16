@@ -14,6 +14,7 @@ Usage::
 """
 
 from vnstock.core.contracts.base import DatasetContract, DatasetContractRegistry
+from vnstock.core.contracts.corporate_action import CORPORATE_ACTIONS_CONTRACT
 from vnstock.core.contracts.equity import (
     INTRADAY_TRADES_CONTRACT,
     OHLCV_CONTRACT,
@@ -53,6 +54,7 @@ _BUILTIN_CONTRACTS = [
     FINANCIAL_RATIO_CONTRACT,
     FUND_NAV_CONTRACT,
     FOREIGN_FLOW_DAILY_CONTRACT,
+    CORPORATE_ACTIONS_CONTRACT,
 ]
 
 for _contract in _BUILTIN_CONTRACTS:
@@ -76,4 +78,5 @@ __all__ = [
     "FINANCIAL_RATIO_CONTRACT",
     "FUND_NAV_CONTRACT",
     "FOREIGN_FLOW_DAILY_CONTRACT",
+    "CORPORATE_ACTIONS_CONTRACT",
 ]

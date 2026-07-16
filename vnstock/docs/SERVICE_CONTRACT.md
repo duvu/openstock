@@ -19,6 +19,7 @@ REST-like JSON API backed by vnstock's provider/plugin runtime.
 | Endpoint | Dataset | Status | Notes |
 |---|---|---|---|
 | `GET /v1/reference/symbols` | `reference.symbols` | Available | Full symbol listing |
+| `GET /v1/reference/corporate-actions` | `reference.corporate_actions` | Available (KBS/VCI partial) | Params: `symbol`, optional `start`, `end`; raw evidence only, no adjusted prices |
 | `GET /v1/equity/ohlcv` | `equity.ohlcv` | Available | Params: `symbol`, `start`, `end`, `interval` |
 | `GET /v1/equity/quote` | `equity.quote` | Available | Real-time / last quote |
 | `GET /v1/index/ohlcv` | `index.ohlcv` | Available | Params: `symbol=VNINDEX` |

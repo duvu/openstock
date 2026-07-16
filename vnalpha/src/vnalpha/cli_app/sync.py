@@ -149,6 +149,48 @@ def sync_index_cmd(
         )
 
 
+@app.command("corporate-actions")
+def sync_corporate_actions_cmd(
+    symbol: str = typer.Argument(..., help="Equity symbol."),
+    start: Optional[str] = typer.Option(None, "--start"),
+    end: Optional[str] = typer.Option(None, "--end"),
+    source: Optional[str] = typer.Option(None, "--source"),
+):
+    """Sync bounded corporate-action evidence without calculating adjusted prices."""
+    from vnalpha.ingestion.corporate_actions import sync_corporate_actions
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        raise typer.BadParameter("symbol must not be empty")
+    set_correlation_id()
+    with command_lifecycle("sync corporate-actions"):
+        conn = get_connection()
+        run_migrations(conn=conn)
+        result = sync_corporate_actions(
+            conn,
+            symbol=normalized_symbol,
+            start=start,
+            end=end,
+            source=source,
+        )
+        status = str(result.get("status", "FAILED"))
+        if status in {"FAILED", "UNSUPPORTED"}:
+            typer.echo(
+                result.get("error") or f"Corporate-action sync {status.lower()}.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        typer.echo(
+            f"Corporate-action sync {status.lower()}: "
+            f"{result.get('canonical_inserted', 0)} inserted, "
+            f"{result.get('revised', 0)} revised, "
+            f"{result.get('quarantined', 0)} quarantined, "
+            f"{result.get('conflicts', 0)} conflicts"
+        )
+
+
 def _execute(
     conn, request: DataProvisioningRequest, *, exit_on_failure: bool = True
 ) -> DataProvisioningResult:

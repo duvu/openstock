@@ -25,6 +25,7 @@ A `DatasetContract` specifies:
 | `index.ohlcv` | symbol, time, open, high, low, close, volume |
 | `reference.symbols` | symbol, exchange |
 | `reference.company_info` | symbol, exchange |
+| `reference.corporate_actions` | provider_event_id, symbol, action_type, provider, source_reference, source_version, content_hash, source_payload_json |
 | `fundamental.balance_sheet` | symbol, year, period_type |
 | `fundamental.income_statement` | symbol, year, period_type |
 | `fundamental.cash_flow` | symbol, year, period_type |
@@ -66,3 +67,6 @@ custom = DatasetContract(
 
 CONTRACT_REGISTRY.register(custom)
 ```
+
+
+See [Corporate-action data contract](CORPORATE_ACTIONS.md) for taxonomy, source semantics and scope boundaries.

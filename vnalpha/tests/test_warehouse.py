@@ -41,6 +41,11 @@ def test_all_tables_created(conn):
         "daily_watchlist",
         "rejected_symbol",
         "ohlcv_quarantine",
+        "corporate_action_raw_evidence",
+        "corporate_action",
+        "corporate_action_source_link",
+        "corporate_action_quarantine",
+        "corporate_action_affected_range",
         "research_session",
         "tool_trace",
         "research_note",
@@ -142,7 +147,7 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 51
+    assert len(tables) == 56
 
 
 def test_get_watchlist_empty(conn):
