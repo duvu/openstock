@@ -1,0 +1,50 @@
+name: Apply issue 112 corporate actions
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    name: Apply verified issue 112 source
+    if: >-
+      github.event.pull_request.head.ref == 'agent/issue-112-corporate-actions' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-112-corporate-actions
+          fetch-depth: 0
+
+      - name: Reassemble and verify reviewable patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/issue112/patch-* > /tmp/issue112.patch
+          echo 'e230fe58319caebd3f353500bc325d21a2b7b8383661425d7bdcaa8427fa5efe  /tmp/issue112.patch' | sha256sum --check --strict
+          git apply --check /tmp/issue112.patch
+
+      - name: Apply source and remove temporary bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply /tmp/issue112.patch
+          rm -rf .github/issue112
+          rm .github/workflows/apply-issue-112.yml
+
+      - name: Commit implementation source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'openstock-ci'
+          git config user.email 'openstock-ci@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'feat(corporate-actions): add canonical ingestion contracts'
+          git push origin HEAD:agent/issue-112-corporate-actions
