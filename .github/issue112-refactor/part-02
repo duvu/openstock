@@ -1,0 +1,153 @@
+-    rules = _validation_rules(conn, raw, requested_symbol=requested_symbol)
+-    if rules:
+-        _quarantine(
+-            conn,
+-            run_id=run_id,
+-            provider=provider,
+-            raw_evidence_id=raw_evidence_id,
+-            record=raw,
+-            rules=rules,
+-        )
+-        return _RecordOutcome("quarantined", True)
+-
+-    symbol = str(raw.get("symbol") or requested_symbol).upper()
+-    action_type = str(raw["action_type"])
+-    anchor = _anchor_date(raw)
+-    prior_link = conn.execute(
+-        """
+-        SELECT link.action_id, link.revision_id
+-        FROM corporate_action_source_link AS link
+-        JOIN corporate_action_raw_evidence AS raw
+-          ON raw.raw_evidence_id = link.raw_evidence_id
+-        WHERE link.provider = ? AND link.provider_event_id = ?
+-        ORDER BY raw.observed_at DESC, link.raw_evidence_id DESC
+-        LIMIT 1
+-        """,
+-        [provider, provider_event_id],
+-    ).fetchone()
+-    action_id = (
+-        prior_link[0] if prior_link else _sha256(symbol, action_type, anchor)[:32]
+-    )
+-    revision_hash = _revision_hash(raw)
+-    existing_same = conn.execute(
+-        """SELECT revision_id, canonical_status
+-           FROM corporate_action
+-           WHERE action_id = ? AND revision_hash = ?""",
+-        [action_id, revision_hash],
+-    ).fetchone()
+-    if existing_same:
+-        existing_revision_id, _ = existing_same
+-        if prior_link is not None and prior_link[1] != existing_revision_id:
+-            _supersede_source_revision(
+-                conn,
+-                prior_revision_id=prior_link[1],
+-                replacement_revision_id=existing_revision_id,
+-            )
+-            _link_source(
+-                conn,
+-                provider=provider,
+-                provider_event_id=provider_event_id,
+-                raw_evidence_id=raw_evidence_id,
+-                action_id=action_id,
+-                revision_id=existing_revision_id,
+-            )
+-            conflict = _refresh_current_revision_statuses(
+-                conn, action_id=action_id, preferred_revision_id=existing_revision_id
+-            )
+-            conn.execute(
+-                "UPDATE corporate_action SET last_seen_at = current_timestamp WHERE revision_id = ?",
+-                [existing_revision_id],
+-            )
+-            _insert_affected_range(
+-                conn,
+-                action_id=action_id,
+-                revision_id=existing_revision_id,
+-                symbol=symbol,
+-                affected_from=anchor,
+-                reason="REVISED_ACTION",
+-            )
+-            return _RecordOutcome("revised", True, conflict=conflict, affected=True)
+-        _link_source(
+-            conn,
+-            provider=provider,
+-            provider_event_id=provider_event_id,
+-            raw_evidence_id=raw_evidence_id,
+-            action_id=action_id,
+-            revision_id=existing_revision_id,
+-        )
+-        conn.execute(
+-            "UPDATE corporate_action SET last_seen_at = current_timestamp WHERE revision_id = ?",
+-            [existing_revision_id],
+-        )
+-        return _RecordOutcome("unchanged", True)
+-
+-    active = conn.execute(
+-        """SELECT revision_id, revision_number, canonical_status
+-           FROM corporate_action
+-           WHERE action_id = ? AND canonical_status IN ('ACTIVE', 'CONFLICT')
+-           ORDER BY revision_number DESC""",
+-        [action_id],
+-    ).fetchall()
+-    same_source_revision = prior_link is not None
+-    supersedes = prior_link[1] if prior_link else None
+-    remaining = [row for row in active if row[0] != supersedes]
+-    if same_source_revision:
+-        revision_number = max((row[1] for row in active), default=0) + 1
+-        status = "CONFLICT" if remaining else "ACTIVE"
+-        outcome = "revised"
+-        reason = "REVISED_ACTION"
+-        if supersedes:
+-            conn.execute(
+-                "UPDATE corporate_action SET canonical_status='SUPERSEDED' WHERE revision_id=?",
+-                [supersedes],
+-            )
+-        for revision_id, _, _ in remaining:
+-            conn.execute(
+-                "UPDATE corporate_action SET canonical_status='CONFLICT' WHERE revision_id=?",
+-                [revision_id],
+-            )
+-    elif active:
+-        for revision_id, _, _ in active:
+-            conn.execute(
+-                "UPDATE corporate_action SET canonical_status='CONFLICT' WHERE revision_id=?",
+-                [revision_id],
+-            )
+-        revision_number = max(row[1] for row in active) + 1
+-        status = "CONFLICT"
+-        outcome = "canonical_inserted"
+-        reason = "CONFLICT"
+-    else:
+-        revision_number = 1
+-        status = "ACTIVE"
+-        outcome = "canonical_inserted"
+-        reason = "NEW_ACTION"
+-
+-    revision_id = _sha256(action_id, revision_hash)[:40]
+-    affected_from = anchor
+-    conn.execute(
+-        """
+-        INSERT INTO corporate_action
+-        (revision_id, action_id, revision_number, symbol, action_type, announced_at, ex_date,
+-         record_date, effective_date, cash_amount, ratio, ratio_text, subscription_price,
+-         reference_price, currency, title, revision_hash, canonical_status,
+-         supersedes_revision_id, affected_from_date, contract_version, diagnostics_json)
+-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+-        """,
+-        [
+-            revision_id,
+-            action_id,
+-            revision_number,
+-            symbol,
+-            action_type,
+-            raw.get("announced_at"),
+-            raw.get("ex_date"),
+-            raw.get("record_date"),
+-            raw.get("effective_date"),
+-            raw.get("cash_amount"),
+-            raw.get("ratio"),
+-            raw.get("ratio_text"),
+-            raw.get("subscription_price"),
+-            raw.get("reference_price"),
+-            raw.get("currency"),
+-            raw.get("title"),
+-            revision_hash,
