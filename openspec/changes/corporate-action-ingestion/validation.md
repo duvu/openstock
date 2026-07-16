@@ -8,7 +8,8 @@ Warehouse raw/canonical/revision contracts: implemented
 Bounded sync and status commands: implemented
 Focused offline tests: pass
 Implementation source SHA: 3b6d990d93248fcf11e0650a8e3c8417411056dd
-Required GitHub Actions validation: running on pull request #154
+Validated implementation head: 83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed
+Required GitHub Actions validation: pass
 ```
 
 ## Required final commands
@@ -33,6 +34,8 @@ python -m build --wheel --sdist --no-isolation --outdir /tmp/vnstock-dist ./vnst
 | 2026-07-16T00:20:00Z | `local source export + working tree` | 1.1–1.4 | required vnstock provider/canonical contract selection | 0 | 508 tests passed | local command transcript |
 | 2026-07-16T00:35:00Z | `local source export + working tree` | 2.1–3.2 | R0 constituent suite | 0 | 70 tests reached 100% | local command transcript |
 | 2026-07-16T00:40:00Z | `local source export + working tree` | 1.1–3.2 | Ruff, repository consistency and both wheel/sdist builds | 0 | all checks and builds passed | local command transcript |
+| 2026-07-16T01:35:00Z | `83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed` | 1.1–3.3 | `openstock-ci` run #71 (`29466440099`) | 0 | repository consistency, documentation contracts, Ruff, focused #112 regressions, R0, complete vnalpha suite, vnstock provider/canonical contracts, both package builds and Required merge gate passed | GitHub Actions run and diagnostics |
 
 Final implementation source SHA: `3b6d990d93248fcf11e0650a8e3c8417411056dd`
-Final validated PR head: `pending required CI`
+Validated implementation head: `83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed`
+Final metadata head: `pending final metadata validation`
