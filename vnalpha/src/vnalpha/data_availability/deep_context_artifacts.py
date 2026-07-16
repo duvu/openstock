@@ -191,6 +191,11 @@ def public_message(issue: ContextIssue) -> str:
             return (
                 "Sector classification metadata is insufficient for required context."
             )
+        case ContextIssue.SECTOR_TAXONOMY_INSUFFICIENT:
+            return (
+                "Sector taxonomy name/version coverage is insufficient for "
+                "required context."
+            )
         case ContextIssue.SYMBOL_SECTOR_UNCLASSIFIED:
             return "The symbol has no usable persisted sector classification."
         case ContextIssue.SECTOR_NOT_RANKABLE:
@@ -230,6 +235,7 @@ def sector_remediation_steps(
         issue
         in {
             ContextIssue.SECTOR_METADATA_INSUFFICIENT,
+            ContextIssue.SECTOR_TAXONOMY_INSUFFICIENT,
             ContextIssue.SYMBOL_SECTOR_UNCLASSIFIED,
         }
         for issue in issues

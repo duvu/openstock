@@ -97,13 +97,24 @@ def sector_issues(
         return (ContextIssue.SECTOR_INPUT_COVERAGE_INSUFFICIENT,)
 
     policy = PRODUCTION_SECTOR_STRENGTH_POLICY
-    if (
-        first.metadata_coverage < policy.minimum_metadata_coverage
-        or first.unclassified_count
-        or (_lineage_float(first.lineage, "taxonomy_coverage") or 0.0)
-        < policy.minimum_taxonomy_coverage
-    ):
+    # Readiness for classification metadata is derived DIRECTLY from the
+    # versioned policy coverage thresholds. Bounded missing classification is
+    # permitted: a non-zero unclassified_count no longer fails readiness on its
+    # own, because metadata_coverage already encodes it
+    # (metadata_coverage == 1 - unclassified_count / active_count). Residual
+    # unclassified symbols above the threshold are disclosed as caveats, not
+    # treated as a hard failure. See market-context-methodology.md.
+    #
+    # Below-threshold sector classification (missing sector) and below-threshold
+    # taxonomy name/version coverage have different remediation paths, so they
+    # are reported as distinct typed issues. Missing classification is checked
+    # first because taxonomy coverage is only meaningful over classified symbols.
+    if first.metadata_coverage < policy.minimum_metadata_coverage:
         return (ContextIssue.SECTOR_METADATA_INSUFFICIENT,)
+    if (
+        _lineage_float(first.lineage, "taxonomy_coverage") or 0.0
+    ) < policy.minimum_taxonomy_coverage:
+        return (ContextIssue.SECTOR_TAXONOMY_INSUFFICIENT,)
     if (
         first.quality != "OK"
         or (_lineage_float(first.lineage, "liquidity_coverage") or 0.0)
