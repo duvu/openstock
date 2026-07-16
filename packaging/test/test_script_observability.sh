@@ -26,7 +26,7 @@ fail() { echo "[FAIL] $*"; FAIL=$(( FAIL + 1 )); }
 
 # --- test: bash -n syntax (already covered by openstock-verify --ci, but re-assert) ---
 test_syntax() {
-  for script in "$PIPELINE_SCRIPT" "$VERIFY_SCRIPT" "$BACKUP_SCRIPT"; do
+  for script in "$PIPELINE_SCRIPT" "$VERIFY_SCRIPT" "$BACKUP_SCRIPT" "$RESTORE_SCRIPT"; do
     if bash -n "$script" 2>/dev/null; then
       ok "bash -n $(basename "$script") is valid"
     else
@@ -63,6 +63,29 @@ _assert_jsonl_parseable() {
     fail "$label: $bad_lines invalid JSON line(s)"
   fi
 }
+
+# --- helper: create a real (verifiable) DuckDB file, or return 1 if unavailable ---
+_make_duckdb() {
+  local db_path="$1"
+  local py=""
+  py="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
+  [ -n "$py" ] || return 1
+  "$py" - "$db_path" <<'PY' 2>/dev/null || return 1
+import sys
+try:
+    import duckdb
+except Exception:
+    sys.exit(1)
+con = duckdb.connect(sys.argv[1])
+con.execute("CREATE TABLE t(a INTEGER)")
+con.execute("INSERT INTO t VALUES (1),(2),(3)")
+con.execute("CHECKPOINT")
+con.close()
+PY
+  return 0
+}
+
+RESTORE_SCRIPT="${SCRIPT_DIR}/openstock-restore-warehouse"
 
 # --- helper: count event_type in JSONL ---
 _count_events() {
@@ -237,15 +260,55 @@ test_backup_lock_failure_logs_backup_failed() {
   local tmpdir
   tmpdir="$(mktemp -d)"
   local lock_file="${tmpdir}/pipeline.lock"
-  touch "$lock_file"
+  local fake_warehouse="${tmpdir}/warehouse.duckdb"
+  echo "fake-duckdb-content" > "$fake_warehouse"
+  # Hold the SAME exclusive flock a writer would hold, in a background process,
+  # so the backup must actually contend for the lock (file existence alone must
+  # not block, and must not falsely succeed either).
+  exec 210>"$lock_file"
+  flock -n 210
   local jsonl_file
-  jsonl_file="$(_run_with_logs "$tmpdir" env OPENSTOCK_LOCK_FILE="$lock_file" bash "$BACKUP_SCRIPT")"
-  local count
-  count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_FAILED")"
-  if [ "$count" -ge 1 ]; then
-    ok "backup: BACKUP_FAILED event written when lock file held"
+  jsonl_file="$(_run_with_logs "$tmpdir" env \
+    OPENSTOCK_LOCK_FILE="$lock_file" \
+    OPENSTOCK_WAREHOUSE_PATH="$fake_warehouse" \
+    OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
+    bash "$BACKUP_SCRIPT")"
+  flock -u 210
+  exec 210>&-
+  local failed_count created_count
+  failed_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_FAILED")"
+  created_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_CREATED")"
+  if [ "$failed_count" -ge 1 ] && [ "$created_count" -eq 0 ]; then
+    ok "backup: BACKUP_FAILED (no BACKUP_CREATED) when writer holds the flock"
   else
-    fail "backup: BACKUP_FAILED event missing when lock file held"
+    fail "backup: expected BACKUP_FAILED and no BACKUP_CREATED under held lock, got failed=$failed_count created=$created_count"
+  fi
+  rm -rf "$tmpdir"
+}
+
+test_backup_force_does_not_bypass_writer_lock() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local lock_file="${tmpdir}/pipeline.lock"
+  local fake_warehouse="${tmpdir}/warehouse.duckdb"
+  echo "fake-duckdb-content" > "$fake_warehouse"
+  exec 211>"$lock_file"
+  flock -n 211
+  local jsonl_file
+  jsonl_file="$(_run_with_logs "$tmpdir" env \
+    OPENSTOCK_LOCK_FILE="$lock_file" \
+    OPENSTOCK_WAREHOUSE_PATH="$fake_warehouse" \
+    OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
+    bash "$BACKUP_SCRIPT" --force)"
+  flock -u 211
+  exec 211>&-
+  local failed_count created_count
+  failed_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_FAILED")"
+  created_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_CREATED")"
+  if [ "$failed_count" -ge 1 ] && [ "$created_count" -eq 0 ]; then
+    ok "backup: --force does not bypass an active writer lock"
+  else
+    fail "backup: --force wrongly bypassed the lock, got failed=$failed_count created=$created_count"
   fi
   rm -rf "$tmpdir"
 }
@@ -272,22 +335,166 @@ test_backup_success_logs_backup_created() {
   local tmpdir
   tmpdir="$(mktemp -d)"
   local fake_warehouse="${tmpdir}/warehouse.duckdb"
-  local backup_dir="${tmpdir}/backups"
-  echo "fake-duckdb-content" > "$fake_warehouse"
-  mkdir -p "$backup_dir"
+  local force_flag=""
+  if ! _make_duckdb "$fake_warehouse"; then
+    # No duckdb runtime — exercise the success path with --force (verification
+    # is skipped, but the copy/atomic-publish path is still covered).
+    echo "fake-duckdb-content" > "$fake_warehouse"
+    force_flag="--force"
+  fi
+  local jsonl_file
+  jsonl_file="$(_run_with_logs "$tmpdir" env \
+    OPENSTOCK_WAREHOUSE_PATH="$fake_warehouse" \
+    OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
+    OPENSTOCK_LOCK_FILE="${tmpdir}/no.lock" \
+    bash "$BACKUP_SCRIPT" $force_flag)"
+  local started_count created_count backup_count
+  started_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_STARTED")"
+  created_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_CREATED")"
+  backup_count="$(find "${tmpdir}/backups" -name 'warehouse-*.duckdb' 2>/dev/null | wc -l)"
+  if [ "$started_count" -ge 1 ] && [ "$created_count" -ge 1 ] && [ "$backup_count" -ge 1 ]; then
+    ok "backup: BACKUP_STARTED+BACKUP_CREATED and a published backup file on success"
+  else
+    fail "backup: expected started+created+file, got started=$started_count created=$created_count files=$backup_count"
+  fi
+  # No leftover .partial files.
+  local partial_count
+  partial_count="$(find "${tmpdir}/backups" -name '*.partial' 2>/dev/null | wc -l)"
+  if [ "$partial_count" -eq 0 ]; then
+    ok "backup: no .partial files remain after success"
+  else
+    fail "backup: $partial_count leftover .partial file(s)"
+  fi
+  rm -rf "$tmpdir"
+}
+
+test_backup_corrupt_source_fails_verification() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local fake_warehouse="${tmpdir}/warehouse.duckdb"
+  # Not a valid DuckDB file: verification must reject it and publish nothing.
+  echo "definitely-not-a-duckdb-file" > "$fake_warehouse"
+  if ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
+    ok "backup: verification test skipped (no python runtime)"
+    rm -rf "$tmpdir"; return
+  fi
+  if ! python3 -c "import duckdb" >/dev/null 2>&1 \
+     && ! python -c "import duckdb" >/dev/null 2>&1; then
+    ok "backup: verification test skipped (no duckdb module)"
+    rm -rf "$tmpdir"; return
+  fi
   local jsonl_file
   jsonl_file="$(_run_with_logs "$tmpdir" env \
     OPENSTOCK_WAREHOUSE_PATH="$fake_warehouse" \
     OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
     OPENSTOCK_LOCK_FILE="${tmpdir}/no.lock" \
     bash "$BACKUP_SCRIPT")"
-  local started_count created_count
-  started_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_STARTED")"
+  local failed_count created_count file_count
+  failed_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_FAILED")"
   created_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_CREATED")"
-  if [ "$started_count" -ge 1 ] && [ "$created_count" -ge 1 ]; then
-    ok "backup: BACKUP_STARTED and BACKUP_CREATED events written on success"
+  file_count="$(find "${tmpdir}/backups" -name 'warehouse-*.duckdb' 2>/dev/null | wc -l)"
+  if [ "$failed_count" -ge 1 ] && [ "$created_count" -eq 0 ] && [ "$file_count" -eq 0 ]; then
+    ok "backup: corrupt source fails verification and publishes no backup"
   else
-    fail "backup: expected BACKUP_STARTED+BACKUP_CREATED, got started=$started_count created=$created_count"
+    fail "backup: corrupt source not rejected, got failed=$failed_count created=$created_count files=$file_count"
+  fi
+  rm -rf "$tmpdir"
+}
+
+# ==============================
+# S9: Restore script tests
+# ==============================
+
+test_restore_success_replaces_and_verifies() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local warehouse="${tmpdir}/warehouse.duckdb"
+  local backup_dir="${tmpdir}/backups"
+  mkdir -p "$backup_dir"
+  local backup="${backup_dir}/warehouse-20240101-000000.duckdb"
+  if ! _make_duckdb "$backup"; then
+    ok "restore: success test skipped (no duckdb runtime)"
+    rm -rf "$tmpdir"; return
+  fi
+  _make_duckdb "$warehouse"
+  local jsonl_file
+  jsonl_file="$(_run_with_logs "$tmpdir" env \
+    OPENSTOCK_WAREHOUSE_PATH="$warehouse" \
+    OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
+    OPENSTOCK_LOCK_FILE="${tmpdir}/no.lock" \
+    bash "$RESTORE_SCRIPT" --backup "$backup" --yes)"
+  local started completed pre_backup
+  started="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_STARTED")"
+  completed="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_COMPLETED")"
+  pre_backup="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_PRE_BACKUP")"
+  if [ "$started" -ge 1 ] && [ "$completed" -ge 1 ] && [ "$pre_backup" -ge 1 ] && [ -f "$warehouse" ]; then
+    ok "restore: pre-backup + atomic replace + verify on success"
+  else
+    fail "restore: expected started+pre_backup+completed, got started=$started pre=$pre_backup completed=$completed"
+  fi
+  rm -rf "$tmpdir"
+}
+
+test_restore_corrupt_backup_leaves_warehouse_intact() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local warehouse="${tmpdir}/warehouse.duckdb"
+  local backup_dir="${tmpdir}/backups"
+  mkdir -p "$backup_dir"
+  local backup="${backup_dir}/warehouse-20240101-000000.duckdb"
+  if ! _make_duckdb "$warehouse"; then
+    ok "restore: rollback test skipped (no duckdb runtime)"
+    rm -rf "$tmpdir"; return
+  fi
+  # Corrupt backup: restore must reject it BEFORE touching the live warehouse.
+  echo "corrupt-backup" > "$backup"
+  local original_sum
+  original_sum="$(md5sum "$warehouse" | awk '{print $1}')"
+  local jsonl_file
+  jsonl_file="$(_run_with_logs "$tmpdir" env \
+    OPENSTOCK_WAREHOUSE_PATH="$warehouse" \
+    OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
+    OPENSTOCK_LOCK_FILE="${tmpdir}/no.lock" \
+    bash "$RESTORE_SCRIPT" --backup "$backup" --yes)"
+  local failed completed
+  failed="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_FAILED")"
+  completed="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_COMPLETED")"
+  local new_sum
+  new_sum="$(md5sum "$warehouse" | awk '{print $1}')"
+  if [ "$failed" -ge 1 ] && [ "$completed" -eq 0 ] && [ "$original_sum" = "$new_sum" ]; then
+    ok "restore: corrupt backup rejected and original warehouse left intact"
+  else
+    fail "restore: corrupt backup not handled safely, failed=$failed completed=$completed intact=$([ "$original_sum" = "$new_sum" ] && echo yes || echo no)"
+  fi
+  rm -rf "$tmpdir"
+}
+
+test_restore_lock_contention_aborts() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local warehouse="${tmpdir}/warehouse.duckdb"
+  local lock_file="${tmpdir}/pipeline.lock"
+  mkdir -p "${tmpdir}/backups"
+  local backup="${tmpdir}/backups/warehouse-20240101-000000.duckdb"
+  echo "content" > "$warehouse"
+  echo "content" > "$backup"
+  exec 212>"$lock_file"
+  flock -n 212
+  local jsonl_file
+  jsonl_file="$(_run_with_logs "$tmpdir" env \
+    OPENSTOCK_WAREHOUSE_PATH="$warehouse" \
+    OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
+    OPENSTOCK_LOCK_FILE="$lock_file" \
+    bash "$RESTORE_SCRIPT" --backup "$backup" --yes)"
+  flock -u 212
+  exec 212>&-
+  local failed completed
+  failed="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_FAILED")"
+  completed="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_COMPLETED")"
+  if [ "$failed" -ge 1 ] && [ "$completed" -eq 0 ]; then
+    ok "restore: aborts under active writer lock"
+  else
+    fail "restore: expected abort under held lock, got failed=$failed completed=$completed"
   fi
   rm -rf "$tmpdir"
 }
@@ -310,8 +517,13 @@ test_verify_has_started_event
 test_verify_has_check_events
 test_verify_has_completed_event
 test_backup_lock_failure_logs_backup_failed
+test_backup_force_does_not_bypass_writer_lock
 test_backup_missing_warehouse_logs_backup_failed
 test_backup_success_logs_backup_created
+test_backup_corrupt_source_fails_verification
+test_restore_success_replaces_and_verifies
+test_restore_corrupt_backup_leaves_warehouse_intact
+test_restore_lock_contention_aborts
 
 echo ""
 echo "Results: ${PASS} OK  ${FAIL} FAIL"

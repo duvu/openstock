@@ -81,8 +81,9 @@ This installs:
 ### Step 5: Install helper scripts
 
 ```bash
-sudo install -m 0755 packaging/scripts/openstock-verify          /usr/bin/
-sudo install -m 0755 packaging/scripts/openstock-backup-warehouse /usr/bin/
+sudo install -m 0755 packaging/scripts/openstock-verify           /usr/bin/
+sudo install -m 0755 packaging/scripts/openstock-backup-warehouse  /usr/bin/
+sudo install -m 0755 packaging/scripts/openstock-restore-warehouse /usr/bin/
 ```
 
 ### Step 6: Run the post-install check
@@ -374,11 +375,21 @@ sudo openstock-backup-warehouse
 ```
 
 Backups land in `/var/lib/openstock/warehouse/backups/` with names like
-`warehouse_20260707_143022.duckdb`.
+`warehouse-20260707-143022.duckdb`.
 
-The script uses `flock` to wait for any active writer job to finish before
-copying. Pass `--force` to skip the recency check and always create a new
-backup:
+The script acquires the **same exclusive `flock`** that pipeline writers use
+(on `/run/openstock-pipeline.lock`), so it cannot copy the database while a
+writer job is running. By default it fails immediately if a writer holds the
+lock; pass `--wait SECONDS` to block for up to that many seconds:
+
+```bash
+sudo openstock-backup-warehouse --wait 300
+```
+
+The copy is written to a `.partial` file, verified by opening it read-only and
+scanning every table, and only then published atomically under its final name.
+`--force` skips **only** the verification step — it does **not** bypass the
+writer lock:
 
 ```bash
 sudo openstock-backup-warehouse --force
@@ -389,6 +400,25 @@ sudo openstock-backup-warehouse --force
 ```bash
 ls -lht /var/lib/openstock/warehouse/backups/
 ```
+
+### Restore a backup
+
+```bash
+# Restore the most recent backup:
+sudo openstock-restore-warehouse --latest
+
+# Or restore a specific file:
+sudo openstock-restore-warehouse --backup \
+  /var/lib/openstock/warehouse/backups/warehouse-20260707-143022.duckdb
+```
+
+`openstock-restore-warehouse` acquires the same writer lock, verifies the chosen
+backup **before** touching the live warehouse, takes a `pre-restore-*.duckdb`
+snapshot of the current warehouse, replaces the warehouse atomically, and
+verifies the result. If the restored warehouse fails verification it is rolled
+back to the pre-restore snapshot, so a failed restore always leaves a usable
+warehouse in place. Pass `--yes` to skip the interactive confirmation and
+`--wait SECONDS` to wait for an active writer lock.
 
 ### Rollback procedures
 
