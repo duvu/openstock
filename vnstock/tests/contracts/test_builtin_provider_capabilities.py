@@ -38,6 +38,7 @@ _KNOWN_DATASETS: frozenset[str] = frozenset(
         "index.ohlcv",
         "reference.symbols",
         "reference.company_info",
+        "reference.corporate_actions",
         "fundamental.balance_sheet",
         "fundamental.income_statement",
         "fundamental.cash_flow",

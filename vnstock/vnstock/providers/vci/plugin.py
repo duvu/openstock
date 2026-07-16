@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from vnstock.core.corporate_actions import normalize_corporate_actions
 from vnstock.core.provider.exceptions import (
     ProviderFetchError,
     UnsupportedDatasetForProviderError,
@@ -40,6 +41,30 @@ class VCIProviderPlugin:
             "reference.symbols",
         ):
             raise ValueError(f"'symbol' is required for dataset '{dataset}'.")
+        if dataset == "reference.corporate_actions":
+            for key in ("start", "end"):
+                value = params.get(key)
+                if value:
+                    try:
+                        pd.Timestamp(value)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(f"'{key}' must be an ISO date.") from exc
+            if (
+                params.get("start")
+                and params.get("end")
+                and pd.Timestamp(params["start"]) > pd.Timestamp(params["end"])
+            ):
+                raise ValueError("'start' must not be after 'end'.")
+            page = params.get("page", 0)
+            page_size = params.get("page_size", 500)
+            if isinstance(page, bool) or not isinstance(page, int) or page < 0:
+                raise ValueError("'page' must be a non-negative integer.")
+            if (
+                isinstance(page_size, bool)
+                or not isinstance(page_size, int)
+                or not 1 <= page_size <= 500
+            ):
+                raise ValueError("'page_size' must be between 1 and 500.")
 
     def fetch(self, dataset: str, params: dict[str, Any]) -> pd.DataFrame:
         if dataset not in _SUPPORTED_DATASETS:
@@ -77,6 +102,7 @@ class VCIProviderPlugin:
             "index.ohlcv": self._fetch_equity_ohlcv,
             "reference.symbols": self._fetch_reference_symbols,
             "reference.company_info": self._fetch_company_info,
+            "reference.corporate_actions": self._fetch_corporate_actions,
             "fundamental.balance_sheet": self._fetch_balance_sheet,
             "fundamental.income_statement": self._fetch_income_statement,
             "fundamental.cash_flow": self._fetch_cash_flow,
@@ -136,6 +162,27 @@ class VCIProviderPlugin:
         df.attrs.setdefault("provider", self.name)
         df.attrs.setdefault("dataset", "reference.symbols")
         return df
+
+    def _fetch_corporate_actions(self, params: dict[str, Any]) -> pd.DataFrame:
+        from vnstock.explorer.vci.company import Company
+
+        symbol = str(params["symbol"]).strip().upper()
+        company = Company(symbol=symbol, show_log=params.get("show_log", False))
+        raw = company._fetch_events(
+            event_codes="DIV,ISS,MOVE,NLIS,RETU,SUSP,OTHE",
+            from_date=str(params.get("start") or "").replace("-", "") or None,
+            to_date=str(params.get("end") or "").replace("-", "") or None,
+            page=int(params.get("page", 0)),
+            size=int(params.get("page_size", 500)),
+        )
+        frame = pd.DataFrame(raw)
+        return normalize_corporate_actions(
+            frame,
+            provider="VCI",
+            symbol=symbol,
+            start=params.get("start"),
+            end=params.get("end"),
+        )
 
     def _fetch_company_info(self, params: dict[str, Any]) -> pd.DataFrame:
         from vnstock.explorer.vci.company import Company

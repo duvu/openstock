@@ -48,6 +48,14 @@ VCI_CAPABILITIES: dict = {
         "intervals": [],
         "notes": "Full symbol listing with ICB industry classification.",
     },
+    "reference.corporate_actions": {
+        "supported": True,
+        "status": "partial",
+        "auth_required": False,
+        "intervals": [],
+        "request_modes": ["symbol_date_range"],
+        "notes": "Provider event feed normalized as market-data evidence; not an official disclosure source.",
+    },
     "reference.company_info": {
         "supported": True,
         "status": "stable",

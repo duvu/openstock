@@ -28,6 +28,7 @@ _CANONICAL: dict[str, str] = {
     "/v1/equity/intraday-trades": "equity.intraday_trades",
     "/v1/index/ohlcv": "index.ohlcv",
     "/v1/reference/symbols": "reference.symbols",
+    "/v1/reference/corporate-actions": "reference.corporate_actions",
     "/v1/reference/index-membership": "reference.index_membership_snapshot",
     "/v1/reference/sector-membership": "reference.sector_membership_snapshot",
     "/v1/company/info": "reference.company_info",

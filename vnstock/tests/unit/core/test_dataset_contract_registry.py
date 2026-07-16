@@ -85,9 +85,9 @@ class TestBuiltinContractRegistry:
             required
         )
 
-    def test_twelve_builtin_contracts(self):
-        """All 12 built-in dataset contracts are registered."""
-        assert len(CONTRACT_REGISTRY) == 12
+    def test_fifteen_builtin_contracts(self):
+        """All 15 built-in dataset contracts are registered."""
+        assert len(CONTRACT_REGISTRY) == 15
 
     def test_all_expected_datasets_registered(self):
         """All expected dataset names are registered."""
@@ -98,6 +98,9 @@ class TestBuiltinContractRegistry:
             "index.ohlcv",
             "reference.symbols",
             "reference.company_info",
+            "reference.corporate_actions",
+            "reference.index_membership_snapshot",
+            "reference.sector_membership_snapshot",
             "fundamental.balance_sheet",
             "fundamental.income_statement",
             "fundamental.cash_flow",

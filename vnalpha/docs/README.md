@@ -40,7 +40,7 @@ Current architecture documents begin with an explicit `Status` block. Target cap
 
 - [Vision and scope](01-vision-and-scope.md)
 - [System architecture](02-system-architecture.md)
-- [Data pipeline](03-data-pipeline.md)
+- [Data pipeline](03-data-pipeline.md) — includes corporate-action raw/canonical/revision boundaries
 - [Market context methodology](market-context-methodology.md)
 - [Pattern engine](04-pattern-engine.md)
 - [Backtest and outcome tracking](05-backtest-and-outcome.md)

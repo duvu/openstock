@@ -149,6 +149,40 @@ def sync_index_cmd(
         )
 
 
+@app.command("corporate-actions")
+def sync_corporate_actions_cmd(
+    symbol: str = typer.Argument(..., help="Equity symbol."),
+    start: Optional[str] = typer.Option(None, "--start"),
+    end: Optional[str] = typer.Option(None, "--end"),
+    source: Optional[str] = typer.Option(None, "--source"),
+):
+    """Sync bounded corporate-action evidence without calculating adjusted prices."""
+    set_correlation_id()
+    with command_lifecycle("sync corporate-actions"):
+        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.migrations import run_migrations
+
+        conn = get_connection()
+        run_migrations(conn=conn)
+        result = _execute(
+            conn,
+            DataProvisioningRequest(
+                "download",
+                "corporate-actions",
+                symbol=symbol,
+                start=start,
+                end=end,
+                source=source,
+            ),
+        )
+        typer.echo(
+            "Corporate-action sync complete: "
+            f"{result.counts.get('canonical_inserted', 0)} inserted, "
+            f"{result.counts.get('revised', 0)} revised, "
+            f"{result.counts.get('quarantined', 0)} quarantined"
+        )
+
+
 def _execute(
     conn, request: DataProvisioningRequest, *, exit_on_failure: bool = True
 ) -> DataProvisioningResult:

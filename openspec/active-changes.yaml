@@ -1,6 +1,6 @@
 # Registry for non-archived OpenSpec lifecycle and evidence.
 # GitHub issue #90 owns roadmap priority and execution order.
-reviewed_at: 2026-07-15
+reviewed_at: 2026-07-16
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
@@ -11,6 +11,19 @@ policy:
   research_only_boundary: true
 
 changes:
+
+  corporate-action-ingestion:
+    status: in_progress
+    github_issues: [112]
+    roadmap_state: scheduled
+    summary: >-
+      Add provider-independent corporate-action evidence, raw-first canonical
+      reconciliation, immutable revisions, quarantine and affected-range signals
+      without calculating adjusted prices.
+    evidence: >-
+      Provider contracts, KBS/VCI adapters, warehouse tables, bounded sync/status
+      commands and focused offline tests are implemented on the issue #112 branch.
+      Exact final-SHA full CI and package evidence remain pending the pull request.
 
   required-ci-merge-gates:
     status: partial

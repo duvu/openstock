@@ -9,6 +9,7 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.warehouse.connection import get_connection
+from vnalpha.warehouse.corporate_action_schema import ALL_DDL_CORPORATE_ACTIONS
 from vnalpha.warehouse.ingestion_migrations import migrate_ingestion_run_outcome_columns
 from vnalpha.warehouse.research_answer_schema import ALL_DDL_RESEARCH_ANSWER_AUDIT
 from vnalpha.warehouse.research_models_schema import ALL_DDL_RESEARCH_MODELS
@@ -50,6 +51,8 @@ def run_migrations(
     except Exception:  # noqa: BLE001
         pass
     for ddl in ALL_DDL:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_CORPORATE_ACTIONS:
         conn.execute(ddl)
     migrate_ingestion_run_outcome_columns(conn)
     for ddl in SANDBOX_DDL:

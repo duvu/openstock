@@ -19,10 +19,12 @@ download_app = typer.Typer(help="Download approved raw market data.")
 build_app = typer.Typer(help="Build approved deterministic research artifacts.")
 sync_app = typer.Typer(help="Run bounded incremental market-data maintenance.")
 repair_app = typer.Typer(help="Repair bounded canonical OHLCV gaps.")
+status_app = typer.Typer(help="Inspect bounded data-ingestion status.")
 app.add_typer(download_app, name="download")
 app.add_typer(build_app, name="build")
 app.add_typer(sync_app, name="sync")
 app.add_typer(repair_app, name="repair")
+app.add_typer(status_app, name="status")
 
 
 @download_app.command("symbols")
@@ -70,6 +72,45 @@ def download_index(
             start=start,
             end=end,
             source=source,
+        )
+    )
+
+
+@download_app.command("corporate-actions")
+def download_corporate_actions(
+    symbol: str = typer.Argument(..., help="Equity symbol."),
+    start: str | None = typer.Option(None, "--start", help="Start date (YYYY-MM-DD)."),
+    end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD)."),
+    source: str | None = typer.Option(None, "--source", help="Preferred provider."),
+) -> None:
+    _run(
+        DataProvisioningRequest(
+            operation="download",
+            artifact="corporate-actions",
+            symbol=symbol,
+            start=start,
+            end=end,
+            source=source,
+        )
+    )
+
+
+@status_app.command("corporate-actions")
+def status_corporate_actions(
+    symbol: str | None = typer.Argument(None, help="Optional equity symbol."),
+    start: str | None = typer.Option(None, "--start", help="Start date (YYYY-MM-DD)."),
+    end: str | None = typer.Option(None, "--end", help="End date (YYYY-MM-DD)."),
+) -> None:
+    from vnalpha.ingestion.corporate_actions import corporate_action_status
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+    typer.echo(
+        json.dumps(
+            corporate_action_status(conn, symbol=symbol, start=start, end=end),
+            sort_keys=True,
         )
     )
 

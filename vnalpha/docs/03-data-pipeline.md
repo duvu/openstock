@@ -31,6 +31,20 @@ vnstock-service request
 Reference-data flow additionally preserves symbol source snapshots, membership
 and point-in-time classification history before updating `symbol_master`.
 
+Corporate-action flow is separate from OHLCV promotion:
+
+```text
+vnstock reference.corporate_actions
+→ corporate_action_raw_evidence
+→ validation + corporate_action_quarantine
+→ immutable corporate_action revisions + source links
+→ corporate_action_affected_range
+```
+
+KBS and VCI feeds are recorded as `MARKET_DATA_PROVIDER` evidence, not official
+issuer disclosures. This pipeline does not calculate adjusted prices; #113 owns
+factor and adjusted-series derivation.
+
 ## Storage layers
 
 ### Ingestion evidence
@@ -131,6 +145,8 @@ vnalpha init
 vnalpha sync symbols
 vnalpha sync ohlcv --universe VN30 --start 2024-01-01
 vnalpha sync index --symbol VNINDEX --start 2024-01-01
+vnalpha sync corporate-actions SSI --start 2024-01-01 --source VCI
+vnalpha data status corporate-actions SSI
 vnalpha build canonical
 vnalpha build features --date today
 vnalpha score --date today
