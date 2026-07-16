@@ -1,0 +1,400 @@
++        "SELECT reason, affected_from_date FROM corporate_action_affected_range ORDER BY created_at DESC LIMIT 1"
++    ).fetchone() == (
++        "REVISED_ACTION",
++        duckdb.sql("SELECT DATE '2024-01-09'").fetchone()[0],
++    )
++
++
++def test_conflicting_provider_evidence_is_preserved_not_overwritten(conn) -> None:
++    vci = _cash_event(cash_amount=1_000)
++    kbs = deepcopy(vci)
++    kbs.update(
++        {
++            "provider_event_id": "kbs-1",
++            "provider": "KBS",
++            "source_reference": "kbs://company/SSI/events/kbs-1",
++            "content_hash": "kbs-hash",
++            "cash_amount": 900,
++        }
++    )
++
++    sync_corporate_actions(conn, symbol="SSI", client=FakeCorporateActionClient([vci]))
++    result = sync_corporate_actions(
++        conn, symbol="SSI", client=FakeCorporateActionClient([kbs], provider="KBS")
++    )
++
++    assert result["conflicts"] == 1
++    assert result["status"] == "PARTIAL"
++    assert (
++        conn.execute(
++            "SELECT COUNT(*) FROM corporate_action WHERE canonical_status='CONFLICT'"
++        ).fetchone()[0]
++        == 2
++    )
++    assert sorted(
++        row[0]
++        for row in conn.execute("SELECT cash_amount FROM corporate_action").fetchall()
++    ) == [900.0, 1_000.0]
++    assert (
++        conn.execute("SELECT COUNT(*) FROM corporate_action_source_link").fetchone()[0]
++        == 2
++    )
++
++
++def test_source_revision_can_resolve_existing_cross_provider_conflict(conn) -> None:
++    vci = _cash_event(cash_amount=1_000)
++    kbs = deepcopy(vci)
++    kbs.update(
++        {
++            "provider_event_id": "kbs-resolution",
++            "provider": "KBS",
++            "source_reference": "kbs://company/SSI/events/kbs-resolution",
++            "content_hash": "kbs-resolution-hash",
++            "cash_amount": 900,
++        }
++    )
++    vci_revised = _cash_event(content_hash="vci-resolution-hash", cash_amount=900)
++
++    sync_corporate_actions(conn, symbol="SSI", client=FakeCorporateActionClient([vci]))
++    sync_corporate_actions(
++        conn, symbol="SSI", client=FakeCorporateActionClient([kbs], provider="KBS")
++    )
++    result = sync_corporate_actions(
++        conn, symbol="SSI", client=FakeCorporateActionClient([vci_revised])
++    )
++
++    assert result["status"] == "COMPLETE"
++    assert result["revised"] == 1
++    assert result["conflicts"] == 0
++    rows = conn.execute(
++        "SELECT cash_amount, canonical_status FROM corporate_action ORDER BY revision_number"
++    ).fetchall()
++    assert rows == [(1_000.0, "SUPERSEDED"), (900.0, "ACTIVE")]
++    assert (
++        conn.execute(
++            "SELECT COUNT(*) FROM corporate_action_source_link WHERE revision_id=(SELECT revision_id FROM corporate_action WHERE cash_amount=900)"
++        ).fetchone()[0]
++        == 2
++    )
++
++
++def test_source_revision_does_not_supersede_other_provider_conflict(conn) -> None:
++    vci = _cash_event(cash_amount=1_000)
++    kbs = deepcopy(vci)
++    kbs.update(
++        {
++            "provider_event_id": "kbs-conflict",
++            "provider": "KBS",
++            "source_reference": "kbs://company/SSI/events/kbs-conflict",
++            "content_hash": "kbs-conflict-hash",
++            "cash_amount": 900,
++        }
++    )
++    vci_revised = _cash_event(content_hash="vci-third-hash", cash_amount=1_100)
++
++    sync_corporate_actions(conn, symbol="SSI", client=FakeCorporateActionClient([vci]))
++    sync_corporate_actions(
++        conn, symbol="SSI", client=FakeCorporateActionClient([kbs], provider="KBS")
++    )
++    result = sync_corporate_actions(
++        conn, symbol="SSI", client=FakeCorporateActionClient([vci_revised])
++    )
++
++    assert result["status"] == "PARTIAL"
++    assert result["revised"] == 1
++    assert result["conflicts"] == 1
++    rows = conn.execute(
++        "SELECT cash_amount, canonical_status FROM corporate_action ORDER BY revision_number"
++    ).fetchall()
++    assert rows == [
++        (1_000.0, "SUPERSEDED"),
++        (900.0, "CONFLICT"),
++        (1_100.0, "CONFLICT"),
++    ]
++
++
++def test_equivalent_cross_provider_terms_share_revision(conn) -> None:
++    vci = _cash_event(cash_amount=1_000)
++    kbs = deepcopy(vci)
++    kbs.update(
++        {
++            "provider_event_id": "kbs-equivalent",
++            "provider": "KBS",
++            "source_reference": "kbs://company/SSI/events/kbs-equivalent",
++            "content_hash": "kbs-equivalent-hash",
++            "announced_at": "2024-01-03",
++            "title": "Dividend payment from KBS feed",
++        }
++    )
++
++    sync_corporate_actions(conn, symbol="SSI", client=FakeCorporateActionClient([vci]))
++    result = sync_corporate_actions(
++        conn, symbol="SSI", client=FakeCorporateActionClient([kbs], provider="KBS")
++    )
++
++    assert result["unchanged"] == 1
++    assert result["conflicts"] == 0
++    assert conn.execute("SELECT COUNT(*) FROM corporate_action").fetchone()[0] == 1
++    assert (
++        conn.execute("SELECT COUNT(*) FROM corporate_action_source_link").fetchone()[0]
++        == 2
++    )
++
++
++@pytest.mark.parametrize(
++    ("mutation", "expected_rule"),
++    [
++        ({"action_type": "OTHER"}, "UNSUPPORTED_ACTION_TYPE"),
++        ({"cash_amount": None}, "INVALID_CASH_AMOUNT"),
++        (
++            {
++                "ex_date": None,
++                "record_date": None,
++                "effective_date": None,
++                "announced_at": None,
++            },
++            "MISSING_ACTION_DATE",
++        ),
++    ],
++)
++def test_malformed_evidence_is_quarantined(conn, mutation, expected_rule) -> None:
++    event = _cash_event()
++    event.update(mutation)
++    event["content_hash"] = f"hash-{expected_rule}"
++
++    result = sync_corporate_actions(
++        conn, symbol="SSI", client=FakeCorporateActionClient([event])
++    )
++
++    assert result["status"] == "PARTIAL"
++    assert result["quarantined"] == 1
++    assert conn.execute("SELECT COUNT(*) FROM corporate_action").fetchone()[0] == 0
++    rules = conn.execute(
++        "SELECT rule_ids_json FROM corporate_action_quarantine"
++    ).fetchone()[0]
++    assert expected_rule in rules
++
++
++def test_unknown_symbol_identity_is_quarantined(conn) -> None:
++    event = _cash_event()
++    event["symbol"] = "UNKNOWN"
++    event["content_hash"] = "unknown-hash"
++
++    result = sync_corporate_actions(
++        conn, symbol="UNKNOWN", client=FakeCorporateActionClient([event])
++    )
++
++    assert result["quarantined"] == 1
++    assert (
++        "UNKNOWN_SYMBOL_IDENTITY"
++        in conn.execute(
++            "SELECT rule_ids_json FROM corporate_action_quarantine"
++        ).fetchone()[0]
++    )
++
++
++def test_valid_empty_sync_is_truthful_success(conn) -> None:
++    result = sync_corporate_actions(
++        conn, symbol="SSI", client=FakeCorporateActionClient([])
++    )
++    assert result["status"] == "EMPTY"
++    assert result["observed"] == 0
++    assert result["canonical_inserted"] == 0
++
++
++def test_unsupported_and_failed_provider_results_are_typed(conn) -> None:
++    unsupported = sync_corporate_actions(
++        conn,
++        symbol="SSI",
++        client=FailingCorporateActionClient(
++            status_code=404, body='{"error":"unsupported_dataset"}'
++        ),
++    )
++    failed = sync_corporate_actions(
++        conn,
++        symbol="SSI",
++        client=FailingCorporateActionClient(
++            status_code=502, body='{"error":"provider_fetch_error"}'
++        ),
++    )
++
++    assert unsupported["status"] == "UNSUPPORTED"
++    assert failed["status"] == "FAILED"
++    rows = conn.execute(
++        """
++        SELECT status, requested_count, failed_count, terminal_reason
++        FROM ingestion_run
++        WHERE source_endpoint='/v1/reference/corporate-actions'
++        ORDER BY started_at
++        """
++    ).fetchall()
++    assert rows == [
++        ("UNSUPPORTED", 1, 1, "UNSUPPORTED"),
++        ("FAILED", 1, 1, "FAILED"),
++    ]
++
++
++def test_status_reports_canonical_quarantine_and_affected_ranges(conn) -> None:
++    sync_corporate_actions(
++        conn, symbol="SSI", client=FakeCorporateActionClient([_cash_event()])
++    )
++    status = corporate_action_status(conn, symbol="SSI")
++    assert status["canonical_status_counts"] == {"ACTIVE": 1}
++    assert status["quarantined"] == 0
++    assert status["unresolved_affected_ranges"] == 1
++    assert status["latest_run"]["status"] == "COMPLETE"
++
++
++def test_data_provisioning_requires_one_symbol_and_surfaces_partial(conn) -> None:
++    with pytest.raises(DataProvisioningValidationError, match="exactly one symbol"):
++        DataProvisioningService.validate_request(
++            DataProvisioningRequest("download", "corporate-actions")
++        )
++
++    def fake_sync(*_: object, **__: object) -> dict:
++        return {
++            "run_id": "run-1",
++            "status": "PARTIAL",
++            "observed": 2,
++            "raw_inserted": 2,
++            "canonical_inserted": 1,
++            "unchanged": 0,
++            "revised": 0,
++            "conflicts": 0,
++            "quarantined": 1,
++            "affected_ranges": 1,
++        }
++
++    service = DataProvisioningService(
++        conn,
++        dependencies=DataProvisioningDependencies(sync_corporate_actions=fake_sync),
++    )
++    result = service.execute(
++        DataProvisioningRequest(
++            "download", "corporate-actions", symbol="SSI", source="VCI"
++        )
++    )
++    assert result.status is ProvisioningStatus.PARTIAL
++    assert result.counts["quarantined"] == 1
++diff --git a/vnalpha/tests/test_vnstock_corporate_action_client.py b/vnalpha/tests/test_vnstock_corporate_action_client.py
++new file mode 100644
++index 0000000..5cc8dca
++--- /dev/null
+++++ b/vnalpha/tests/test_vnstock_corporate_action_client.py
++@@ -0,0 +1,37 @@
+++from __future__ import annotations
+++
+++import httpx
+++
+++from vnalpha.clients.vnstock.client import VnstockClient
+++
+++
+++def test_get_corporate_actions_uses_canonical_bounded_endpoint(monkeypatch) -> None:
+++    captured: dict[str, object] = {}
+++
+++    def fake_get(self, url):
+++        captured["url"] = str(url)
+++        return httpx.Response(
+++            200,
+++            request=httpx.Request("GET", str(url)),
+++            json={
+++                "data": [],
+++                "meta": {
+++                    "dataset": "reference.corporate_actions",
+++                    "provider": "VCI",
+++                },
+++                "diagnostics": {},
+++            },
+++        )
+++
+++    monkeypatch.setattr(httpx.Client, "get", fake_get)
+++    client = VnstockClient(base_url="http://vnstock.test")
+++    response = client.get_corporate_actions(
+++        "SSI", start="2024-01-01", end="2024-12-31", source="VCI"
+++    )
+++    client.close()
+++
+++    assert response.meta.dataset == "reference.corporate_actions"
+++    assert captured["url"] == (
+++        "/v1/reference/corporate-actions?symbol=SSI&start=2024-01-01"
+++        "&end=2024-12-31&source=VCI"
+++    )
++diff --git a/vnalpha/tests/test_warehouse.py b/vnalpha/tests/test_warehouse.py
++index ccecef7..6bb23c2 100644
++--- a/vnalpha/tests/test_warehouse.py
+++++ b/vnalpha/tests/test_warehouse.py
++@@ -41,6 +41,11 @@ def test_all_tables_created(conn):
++         "daily_watchlist",
++         "rejected_symbol",
++         "ohlcv_quarantine",
+++        "corporate_action_raw_evidence",
+++        "corporate_action",
+++        "corporate_action_source_link",
+++        "corporate_action_quarantine",
+++        "corporate_action_affected_range",
++         "research_session",
++         "tool_trace",
++         "research_note",
++@@ -142,7 +147,7 @@ def test_run_migrations_idempotent(conn):
++     """Migrations can be run multiple times safely."""
++     run_migrations(conn=conn)  # second run
++     tables = conn.execute("SHOW TABLES").fetchall()
++-    assert len(tables) == 51
+++    assert len(tables) == 56
++ 
++ 
++ def test_get_watchlist_empty(conn):
++diff --git a/vnstock/docs/CORPORATE_ACTIONS.md b/vnstock/docs/CORPORATE_ACTIONS.md
++new file mode 100644
++index 0000000..59b91a0
++--- /dev/null
+++++ b/vnstock/docs/CORPORATE_ACTIONS.md
++@@ -0,0 +1,59 @@
+++# Corporate-action data contract
+++
+++> **Status:** current implementation for issue #112.
+++
+++`reference.corporate_actions` exposes bounded provider-normalized evidence for
+++corporate events. It does not calculate adjusted prices.
+++
+++## Providers
+++
+++KBS and VCI currently declare this dataset as `partial`. Their event feeds are
+++market-data evidence and are not described as official issuer disclosures.
+++Unsupported providers fail explicitly; a supported provider returning no rows is
+++a valid empty result.
+++
+++## Required columns
+++
+++```text
+++provider_event_id
+++symbol
+++action_type
+++provider
+++source_reference
+++source_version
+++content_hash
+++source_payload_json
+++```
+++
+++Optional fields include announcement, ex, record and effective dates; cash,
+++ratio, subscription and reference-price terms; currency and title. `ratio` is
+++normalized as new/resulting shares per existing share: `1:2` split becomes `2.0`,
+++`2:1` consolidation becomes `0.5`, and a `2:1` rights entitlement becomes `0.5`
+++new share per existing share. `ratio_text` preserves the provider wording.
+++
+++Supported canonical action types are:
+++
+++```text
+++CASH_DIVIDEND
+++STOCK_DIVIDEND
+++STOCK_BONUS
+++SPLIT
+++CONSOLIDATION
+++RIGHTS_ISSUE
+++REFERENCE_PRICE_ADJUSTMENT
+++ADDITIONAL_LISTING
+++SYMBOL_CHANGE
+++DELISTING
+++```
+++
