@@ -10,6 +10,7 @@ Focused offline tests: pass
 Implementation source SHA: 3b6d990d93248fcf11e0650a8e3c8417411056dd
 Validated implementation head: 83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed
 Validated metadata head: 88b30df00b17a3ee11f619258dc5b98ef872e7ae
+Final ledger head: 334b0cdb4c7d7a14044059b9fe48613c2fe107f2
 Required GitHub Actions validation: pass
 ```
 
@@ -37,7 +38,9 @@ python -m build --wheel --sdist --no-isolation --outdir /tmp/vnstock-dist ./vnst
 | 2026-07-16T00:40:00Z | `local source export + working tree` | 1.1–3.2 | Ruff, repository consistency and both wheel/sdist builds | 0 | all checks and builds passed | local command transcript |
 | 2026-07-16T01:35:00Z | `83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed` | 1.1–3.3 | `openstock-ci` run #71 (`29466440099`) | 0 | repository consistency, documentation contracts, Ruff, focused #112 regressions, R0, complete vnalpha suite, vnstock provider/canonical contracts, both package builds and Required merge gate passed | GitHub Actions run and diagnostics |
 | 2026-07-16T01:45:00Z | `88b30df00b17a3ee11f619258dc5b98ef872e7ae` | lifecycle metadata | `openstock-ci` run #74 (`29466729009`) | 0 | all component jobs and Required merge gate passed after completing tasks and setting the active change to ready/review_required | GitHub Actions run and diagnostics |
+| 2026-07-16T02:35:00Z | `334b0cdb4c7d7a14044059b9fe48613c2fe107f2` | final ledger | `openstock-ci` run #75 (`29466974193`) | 0 | repository consistency, full vnalpha, vnstock contracts, both package builds and Required merge gate passed with the completed validation ledger | GitHub Actions run and diagnostics |
 
 Final implementation source SHA: `3b6d990d93248fcf11e0650a8e3c8417411056dd`
 Validated implementation head: `83d2c77162b6d6b136cb8885d148bd3bd8c3f4ed`
 Validated metadata head: `88b30df00b17a3ee11f619258dc5b98ef872e7ae`
+Final ledger head: `334b0cdb4c7d7a14044059b9fe48613c2fe107f2`
