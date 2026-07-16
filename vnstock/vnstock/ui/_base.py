@@ -228,10 +228,12 @@ class BaseUI:
         return_result: bool = False,
         allow_legacy_fallback: bool = False,
     ) -> Any:
-        """Route a dataset request through the PluginRuntime.
+        """Route a dataset request through the :class:`PluginRuntime`.
 
-        This is the new routing path for migrated datasets.  Non-migrated
-        domains continue to use :meth:`_dispatch`.
+        This is the fail-closed routing boundary for migrated canonical
+        datasets. A migrated dataset either serves the request through its
+        canonical provider contract or raises a *typed* failure; it never
+        silently drops into legacy explorer dispatch.
 
         Args:
             dataset: Dotted dataset name, e.g. ``"equity.ohlcv"``.
@@ -241,13 +243,26 @@ class BaseUI:
             quality_mode: Quality validation mode (``"off"`` / ``"warn"`` /
                 ``"strict"``).
             return_result: Return :class:`DataResult` instead of DataFrame.
-            allow_legacy_fallback: When ``True``, fall back to legacy
-                :meth:`_dispatch` if the PluginRuntime raises an error.
-                Disabled by default for migrated datasets.
+            allow_legacy_fallback: Opt-in compatibility boundary for genuinely
+                *non-migrated* capabilities. When ``True`` **and** no explicit
+                ``source`` was requested, a capability-absence signal
+                (:class:`UnsupportedDatasetError` /
+                :class:`NoProviderForDatasetError`) causes this method to return
+                ``None`` so the caller can re-route through :meth:`_dispatch`.
+                All other failures — authentication, entitlement, rate limit,
+                invalid request, schema/contract drift, cooldown, disabled
+                provider and provider fetch errors — always propagate as typed
+                exceptions. Explicit provider selection never falls back.
 
         Returns:
-            :class:`pandas.DataFrame` or :class:`DataResult`.
+            :class:`pandas.DataFrame` or :class:`DataResult`, or ``None`` only
+            when a non-migrated capability was requested with
+            ``allow_legacy_fallback=True`` and no explicit ``source``.
         """
+        from vnstock.core.provider.exceptions import (
+            NoProviderForDatasetError,
+            UnsupportedDatasetError,
+        )
         from vnstock.core.runtime import default_runtime
 
         try:
@@ -260,15 +275,20 @@ class BaseUI:
                 quality_mode=quality_mode,
                 return_result=return_result,
             )
-        except Exception as _exc:
-            if allow_legacy_fallback:
+        except (UnsupportedDatasetError, NoProviderForDatasetError) as _exc:
+            # Capability-absence: the plugin platform has no provider for this
+            # dataset at all. This is the only signal that may cross the
+            # compatibility boundary, and only for auto-selected (no explicit
+            # source) non-migrated capabilities.
+            explicit_source = source is not None
+            if allow_legacy_fallback and not explicit_source:
                 import warnings as _w
 
                 _w.warn(
-                    f"PluginRuntime failed for dataset '{dataset}' "
-                    f"({type(_exc).__name__}: {_exc}). "
-                    "Falling back to legacy dispatch. "
-                    "Set allow_legacy_fallback=False to disable this behaviour.",
+                    f"COMPAT_LEGACY_DISPATCH: dataset '{dataset}' has no plugin "
+                    f"provider ({type(_exc).__name__}); routing through the "
+                    "non-canonical legacy explorer path. This capability is not "
+                    "yet migrated to a canonical dataset contract.",
                     RuntimeWarning,
                     stacklevel=2,
                 )
