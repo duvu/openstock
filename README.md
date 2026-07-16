@@ -105,6 +105,21 @@ See [`vnalpha/README.md`](vnalpha/README.md) and [`vnalpha/docs/README.md`](vnal
 
 ## Quick start
 
+### One-command MVP1 startup
+
+On a configured single Linux host, one command validates paths, starts and
+health-checks `vnstock-service`, migrates the warehouse, runs the MVP1
+preflight and launches the chat TUI:
+
+```bash
+packaging/scripts/openstock-mvp1-start          # start everything and open the TUI
+packaging/scripts/openstock-mvp1-start --no-launch   # prepare, then print the launch command
+packaging/scripts/openstock-verify --mvp1        # read-only preflight only (safe to re-run)
+```
+
+Startup is idempotent and never overwrites existing valid data or credentials.
+The manual steps below remain available for development and first-time setup.
+
 ### Prerequisites
 
 - Linux or another environment capable of running Python and Docker Compose;

@@ -5,7 +5,8 @@
 # ──────────────────────────────────────────────
 
 .PHONY: help up-vnstock down-vnstock login-vnstock validate-compose \
-        sync features score tui install-vnalpha lint-vnalpha test-vnalpha \
+        sync features score tui mvp1-start verify-mvp1 install-vnalpha \
+        lint-vnalpha test-vnalpha \
         eval-research-answers eval-research-runtime verify-hardening verify-r0 \
         verify-r2-ci verify-r4 repo-hygiene verify-repo-consistency \
         verify-vnalpha-package build-vnalpha-deb verify-vnalpha-deb
@@ -49,6 +50,12 @@ score: ## Score and update watchlist for today
 
 tui: ## Launch the vnalpha TUI
 	vnalpha tui
+
+mvp1-start: ## One-command MVP1 chat vertical-slice startup (idempotent)
+	packaging/scripts/openstock-mvp1-start
+
+verify-mvp1: ## Read-only MVP1 chat vertical-slice preflight
+	packaging/scripts/openstock-verify --mvp1
 
 # ── vnalpha dev ───────────────────────────────
 

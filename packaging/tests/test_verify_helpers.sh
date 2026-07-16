@@ -106,6 +106,46 @@ else
   tap_ok "openstock-verify --ci emits no [FAIL] lines"
 fi
 
+# --- test 12: openstock-verify --mvp1 --ci exits 0 (issue #166) ---
+if bash packaging/scripts/openstock-verify --mvp1 --ci >/dev/null 2>&1; then
+  tap_ok "openstock-verify --mvp1 --ci exits 0"
+else
+  TAP_COUNT=$(( TAP_COUNT + 1 ))
+  TAP_FAIL=$(( TAP_FAIL + 1 ))
+  echo "not ok ${TAP_COUNT} - openstock-verify --mvp1 --ci exits 0"
+  echo "  # script returned non-zero in --mvp1 --ci mode"
+fi
+
+# --- test 13: openstock-verify --mvp1 --ci emits no [FAIL] lines ---
+_mvp1_output="$(bash packaging/scripts/openstock-verify --mvp1 --ci 2>&1 || true)"
+if echo "$_mvp1_output" | grep -q '^\[FAIL\]'; then
+  TAP_COUNT=$(( TAP_COUNT + 1 ))
+  TAP_FAIL=$(( TAP_FAIL + 1 ))
+  echo "not ok ${TAP_COUNT} - openstock-verify --mvp1 --ci emits no [FAIL] lines"
+  echo "$_mvp1_output" | grep '^\[FAIL\]' | sed 's/^/  # /'
+else
+  tap_ok "openstock-verify --mvp1 --ci emits no [FAIL] lines"
+fi
+
+# --- test 14: openstock-mvp1-start --help exits 0 and documents flags ---
+_start_help="$(bash packaging/scripts/openstock-mvp1-start --help 2>&1)"
+if echo "$_start_help" | grep -q -- "--no-launch"; then
+  tap_ok "openstock-mvp1-start --help documents --no-launch"
+else
+  TAP_COUNT=$(( TAP_COUNT + 1 ))
+  TAP_FAIL=$(( TAP_FAIL + 1 ))
+  echo "not ok ${TAP_COUNT} - openstock-mvp1-start --help documents --no-launch"
+fi
+
+# --- test 15: openstock-mvp1-start rejects unknown options ---
+if bash packaging/scripts/openstock-mvp1-start --bogus >/dev/null 2>&1; then
+  TAP_COUNT=$(( TAP_COUNT + 1 ))
+  TAP_FAIL=$(( TAP_FAIL + 1 ))
+  echo "not ok ${TAP_COUNT} - openstock-mvp1-start rejects unknown options"
+else
+  tap_ok "openstock-mvp1-start rejects unknown options"
+fi
+
 # --- TAP summary ---
 echo ""
 echo "1..${TAP_COUNT}"

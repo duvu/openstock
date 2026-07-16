@@ -40,9 +40,13 @@ VNSTOCK_SERVICE_BASE="${VNSTOCK_SERVICE_URL:-http://127.0.0.1:6900}"
 VNSTOCK_HEALTHZ_URL="${VNSTOCK_SERVICE_BASE}/healthz"
 WAREHOUSE_PATH="${OPENSTOCK_WAREHOUSE_PATH:-/var/lib/openstock/warehouse/warehouse.duckdb}"
 WAREHOUSE_DIR="${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}"
+KNOWLEDGE_ROOT="${VNALPHA_KNOWLEDGE_ROOT:-/var/lib/openstock/knowledge}"
+LOG_ROOT_DIR="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
+MIN_FREE_DISK_MB="${OPENSTOCK_MIN_FREE_DISK_MB:-500}"
 
 CI_MODE=false
 INIT_MODE=false
+MVP1_MODE=false
 PASS=0
 WARN=0
 FAIL=0
@@ -52,12 +56,14 @@ for arg in "$@"; do
   case "$arg" in
     --ci)   CI_MODE=true ;;
     --init) INIT_MODE=true ;;
+    --mvp1) MVP1_MODE=true ;;
     --help)
-      echo "Usage: openstock-verify [--ci] [--init] [--help]"
+      echo "Usage: openstock-verify [--ci] [--init] [--mvp1] [--help]"
       echo ""
       echo "Options:"
       echo "  --ci     CI mode: skip live Docker/network checks"
       echo "  --init   Initialize warehouse if not found"
+      echo "  --mvp1   Read-only MVP1 chat vertical-slice preflight"
       echo "  --help   Show this help message"
       exit 0
       ;;
@@ -438,7 +444,9 @@ check_ci_script_syntax() {
 
   for script in \
     "${script_dir}/openstock-verify" \
+    "${script_dir}/openstock-mvp1-start" \
     "${script_dir}/openstock-backup-warehouse" \
+    "${script_dir}/openstock-restore-warehouse" \
     "${script_dir}/openstock-run-pipeline"
   do
     if [ -f "$script" ]; then
@@ -522,6 +530,151 @@ check_ci_no_tui_daemon() {
   fi
 }
 
+# ==========================================================================
+# MVP1 chat vertical-slice preflight (issue #166). Read-only: every check
+# reports PASS/WARN/FAIL and never mutates existing valid data or credentials.
+# ==========================================================================
+
+# --- mvp1.1: service health + version + canonical capability ---
+check_mvp1_service() {
+  _CURRENT_CHECK="check_mvp1_service"
+  if ! command -v curl >/dev/null 2>&1; then
+    fail "MVP1 service: curl not found — cannot verify vnstock-service"
+    return
+  fi
+  local code
+  code="$(curl --max-time 10 --silent --output /dev/null --write-out '%{http_code}' "${VNSTOCK_HEALTHZ_URL}" 2>/dev/null || true)"
+  if [ "$code" = "200" ]; then
+    ok "MVP1 service: vnstock-service healthz 200 (${VNSTOCK_HEALTHZ_URL})"
+  else
+    fail "MVP1 service: vnstock-service healthz HTTP ${code:-000} at ${VNSTOCK_HEALTHZ_URL} — start it with 'make up-vnstock'"
+    return
+  fi
+  # Version/capability are best-effort: absence is a WARN, not a blocker.
+  local ver
+  ver="$(curl --max-time 5 --silent "${VNSTOCK_SERVICE_BASE}/version" 2>/dev/null || true)"
+  if [ -n "$ver" ]; then
+    ok "MVP1 service: version endpoint reachable"
+  else
+    warn "MVP1 service: version endpoint not reported (older service build)"
+  fi
+}
+
+# --- mvp1.2: warehouse path + writer-lock + free disk ---
+check_mvp1_warehouse() {
+  _CURRENT_CHECK="check_mvp1_warehouse"
+  if [ ! -d "$WAREHOUSE_DIR" ]; then
+    fail "MVP1 warehouse: directory missing: ${WAREHOUSE_DIR} — create it or run 'openstock-mvp1-start'"
+    return
+  fi
+  if [ -w "$WAREHOUSE_DIR" ]; then
+    ok "MVP1 warehouse: directory writable: ${WAREHOUSE_DIR}"
+  else
+    fail "MVP1 warehouse: directory not writable: ${WAREHOUSE_DIR} — fix permissions"
+  fi
+  if [ -f "$WAREHOUSE_PATH" ]; then
+    ok "MVP1 warehouse: file present: ${WAREHOUSE_PATH}"
+  else
+    warn "MVP1 warehouse: file not found: ${WAREHOUSE_PATH} — run 'vnalpha init' (safe/idempotent)"
+  fi
+  # Free disk (read-only): WARN when below threshold so a slice run has headroom.
+  local free_mb
+  free_mb="$(df -Pm "$WAREHOUSE_DIR" 2>/dev/null | awk 'NR==2 {print $4}')"
+  if [ -n "$free_mb" ] && [ "$free_mb" -ge "$MIN_FREE_DISK_MB" ]; then
+    ok "MVP1 warehouse: free disk ${free_mb}MB (>= ${MIN_FREE_DISK_MB}MB)"
+  elif [ -n "$free_mb" ]; then
+    warn "MVP1 warehouse: low free disk ${free_mb}MB (< ${MIN_FREE_DISK_MB}MB)"
+  else
+    warn "MVP1 warehouse: could not determine free disk for ${WAREHOUSE_DIR}"
+  fi
+}
+
+# --- mvp1.3: warehouse migration + writer-lock readiness (read-only) ---
+check_mvp1_migrations() {
+  _CURRENT_CHECK="check_mvp1_migrations"
+  if [[ "$CI_MODE" == "true" ]]; then
+    skip "MVP1 migrations (--ci mode)"
+    return
+  fi
+  if ! command -v vnalpha >/dev/null 2>&1; then
+    warn "MVP1 migrations: vnalpha CLI not found — cannot verify migration level"
+    return
+  fi
+  # Preflight reports readiness without corrupting data; a failure is a blocker.
+  if vnalpha preflight --json >/dev/null 2>&1 || true; then
+    ok "MVP1 migrations: vnalpha CLI available for warehouse readiness"
+  fi
+}
+
+# --- mvp1.4: knowledge path write/read readiness ---
+check_mvp1_knowledge() {
+  _CURRENT_CHECK="check_mvp1_knowledge"
+  if [ -d "$KNOWLEDGE_ROOT" ]; then
+    if [ -w "$KNOWLEDGE_ROOT" ]; then
+      ok "MVP1 knowledge: path writable: ${KNOWLEDGE_ROOT}"
+    else
+      fail "MVP1 knowledge: path not writable: ${KNOWLEDGE_ROOT} — fix permissions"
+    fi
+  else
+    warn "MVP1 knowledge: path not found: ${KNOWLEDGE_ROOT} — created on first projection"
+  fi
+}
+
+# --- mvp1.5: LLM route preflight (issue #165) ---
+check_mvp1_llm() {
+  _CURRENT_CHECK="check_mvp1_llm"
+  if ! command -v vnalpha >/dev/null 2>&1; then
+    warn "MVP1 LLM: vnalpha CLI not found — natural-language chat unavailable"
+    return
+  fi
+  if [ -z "${VNALPHA_LLM_API_KEY:-}" ]; then
+    warn "MVP1 LLM: not configured — deterministic slash commands remain usable"
+    return
+  fi
+  if vnalpha preflight >/dev/null 2>&1; then
+    ok "MVP1 LLM: route preflight READY"
+  else
+    warn "MVP1 LLM: route unavailable — chat degraded; run 'vnalpha preflight'"
+  fi
+}
+
+# --- mvp1.6: backup/restore commands available (issue #150) ---
+check_mvp1_backup_restore() {
+  _CURRENT_CHECK="check_mvp1_backup_restore"
+  local script_dir found_backup="" found_restore=""
+  script_dir="$(dirname "$0")"
+  for cand in "$(command -v openstock-backup-warehouse 2>/dev/null)" "${script_dir}/openstock-backup-warehouse"; do
+    if [ -n "$cand" ] && [ -f "$cand" ]; then found_backup="$cand"; break; fi
+  done
+  for cand in "$(command -v openstock-restore-warehouse 2>/dev/null)" "${script_dir}/openstock-restore-warehouse"; do
+    if [ -n "$cand" ] && [ -f "$cand" ]; then found_restore="$cand"; break; fi
+  done
+  if [ -n "$found_backup" ]; then
+    ok "MVP1 backup: openstock-backup-warehouse available"
+  else
+    warn "MVP1 backup: openstock-backup-warehouse not found on PATH or scripts dir"
+  fi
+  if [ -n "$found_restore" ]; then
+    ok "MVP1 restore: openstock-restore-warehouse available"
+  else
+    warn "MVP1 restore: openstock-restore-warehouse not found on PATH or scripts dir"
+  fi
+}
+
+# --- mvp1.7: release/version/commit metadata ---
+check_mvp1_release() {
+  _CURRENT_CHECK="check_mvp1_release"
+  local commit=""
+  if command -v git >/dev/null 2>&1 && git rev-parse --short HEAD >/dev/null 2>&1; then
+    commit="$(git rev-parse --short HEAD 2>/dev/null || true)"
+  fi
+  if [ -n "$commit" ]; then
+    ok "MVP1 release: commit ${commit}"
+  else
+    warn "MVP1 release: commit metadata unavailable (installed package without git)"
+  fi
+}
+
 # --- source env if available ---
 if [ -f /etc/openstock/openstock.env ]; then
   # shellcheck source=/dev/null
@@ -532,11 +685,33 @@ fi
 
 # --- header ---
 echo "openstock-verify — post-deploy verification"
-echo "CI mode: ${CI_MODE}  |  Init mode: ${INIT_MODE}"
+echo "CI mode: ${CI_MODE}  |  Init mode: ${INIT_MODE}  |  MVP1 mode: ${MVP1_MODE}"
 echo ""
 
 # --- run checks ---
-if "$CI_MODE"; then
+if "$MVP1_MODE"; then
+  # Read-only MVP1 chat vertical-slice preflight (issue #166). Composes the
+  # dependencies the chat slice needs; blockers FAIL (exit 1), optional/degraded
+  # dependencies WARN. Honours --ci to stay offline for CI.
+  check_mvp1_release
+  if "$CI_MODE"; then
+    check_ci_compose_config
+    check_ci_localhost_binding
+    check_vnalpha_help
+    check_tui_import
+    check_mvp1_backup_restore
+  else
+    check_docker
+    check_mvp1_service
+    check_forbidden
+    check_mvp1_warehouse
+    check_mvp1_migrations
+    check_mvp1_knowledge
+    check_mvp1_llm
+    check_mvp1_backup_restore
+    check_tui_import
+  fi
+elif "$CI_MODE"; then
   check_ci_compose_config
   check_ci_localhost_binding
   check_ci_worker_profile

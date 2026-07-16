@@ -12,8 +12,25 @@ policy:
 
 changes:
 
-  assistant-llm-preflight:
+  mvp1-startup-preflight:
     status: in_progress
+    github_issues: [166]
+    roadmap_state: scheduled
+    summary: >-
+      Add one idempotent `openstock-mvp1-start` command and a read-only
+      `openstock-verify --mvp1` installed-host preflight for the MVP1 chat
+      vertical slice: persistent paths, service health, warehouse migration and
+      disk, knowledge path, LLM route (#165), backup/restore availability (#150)
+      and release metadata, with PASS/WARN/FAIL and non-zero exit on blockers.
+    evidence: >-
+      Implementation on branch agent/issue-166-one-command-startup. Packaging
+      tests in packaging/tests/test_verify_helpers.sh and
+      packaging/test/test_mvp1_start.sh pass locally (--mvp1 --ci exits 0 with
+      no [FAIL]; idempotent startup against fake binaries). An installed-host
+      smoke run and final CI on the merge SHA are pending the PR.
+
+  assistant-llm-preflight:
+    status: ready
     github_issues: [165]
     roadmap_state: scheduled
     summary: >-
