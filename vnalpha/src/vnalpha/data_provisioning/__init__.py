@@ -1,5 +1,11 @@
 from vnalpha.clients.vnstock.source_policy import ENVIRONMENT_APPROVED_SOURCES
 from vnalpha.data_provisioning import service as _service
+from vnalpha.data_provisioning.ensure_current_symbol import (
+    CurrentSymbolReadyResult,
+    ProvisioningAction,
+    ProvisioningOutcome,
+    ensure_current_symbol_ready,
+)
 from vnalpha.data_provisioning.service import (
     DataProvisioningDependencies,
     DataProvisioningRequest,
@@ -21,4 +27,8 @@ __all__ = [
     "DataProvisioningService",
     "DataProvisioningValidationError",
     "ProvisioningStatus",
+    "ensure_current_symbol_ready",
+    "CurrentSymbolReadyResult",
+    "ProvisioningAction",
+    "ProvisioningOutcome",
 ]

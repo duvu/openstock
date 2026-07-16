@@ -137,6 +137,26 @@ def _build_explain_plan(entities: dict) -> AssistantPlan:
     )
 
 
+def _provision_step(
+    entities: dict, symbol: str, *, refresh: bool = False
+) -> ToolPlanStep:
+    """Build an explicit current-symbol provisioning step for a plan."""
+    args = _date_args(entities, symbol=symbol)
+    if refresh:
+        args["refresh"] = True
+    purpose = (
+        "Refresh and validate the minimum current-symbol data"
+        if refresh
+        else "Provision and validate the minimum current-symbol data"
+    )
+    return _step(
+        "data.ensure_current_symbol",
+        args,
+        purpose,
+        "WRITE_DATA",
+    )
+
+
 def _build_deep_analysis_plan(entities: dict) -> AssistantPlan:
     symbol = _resolve_symbol(entities)
     if not symbol:
@@ -145,12 +165,13 @@ def _build_deep_analysis_plan(entities: dict) -> AssistantPlan:
     return AssistantPlan(
         intent="deep_analyze_symbol",
         steps=[
+            _provision_step(entities, symbol),
             _step(
                 "analysis.deep_symbol",
                 args,
                 "Compose score, feature, level, market, sector, freshness, and lineage context",
                 "READ_SCORE",
-            )
+            ),
         ],
         assumptions=["Only persisted warehouse artifacts are authoritative."],
         required_artifacts=[
@@ -389,14 +410,18 @@ def _build_history_plan(entities: dict) -> AssistantPlan:
     )
 
 
-def _build_fetch_plan(_entities: dict) -> AssistantPlan:
+def _build_fetch_plan(entities: dict) -> AssistantPlan:
+    symbol = _resolve_symbol(entities)
+    if not symbol:
+        return _missing_entity_plan("fetch_data", "symbol")
     return AssistantPlan(
         intent="fetch_data",
-        steps=[],
-        refusal_reason=(
-            "Warehouse data fetches require an explicit manual command or tool path; "
-            "the assistant cannot run data.fetch autonomously."
-        ),
+        steps=[_provision_step(entities, symbol, refresh=True)],
+        assumptions=[
+            "Provisioning is bounded to the current symbol and its benchmark; "
+            "it never performs arbitrary or unrestricted data fetching."
+        ],
+        required_artifacts=["canonical_ohlcv"],
     )
 
 

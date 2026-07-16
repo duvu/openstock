@@ -107,6 +107,14 @@ TOOL_CAPABILITIES: Final[tuple[ToolCapability, ...]] = (
         mutates_warehouse=True,
     ),
     ToolCapability(
+        "data.ensure_current_symbol",
+        ToolPermission.WRITE_DATA,
+        True,
+        True,
+        True,
+        mutates_warehouse=True,
+    ),
+    ToolCapability(
         "data.fetch",
         ToolPermission.WRITE_DATA,
         False,

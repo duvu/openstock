@@ -25,6 +25,7 @@ def ensure_symbol_analysis_ready(
     *,
     policy: DataAvailabilityPolicy = DEFAULT_POLICY,
     client: VnstockClient | None = None,
+    force_refresh: bool = False,
     _sync_symbols_fn: Callable | None = None,
     _sync_ohlcv_fn: Callable | None = None,
     _sync_index_fn: Callable | None = None,
@@ -42,6 +43,7 @@ def ensure_symbol_analysis_ready(
         policy=policy,
         client=client,
         lock_dir=_lock_dir,
+        force_refresh=force_refresh,
     )
     dependencies = EnsureDependencies(
         sync_symbols=_sync_symbols_fn,

@@ -15,6 +15,11 @@ from vnalpha.assistant.research_templates import (
 _NUMBER_RE = re.compile(r"(?<![\w-])[-+]?(?:\d+\.\d+|\d+)%?(?![\w-])")
 _ISO_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
+# Provisioning/support tools that never produce factual research claims. Their
+# outputs (data-availability traces) are not the primary research payload and
+# are excluded from the groundedness field/claim contract (issue #163).
+_NON_CLAIM_TOOLS: frozenset[str] = frozenset({"data.ensure_current_symbol"})
+
 
 @dataclass(frozen=True, slots=True)
 class GroundednessResult:
@@ -69,8 +74,11 @@ class GroundednessValidator:
             return GroundednessResult(status="PASS")
 
         template = RESEARCH_TEMPLATES.get(plan.intent)
+        claim_steps = [
+            step for step in plan.steps if step.tool_name not in _NON_CLAIM_TOOLS
+        ]
         missing_outputs = tuple(
-            step.tool_name for step in plan.steps if step.step_id not in tool_outputs
+            step.tool_name for step in claim_steps if step.step_id not in tool_outputs
         )
         valid_refs = tuple(sorted(_valid_source_refs(plan, tool_outputs)))
         messages: list[str] = []
@@ -82,8 +90,8 @@ class GroundednessValidator:
             )
 
         primary_data: dict[str, Any] | None = None
-        if plan.steps:
-            primary_output = tool_outputs.get(plan.steps[0].step_id)
+        if claim_steps:
+            primary_output = tool_outputs.get(claim_steps[0].step_id)
             candidate = _data_payload(primary_output)
             if isinstance(candidate, dict):
                 primary_data = candidate

@@ -38,6 +38,11 @@ _FAIL_CLOSED_ANALYSIS_TOOLS: frozenset[str] = frozenset(
     {"analysis.deep_symbol", "scenario.generate_research_plan"}
 )
 
+# The explicit provisioning tool. When a plan already contains this step, the
+# executor does not run the hidden implicit data-ensure for the same symbol,
+# because provisioning is now an on-trace application step (issue #163).
+_PROVISION_TOOL = "data.ensure_current_symbol"
+
 _TOOL_PERMISSIONS = TOOL_PERMISSIONS
 logger = get_logger("assistant.executor")
 
@@ -46,13 +51,21 @@ def _build_tool_registry(conn):
     return build_local_tool_registry(conn)
 
 
-def _ensure_data_for_step(conn, step: ToolPlanStep) -> None:
+def _ensure_data_for_step(
+    conn, step: ToolPlanStep, *, explicitly_provisioned: bool = False
+) -> None:
     """Deterministically provision one-symbol analysis prerequisites.
 
     Full-universe watchlist and shortlist flows deliberately do not trigger an
     implicit universe refresh. They consume persisted artifacts only.
+
+    When the plan already carries an explicit ``data.ensure_current_symbol``
+    step (``explicitly_provisioned``), the implicit pre-step is skipped so
+    provisioning is represented once, on-trace (issue #163).
     """
     if step.tool_name not in _ANALYSIS_TOOLS:
+        return
+    if explicitly_provisioned:
         return
     from vnalpha.commands.normalizers import normalize_date
     from vnalpha.data_availability import ensure_symbol_analysis_ready
@@ -92,6 +105,32 @@ def _ensure_data_for_step(conn, step: ToolPlanStep) -> None:
                 logger.warning(
                     "Pre-execution data ensure failed for %s: %s", symbol, exc
                 )
+
+
+def _assert_provisioning_ready(step: ToolPlanStep, result: Any) -> None:
+    """Stop the plan when explicit provisioning did not reach a ready state.
+
+    Provisioning is fail-closed: a failed or partial provisioning turn must not
+    let a downstream analysis step run against incomplete or corrupt data.
+    """
+    data = result.get("data") if isinstance(result, dict) else None
+    outcome = data.get("outcome") if isinstance(data, dict) else None
+    ready_outcomes = {"READY", "REUSED", "REFRESHED"}
+    if outcome in ready_outcomes:
+        return
+    errors = data.get("errors") if isinstance(data, dict) else None
+    remediation = data.get("remediation") if isinstance(data, dict) else None
+    details = []
+    if isinstance(errors, list) and errors:
+        details.append(str(errors[0]))
+    else:
+        details.append("Current-symbol data could not be provisioned.")
+    if isinstance(remediation, list) and remediation:
+        details.append("Remediation: " + " -> ".join(str(cmd) for cmd in remediation))
+    correlation_id = data.get("correlation_id") if isinstance(data, dict) else None
+    if correlation_id:
+        details.append(f"correlation_id={correlation_id}")
+    raise ToolExecutionError(". ".join(details))
 
 
 def _readiness_error_message(readiness) -> str:
@@ -168,20 +207,42 @@ class AssistantExecutor:
                 reason=plan.refusal_reason or "Unsupported request",
                 policy_category="UNSUPPORTED",
             )
+        from vnalpha.observability.context import get_correlation_id, set_correlation_id
+
+        correlation_id = get_correlation_id()
+        if not correlation_id or correlation_id == "unset":
+            correlation_id = set_correlation_id()
+
+        explicitly_provisioned = any(
+            step.tool_name == _PROVISION_TOOL for step in plan.steps
+        )
         results: dict[str, Any] = {}
         for step in plan.steps:
             assert_safe_tool(step.tool_name)
-            _ensure_data_for_step(self._conn, step)
-            results[step.step_id] = self._execute_step(step)
+            _ensure_data_for_step(
+                self._conn,
+                step,
+                explicitly_provisioned=explicitly_provisioned,
+            )
+            results[step.step_id] = self._execute_step(
+                step, correlation_id=correlation_id
+            )
+            if step.tool_name == _PROVISION_TOOL:
+                _assert_provisioning_ready(step, results[step.step_id])
         return results
 
-    def _execute_step(self, step: ToolPlanStep) -> Any:
+    def _execute_step(
+        self, step: ToolPlanStep, *, correlation_id: str | None = None
+    ) -> Any:
         try:
             permission = _TOOL_PERMISSIONS[step.tool_name]
+            arguments = _normalize_tool_arguments(step.arguments)
+            if step.tool_name == _PROVISION_TOOL and correlation_id is not None:
+                arguments["correlation_id"] = correlation_id
             output = self._tool_executor.call(
                 step.tool_name,
                 {permission},
-                **_normalize_tool_arguments(step.arguments),
+                **arguments,
             )
             if dataclasses.is_dataclass(output):
                 return dataclasses.asdict(output)
