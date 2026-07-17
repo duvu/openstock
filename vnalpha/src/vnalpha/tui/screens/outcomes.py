@@ -121,8 +121,11 @@ if _TEXTUAL_AVAILABLE:
                         f"Candidates: {result.get('candidate_count')} | "
                         f"Complete: {result.get('complete_count')} | "
                         f"Pending: {result.get('pending_count')} | "
+                        f"Invalid: {result.get('invalid_count')} | "
                         f"Hit Rate: {hit_rate_str} | "
-                        f"Failure Rate: {failure_rate_str}"
+                        f"Failure Rate: {failure_rate_str} | "
+                        f"Basis: {result.get('price_basis') or 'UNKNOWN'} | "
+                        f"Policy: {result.get('scoring_policy_version') or 'UNKNOWN'}"
                     )
                 self.query_one("#outcome-summary", Static).update(text)
             except Exception as exc:
@@ -145,9 +148,11 @@ if _TEXTUAL_AVAILABLE:
                 else:
                     pending = result.get("pending_count") or 0
                     missing = result.get("missing_data_count") or 0
+                    invalid = result.get("invalid_count") or 0
                     text = (
                         f"[Pending/Missing Data] "
-                        f"Pending horizons: {pending} | Missing data: {missing}\n"
+                        f"Pending horizons: {pending} | Missing data: {missing} | "
+                        f"Invalid lineage: {invalid}\n"
                         "Note: outcomes are retrospective research evaluation only."
                     )
                 self.query_one("#outcome-pending-panel", Static).update(text)
@@ -176,10 +181,14 @@ if _TEXTUAL_AVAILABLE:
                     "Excess Rtn",
                     "Hit",
                     "Failure",
+                    "Basis",
+                    "Policy",
                 )
                 if not rows:
                     table.add_row(
                         "No candidate outcome data available.",
+                        "—",
+                        "—",
                         "—",
                         "—",
                         "—",
@@ -208,6 +217,8 @@ if _TEXTUAL_AVAILABLE:
                         exc,
                         str(row["hit"]) if row["hit"] is not None else "—",
                         str(row["failure"]) if row["failure"] is not None else "—",
+                        row.get("price_basis") or "UNKNOWN",
+                        row.get("scoring_policy_version") or "UNKNOWN",
                     )
             except Exception as exc:
                 logger.warning(f"Error populating candidates table: {exc}")

@@ -22,6 +22,7 @@ from vnalpha.outcomes.repositories import (
     get_evaluation_run,
     get_watchlist_outcome,
 )
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -84,15 +85,21 @@ def _insert_watchlist(
     conn.execute(
         """
         INSERT INTO daily_watchlist
-           (date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, '{}')
+           (date, rank, symbol, score, candidate_class, setup_type,
+            risk_flags_json, lineage_json, scoring_policy_id,
+            scoring_policy_version, scoring_policy_hash, scoring_policy_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?)
            ON CONFLICT (date, rank) DO UPDATE SET
                symbol=excluded.symbol,
                score=excluded.score,
                candidate_class=excluded.candidate_class,
                setup_type=excluded.setup_type,
                risk_flags_json=excluded.risk_flags_json,
-               lineage_json=excluded.lineage_json
+               lineage_json=excluded.lineage_json,
+               scoring_policy_id=excluded.scoring_policy_id,
+               scoring_policy_version=excluded.scoring_policy_version,
+               scoring_policy_hash=excluded.scoring_policy_hash,
+               scoring_policy_status=excluded.scoring_policy_status
         """,
         [
             watchlist_date,
@@ -102,6 +109,10 @@ def _insert_watchlist(
             candidate_class,
             setup_type,
             json.dumps(risk_flags or []),
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.lifecycle_status.value,
         ],
     )
 

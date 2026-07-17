@@ -138,10 +138,28 @@ def build_features(
 def build_score(
     symbol: str = typer.Argument(..., help="Symbol to score."),
     date: str = typer.Option(..., "--date", help="As-of date (YYYY-MM-DD)."),
+    scoring_policy: str = typer.Option(
+        "openstock-candidate-score@v1.0",
+        "--scoring-policy",
+        help="Immutable scoring policy ID and version.",
+    ),
+    rebuild_policy: bool = typer.Option(False, "--rebuild-policy"),
 ) -> None:
+    try:
+        policy_id, policy_version = scoring_policy.rsplit("@", 1)
+    except ValueError as exc:
+        raise typer.BadParameter(
+            "Use ID@version.", param_hint="--scoring-policy"
+        ) from exc
     _run(
         DataProvisioningRequest(
-            operation="build", artifact="score", symbol=symbol, date=date
+            operation="build",
+            artifact="score",
+            symbol=symbol,
+            date=date,
+            scoring_policy_id=policy_id,
+            scoring_policy_version=policy_version,
+            rebuild_policy=rebuild_policy,
         )
     )
 

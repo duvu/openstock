@@ -33,8 +33,14 @@ def create_evaluation_run(
     evaluator_version: Optional[str],
     metric_policy_version: Optional[str],
     horizons: List[int],
-    price_basis: str = "RAW_UNADJUSTED",
-    adjustment_methodology: str = "NONE",
+    price_basis: str = "UNKNOWN",
+    adjustment_methodology: str = "UNKNOWN",
+    adjustment_version: str = "UNKNOWN",
+    action_overlap_status: str = "NOT_EVALUATED",
+    scoring_policy_id: str | None = None,
+    scoring_policy_version: str | None = None,
+    scoring_policy_hash: str | None = None,
+    scoring_policy_status: str | None = None,
 ) -> str:
     """Insert a new RUNNING evaluation run record; return its ID."""
     run_id = str(uuid.uuid4())
@@ -43,8 +49,10 @@ def create_evaluation_run(
         INSERT INTO outcome_evaluation_run
             (evaluation_run_id, watchlist_date, started_at, status,
              evaluator_version, metric_policy_version, horizons_json,
-             price_basis, adjustment_methodology)
-        VALUES (?, ?, ?, 'RUNNING', ?, ?, ?, ?, ?)
+             price_basis, adjustment_methodology, adjustment_version,
+             action_overlap_status, scoring_policy_id, scoring_policy_version,
+             scoring_policy_hash, scoring_policy_status)
+        VALUES (?, ?, ?, 'RUNNING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             run_id,
@@ -55,6 +63,12 @@ def create_evaluation_run(
             str(horizons),
             price_basis,
             adjustment_methodology,
+            adjustment_version,
+            action_overlap_status,
+            scoring_policy_id,
+            scoring_policy_version,
+            scoring_policy_hash,
+            scoring_policy_status,
         ],
     )
     return run_id
@@ -69,9 +83,14 @@ def finish_evaluation_run(
     symbol_bar_count_json: Optional[str] = None,
     benchmark_bar_count: Optional[int] = None,
     error_json: Optional[str] = None,
+    status: str | None = None,
+    price_basis: str = "UNKNOWN",
+    adjustment_methodology: str = "UNKNOWN",
+    adjustment_version: str = "UNKNOWN",
+    action_overlap_status: str = "NOT_EVALUATED",
 ) -> None:
-    """Mark an evaluation run as COMPLETE (or FAILED if error_json set)."""
-    status = "FAILED" if error_json else "COMPLETE"
+    """Finish an evaluation run with observed status and lineage."""
+    resolved_status = status or ("FAILED" if error_json else "COMPLETE")
     conn.execute(
         """
         UPDATE outcome_evaluation_run SET
@@ -82,18 +101,26 @@ def finish_evaluation_run(
             errors=?,
             symbol_bar_count_json=?,
             benchmark_bar_count=?,
-            error_json=?
+            error_json=?,
+            price_basis=?,
+            adjustment_methodology=?,
+            adjustment_version=?,
+            action_overlap_status=?
         WHERE evaluation_run_id=?
         """,
         [
             _now_utc(),
-            status,
+            resolved_status,
             evaluated,
             persisted,
             errors,
             symbol_bar_count_json,
             benchmark_bar_count,
             error_json,
+            price_basis,
+            adjustment_methodology,
+            adjustment_version,
+            action_overlap_status,
             run_id,
         ],
     )
@@ -110,7 +137,9 @@ def get_evaluation_run(
                finished_at::VARCHAR, status, evaluator_version, metric_policy_version,
                horizons_json, symbol_bar_count_json, benchmark_bar_count,
                evaluated, persisted, errors, error_json, price_basis,
-               adjustment_methodology
+               adjustment_methodology, adjustment_version, action_overlap_status,
+               scoring_policy_id, scoring_policy_version, scoring_policy_hash,
+               scoring_policy_status
         FROM outcome_evaluation_run
         WHERE evaluation_run_id = ?
         """,
@@ -135,6 +164,12 @@ def get_evaluation_run(
         "error_json",
         "price_basis",
         "adjustment_methodology",
+        "adjustment_version",
+        "action_overlap_status",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     return dict(zip(cols, row, strict=True))
 
@@ -153,19 +188,22 @@ def upsert_candidate_outcome(
         INSERT INTO candidate_outcome (
             symbol, watchlist_date, horizon_sessions,
             rank, score, candidate_class, setup_type, risk_flags_json,
+            observation_start_date, observation_end_date,
             entry_close, exit_close, benchmark_entry_close, benchmark_exit_close,
             forward_return, benchmark_return, excess_return_vs_vnindex,
             max_gain, max_drawdown, hit, failure, outcome_status,
             bars_available, required_bars, computed_at, error_json,
             evaluation_run_id, evaluator_version, metric_policy_version,
             symbol_bar_count, benchmark_bar_count, price_basis,
-            benchmark_price_basis, adjustment_methodology,
-            action_overlap_status, invalidation_reason
+            benchmark_price_basis, adjustment_methodology, adjustment_version,
+            action_overlap_status, invalidation_reason,
+            corporate_action_lineage_json, scoring_policy_id,
+            scoring_policy_version, scoring_policy_hash, scoring_policy_status
         ) VALUES (
             ?,?,?,?,?,?,?,?,?,?,
             ?,?,?,?,?,?,?,?,?,?,
             ?,?,?,?,?,?,?,?,?,?,
-            ?,?,?,?
+            ?,?,?,?,?,?,?,?,?,?,?,?
         )
         ON CONFLICT (symbol, watchlist_date, horizon_sessions)
         DO UPDATE SET
@@ -173,6 +211,8 @@ def upsert_candidate_outcome(
             candidate_class=excluded.candidate_class,
             setup_type=excluded.setup_type,
             risk_flags_json=excluded.risk_flags_json,
+            observation_start_date=excluded.observation_start_date,
+            observation_end_date=excluded.observation_end_date,
             entry_close=excluded.entry_close,
             exit_close=excluded.exit_close,
             benchmark_entry_close=excluded.benchmark_entry_close,
@@ -195,8 +235,14 @@ def upsert_candidate_outcome(
             ,price_basis=excluded.price_basis
             ,benchmark_price_basis=excluded.benchmark_price_basis
             ,adjustment_methodology=excluded.adjustment_methodology
+            ,adjustment_version=excluded.adjustment_version
             ,action_overlap_status=excluded.action_overlap_status
             ,invalidation_reason=excluded.invalidation_reason
+            ,corporate_action_lineage_json=excluded.corporate_action_lineage_json
+            ,scoring_policy_id=excluded.scoring_policy_id
+            ,scoring_policy_version=excluded.scoring_policy_version
+            ,scoring_policy_hash=excluded.scoring_policy_hash
+            ,scoring_policy_status=excluded.scoring_policy_status
         """,
         [
             rec.symbol,
@@ -207,6 +253,8 @@ def upsert_candidate_outcome(
             rec.candidate_class,
             rec.setup_type,
             rec.risk_flags_json,
+            rec.observation_start_date,
+            rec.observation_end_date,
             rec.entry_close,
             rec.exit_close,
             rec.benchmark_entry_close,
@@ -231,8 +279,14 @@ def upsert_candidate_outcome(
             rec.price_basis,
             rec.benchmark_price_basis,
             rec.adjustment_methodology,
+            rec.adjustment_version,
             rec.action_overlap_status,
             rec.invalidation_reason,
+            rec.corporate_action_lineage_json,
+            rec.scoring_policy_id,
+            rec.scoring_policy_version,
+            rec.scoring_policy_hash,
+            rec.scoring_policy_status,
         ],
     )
 
@@ -247,14 +301,17 @@ def get_candidate_outcomes(
         """
         SELECT symbol, watchlist_date::VARCHAR, horizon_sessions, rank, score,
                candidate_class, setup_type, risk_flags_json,
+               observation_start_date::VARCHAR, observation_end_date::VARCHAR,
                entry_close, exit_close, benchmark_entry_close, benchmark_exit_close,
                forward_return, benchmark_return, excess_return_vs_vnindex,
                max_gain, max_drawdown, hit, failure, outcome_status,
                bars_available, required_bars, computed_at::VARCHAR, error_json,
                evaluation_run_id, evaluator_version, metric_policy_version,
                symbol_bar_count, benchmark_bar_count, price_basis,
-               benchmark_price_basis, adjustment_methodology,
-               action_overlap_status, invalidation_reason
+               benchmark_price_basis, adjustment_methodology, adjustment_version,
+               action_overlap_status, invalidation_reason,
+               corporate_action_lineage_json, scoring_policy_id,
+               scoring_policy_version, scoring_policy_hash, scoring_policy_status
         FROM candidate_outcome
         WHERE watchlist_date = ? AND horizon_sessions = ?
         ORDER BY score DESC NULLS LAST
@@ -270,6 +327,8 @@ def get_candidate_outcomes(
         "candidate_class",
         "setup_type",
         "risk_flags_json",
+        "observation_start_date",
+        "observation_end_date",
         "entry_close",
         "exit_close",
         "benchmark_entry_close",
@@ -294,8 +353,14 @@ def get_candidate_outcomes(
         "price_basis",
         "benchmark_price_basis",
         "adjustment_methodology",
+        "adjustment_version",
         "action_overlap_status",
         "invalidation_reason",
+        "corporate_action_lineage_json",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 
@@ -314,11 +379,33 @@ def summarize_hypothesis_outcomes(
             count(o.forward_return) FILTER (
                 WHERE {eligible_sql}
                   AND o.outcome_status = ?
+                  AND o.price_basis = 'RAW_UNADJUSTED'
+                  AND o.adjustment_methodology = 'NONE'
+                  AND o.action_overlap_status = 'CLEAR'
                   AND isfinite(o.forward_return)
             ),
             avg(o.forward_return) FILTER (
                 WHERE {eligible_sql}
                   AND o.outcome_status = ?
+                  AND o.price_basis = 'RAW_UNADJUSTED'
+                  AND o.adjustment_methodology = 'NONE'
+                  AND o.action_overlap_status = 'CLEAR'
+                  AND isfinite(o.forward_return)
+            ),
+            count(DISTINCT o.scoring_policy_hash) FILTER (
+                WHERE {eligible_sql}
+                  AND o.outcome_status = ?
+                  AND o.price_basis = 'RAW_UNADJUSTED'
+                  AND o.adjustment_methodology = 'NONE'
+                  AND o.action_overlap_status = 'CLEAR'
+                  AND isfinite(o.forward_return)
+            ),
+            min(o.scoring_policy_hash) FILTER (
+                WHERE {eligible_sql}
+                  AND o.outcome_status = ?
+                  AND o.price_basis = 'RAW_UNADJUSTED'
+                  AND o.adjustment_methodology = 'NONE'
+                  AND o.action_overlap_status = 'CLEAR'
                   AND isfinite(o.forward_return)
             )
         FROM feature_snapshot f
@@ -331,14 +418,19 @@ def summarize_hypothesis_outcomes(
         [
             OutcomeStatus.COMPLETE.value,
             OutcomeStatus.COMPLETE.value,
+            OutcomeStatus.COMPLETE.value,
+            OutcomeStatus.COMPLETE.value,
             horizon_sessions,
         ],
     ).fetchone()
     selected = int(row[0]) if row is not None else 0
     eligible = int(row[1]) if row is not None else 0
-    complete = int(row[2]) if row is not None else 0
+    policy_count = int(row[4]) if row is not None else 0
+    complete = int(row[2]) if row is not None and policy_count == 1 else 0
     mean_forward_return = (
-        float(row[3]) if row is not None and row[3] is not None else None
+        float(row[3])
+        if row is not None and row[3] is not None and policy_count == 1
+        else None
     )
     return HypothesisOutcomeSummary(
         selected_feature_rows=selected,
@@ -347,6 +439,10 @@ def summarize_hypothesis_outcomes(
         excluded_feature_rows=selected - eligible,
         missing_observation_rows=eligible - complete,
         mean_forward_return=mean_forward_return,
+        price_basis="RAW_UNADJUSTED" if complete else "UNKNOWN",
+        adjustment_methodology="NONE" if complete else "UNKNOWN",
+        adjustment_version="raw-unadjusted-v1" if complete else "UNKNOWN",
+        scoring_policy_hash=(str(row[5]) if complete and row[5] is not None else None),
     )
 
 
@@ -363,17 +459,22 @@ def upsert_watchlist_outcome(
         INSERT INTO watchlist_outcome (
             watchlist_date, horizon_sessions,
             candidate_count, complete_count, pending_count, missing_data_count,
+            invalid_count,
             avg_forward_return, median_forward_return,
             avg_excess_return, median_excess_return,
             avg_max_gain, avg_max_drawdown, hit_rate, failure_rate, computed_at,
-            evaluation_run_id, evaluator_version, metric_policy_version
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            evaluation_run_id, evaluator_version, metric_policy_version,
+            price_basis, adjustment_methodology, adjustment_version,
+            action_overlap_status, scoring_policy_id, scoring_policy_version,
+            scoring_policy_hash, scoring_policy_status
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (watchlist_date, horizon_sessions)
         DO UPDATE SET
             candidate_count=excluded.candidate_count,
             complete_count=excluded.complete_count,
             pending_count=excluded.pending_count,
             missing_data_count=excluded.missing_data_count,
+            invalid_count=excluded.invalid_count,
             avg_forward_return=excluded.avg_forward_return,
             median_forward_return=excluded.median_forward_return,
             avg_excess_return=excluded.avg_excess_return,
@@ -385,7 +486,15 @@ def upsert_watchlist_outcome(
             computed_at=excluded.computed_at,
             evaluation_run_id=excluded.evaluation_run_id,
             evaluator_version=excluded.evaluator_version,
-            metric_policy_version=excluded.metric_policy_version
+            metric_policy_version=excluded.metric_policy_version,
+            price_basis=excluded.price_basis,
+            adjustment_methodology=excluded.adjustment_methodology,
+            adjustment_version=excluded.adjustment_version,
+            action_overlap_status=excluded.action_overlap_status,
+            scoring_policy_id=excluded.scoring_policy_id,
+            scoring_policy_version=excluded.scoring_policy_version,
+            scoring_policy_hash=excluded.scoring_policy_hash,
+            scoring_policy_status=excluded.scoring_policy_status
         """,
         [
             rec.watchlist_date,
@@ -394,6 +503,7 @@ def upsert_watchlist_outcome(
             rec.complete_count,
             rec.pending_count,
             rec.missing_data_count,
+            rec.invalid_count,
             rec.avg_forward_return,
             rec.median_forward_return,
             rec.avg_excess_return,
@@ -406,6 +516,14 @@ def upsert_watchlist_outcome(
             rec.evaluation_run_id,
             rec.evaluator_version,
             rec.metric_policy_version,
+            rec.price_basis,
+            rec.adjustment_methodology,
+            rec.adjustment_version,
+            rec.action_overlap_status,
+            rec.scoring_policy_id,
+            rec.scoring_policy_version,
+            rec.scoring_policy_hash,
+            rec.scoring_policy_status,
         ],
     )
 
@@ -418,11 +536,13 @@ def get_watchlist_outcome(
     row = conn.execute(
         """
         SELECT watchlist_date::VARCHAR, horizon_sessions, candidate_count,
-               complete_count, pending_count, missing_data_count,
+               complete_count, pending_count, missing_data_count, invalid_count,
                avg_forward_return, median_forward_return,
                avg_excess_return, median_excess_return,
                avg_max_gain, avg_max_drawdown, hit_rate, failure_rate,
-               computed_at::VARCHAR
+               computed_at::VARCHAR, price_basis, adjustment_methodology,
+               adjustment_version, action_overlap_status, scoring_policy_id,
+               scoring_policy_version, scoring_policy_hash, scoring_policy_status
         FROM watchlist_outcome
         WHERE watchlist_date = ? AND horizon_sessions = ?
         """,
@@ -437,6 +557,7 @@ def get_watchlist_outcome(
         "complete_count",
         "pending_count",
         "missing_data_count",
+        "invalid_count",
         "avg_forward_return",
         "median_forward_return",
         "avg_excess_return",
@@ -446,6 +567,14 @@ def get_watchlist_outcome(
         "hit_rate",
         "failure_rate",
         "computed_at",
+        "price_basis",
+        "adjustment_methodology",
+        "adjustment_version",
+        "action_overlap_status",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     return dict(zip(cols, row, strict=True))
 
@@ -464,8 +593,11 @@ def upsert_score_bucket_performance(
             as_of_date, horizon_sessions, score_bucket,
             candidate_count, avg_forward_return, median_forward_return,
             avg_excess_return, hit_rate, failure_rate, avg_max_drawdown, computed_at,
-            evaluation_run_id, evaluator_version, metric_policy_version
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            evaluation_run_id, evaluator_version, metric_policy_version,
+            price_basis, adjustment_methodology, adjustment_version,
+            action_overlap_status, scoring_policy_id, scoring_policy_version,
+            scoring_policy_hash, scoring_policy_status
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (as_of_date, horizon_sessions, score_bucket)
         DO UPDATE SET
             candidate_count=excluded.candidate_count,
@@ -478,7 +610,15 @@ def upsert_score_bucket_performance(
             computed_at=excluded.computed_at,
             evaluation_run_id=excluded.evaluation_run_id,
             evaluator_version=excluded.evaluator_version,
-            metric_policy_version=excluded.metric_policy_version
+            metric_policy_version=excluded.metric_policy_version,
+            price_basis=excluded.price_basis,
+            adjustment_methodology=excluded.adjustment_methodology,
+            adjustment_version=excluded.adjustment_version,
+            action_overlap_status=excluded.action_overlap_status,
+            scoring_policy_id=excluded.scoring_policy_id,
+            scoring_policy_version=excluded.scoring_policy_version,
+            scoring_policy_hash=excluded.scoring_policy_hash,
+            scoring_policy_status=excluded.scoring_policy_status
         """,
         [
             rec.as_of_date,
@@ -495,6 +635,14 @@ def upsert_score_bucket_performance(
             rec.evaluation_run_id,
             rec.evaluator_version,
             rec.metric_policy_version,
+            rec.price_basis,
+            rec.adjustment_methodology,
+            rec.adjustment_version,
+            rec.action_overlap_status,
+            rec.scoring_policy_id,
+            rec.scoring_policy_version,
+            rec.scoring_policy_hash,
+            rec.scoring_policy_status,
         ],
     )
 
@@ -507,7 +655,10 @@ def list_score_bucket_performance(
     sql = """
         SELECT as_of_date::VARCHAR, horizon_sessions, score_bucket, candidate_count,
                avg_forward_return, median_forward_return, avg_excess_return,
-               hit_rate, failure_rate, avg_max_drawdown, computed_at::VARCHAR
+               hit_rate, failure_rate, avg_max_drawdown, computed_at::VARCHAR,
+               price_basis, adjustment_methodology, adjustment_version,
+               action_overlap_status, scoring_policy_id, scoring_policy_version,
+               scoring_policy_hash, scoring_policy_status
         FROM score_bucket_performance
         WHERE horizon_sessions = ?
     """
@@ -529,6 +680,14 @@ def list_score_bucket_performance(
         "failure_rate",
         "avg_max_drawdown",
         "computed_at",
+        "price_basis",
+        "adjustment_methodology",
+        "adjustment_version",
+        "action_overlap_status",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 
@@ -547,8 +706,11 @@ def upsert_setup_type_performance(
             as_of_date, horizon_sessions, setup_type,
             candidate_count, avg_forward_return, median_forward_return,
             avg_excess_return, hit_rate, failure_rate, avg_max_drawdown, computed_at,
-            evaluation_run_id, evaluator_version, metric_policy_version
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            evaluation_run_id, evaluator_version, metric_policy_version,
+            price_basis, adjustment_methodology, adjustment_version,
+            action_overlap_status, scoring_policy_id, scoring_policy_version,
+            scoring_policy_hash, scoring_policy_status
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (as_of_date, horizon_sessions, setup_type)
         DO UPDATE SET
             candidate_count=excluded.candidate_count,
@@ -561,7 +723,15 @@ def upsert_setup_type_performance(
             computed_at=excluded.computed_at,
             evaluation_run_id=excluded.evaluation_run_id,
             evaluator_version=excluded.evaluator_version,
-            metric_policy_version=excluded.metric_policy_version
+            metric_policy_version=excluded.metric_policy_version,
+            price_basis=excluded.price_basis,
+            adjustment_methodology=excluded.adjustment_methodology,
+            adjustment_version=excluded.adjustment_version,
+            action_overlap_status=excluded.action_overlap_status,
+            scoring_policy_id=excluded.scoring_policy_id,
+            scoring_policy_version=excluded.scoring_policy_version,
+            scoring_policy_hash=excluded.scoring_policy_hash,
+            scoring_policy_status=excluded.scoring_policy_status
         """,
         [
             rec.as_of_date,
@@ -578,6 +748,14 @@ def upsert_setup_type_performance(
             rec.evaluation_run_id,
             rec.evaluator_version,
             rec.metric_policy_version,
+            rec.price_basis,
+            rec.adjustment_methodology,
+            rec.adjustment_version,
+            rec.action_overlap_status,
+            rec.scoring_policy_id,
+            rec.scoring_policy_version,
+            rec.scoring_policy_hash,
+            rec.scoring_policy_status,
         ],
     )
 
@@ -590,7 +768,10 @@ def list_setup_type_performance(
     sql = """
         SELECT as_of_date::VARCHAR, horizon_sessions, setup_type, candidate_count,
                avg_forward_return, median_forward_return, avg_excess_return,
-               hit_rate, failure_rate, avg_max_drawdown, computed_at::VARCHAR
+               hit_rate, failure_rate, avg_max_drawdown, computed_at::VARCHAR,
+               price_basis, adjustment_methodology, adjustment_version,
+               action_overlap_status, scoring_policy_id, scoring_policy_version,
+               scoring_policy_hash, scoring_policy_status
         FROM setup_type_performance
         WHERE horizon_sessions = ?
     """
@@ -612,6 +793,14 @@ def list_setup_type_performance(
         "failure_rate",
         "avg_max_drawdown",
         "computed_at",
+        "price_basis",
+        "adjustment_methodology",
+        "adjustment_version",
+        "action_overlap_status",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 
@@ -630,8 +819,11 @@ def upsert_risk_flag_performance(
             as_of_date, horizon_sessions, risk_flag,
             candidate_count, avg_forward_return, median_forward_return,
             avg_excess_return, hit_rate, failure_rate, avg_max_drawdown, computed_at,
-            evaluation_run_id, evaluator_version, metric_policy_version
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            evaluation_run_id, evaluator_version, metric_policy_version,
+            price_basis, adjustment_methodology, adjustment_version,
+            action_overlap_status, scoring_policy_id, scoring_policy_version,
+            scoring_policy_hash, scoring_policy_status
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (as_of_date, horizon_sessions, risk_flag)
         DO UPDATE SET
             candidate_count=excluded.candidate_count,
@@ -644,7 +836,15 @@ def upsert_risk_flag_performance(
             computed_at=excluded.computed_at,
             evaluation_run_id=excluded.evaluation_run_id,
             evaluator_version=excluded.evaluator_version,
-            metric_policy_version=excluded.metric_policy_version
+            metric_policy_version=excluded.metric_policy_version,
+            price_basis=excluded.price_basis,
+            adjustment_methodology=excluded.adjustment_methodology,
+            adjustment_version=excluded.adjustment_version,
+            action_overlap_status=excluded.action_overlap_status,
+            scoring_policy_id=excluded.scoring_policy_id,
+            scoring_policy_version=excluded.scoring_policy_version,
+            scoring_policy_hash=excluded.scoring_policy_hash,
+            scoring_policy_status=excluded.scoring_policy_status
         """,
         [
             rec.as_of_date,
@@ -661,6 +861,14 @@ def upsert_risk_flag_performance(
             rec.evaluation_run_id,
             rec.evaluator_version,
             rec.metric_policy_version,
+            rec.price_basis,
+            rec.adjustment_methodology,
+            rec.adjustment_version,
+            rec.action_overlap_status,
+            rec.scoring_policy_id,
+            rec.scoring_policy_version,
+            rec.scoring_policy_hash,
+            rec.scoring_policy_status,
         ],
     )
 
@@ -673,7 +881,10 @@ def list_risk_flag_performance(
     sql = """
         SELECT as_of_date::VARCHAR, horizon_sessions, risk_flag, candidate_count,
                avg_forward_return, median_forward_return, avg_excess_return,
-               hit_rate, failure_rate, avg_max_drawdown, computed_at::VARCHAR
+               hit_rate, failure_rate, avg_max_drawdown, computed_at::VARCHAR,
+               price_basis, adjustment_methodology, adjustment_version,
+               action_overlap_status, scoring_policy_id, scoring_policy_version,
+               scoring_policy_hash, scoring_policy_status
         FROM risk_flag_performance
         WHERE horizon_sessions = ?
     """
@@ -695,5 +906,13 @@ def list_risk_flag_performance(
         "failure_rate",
         "avg_max_drawdown",
         "computed_at",
+        "price_basis",
+        "adjustment_methodology",
+        "adjustment_version",
+        "action_overlap_status",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]

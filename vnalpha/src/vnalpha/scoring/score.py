@@ -27,16 +27,21 @@ def _safe(v: Optional[float], default: float = 0.0) -> float:
     return float(v)
 
 
-def compute_trend_score(features: dict[str, Any]) -> float:
+def compute_trend_score(
+    features: dict[str, Any], policy: ScoringPolicy = BASELINE_SCORING_POLICY
+) -> float:
     """Score 0-1 based on price/MA alignment."""
-    rules = [
-        rule_price_above_ma20(features),
-        rule_price_above_ma50(features),
-        rule_ma20_above_ma50(features),
-        rule_ma50_above_ma100(features),
-        rule_positive_ma20_slope(features),
-    ]
-    return sum(rules) / len(rules)
+    rules = {
+        "price_above_ma20": rule_price_above_ma20(features),
+        "price_above_ma50": rule_price_above_ma50(features),
+        "ma20_above_ma50": rule_ma20_above_ma50(features),
+        "ma50_above_ma100": rule_ma50_above_ma100(features),
+        "positive_ma20_slope": rule_positive_ma20_slope(features),
+    }
+    return sum(
+        policy.number("trend_rule_weights", name) * value
+        for name, value in rules.items()
+    )
 
 
 def compute_relative_strength_score(
@@ -50,7 +55,10 @@ def compute_relative_strength_score(
     width = policy.number("normalization", "relative_strength_range")
     score20 = min(1.0, max(0.0, (rs20 - floor) / width))
     score60 = min(1.0, max(0.0, (rs60 - floor) / width))
-    return 0.5 * score20 + 0.5 * score60
+    return (
+        policy.number("relative_strength_weights", "rs20") * score20
+        + policy.number("relative_strength_weights", "rs60") * score60
+    )
 
 
 def compute_volume_score(
@@ -77,21 +85,24 @@ def compute_breakout_score(
     features: dict[str, Any], policy: ScoringPolicy = BASELINE_SCORING_POLICY
 ) -> float:
     """Score 0-1 for breakout-style setups."""
-    components = [
-        rule_near_52w_high(
+    components = {
+        "near_52w_high": rule_near_52w_high(
             features, policy.number("breakout_thresholds", "near_52w_high")
         ),
-        rule_close_near_high(
+        "close_strength": rule_close_near_high(
             features, policy.number("breakout_thresholds", "close_strength")
         ),
-        rule_volume_expansion(
+        "volume_expansion": rule_volume_expansion(
             features, policy.number("breakout_thresholds", "volume_expansion")
         ),
-        rule_base_compression(
+        "base_compression": rule_base_compression(
             features, policy.number("breakout_thresholds", "base_compression")
         ),
-    ]
-    return sum(components) / len(components)
+    }
+    return sum(
+        policy.number("breakout_rule_weights", name) * value
+        for name, value in components.items()
+    )
 
 
 def compute_risk_quality_score(
@@ -101,16 +112,6 @@ def compute_risk_quality_score(
     flags = compute_risk_flags(features)
     penalty = len(flags) * policy.number("risk", "flag_penalty")
     return max(0.0, 1.0 - penalty)
-
-
-SCORE_WEIGHTS = {
-    "trend": 0.30,
-    "relative_strength": 0.25,
-    "volume": 0.15,
-    "base": 0.10,
-    "breakout": 0.10,
-    "risk_quality": 0.10,
-}
 
 
 def compute_composite_score(
@@ -124,7 +125,7 @@ def compute_composite_score(
         "base_score", "breakout_score", "risk_quality_score",
         "risk_flags" list.
     """
-    trend = compute_trend_score(features)
+    trend = compute_trend_score(features, policy)
     rs = compute_relative_strength_score(features, policy)
     vol = compute_volume_score(features, policy)
     base = compute_base_score(features, policy)
@@ -215,7 +216,8 @@ def _detect_setup(
             return SetupType.PULLBACK_TO_TREND.value
         return SetupType.MOMENTUM_CONTINUATION.value
     if not rule_price_above_ma20(features) and rule_volume_expansion(
-        features, threshold=1.5
+        features,
+        threshold=policy.number("setup_thresholds", "breakout_volume"),
     ):
         return SetupType.MEAN_REVERSION.value
     return SetupType.UNCLASSIFIED.value

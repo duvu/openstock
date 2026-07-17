@@ -17,6 +17,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.symbol_memory import projection as projection_module
 from vnalpha.symbol_memory.compaction import SymbolMemoryCompactionService
 from vnalpha.symbol_memory.projection import project_analysis_evidence
@@ -63,9 +64,19 @@ def _seed_analysis_artifacts(
         [symbol, as_of],
     )
     conn.execute(
-        "INSERT INTO candidate_score (symbol, date, score, candidate_class, setup_type) "
-        "VALUES (?, ?, ?, 'WATCH_CANDIDATE', 'ACCUMULATION_BASE')",
-        [symbol, as_of, score],
+        "INSERT INTO candidate_score "
+        "(symbol, date, score, candidate_class, setup_type, scoring_policy_id, "
+        "scoring_policy_version, scoring_policy_hash, scoring_policy_status) "
+        "VALUES (?, ?, ?, 'WATCH_CANDIDATE', 'ACCUMULATION_BASE', ?, ?, ?, ?)",
+        [
+            symbol,
+            as_of,
+            score,
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.lifecycle_status.value,
+        ],
     )
     conn.execute(
         "INSERT INTO feature_snapshot (symbol, date, feature_data_status) "

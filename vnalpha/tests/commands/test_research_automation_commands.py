@@ -13,6 +13,7 @@ from vnalpha.commands.models import CommandStatus
 from vnalpha.commands.parser import parse
 from vnalpha.commands.setup import build_default_registry
 from vnalpha.observability.context import init_run_context, reset_run_context
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -57,9 +58,26 @@ def research_connection(tmp_path: Path) -> Iterator[duckdb.DuckDBPyConnection]:
         conn.execute(
             "INSERT INTO candidate_outcome "
             "(symbol, watchlist_date, horizon_sessions, forward_return, "
-            "outcome_status) VALUES "
-            "('FPT', DATE '2026-07-01', 20, 0.12, 'COMPLETE'), "
-            "('VNM', DATE '2026-07-01', 20, 0.08, 'COMPLETE')"
+            "outcome_status, price_basis, benchmark_price_basis, "
+            "adjustment_methodology, adjustment_version, action_overlap_status, "
+            "scoring_policy_id, scoring_policy_version, scoring_policy_hash, "
+            "scoring_policy_status) VALUES "
+            "('FPT', DATE '2026-07-01', 20, 0.12, 'COMPLETE', "
+            "'RAW_UNADJUSTED', 'RAW_UNADJUSTED', 'NONE', 'raw-unadjusted-v1', "
+            "'CLEAR', ?, ?, ?, ?), "
+            "('VNM', DATE '2026-07-01', 20, 0.08, 'COMPLETE', "
+            "'RAW_UNADJUSTED', 'RAW_UNADJUSTED', 'NONE', 'raw-unadjusted-v1', "
+            "'CLEAR', ?, ?, ?, ?)",
+            [
+                BASELINE_SCORING_POLICY.policy_id,
+                BASELINE_SCORING_POLICY.version,
+                BASELINE_SCORING_POLICY.payload_hash,
+                BASELINE_SCORING_POLICY.lifecycle_status.value,
+                BASELINE_SCORING_POLICY.policy_id,
+                BASELINE_SCORING_POLICY.version,
+                BASELINE_SCORING_POLICY.payload_hash,
+                BASELINE_SCORING_POLICY.lifecycle_status.value,
+            ],
         )
         yield conn
     reset_run_context()

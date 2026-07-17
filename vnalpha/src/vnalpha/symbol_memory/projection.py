@@ -269,6 +269,8 @@ def _build_evidences(
                     ),
                     correlation_id=correlation_id,
                     persisted_at=observed_at,
+                    scoring_policy_id=str(candidate["scoring_policy_id"]),
+                    scoring_policy_hash=str(candidate["scoring_policy_hash"]),
                 )
             )
         )
@@ -294,13 +296,20 @@ def _read_candidate_score(
     conn: duckdb.DuckDBPyConnection, symbol: str, as_of_date: DateType
 ) -> dict[str, object] | None:
     row = conn.execute(
-        "SELECT score, candidate_class, setup_type "
+        "SELECT score, candidate_class, setup_type, scoring_policy_id, "
+        "scoring_policy_hash "
         "FROM candidate_score WHERE symbol = ? AND date = ?",
         [symbol, as_of_date],
     ).fetchone()
-    if row is None or row[0] is None:
+    if row is None or row[0] is None or row[3] is None or row[4] is None:
         return None
-    return {"score": row[0], "candidate_class": row[1], "setup_type": row[2]}
+    return {
+        "score": row[0],
+        "candidate_class": row[1],
+        "setup_type": row[2],
+        "scoring_policy_id": row[3],
+        "scoring_policy_hash": row[4],
+    }
 
 
 def _read_feature_status(

@@ -383,13 +383,21 @@ def _migrate_candidate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("evaluation_run_id", "VARCHAR"),
         ("evaluator_version", "VARCHAR"),
         ("metric_policy_version", "VARCHAR"),
+        ("observation_start_date", "DATE"),
+        ("observation_end_date", "DATE"),
         ("symbol_bar_count", "INTEGER"),
         ("benchmark_bar_count", "INTEGER"),
         ("price_basis", "VARCHAR"),
         ("benchmark_price_basis", "VARCHAR"),
         ("adjustment_methodology", "VARCHAR"),
+        ("adjustment_version", "VARCHAR DEFAULT 'UNKNOWN'"),
         ("action_overlap_status", "VARCHAR"),
         ("invalidation_reason", "VARCHAR"),
+        ("corporate_action_lineage_json", "VARCHAR DEFAULT '[]'"),
+        ("scoring_policy_id", "VARCHAR"),
+        ("scoring_policy_version", "VARCHAR"),
+        ("scoring_policy_hash", "VARCHAR"),
+        ("scoring_policy_status", "VARCHAR"),
     ]
     for col, col_type in cols:
         conn.execute(
@@ -409,7 +417,18 @@ def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("evaluation_run_id", "VARCHAR"),
         ("evaluator_version", "VARCHAR"),
         ("metric_policy_version", "VARCHAR"),
+        ("price_basis", "VARCHAR"),
+        ("adjustment_methodology", "VARCHAR"),
+        ("adjustment_version", "VARCHAR"),
+        ("action_overlap_status", "VARCHAR"),
+        ("scoring_policy_id", "VARCHAR"),
+        ("scoring_policy_version", "VARCHAR"),
+        ("scoring_policy_hash", "VARCHAR"),
+        ("scoring_policy_status", "VARCHAR"),
     ]
+    conn.execute(
+        "ALTER TABLE watchlist_outcome ADD COLUMN IF NOT EXISTS invalid_count INTEGER"
+    )
     for table in aggregate_tables:
         for col, col_type in cols:
             conn.execute(
@@ -418,7 +437,16 @@ def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
 
 
 def _migrate_outcome_evaluation_run_columns(conn: duckdb.DuckDBPyConnection) -> None:
-    for column in ("price_basis", "adjustment_methodology"):
+    for column in (
+        "price_basis",
+        "adjustment_methodology",
+        "adjustment_version",
+        "action_overlap_status",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
+    ):
         conn.execute(
             f"ALTER TABLE outcome_evaluation_run ADD COLUMN IF NOT EXISTS {column} VARCHAR"
         )

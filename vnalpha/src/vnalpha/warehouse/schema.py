@@ -482,6 +482,8 @@ CREATE TABLE IF NOT EXISTS candidate_outcome (
     candidate_class          VARCHAR,
     setup_type               VARCHAR,
     risk_flags_json          VARCHAR,
+    observation_start_date   DATE,
+    observation_end_date     DATE,
     entry_close              DOUBLE,
     exit_close               DOUBLE,
     benchmark_entry_close    DOUBLE,
@@ -503,11 +505,17 @@ CREATE TABLE IF NOT EXISTS candidate_outcome (
     metric_policy_version    VARCHAR,
     symbol_bar_count         INTEGER,
     benchmark_bar_count      INTEGER,
-    price_basis              VARCHAR,
-    benchmark_price_basis    VARCHAR,
-    adjustment_methodology   VARCHAR,
-    action_overlap_status    VARCHAR,
+    price_basis              VARCHAR NOT NULL DEFAULT 'UNKNOWN',
+    benchmark_price_basis    VARCHAR NOT NULL DEFAULT 'UNKNOWN',
+    adjustment_methodology   VARCHAR NOT NULL DEFAULT 'UNKNOWN',
+    adjustment_version       VARCHAR NOT NULL DEFAULT 'UNKNOWN',
+    action_overlap_status    VARCHAR NOT NULL DEFAULT 'NOT_EVALUATED',
     invalidation_reason      VARCHAR,
+    corporate_action_lineage_json VARCHAR NOT NULL DEFAULT '[]',
+    scoring_policy_id        VARCHAR,
+    scoring_policy_version   VARCHAR,
+    scoring_policy_hash      VARCHAR,
+    scoring_policy_status    VARCHAR,
     PRIMARY KEY (symbol, watchlist_date, horizon_sessions)
 )
 """
@@ -520,6 +528,7 @@ CREATE TABLE IF NOT EXISTS watchlist_outcome (
     complete_count           INTEGER,
     pending_count            INTEGER,
     missing_data_count       INTEGER,
+    invalid_count            INTEGER,
     avg_forward_return       DOUBLE,
     median_forward_return    DOUBLE,
     avg_excess_return        DOUBLE,
@@ -532,6 +541,14 @@ CREATE TABLE IF NOT EXISTS watchlist_outcome (
     evaluation_run_id        VARCHAR,
     evaluator_version        VARCHAR,
     metric_policy_version    VARCHAR,
+    price_basis              VARCHAR,
+    adjustment_methodology   VARCHAR,
+    adjustment_version       VARCHAR,
+    action_overlap_status    VARCHAR,
+    scoring_policy_id        VARCHAR,
+    scoring_policy_version   VARCHAR,
+    scoring_policy_hash      VARCHAR,
+    scoring_policy_status    VARCHAR,
     PRIMARY KEY (watchlist_date, horizon_sessions)
 )
 """

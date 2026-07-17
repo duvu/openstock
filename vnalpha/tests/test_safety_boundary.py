@@ -142,6 +142,7 @@ def test_candidate_output_includes_evidence():
 def test_candidate_output_includes_lineage():
     """Watchlist save includes lineage_json derived from persisted candidate_score."""
     from vnalpha.scoring.generate_watchlist import save_watchlist
+    from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
     from vnalpha.warehouse.connection import in_memory_connection
     from vnalpha.warehouse.migrations import run_migrations
     from vnalpha.warehouse.repositories import save_candidate_score
@@ -161,6 +162,10 @@ def test_candidate_output_includes_lineage():
         "breakout_score": 0.4,
         "risk_quality_score": 0.9,
         "risk_flags": [],
+        "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+        "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+        "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+        "scoring_policy_status": BASELINE_SCORING_POLICY.lifecycle_status.value,
     }
     save_candidate_score(conn, "FPT", "2024-01-02", score_result)
     save_watchlist(conn, "2024-01-02", top_n=10, min_score=0.0)

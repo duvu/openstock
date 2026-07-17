@@ -93,6 +93,15 @@ def generate_calibration_report(
         "watchlist_summary": wl_row,
         "pending_count": pending_count,
         "missing_count": missing_count,
+        "invalid_count": (wl_row.get("invalid_count") or 0) if wl_row else 0,
+        "price_basis": wl_row.get("price_basis") if wl_row else "UNKNOWN",
+        "adjustment_methodology": (
+            wl_row.get("adjustment_methodology") if wl_row else "UNKNOWN"
+        ),
+        "adjustment_version": (
+            wl_row.get("adjustment_version") if wl_row else "UNKNOWN"
+        ),
+        "scoring_policy_hash": (wl_row.get("scoring_policy_hash") if wl_row else None),
         "score_bucket_monotone": bucket_monotone,
         "best_setup": best_setup,
         "worst_setup": worst_setup,

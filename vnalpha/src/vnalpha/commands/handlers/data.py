@@ -37,6 +37,8 @@ def handle_data(
         "benchmark",
         "from",
         "to",
+        "scoring-policy",
+        "rebuild-policy",
     }
     if unsupported_options:
         rendered_options = ", ".join(
@@ -54,6 +56,15 @@ def handle_data(
             raise CommandValidationError(_usage())
         artifact = parsed.positional[1]
         symbol = parsed.positional[2] if len(parsed.positional) == 3 else None
+    scoring_policy = _option_value(parsed, "scoring-policy")
+    try:
+        policy_id, policy_version = (
+            scoring_policy.rsplit("@", 1)
+            if scoring_policy
+            else ("openstock-candidate-score", "v1.0")
+        )
+    except ValueError as exc:
+        raise CommandValidationError("--scoring-policy must use ID@version.") from exc
     request = DataProvisioningRequest(
         operation=operation,
         artifact=artifact,
@@ -63,6 +74,9 @@ def handle_data(
         date=_option_value(parsed, "date"),
         source=_option_value(parsed, "source"),
         benchmark=_option_value(parsed, "benchmark"),
+        scoring_policy_id=policy_id,
+        scoring_policy_version=policy_version,
+        rebuild_policy=parsed.options.get("rebuild-policy") is True,
     )
     provisioning_service = service or DataProvisioningService(conn)
     try:

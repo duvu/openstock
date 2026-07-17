@@ -4,6 +4,7 @@ from typing import Optional
 
 import typer
 
+from vnalpha.core.dates import resolve_date
 from vnalpha.core.logging import set_correlation_id
 from vnalpha.data_provisioning.service import (
     DataProvisioningRequest,
@@ -50,7 +51,11 @@ def score(
             typer.echo("--scoring-policy must use ID@version", err=True)
             raise typer.Exit(code=1) from exc
         try:
-            selected_policy = resolve_scoring_policy(policy_id, policy_version)
+            selected_policy = resolve_scoring_policy(
+                policy_id,
+                policy_version,
+                as_of_date=resolve_date(date, conn=conn),
+            )
         except ValueError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1) from exc
@@ -72,6 +77,8 @@ def score(
         typer.echo(
             f"Scored {result.counts['scored']} symbols — {result.counts['saved']} candidates in watchlist for {result.resolved_date}"
         )
+        for warning in result.warnings:
+            typer.echo(f"Warning: {warning}", err=True)
         typer.echo(
             "Scoring policy: "
             f"{selected_policy.policy_id}@{selected_policy.version} "

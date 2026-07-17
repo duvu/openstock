@@ -168,14 +168,8 @@ class SymbolMemoryRepository:
                         or value["candidate_class"] == row[1]
                     )
                     and ("setup_type" not in value or value["setup_type"] == row[2])
-                    and (
-                        "scoring_policy_id" not in value
-                        or value["scoring_policy_id"] == row[3]
-                    )
-                    and (
-                        "scoring_policy_hash" not in value
-                        or value["scoring_policy_hash"] == row[4]
-                    )
+                    and value.get("scoring_policy_id") == row[3]
+                    and value.get("scoring_policy_hash") == row[4]
                 )
             row = self.connection.execute(
                 "SELECT feature_data_status FROM feature_snapshot WHERE symbol = ? AND date = ?",

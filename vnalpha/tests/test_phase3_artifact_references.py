@@ -10,6 +10,7 @@ from vnalpha.assistant.research_audit import (
     list_research_answer_audits,
     persist_research_answer_audit,
 )
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.tools.research_intelligence import (
     deep_symbol_analysis,
     generate_shortlist,
@@ -37,20 +38,34 @@ def _watchlist_without_sector() -> duckdb.DuckDBPyConnection:
         """
         INSERT INTO candidate_score
         (symbol, date, score, candidate_class, setup_type, risk_quality_score,
-         evidence_json, risk_flags_json, lineage_json)
+         evidence_json, risk_flags_json, lineage_json, scoring_policy_id,
+         scoring_policy_version, scoring_policy_hash, scoring_policy_status)
         VALUES ('FPT', '2026-07-10', 0.8, 'WATCH_CANDIDATE',
                 'MOMENTUM_CONTINUATION', 0.9,
-                '{"risk_quality_score": 0.9}', '[]', '{}')
-        """
+                '{"risk_quality_score": 0.9}', '[]', '{}', ?, ?, ?, ?)
+        """,
+        [
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.lifecycle_status.value,
+        ],
     )
     conn.execute(
         """
         INSERT INTO daily_watchlist
         (date, rank, symbol, score, candidate_class, setup_type,
-         risk_flags_json, lineage_json)
+         risk_flags_json, lineage_json, scoring_policy_id,
+         scoring_policy_version, scoring_policy_hash, scoring_policy_status)
         VALUES ('2026-07-10', 1, 'FPT', 0.8, 'WATCH_CANDIDATE',
-                'MOMENTUM_CONTINUATION', '[]', '{}')
-        """
+                'MOMENTUM_CONTINUATION', '[]', '{}', ?, ?, ?, ?)
+        """,
+        [
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.lifecycle_status.value,
+        ],
     )
     return conn
 

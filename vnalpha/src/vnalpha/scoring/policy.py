@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
 from types import MappingProxyType
@@ -12,6 +12,7 @@ from typing import Any, Mapping
 class PolicyLifecycleStatus(str, Enum):
     EXPERIMENTAL = "EXPERIMENTAL"
     ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
     RETIRED = "RETIRED"
 
 
@@ -41,7 +42,22 @@ class ScoringPolicy:
     effective_from: date
     effective_to: date | None
     payload: Mapping[str, Any]
-    payload_hash: str
+    payload_hash: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        frozen_payload = _freeze(dict(self.payload))
+        canonical = json.dumps(
+            _plain(frozen_payload),
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        object.__setattr__(self, "payload", frozen_payload)
+        object.__setattr__(
+            self,
+            "payload_hash",
+            hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        )
 
     @classmethod
     def from_payload(
@@ -54,17 +70,13 @@ class ScoringPolicy:
         payload: Mapping[str, Any],
         effective_to: date | None = None,
     ) -> ScoringPolicy:
-        canonical = json.dumps(
-            _plain(payload), sort_keys=True, separators=(",", ":"), allow_nan=False
-        )
         return cls(
             policy_id=policy_id,
             version=version,
             lifecycle_status=lifecycle_status,
             effective_from=effective_from,
             effective_to=effective_to,
-            payload=_freeze(dict(payload)),
-            payload_hash=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+            payload=payload,
         )
 
     def number(self, section: str, key: str) -> float:
@@ -72,6 +84,15 @@ class ScoringPolicy:
         if not isinstance(values, Mapping) or key not in values:
             raise ValueError(f"Scoring policy is missing {section}.{key}")
         return float(values[key])
+
+    def require_effective(self, as_of_date: date) -> None:
+        if as_of_date < self.effective_from or (
+            self.effective_to is not None and as_of_date > self.effective_to
+        ):
+            raise ValueError(
+                f"Scoring policy {self.policy_id}@{self.version} is not effective "
+                f"on {as_of_date.isoformat()}"
+            )
 
 
 BASELINE_SCORING_POLICY = ScoringPolicy.from_payload(
@@ -87,6 +108,20 @@ BASELINE_SCORING_POLICY = ScoringPolicy.from_payload(
             "base": 0.10,
             "breakout": 0.10,
             "risk_quality": 0.10,
+        },
+        "trend_rule_weights": {
+            "price_above_ma20": 0.20,
+            "price_above_ma50": 0.20,
+            "ma20_above_ma50": 0.20,
+            "ma50_above_ma100": 0.20,
+            "positive_ma20_slope": 0.20,
+        },
+        "relative_strength_weights": {"rs20": 0.50, "rs60": 0.50},
+        "breakout_rule_weights": {
+            "near_52w_high": 0.25,
+            "close_strength": 0.25,
+            "volume_expansion": 0.25,
+            "base_compression": 0.25,
         },
         "normalization": {
             "relative_strength_floor": -0.05,
@@ -122,11 +157,21 @@ _POLICIES = {
 def resolve_scoring_policy(
     policy_id: str = BASELINE_SCORING_POLICY.policy_id,
     version: str = BASELINE_SCORING_POLICY.version,
+    *,
+    as_of_date: date | str | None = None,
 ) -> ScoringPolicy:
     try:
-        return _POLICIES[(policy_id, version)]
+        policy = _POLICIES[(policy_id, version)]
     except KeyError as exc:
         raise ValueError(f"Unknown scoring policy {policy_id}@{version}") from exc
+    if as_of_date is not None:
+        resolved_date = (
+            as_of_date
+            if isinstance(as_of_date, date)
+            else date.fromisoformat(as_of_date)
+        )
+        policy.require_effective(resolved_date)
+    return policy
 
 
 __all__ = [

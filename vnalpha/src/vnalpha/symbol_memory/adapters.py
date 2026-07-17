@@ -31,8 +31,8 @@ class CandidateScoreSnapshot:
     setup_type: str | None
     correlation_id: str
     persisted_at: datetime
-    scoring_policy_id: str = "legacy-unknown"
-    scoring_policy_hash: str = "legacy-unknown"
+    scoring_policy_id: str
+    scoring_policy_hash: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,10 +54,8 @@ def candidate_score_evidence(snapshot: CandidateScoreSnapshot) -> MemoryEvidence
         "candidate_class": snapshot.candidate_class,
         "setup_type": snapshot.setup_type,
     }
-    if snapshot.scoring_policy_id != "legacy-unknown":
-        value["scoring_policy_id"] = snapshot.scoring_policy_id
-    if snapshot.scoring_policy_hash != "legacy-unknown":
-        value["scoring_policy_hash"] = snapshot.scoring_policy_hash
+    value["scoring_policy_id"] = snapshot.scoring_policy_id
+    value["scoring_policy_hash"] = snapshot.scoring_policy_hash
     return MemoryEvidence(
         symbol=symbol,
         claim_type="candidate_score",

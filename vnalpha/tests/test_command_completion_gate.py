@@ -8,6 +8,7 @@ from datetime import date
 import duckdb
 import pytest
 
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.repositories import save_candidate_score
 
@@ -43,13 +44,21 @@ def _seed_watchlist(conn, target_date: str) -> None:
                 "risk_quality_score": 0.9,
                 "risk_flags": flags,
                 "rule_outcomes": {},
+                "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+                "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+                "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+                "scoring_policy_status": (
+                    BASELINE_SCORING_POLICY.lifecycle_status.value
+                ),
             },
         )
         conn.execute(
             """
             INSERT INTO daily_watchlist
-                (date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, '{}')
+                (date, rank, symbol, score, candidate_class, setup_type,
+                 risk_flags_json, lineage_json, scoring_policy_id,
+                 scoring_policy_version, scoring_policy_hash, scoring_policy_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?)
             """,
             [
                 target_date,
@@ -59,6 +68,10 @@ def _seed_watchlist(conn, target_date: str) -> None:
                 "STRONG_CANDIDATE" if rank == 1 else "WATCH_CANDIDATE",
                 "ACCUMULATION_BASE",
                 json.dumps(flags),
+                BASELINE_SCORING_POLICY.policy_id,
+                BASELINE_SCORING_POLICY.version,
+                BASELINE_SCORING_POLICY.payload_hash,
+                BASELINE_SCORING_POLICY.lifecycle_status.value,
             ],
         )
 

@@ -23,6 +23,7 @@ from vnalpha.outcomes.models import (
 from vnalpha.outcomes.repositories import upsert_candidate_outcome
 from vnalpha.research_automation.dataset_resolver import DatasetResolver
 from vnalpha.research_automation.study_service import ResearchStudyService
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -201,6 +202,17 @@ def test_hypothesis_reads_complete_later_observations_and_persists_contracts(
                     horizon_sessions=20,
                     outcome_status=outcome_status,
                     forward_return=forward_return,
+                    price_basis="RAW_UNADJUSTED",
+                    benchmark_price_basis="RAW_UNADJUSTED",
+                    adjustment_methodology="NONE",
+                    adjustment_version="raw-unadjusted-v1",
+                    action_overlap_status="CLEAR",
+                    scoring_policy_id=BASELINE_SCORING_POLICY.policy_id,
+                    scoring_policy_version=BASELINE_SCORING_POLICY.version,
+                    scoring_policy_hash=BASELINE_SCORING_POLICY.payload_hash,
+                    scoring_policy_status=(
+                        BASELINE_SCORING_POLICY.lifecycle_status.value
+                    ),
                 ),
             )
 
@@ -262,6 +274,15 @@ def test_incomplete_and_non_finite_outcomes_are_partial_and_explicit(
                 horizon_sessions=20,
                 outcome_status="COMPLETE",
                 forward_return=value,
+                price_basis="RAW_UNADJUSTED",
+                benchmark_price_basis="RAW_UNADJUSTED",
+                adjustment_methodology="NONE",
+                adjustment_version="raw-unadjusted-v1",
+                action_overlap_status="CLEAR",
+                scoring_policy_id=BASELINE_SCORING_POLICY.policy_id,
+                scoring_policy_version=BASELINE_SCORING_POLICY.version,
+                scoring_policy_hash=BASELINE_SCORING_POLICY.payload_hash,
+                scoring_policy_status=BASELINE_SCORING_POLICY.lifecycle_status.value,
             ),
         )
     reset_run_context()
@@ -322,3 +343,59 @@ def test_event_study_excludes_overflowed_forward_return(
 
     assert outcome.artifact.metrics["sample_size"] == 0
     assert outcome.rows[0][4] == "invalid_outcome"
+
+
+@pytest.mark.parametrize(
+    ("outcome_basis", "affected_range", "expected_status"),
+    [
+        ("ADJUSTED", False, "mixed_price_basis"),
+        ("RAW_UNADJUSTED", True, "corporate_action_overlap"),
+    ],
+)
+def test_event_study_rejects_untrustworthy_price_basis(
+    conn: duckdb.DuckDBPyConnection,
+    tmp_path: Path,
+    outcome_basis: str,
+    affected_range: bool,
+    expected_status: str,
+) -> None:
+    lineage = json.dumps(
+        {"feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION}
+    )
+    conn.execute(
+        "INSERT INTO feature_snapshot "
+        "(symbol, date, rs_20d_vs_vnindex, feature_data_status, "
+        "as_of_bar_date, benchmark_as_of_bar_date, lineage_json) "
+        "VALUES ('FPT', DATE '2026-07-01', 0.05, 'EXACT_DATE', "
+        "DATE '2026-07-01', DATE '2026-07-01', ?)",
+        [lineage],
+    )
+    conn.execute(
+        "INSERT INTO canonical_ohlcv "
+        "(symbol, time, interval, close, quality_status, price_basis) VALUES "
+        "('FPT', DATE '2026-07-01', '1D', 100.0, 'pass', 'RAW_UNADJUSTED'), "
+        "('FPT', DATE '2026-07-02', '1D', 110.0, 'pass', ?)",
+        [outcome_basis],
+    )
+    if affected_range:
+        conn.execute(
+            "INSERT INTO corporate_action_affected_range "
+            "(signal_id, action_id, revision_id, symbol, affected_from_date, "
+            "affected_to_date, reason) VALUES "
+            "('signal-event', 'action-event', 'revision-event', 'FPT', "
+            "'2026-07-02', '2026-07-02', 'REVISED_ACTION')"
+        )
+    reset_run_context()
+    _ = init_run_context(surface="test", actor="pytest", log_root=tmp_path)
+    try:
+        outcome = ResearchStudyService(conn).event_study(
+            "rs_20d_vs_vnindex > 0",
+            horizon=1,
+            start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 1),
+        )
+    finally:
+        reset_run_context()
+
+    assert outcome.artifact.metrics["sample_size"] == 0
+    assert outcome.rows[0][4] == expected_status

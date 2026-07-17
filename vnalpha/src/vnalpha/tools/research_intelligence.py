@@ -338,6 +338,31 @@ def generate_shortlist(
         )
 
     watchlist_rows = get_watchlist_rich(conn, target_date)
+    policy_identities = {
+        (
+            row.get("scoring_policy_id"),
+            row.get("scoring_policy_version"),
+            row.get("scoring_policy_hash"),
+            row.get("scoring_policy_status"),
+        )
+        for row in watchlist_rows
+    }
+    if watchlist_rows and (
+        len(policy_identities) != 1
+        or any(value in (None, "") for value in next(iter(policy_identities)))
+    ):
+        caveat = "Persisted watchlist policy identity is missing or mixed."
+        return ToolOutput(
+            data=_missing_payload(
+                "shortlist.generate",
+                target_date,
+                date,
+                ["scoring_policy_identity"],
+                caveat,
+            ),
+            summary=caveat,
+            warnings=[caveat],
+        )
     rows = [row for row in watchlist_rows if float(row.get("score") or 0) >= threshold]
     sectors = _symbol_sector_map(conn, [row["symbol"] for row in rows], target_date)
     sector_scores = _sector_score_map(conn, target_date)

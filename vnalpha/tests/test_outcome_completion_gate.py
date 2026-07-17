@@ -19,6 +19,7 @@ from vnalpha.outcomes.repositories import (
     list_score_bucket_performance,
     list_setup_type_performance,
 )
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.migrations import run_migrations
 
 runner = CliRunner()
@@ -68,10 +69,22 @@ def _insert_watchlist(
     conn.execute(
         """
         INSERT INTO daily_watchlist
-            (date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json)
-        VALUES ('2026-07-06', ?, ?, ?, 'STRONG_CANDIDATE', 'ACCUMULATION_BASE', ?, '{}')
+            (date, rank, symbol, score, candidate_class, setup_type,
+             risk_flags_json, lineage_json, scoring_policy_id,
+             scoring_policy_version, scoring_policy_hash, scoring_policy_status)
+        VALUES ('2026-07-06', ?, ?, ?, 'STRONG_CANDIDATE',
+                'ACCUMULATION_BASE', ?, '{}', ?, ?, ?, ?)
         """,
-        [rank, symbol, score, json.dumps(flags)],
+        [
+            rank,
+            symbol,
+            score,
+            json.dumps(flags),
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.lifecycle_status.value,
+        ],
     )
 
 

@@ -8,6 +8,7 @@ import pytest
 
 from vnalpha.commands.parser import parse
 from vnalpha.commands.setup import build_default_registry
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import build_local_tool_registry
 from vnalpha.warehouse.migrations import run_migrations
@@ -63,6 +64,12 @@ def conn_with_data(conn):
                 "risk_quality_score": 0.9,
                 "risk_flags": ["THIN_VOLUME"] if sym == "HPG" else [],
                 "rule_outcomes": {},
+                "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+                "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+                "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+                "scoring_policy_status": (
+                    BASELINE_SCORING_POLICY.lifecycle_status.value
+                ),
             },
         )
 
@@ -73,10 +80,24 @@ def conn_with_data(conn):
     ]:
         conn.execute(
             """
-            INSERT INTO daily_watchlist (date, rank, symbol, score, candidate_class, setup_type)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO daily_watchlist (
+                date, rank, symbol, score, candidate_class, setup_type,
+                scoring_policy_id, scoring_policy_version,
+                scoring_policy_hash, scoring_policy_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            [today, rank, sym, score_val, cls, "ACCUMULATION_BASE"],
+            [
+                today,
+                rank,
+                sym,
+                score_val,
+                cls,
+                "ACCUMULATION_BASE",
+                BASELINE_SCORING_POLICY.policy_id,
+                BASELINE_SCORING_POLICY.version,
+                BASELINE_SCORING_POLICY.payload_hash,
+                BASELINE_SCORING_POLICY.lifecycle_status.value,
+            ],
         )
 
     # Insert a session for /history tests

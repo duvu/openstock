@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from vnalpha.core.types import CandidateClass, SetupType
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.repositories import (
@@ -53,6 +54,10 @@ def _make_score_result(
         "risk_quality_score": 0.90,
         "risk_flags": risk_flags or [],
         "rule_outcomes": {"ma20_above_ma50": True, "volume_expansion": True},
+        "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+        "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+        "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+        "scoring_policy_status": BASELINE_SCORING_POLICY.lifecycle_status.value,
     }
 
 

@@ -30,6 +30,10 @@ class DataAvailabilityPolicy:
     required_lineage_fields: tuple[str, ...] = (
         "as_of_bar_date",
         "scoring_version",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
         "feature_build_version",
         "selected_provider",
         "ingestion_run_id",

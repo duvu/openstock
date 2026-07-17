@@ -18,7 +18,7 @@ from vnalpha.research_intelligence.models import (
     SectorStrengthSnapshot,
     SymbolSectorAlignment,
 )
-from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
+from vnalpha.scoring.policy import resolve_scoring_policy
 from vnalpha.warehouse.symbol_lifecycle import (
     SymbolTaxonomyAsOf,
 )
@@ -256,26 +256,26 @@ def save_candidate_score(
             f"Must be one of {sorted(CANONICAL_SETUP_TYPES)}."
         )
     generated_at = _now_utc().isoformat()
-    policy_id = str(
-        score_result.get("scoring_policy_id") or BASELINE_SCORING_POLICY.policy_id
+    policy_values = tuple(
+        score_result.get(key)
+        for key in (
+            "scoring_policy_id",
+            "scoring_policy_version",
+            "scoring_policy_hash",
+            "scoring_policy_status",
+        )
     )
-    policy_version = str(
-        score_result.get("scoring_policy_version") or BASELINE_SCORING_POLICY.version
-    )
-    policy_hash = str(
-        score_result.get("scoring_policy_hash") or BASELINE_SCORING_POLICY.payload_hash
-    )
-    policy_status = str(
-        score_result.get("scoring_policy_status")
-        or BASELINE_SCORING_POLICY.lifecycle_status.value
-    )
-    if (policy_id, policy_version, policy_hash) != (
-        BASELINE_SCORING_POLICY.policy_id,
-        BASELINE_SCORING_POLICY.version,
-        BASELINE_SCORING_POLICY.payload_hash,
+    if any(value in (None, "") for value in policy_values):
+        raise ValueError("Scoring policy identity is required for persistence")
+    policy_id, policy_version, policy_hash, policy_status = map(str, policy_values)
+    policy = resolve_scoring_policy(policy_id, policy_version, as_of_date=date)
+    if (policy_hash, policy_status) != (
+        policy.payload_hash,
+        policy.lifecycle_status.value,
     ):
         raise ValueError(
-            "Unknown or malformed scoring policy hash; refusing persistence"
+            "Scoring policy identity is unknown: policy hash or lifecycle status "
+            "is malformed or inconsistent"
         )
     existing = conn.execute(
         "SELECT scoring_policy_hash FROM candidate_score WHERE symbol=? AND date=?",

@@ -42,6 +42,7 @@ def score_universe(
     scoring_policy_id: str = BASELINE_SCORING_POLICY.policy_id,
     scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
     rebuild_policy: bool = False,
+    project_memory: bool = True,
 ) -> int:
     """Score all symbols for a given date using feature_snapshot.
 
@@ -77,7 +78,9 @@ def score_universe(
           AND fs.relative_strength_completeness = 'COMPLETE'
     """
     params: list = [date]
-    if universe:
+    if universe is not None:
+        if not universe:
+            return 0
         placeholders = ", ".join(["?"] * len(universe))
         query += f" AND fs.symbol IN ({placeholders})"
         params.extend(universe)
@@ -107,7 +110,9 @@ def score_universe(
         "lineage_json",
     ]
 
-    policy = resolve_scoring_policy(scoring_policy_id, scoring_policy_version)
+    policy = resolve_scoring_policy(
+        scoring_policy_id, scoring_policy_version, as_of_date=date
+    )
     _guard_policy_replay(
         conn,
         date,
@@ -151,9 +156,10 @@ def score_universe(
             scored,
             allow_policy_rebuild=rebuild_policy,
         )
-        _project_candidate_score_to_memory(
-            conn, symbol, date_val, scored, memory_root=memory_root
-        )
+        if project_memory:
+            _project_candidate_score_to_memory(
+                conn, symbol, date_val, scored, memory_root=memory_root
+            )
         scored_count += 1
 
     logger.info("Scored and persisted %d symbols for %s", scored_count, date)
@@ -248,6 +254,11 @@ def save_watchlist(
     date: str,
     top_n: int = DEFAULT_TOP_N,
     min_score: float = DEFAULT_MIN_SCORE,
+    *,
+    scoring_policy_id: str = BASELINE_SCORING_POLICY.policy_id,
+    scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
+    allow_policy_rebuild: bool = False,
+    manage_transaction: bool = True,
 ) -> int:
     """Derive and save daily_watchlist FROM persisted candidate_score rows.
 
@@ -263,39 +274,84 @@ def save_watchlist(
         c for c in candidates if c.get("candidate_class") in WATCHLIST_CLASSES
     ][:top_n]
 
-    # Clear existing entries for this date
-    policy_hashes = {str(c.get("scoring_policy_hash") or "") for c in candidates}
-    if "" in policy_hashes or len(policy_hashes) > 1:
-        raise ValueError(
-            "Watchlist candidates have missing or mixed scoring policy hashes"
+    policy = resolve_scoring_policy(
+        scoring_policy_id, scoring_policy_version, as_of_date=date
+    )
+    identities = {
+        (
+            str(c.get("scoring_policy_id") or ""),
+            str(c.get("scoring_policy_version") or ""),
+            str(c.get("scoring_policy_hash") or ""),
+            str(c.get("scoring_policy_status") or ""),
         )
-    conn.execute("DELETE FROM daily_watchlist WHERE date = ?", [date])
-
-    for rank, candidate in enumerate(candidates, start=1):
-        risk_flags = candidate.get("risk_flags_json", [])
-        lineage = candidate.get("lineage_json", {})
+        for c in candidates
+    }
+    expected_identity = (
+        policy.policy_id,
+        policy.version,
+        policy.payload_hash,
+        policy.lifecycle_status.value,
+    )
+    if identities and identities != {expected_identity}:
+        raise ValueError(
+            "Watchlist candidates have missing, mixed, or invalid policy identity"
+        )
+    existing_identities = set(
         conn.execute(
-            """
+            "SELECT DISTINCT scoring_policy_id, scoring_policy_version, "
+            "scoring_policy_hash, scoring_policy_status "
+            "FROM daily_watchlist WHERE date=?",
+            [date],
+        ).fetchall()
+    )
+    if (
+        existing_identities
+        and existing_identities != {expected_identity}
+        and not allow_policy_rebuild
+    ):
+        raise ValueError(
+            "Existing watchlist has a different or legacy policy identity; "
+            "explicit rebuild is required"
+        )
+
+    if manage_transaction:
+        conn.execute("BEGIN TRANSACTION")
+    try:
+        conn.execute("DELETE FROM daily_watchlist WHERE date = ?", [date])
+
+        for rank, candidate in enumerate(candidates, start=1):
+            risk_flags = candidate.get("risk_flags_json", [])
+            lineage = candidate.get("lineage_json", {})
+            conn.execute(
+                """
             INSERT INTO daily_watchlist
             (date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json,
              scoring_policy_id, scoring_policy_version, scoring_policy_hash, scoring_policy_status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                date,
-                rank,
-                candidate["symbol"],
-                candidate["score"],
-                candidate["candidate_class"],
-                candidate["setup_type"],
-                json.dumps(risk_flags) if isinstance(risk_flags, list) else risk_flags,
-                json.dumps(lineage) if isinstance(lineage, dict) else lineage,
-                candidate.get("scoring_policy_id"),
-                candidate.get("scoring_policy_version"),
-                candidate.get("scoring_policy_hash"),
-                candidate.get("scoring_policy_status"),
-            ],
-        )
+                """,
+                [
+                    date,
+                    rank,
+                    candidate["symbol"],
+                    candidate["score"],
+                    candidate["candidate_class"],
+                    candidate["setup_type"],
+                    json.dumps(risk_flags)
+                    if isinstance(risk_flags, list)
+                    else risk_flags,
+                    json.dumps(lineage) if isinstance(lineage, dict) else lineage,
+                    candidate.get("scoring_policy_id"),
+                    candidate.get("scoring_policy_version"),
+                    candidate.get("scoring_policy_hash"),
+                    candidate.get("scoring_policy_status"),
+                ],
+            )
+        if manage_transaction:
+            conn.execute("COMMIT")
+    except duckdb.Error:
+        if manage_transaction:
+            conn.execute("ROLLBACK")
+        raise
     logger.info(
         "Saved %d watchlist entries for %s (from persisted scores)",
         len(candidates),
@@ -319,6 +375,11 @@ def generate_watchlist(
     Returns:
         dict with "scored" count (all symbols scored) and "saved" count (watchlist entries).
     """
+    policy = resolve_scoring_policy(
+        scoring_policy_id, scoring_policy_version, as_of_date=date
+    )
+    requested_symbols = sorted(set(universe or ()))
+    requested_count = len(requested_symbols) if universe is not None else 0
     try:
         from vnalpha.observability.domain import log_watchlist_start
 
@@ -326,6 +387,7 @@ def generate_watchlist(
     except Exception:  # noqa: BLE001
         pass
     try:
+        conn.execute("BEGIN TRANSACTION")
         scored = score_universe(
             conn,
             date,
@@ -333,9 +395,24 @@ def generate_watchlist(
             scoring_policy_id=scoring_policy_id,
             scoring_policy_version=scoring_policy_version,
             rebuild_policy=rebuild_policy,
+            project_memory=False,
         )
-        saved = save_watchlist(conn, date, top_n=top_n, min_score=min_score)
+        saved = save_watchlist(
+            conn,
+            date,
+            top_n=top_n,
+            min_score=min_score,
+            scoring_policy_id=policy.policy_id,
+            scoring_policy_version=policy.version,
+            allow_policy_rebuild=rebuild_policy,
+            manage_transaction=False,
+        )
+        conn.execute("COMMIT")
     except Exception as exc:
+        try:
+            conn.execute("ROLLBACK")
+        except duckdb.Error:
+            pass
         logger.error("Watchlist generation failed for %s: %s", date, exc)
         try:
             from vnalpha.observability.domain import log_watchlist_failure
@@ -351,10 +428,23 @@ def generate_watchlist(
         log_watchlist_success(date, scored=scored, saved=saved)
     except Exception:  # noqa: BLE001
         pass
-    policy = resolve_scoring_policy(scoring_policy_id, scoring_policy_version)
+    persisted_scores = get_candidate_scores(conn, date)
+    requested_set = set(requested_symbols)
+    for scored_result in persisted_scores:
+        if universe is None or str(scored_result["symbol"]) in requested_set:
+            _project_candidate_score_to_memory(
+                conn,
+                str(scored_result["symbol"]),
+                scored_result["date"],
+                scored_result,
+                memory_root=None,
+            )
+    missing_count = max(0, requested_count - scored) if universe is not None else 0
     return {
         "scored": scored,
         "saved": saved,
+        "requested": requested_count,
+        "missing": missing_count,
         "scoring_policy_id": policy.policy_id,
         "scoring_policy_version": policy.version,
         "scoring_policy_hash": policy.payload_hash,

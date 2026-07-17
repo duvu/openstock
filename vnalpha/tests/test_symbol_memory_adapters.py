@@ -18,6 +18,7 @@ from vnalpha.research_models.models import (
     SetupAnalysis,
     SymbolLevelSnapshot,
 )
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.symbol_memory.adapters import (
     CandidateScoreSnapshot,
     FeatureSnapshot,
@@ -40,6 +41,8 @@ def test_persisted_candidate_and_feature_snapshots_create_grounded_evidence() ->
             setup_type="base",
             correlation_id="candidate-001",
             persisted_at=timestamp,
+            scoring_policy_id=BASELINE_SCORING_POLICY.policy_id,
+            scoring_policy_hash=BASELINE_SCORING_POLICY.payload_hash,
         )
     )
     feature = feature_snapshot_evidence(

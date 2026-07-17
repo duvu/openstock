@@ -18,6 +18,7 @@ from vnalpha.data_availability.models import (
     EnsureDataResult,
     EnsureDataStatus,
 )
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import build_local_tool_registry
 from vnalpha.warehouse.migrations import run_migrations
@@ -54,6 +55,12 @@ def conn_scored(conn):
                 "risk_flags_json": [],
                 "lineage_json": {"scoring_version": "test", "as_of_bar_date": today},
                 "data_quality_status": "pass",
+                "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+                "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+                "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+                "scoring_policy_status": (
+                    BASELINE_SCORING_POLICY.lifecycle_status.value
+                ),
             },
         )
     return conn, today

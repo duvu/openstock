@@ -161,6 +161,50 @@ def test_revision_preserves_history_and_emits_affected_range(conn) -> None:
     )
 
 
+def test_revision_invalidates_only_intersecting_completed_outcomes(conn) -> None:
+    original = _cash_event()
+    revised = _cash_event(content_hash="hash-2", cash_amount=1_200)
+    sync_corporate_actions(
+        conn, symbol="SSI", client=FakeCorporateActionClient([original])
+    )
+    conn.execute(
+        """
+        INSERT INTO candidate_outcome (
+            symbol, watchlist_date, horizon_sessions, observation_start_date,
+            observation_end_date, outcome_status, forward_return, price_basis,
+            benchmark_price_basis, adjustment_methodology, adjustment_version,
+            action_overlap_status
+        ) VALUES
+            ('SSI', '2024-01-02', 5, '2024-01-02', '2024-01-20', 'COMPLETE',
+             0.1, 'RAW_UNADJUSTED', 'RAW_UNADJUSTED', 'NONE',
+             'raw-unadjusted-v1', 'CLEAR'),
+            ('SSI', '2023-12-01', 5, '2023-12-01', '2024-01-08', 'COMPLETE',
+             0.2, 'RAW_UNADJUSTED', 'RAW_UNADJUSTED', 'NONE',
+             'raw-unadjusted-v1', 'CLEAR')
+        """
+    )
+
+    sync_corporate_actions(
+        conn, symbol="SSI", client=FakeCorporateActionClient([revised])
+    )
+
+    rows = conn.execute(
+        "SELECT watchlist_date::VARCHAR, outcome_status, forward_return, "
+        "action_overlap_status, invalidation_reason FROM candidate_outcome "
+        "ORDER BY watchlist_date"
+    ).fetchall()
+    assert rows == [
+        ("2023-12-01", "COMPLETE", 0.2, "CLEAR", None),
+        (
+            "2024-01-02",
+            "INVALID",
+            None,
+            "INVALID",
+            "CORPORATE_ACTION_EVIDENCE_REVISED",
+        ),
+    ]
+
+
 def test_conflicting_provider_evidence_is_preserved_not_overwritten(conn) -> None:
     vci = _cash_event(cash_amount=1_000)
     kbs = deepcopy(vci)
