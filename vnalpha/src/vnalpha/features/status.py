@@ -6,6 +6,11 @@ from enum import Enum
 from typing import Any, Final, Mapping, assert_never
 
 FEATURE_STATUS_CONTRACT_VERSION: Final = "feature-data-status-v1"
+_FEATURE_STATUS_CONTRACT_KEY: Final = "feature_status_contract_version"
+
+
+class _JsonObjectPairs(list[tuple[str, Any]]):
+    pass
 
 
 class FeatureDataStatus(str, Enum):
@@ -79,20 +84,21 @@ def parse_feature_snapshot_eligibility(
     eligibility = parse_feature_eligibility(raw_status)
     if not eligibility.eligible:
         return eligibility
-    lineage: Mapping[str, Any]
+    contract_version: object | None = None
     if isinstance(raw_lineage, str):
         try:
-            decoded = json.loads(raw_lineage)
+            decoded = json.loads(raw_lineage, object_pairs_hook=_JsonObjectPairs)
         except (json.JSONDecodeError, TypeError):
             decoded = None
-        lineage = decoded if isinstance(decoded, Mapping) else {}
+        if isinstance(decoded, _JsonObjectPairs):
+            contract_values = [
+                value for key, value in decoded if key == _FEATURE_STATUS_CONTRACT_KEY
+            ]
+            if len(contract_values) == 1:
+                contract_version = contract_values[0]
     elif isinstance(raw_lineage, Mapping):
-        lineage = raw_lineage
-    else:
-        lineage = {}
-    if lineage.get("feature_status_contract_version") == (
-        FEATURE_STATUS_CONTRACT_VERSION
-    ):
+        contract_version = raw_lineage.get(_FEATURE_STATUS_CONTRACT_KEY)
+    if contract_version == FEATURE_STATUS_CONTRACT_VERSION:
         return eligibility
     return FeatureEligibility(
         raw_status=raw_status,
@@ -117,11 +123,17 @@ def feature_exclusion_reason_sql(table_alias: str) -> str:
     contract_version = (
         "json_extract_string("
         f"try_cast({table_alias}.lineage_json AS JSON), "
-        "'$.feature_status_contract_version')"
+        f"'$.{_FEATURE_STATUS_CONTRACT_KEY}')"
+    )
+    contract_key_count = (
+        "list_count(list_filter("
+        f"json_keys(try_cast({table_alias}.lineage_json AS JSON)), "
+        f"contract_key -> contract_key = '{_FEATURE_STATUS_CONTRACT_KEY}'))"
     )
     return (
         "CASE "
         f"WHEN {status} = '{FeatureDataStatus.EXACT_DATE.value}' "
+        f"AND {contract_key_count} = 1 "
         f"AND {contract_version} = '{FEATURE_STATUS_CONTRACT_VERSION}' THEN NULL "
         f"WHEN {status} = '{FeatureDataStatus.STALE_DATE.value}' "
         f"THEN '{FeatureExclusionReason.STALE_FEATURE_DATE.value}' "

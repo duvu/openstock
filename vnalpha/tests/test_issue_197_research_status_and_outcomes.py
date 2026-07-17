@@ -62,6 +62,36 @@ def test_unversioned_exact_date_snapshot_fails_closed() -> None:
     assert parsed.exclusion_reason is FeatureExclusionReason.UNKNOWN_FEATURE_STATUS
 
 
+@pytest.mark.parametrize(
+    "lineage",
+    (
+        '{"feature_status_contract_version":"feature-data-status-v1",'
+        '"feature_status_contract_version":"bad"}',
+        '{"feature_status_contract_version":"bad",'
+        '"feature_status_contract_version":"feature-data-status-v1"}',
+    ),
+)
+def test_duplicate_lineage_contract_keys_fail_closed(
+    conn: duckdb.DuckDBPyConnection,
+    lineage: str,
+) -> None:
+    conn.execute(
+        "INSERT INTO feature_snapshot "
+        "(symbol, date, feature_data_status, lineage_json) "
+        "VALUES ('FPT', DATE '2026-07-01', 'EXACT_DATE', ?)",
+        [lineage],
+    )
+
+    parsed = parse_feature_snapshot_eligibility("EXACT_DATE", lineage)
+    resolution = DatasetResolver(conn).resolve_feature_snapshot()
+
+    assert parsed.eligible is False
+    assert resolution.dataset.quality_status["eligible_row_count"] == 0
+    assert resolution.dataset.quality_status["exclusion_counts"] == {
+        FeatureExclusionReason.UNKNOWN_FEATURE_STATUS.value: 1
+    }
+
+
 def test_production_builder_statuses_drive_typed_dataset_eligibility(
     conn: duckdb.DuckDBPyConnection,
 ) -> None:
@@ -255,3 +285,40 @@ def test_incomplete_and_non_finite_outcomes_are_partial_and_explicit(
         outcome.artifact.outputs.validation_json.read_text(encoding="utf-8")
     )
     assert validation["sample_size"] == 1
+
+
+def test_event_study_excludes_overflowed_forward_return(
+    conn: duckdb.DuckDBPyConnection,
+    tmp_path: Path,
+) -> None:
+    lineage = json.dumps(
+        {"feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION}
+    )
+    conn.execute(
+        "INSERT INTO feature_snapshot "
+        "(symbol, date, rs_20d_vs_vnindex, feature_data_status, "
+        "as_of_bar_date, benchmark_as_of_bar_date, lineage_json) "
+        "VALUES ('FPT', DATE '2026-07-01', 0.05, 'EXACT_DATE', "
+        "DATE '2026-07-01', DATE '2026-07-01', ?)",
+        [lineage],
+    )
+    conn.execute(
+        "INSERT INTO canonical_ohlcv "
+        "(symbol, time, interval, close, quality_status) VALUES "
+        "('FPT', DATE '2026-07-01', '1D', 1e-308, 'pass'), "
+        "('FPT', DATE '2026-07-02', '1D', 1e308, 'pass')"
+    )
+    reset_run_context()
+    _ = init_run_context(surface="test", actor="pytest", log_root=tmp_path)
+    try:
+        outcome = ResearchStudyService(conn).event_study(
+            "rs_20d_vs_vnindex > 0",
+            horizon=1,
+            start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 1),
+        )
+    finally:
+        reset_run_context()
+
+    assert outcome.artifact.metrics["sample_size"] == 0
+    assert outcome.rows[0][4] == "invalid_outcome"

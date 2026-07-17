@@ -359,6 +359,7 @@ class ResearchStudyService:
             parameters.append(end_date)
         where = " AND ".join(clauses)
         feature_exclusion_sql = feature_exclusion_reason_sql("source")
+        forward_return_sql = "p.outcome_close / p.entry_close - 1"
         return self._conn.execute(
             f"""
             WITH feature_rows AS (
@@ -399,8 +400,9 @@ class ResearchStudyService:
                          OR p.outcome_close IS NULL
                          OR NOT isfinite(p.entry_close)
                          OR NOT isfinite(p.outcome_close)
+                         OR NOT isfinite({forward_return_sql})
                     THEN NULL
-                    ELSE p.outcome_close / p.entry_close - 1
+                    ELSE {forward_return_sql}
                 END AS forward_return,
                 CASE
                     WHEN f.feature_exclusion_reason IS NOT NULL
@@ -417,6 +419,8 @@ class ResearchStudyService:
                     WHEN p.outcome_close IS NULL OR p.outcome_date IS NULL
                          OR NOT isfinite(p.outcome_close)
                     THEN 'missing_outcome'
+                    WHEN NOT isfinite({forward_return_sql})
+                    THEN 'invalid_outcome'
                     ELSE 'included'
                 END AS observation_status
             FROM feature_rows f
