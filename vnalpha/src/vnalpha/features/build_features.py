@@ -34,6 +34,10 @@ from vnalpha.features.snapshot_store import (
     FEATURE_COLUMNS,
     save_feature_snapshot,
 )
+from vnalpha.features.status import (
+    FEATURE_STATUS_CONTRACT_VERSION,
+    FeatureDataStatus,
+)
 from vnalpha.features.volatility import compute_volatility_features
 from vnalpha.features.volume import compute_volume_features
 
@@ -166,11 +170,11 @@ def build_features(
         source_row_count = len(df)
 
         if benchmark_df.empty:
-            data_status = "MISSING_BENCHMARK"
+            data_status = FeatureDataStatus.MISSING_BENCHMARK
         elif as_of_bar_date < target_date:
-            data_status = "STALE_DATE"
+            data_status = FeatureDataStatus.STALE_DATE
         else:
-            data_status = "EXACT_DATE"
+            data_status = FeatureDataStatus.EXACT_DATE
 
         bar_lineage = canonical_bar_lineage(conn, symbol, as_of_bar_date)
         benchmark_lineage = (
@@ -201,6 +205,7 @@ def build_features(
             "benchmark_provider": benchmark_lineage.provider,
             "benchmark_ingestion_run_id": benchmark_lineage.ingestion_run_id,
             "feature_build_version": _FEATURE_BUILD_VERSION,
+            "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
         }
 
         features = {
@@ -237,7 +242,7 @@ def build_features(
             "benchmark_as_of_bar_date": benchmark_as_of,
             "source_row_count": source_row_count,
             "benchmark_row_count": benchmark_row_count,
-            "feature_data_status": data_status,
+            "feature_data_status": data_status.value,
             "feature_build_version": _FEATURE_BUILD_VERSION,
             "feature_generated_at": generated_at.isoformat(),
             "lineage_json": json.dumps(lineage),

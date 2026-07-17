@@ -10,6 +10,8 @@ import duckdb
 
 from vnalpha.outcomes.models import (
     CandidateOutcomeRecord,
+    HypothesisOutcomeSummary,
+    OutcomeStatus,
     RiskFlagPerformanceRecord,
     ScoreBucketPerformanceRecord,
     SetupTypePerformanceRecord,
@@ -258,6 +260,59 @@ def get_candidate_outcomes(
         "error_json",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
+
+
+def summarize_hypothesis_outcomes(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    horizon_sessions: int,
+    required_feature_status: str,
+) -> HypothesisOutcomeSummary:
+    row = conn.execute(
+        """
+        SELECT
+            count(*),
+            count(*) FILTER (
+                WHERE upper(trim(coalesce(f.feature_data_status, ''))) = ?
+            ),
+            count(o.forward_return) FILTER (
+                WHERE upper(trim(coalesce(f.feature_data_status, ''))) = ?
+                  AND o.outcome_status = ?
+            ),
+            avg(o.forward_return) FILTER (
+                WHERE upper(trim(coalesce(f.feature_data_status, ''))) = ?
+                  AND o.outcome_status = ?
+            )
+        FROM feature_snapshot f
+        LEFT JOIN candidate_outcome o
+          ON o.symbol = f.symbol
+         AND o.watchlist_date = f.date
+         AND o.horizon_sessions = ?
+        WHERE f.rs_20d_vs_vnindex > 0
+        """,
+        [
+            required_feature_status,
+            required_feature_status,
+            OutcomeStatus.COMPLETE.value,
+            required_feature_status,
+            OutcomeStatus.COMPLETE.value,
+            horizon_sessions,
+        ],
+    ).fetchone()
+    selected = int(row[0]) if row is not None else 0
+    eligible = int(row[1]) if row is not None else 0
+    complete = int(row[2]) if row is not None else 0
+    mean_forward_return = (
+        float(row[3]) if row is not None and row[3] is not None else None
+    )
+    return HypothesisOutcomeSummary(
+        selected_feature_rows=selected,
+        eligible_feature_rows=eligible,
+        complete_observation_rows=complete,
+        excluded_feature_rows=selected - eligible,
+        missing_observation_rows=eligible - complete,
+        mean_forward_return=mean_forward_return,
+    )
 
 
 # ---- watchlist_outcome ----

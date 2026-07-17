@@ -238,8 +238,9 @@ class TestQualityHandler:
 
 class TestAnalyzeHandler:
     def test_analyze_blocks_when_fixture_lacks_required_core_data(
-        self, conn_with_data, reg
+        self, conn_with_data, reg, monkeypatch: pytest.MonkeyPatch
     ):
+        monkeypatch.setenv("VNSTOCK_SERVICE_URL", "http://127.0.0.1:1")
         conn, today = conn_with_data
         parsed = parse(f"/analyze FPT --date {today}")
         result = reg.execute(
@@ -301,8 +302,9 @@ class TestShortlistHandler:
 
 class TestResearchPlanHandler:
     def test_research_plan_blocks_when_fixture_lacks_required_core_data(
-        self, conn_with_data, reg
+        self, conn_with_data, reg, monkeypatch: pytest.MonkeyPatch
     ):
+        monkeypatch.setenv("VNSTOCK_SERVICE_URL", "http://127.0.0.1:1")
         conn, today = conn_with_data
         parsed = parse(f"/research-plan FPT --date {today}")
         result = reg.execute(

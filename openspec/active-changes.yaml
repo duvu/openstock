@@ -11,6 +11,21 @@ policy:
 
 changes:
 
+  validate-daily-equity-ranking:
+    status: partial
+    github_issues: [196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206]
+    roadmap_state: scheduled
+    summary: >-
+      Validate the daily full-universe equity-ranking vertical through shared
+      point-in-time eligibility, explicit price basis, immutable scoring and
+      ranking policies, held-out evaluation, versioned assumptions, reproducible
+      reports, append-only observations, bounded dataset experiments and reviewed
+      manual policy decisions.
+    evidence: >-
+      GitHub epic #196 owns the dependency graph. Issue #197 is the first
+      implementation slice and aligns production feature status with research
+      eligibility while moving hypothesis measurement to complete later outcomes.
+
   mvp1-golden-acceptance:
     status: ready
     github_issues: [162]

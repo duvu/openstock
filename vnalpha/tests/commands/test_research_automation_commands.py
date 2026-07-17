@@ -29,9 +29,9 @@ def research_connection(tmp_path: Path) -> Iterator[duckdb.DuckDBPyConnection]:
             "volatility_20d, volume_ratio, feature_data_status, as_of_bar_date, "
             "benchmark_as_of_bar_date, feature_build_version, lineage_json) VALUES "
             "('FPT', DATE '2026-07-01', 100, 0.12, 0.04, 0.10, 0.02, 0.60, "
-            "'good', DATE '2026-07-01', DATE '2026-07-01', 'v1', '{}'), "
+            "'EXACT_DATE', DATE '2026-07-01', DATE '2026-07-01', 'v1', '{}'), "
             "('VNM', DATE '2026-07-01', 80, 0.08, 0.01, 0.20, 0.05, 1.10, "
-            "'good', DATE '2026-07-01', DATE '2026-07-01', 'v1', '{}')"
+            "'EXACT_DATE', DATE '2026-07-01', DATE '2026-07-01', 'v1', '{}')"
         )
         start = date(2026, 7, 1)
         for symbol, base in (("FPT", 100.0), ("VNM", 80.0)):
@@ -52,6 +52,13 @@ def research_connection(tmp_path: Path) -> Iterator[duckdb.DuckDBPyConnection]:
                         close,
                     ],
                 )
+        conn.execute(
+            "INSERT INTO candidate_outcome "
+            "(symbol, watchlist_date, horizon_sessions, forward_return, "
+            "outcome_status) VALUES "
+            "('FPT', DATE '2026-07-01', 20, 0.12, 'COMPLETE'), "
+            "('VNM', DATE '2026-07-01', 20, 0.08, 'COMPLETE')"
+        )
         yield conn
     reset_run_context()
 

@@ -8,6 +8,12 @@ from typing import Final
 
 import duckdb
 
+from vnalpha.features.status import (
+    FEATURE_STATUS_CONTRACT_VERSION,
+    FeatureDataStatus,
+)
+from vnalpha.outcomes.models import FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION
+from vnalpha.outcomes.repositories import summarize_hypothesis_outcomes
 from vnalpha.research_automation.dataset_resolver import DatasetResolver
 from vnalpha.research_automation.event_study_spec import parse_event_study_spec
 from vnalpha.research_automation.models import (
@@ -51,13 +57,39 @@ class ResearchStudyService:
             () if horizon_match else ("Assumed a 20-session research horizon.",)
         )
         resolution = self._resolver.resolve_feature_snapshot(benchmark="VNINDEX")
-        row = self._conn.execute(
-            "SELECT count(*), avg(return_20d) FROM feature_snapshot "
-            "WHERE rs_20d_vs_vnindex > 0"
-        ).fetchone()
+        observation_summary = summarize_hypothesis_outcomes(
+            self._conn,
+            horizon_sessions=horizon,
+            required_feature_status=FeatureDataStatus.EXACT_DATE.value,
+        )
+        measurement_warnings: list[str] = []
+        if observation_summary.missing_observation_rows:
+            measurement_warnings.append(
+                f"{observation_summary.missing_observation_rows} eligible feature rows "
+                "have no complete later observation."
+            )
+        if observation_summary.complete_observation_rows < _MIN_EVENT_OBSERVATIONS:
+            measurement_warnings.append(
+                f"At least {_MIN_EVENT_OBSERVATIONS} complete later observations are required."
+            )
+        effective_resolution = replace(
+            resolution,
+            sufficient=(
+                resolution.sufficient
+                and observation_summary.complete_observation_rows
+                >= _MIN_EVENT_OBSERVATIONS
+            ),
+            warnings=tuple(
+                dict.fromkeys((*resolution.warnings, *measurement_warnings))
+            ),
+        )
         metrics = {
-            "sample_size": int(row[0]),
-            "mean_return_20d": float(row[1]) if row[1] is not None else None,
+            "sample_size": observation_summary.complete_observation_rows,
+            "selected_feature_rows": observation_summary.selected_feature_rows,
+            "eligible_feature_rows": observation_summary.eligible_feature_rows,
+            "excluded_feature_rows": observation_summary.excluded_feature_rows,
+            "missing_observation_rows": observation_summary.missing_observation_rows,
+            "mean_return_20d": observation_summary.mean_forward_return,
             "horizon_sessions": horizon,
         }
         artifact = persist_workflow_artifact(
@@ -67,18 +99,37 @@ class ResearchStudyService:
             parameters={
                 "sample": "persisted symbols",
                 "condition": "rs_20d_vs_vnindex > 0",
-                "outcome": "return_20d",
+                "outcome": "candidate_outcome.forward_return",
                 "horizon_sessions": horizon,
                 "metric": "mean",
             },
             metrics=metrics,
             result={**metrics, "assumptions": list(assumptions)},
-            resolution=resolution,
+            resolution=effective_resolution,
             summary_body=(
                 "Evaluated the condition as bounded historical evidence; "
                 "no buy or sell action is implied."
             ),
             metrics_csv=metrics_csv(metrics),
+            lineage_extra={
+                "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
+                "measurement_contract_version": (
+                    FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION
+                ),
+                "measurement_source": "candidate_outcome.forward_return",
+                "measurement_status": "COMPLETE",
+                "measurement_join_keys": ["symbol", "watchlist_date"],
+            },
+            validation_extra={
+                "eligible_feature_rows": observation_summary.eligible_feature_rows,
+                "excluded_feature_rows": observation_summary.excluded_feature_rows,
+                "complete_observation_rows": (
+                    observation_summary.complete_observation_rows
+                ),
+                "missing_observation_rows": (
+                    observation_summary.missing_observation_rows
+                ),
+            },
         )
         self._repository.save_hypothesis(
             ResearchHypothesis(
@@ -163,7 +214,8 @@ class ResearchStudyService:
             "condition": spec.canonical_condition,
             "start_date": str(start_date) if start_date else None,
             "end_date": str(end_date) if end_date else None,
-            "feature_quality": "good|ok|pass",
+            "feature_quality": FeatureDataStatus.EXACT_DATE.value,
+            "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
             "feature_observable_at_event": True,
             "canonical_interval": "1D",
             "canonical_quality": "good|ok|pass",
@@ -219,6 +271,7 @@ class ResearchStudyService:
                 ),
                 "price_basis": spec.price_basis,
                 "metric_policy_version": spec.metric_policy_version,
+                "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
                 "future_feature_selection": False,
             },
             validation_extra={
@@ -313,8 +366,15 @@ class ResearchStudyService:
                     ELSE p.outcome_close / p.entry_close - 1
                 END AS forward_return,
                 CASE
-                    WHEN lower(trim(coalesce(f.feature_data_status, ''))) NOT IN ('good', 'ok', 'pass')
-                    THEN 'feature_quality'
+                    WHEN f.feature_data_status IS NULL
+                         OR trim(f.feature_data_status) = ''
+                    THEN 'UNKNOWN_FEATURE_STATUS'
+                    WHEN upper(trim(f.feature_data_status)) = 'STALE_DATE'
+                    THEN 'STALE_FEATURE_DATE'
+                    WHEN upper(trim(f.feature_data_status)) = 'MISSING_BENCHMARK'
+                    THEN 'MISSING_BENCHMARK'
+                    WHEN upper(trim(f.feature_data_status)) <> 'EXACT_DATE'
+                    THEN 'UNKNOWN_FEATURE_STATUS'
                     WHEN f.as_of_bar_date IS NULL OR f.as_of_bar_date > f.date
                     THEN 'non_observable_feature'
                     WHEN f.benchmark_as_of_bar_date IS NULL OR f.benchmark_as_of_bar_date > f.date
