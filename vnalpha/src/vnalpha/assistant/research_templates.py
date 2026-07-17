@@ -159,6 +159,15 @@ def build_deterministic_research_answer(
         summary = "Caveat: persisted context includes limitations. " + summary
     tool_names = [step.tool_name for step in plan.steps]
     basis = "Deterministic tools: " + ", ".join(tool_names or ["none"])
+    price_bases = tuple(
+        dict.fromkeys(
+            str(payload["price_basis"])
+            for payload in payloads
+            if payload.get("price_basis")
+        )
+    )
+    if price_bases:
+        basis += "; Price basis: " + ", ".join(price_bases)
     risk_parts = [*caveats, *(reasons or []), _RESEARCH_ONLY_CAVEAT]
     risks = " ".join(dict.fromkeys(item for item in risk_parts if item))
     return AssistantAnswer(
@@ -216,8 +225,24 @@ def _source_refs(
     return list(dict.fromkeys(refs))
 
 
+def _primary_payload(intent: str, payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return the payload that actually carries this intent's summary fields.
+
+    ``deep_analyze_symbol`` prepends a ``data.ensure_current_symbol``
+    provisioning step ahead of ``analysis.deep_symbol``. That provisioning
+    payload has no ``candidate``/``as_of_date`` fields, so naively using
+    ``payloads[0]`` always rendered "score=None, class=None" even when the
+    analysis payload right behind it was fully populated.
+    """
+    if intent == "deep_analyze_symbol":
+        for payload in payloads:
+            if "candidate" in payload:
+                return payload
+    return payloads[0] if payloads else {}
+
+
 def _summary_for_intent(intent: str, payloads: list[dict[str, Any]]) -> str:
-    primary = payloads[0] if payloads else {}
+    primary = _primary_payload(intent, payloads)
     if intent == "deep_analyze_symbol":
         candidate = primary.get("candidate") or {}
         return (

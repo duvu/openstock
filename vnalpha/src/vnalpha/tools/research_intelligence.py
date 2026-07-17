@@ -74,6 +74,7 @@ def deep_symbol_analysis(
     sector = get_symbol_alignment(conn, normalized_symbol, target_date)
     quality = _latest_quality(conn, normalized_symbol, target_date)
     levels = _level_context(bars, feature)
+    basis_context = _ohlcv_basis_context(conn, normalized_symbol, bars)
 
     missing_data: list[str] = []
     optional_missing_data: list[str] = []
@@ -106,6 +107,17 @@ def deep_symbol_analysis(
         artifact_refs.add_if_present(
             "canonical_ohlcv", f"{normalized_symbol}:through:{target_date}", True
         )
+        if basis_context["price_basis"] != "RAW_UNADJUSTED":
+            missing_data.append("canonical_ohlcv_basis")
+            caveats.append(
+                "Canonical OHLCV basis is missing or is not verified RAW_UNADJUSTED."
+            )
+        elif basis_context["corporate_action_overlap"]:
+            caveats.append(
+                "Corporate-action evidence overlaps the RAW_UNADJUSTED lookback; "
+                "returns, volatility, levels, and score components may contain "
+                "mechanical action effects."
+            )
 
     if market_regime_requirement is not ContextRequirement.NOT_REQUESTED:
         caveats.extend(_tool_warnings(market))
@@ -173,17 +185,19 @@ def deep_symbol_analysis(
         "market_context": market_data,
         "sector_context": sector_data,
         "quality": quality,
+        "price_basis": basis_context["price_basis"],
+        "corporate_action_overlap": basis_context["corporate_action_overlap"],
         "freshness": {
             "price_bar_date": bars[0]["date"] if bars else None,
             "feature_generated_at": feature.get("feature_generated_at")
             if feature
             else None,
-            "score_generated_at": (score or {})
-            .get("lineage_json", {})
-            .get("generated_at"),
+            "score_generated_at": ((score or {}).get("lineage_json") or {}).get(
+                "generated_at"
+            ),
         },
         "lineage": {
-            "candidate_score": (score or {}).get("lineage_json", {}),
+            "candidate_score": (score or {}).get("lineage_json") or {},
             "feature_snapshot": (feature or {}).get("lineage", {}),
             "market_context": market_data.get("lineage", {})
             if isinstance(market_data, dict)
@@ -747,7 +761,7 @@ def _recent_bars(
     rows = conn.execute(
         """
         SELECT CAST(time AS DATE)::VARCHAR, open, high, low, close, volume,
-               selected_provider, quality_status, ingestion_run_id
+               selected_provider, quality_status, ingestion_run_id, price_basis
         FROM canonical_ohlcv
         WHERE symbol = ? AND interval = '1D' AND CAST(time AS DATE) <= ?
         ORDER BY time DESC LIMIT ?
@@ -764,8 +778,34 @@ def _recent_bars(
         "provider",
         "quality_status",
         "ingestion_run_id",
+        "price_basis",
     ]
     return [dict(zip(columns, row, strict=True)) for row in rows]
+
+
+def _ohlcv_basis_context(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    bars: list[dict[str, Any]],
+) -> dict[str, str | bool | None]:
+    bases = {
+        None if row.get("price_basis") is None else str(row["price_basis"])
+        for row in bars
+    }
+    basis = "RAW_UNADJUSTED" if bases == {"RAW_UNADJUSTED"} else None
+    if not bars:
+        return {"price_basis": basis, "corporate_action_overlap": False}
+    dates = [str(row["date"]) for row in bars]
+    overlap = conn.execute(
+        "SELECT 1 FROM corporate_action_affected_range "
+        "WHERE symbol = ? AND affected_from_date <= ? "
+        "AND (affected_to_date IS NULL OR affected_to_date >= ?) LIMIT 1",
+        [symbol, max(dates), min(dates)],
+    ).fetchone()
+    return {
+        "price_basis": basis,
+        "corporate_action_overlap": overlap is not None,
+    }
 
 
 def _level_context(

@@ -97,6 +97,33 @@ async def test_router_shows_user_input_only_for_natural_prompt(
 
 
 @pytest.mark.asyncio
+async def test_unexpected_router_exception_uses_fixed_public_message(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from vnalpha.tui.input_router import TuiInputRouter
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
+    output = MagicMock(spec=OutputStream)
+    with patch.object(TuiInputRouter, "_setup_controller"):
+        with patch.object(TuiInputRouter, "_setup_executor"):
+            router = TuiInputRouter(
+                output_stream=output,
+                workspace=create_workspace(root=tmp_path),
+            )
+    router._command_path = AsyncMock(
+        **{"route.side_effect": RuntimeError("api_key=super-secret")}
+    )
+    router._set_status_error = MagicMock()
+
+    await router.route("/scan")
+
+    public_message = "Unexpected routing failure. Inspect the debug logs for details."
+    output.show_error.assert_called_once_with(public_message, source="router")
+    router._set_status_error.assert_called_once_with(public_message)
+
+
+@pytest.mark.asyncio
 async def test_workspace_input_failure_does_not_block_command(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -125,6 +152,49 @@ async def test_workspace_input_failure_does_not_block_command(
 
     router._command_executor.execute.assert_called_once_with("/scan")
     output.show_command_result.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "expected_kind"),
+    [
+        ("SUCCESS", "done"),
+        ("PARTIAL", "warning"),
+        ("EMPTY_RESULT", "warning"),
+        ("FAILED", "error"),
+        ("VALIDATION_ERROR", "error"),
+    ],
+)
+async def test_research_workflow_completion_preserves_result_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    status: str,
+    expected_kind: str,
+) -> None:
+    from vnalpha.commands.models import CommandResult
+    from vnalpha.tui.input_router import TuiInputRouter
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
+    output = MagicMock(spec=OutputStream)
+    with patch.object(TuiInputRouter, "_setup_controller"):
+        with patch.object(TuiInputRouter, "_setup_executor"):
+            router = TuiInputRouter(
+                output_stream=output,
+                workspace=create_workspace(root=tmp_path),
+            )
+    router._command_executor = MagicMock()
+    result = CommandResult(status=status, title="Research result", summary="done")
+
+    with patch(
+        "vnalpha.tui.routing.command_path.anyio.to_thread.run_sync",
+        new_callable=AsyncMock,
+        return_value=result,
+    ):
+        await router.route("/analyze FPT")
+
+    completion = output.append_activity.call_args_list[-1]
+    assert completion.kwargs["kind"] == expected_kind
 
 
 @pytest.mark.asyncio

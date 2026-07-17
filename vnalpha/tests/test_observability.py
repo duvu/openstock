@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -55,6 +57,24 @@ class TestRunContext:
         )
         assert ctx.run_dir.exists()
         assert ctx.run_dir.is_dir()
+
+    def test_run_artifacts_are_private_under_permissive_umask(self, tmp_path):
+        from vnalpha.observability.context import RunContext
+
+        previous = os.umask(0o022)
+        try:
+            ctx = RunContext(
+                run_id="run_private",
+                surface="cli",
+                actor="test",
+                log_root=tmp_path,
+            )
+        finally:
+            os.umask(previous)
+
+        assert stat.S_IMODE(ctx.run_dir.stat().st_mode) == 0o700
+        assert stat.S_IMODE((ctx.run_dir / "environment.json").stat().st_mode) == 0o600
+        assert stat.S_IMODE((ctx.run_dir / "README.md").stat().st_mode) == 0o600
 
     def test_run_dir_path_structure(self, tmp_path):
         from vnalpha.observability.context import RunContext
@@ -165,6 +185,17 @@ class TestJsonlWriter:
         record = json.loads(lines[0])
         assert record["event"] == "test"
         assert record["value"] == 42
+
+    def test_append_tightens_existing_file_permissions(self, tmp_path):
+        from vnalpha.observability.jsonl import append_jsonl
+
+        path = tmp_path / "existing.jsonl"
+        path.write_text("", encoding="utf-8")
+        path.chmod(0o644)
+
+        append_jsonl(path, {"event": "private"})
+
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
     def test_appends_multiple_lines(self, tmp_path):
         from vnalpha.observability.jsonl import append_jsonl

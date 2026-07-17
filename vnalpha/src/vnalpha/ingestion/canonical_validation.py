@@ -17,6 +17,9 @@ class CanonicalValidationRule(str, Enum):
     LOW_BOUND = "low_bound"
     VOLUME_NONNEGATIVE = "volume_nonnegative"
     INTERVAL_PRESENT = "interval_present"
+    PRICE_BASIS_RAW_UNADJUSTED = "price_basis_raw_unadjusted"
+    UPSTREAM_QUALITY_FAILED = "upstream_quality_failed"
+    UPSTREAM_QUALITY_UNVERIFIED = "upstream_quality_unverified"
     PROVIDER_CONSISTENCY = "provider_consistency"
 
 
@@ -33,6 +36,7 @@ class CanonicalCandidate:
     close: float | None
     volume: float | None
     provider: str | None
+    price_basis: str | None
     quality_status: str | None
     ingestion_run_id: str
 
@@ -87,6 +91,18 @@ def _base_validation_rules(
         rules.append(CanonicalValidationRule.VOLUME_NONNEGATIVE)
     if not candidate.interval.strip():
         rules.append(CanonicalValidationRule.INTERVAL_PRESENT)
+    if candidate.price_basis != "RAW_UNADJUSTED":
+        rules.append(CanonicalValidationRule.PRICE_BASIS_RAW_UNADJUSTED)
+    quality_status = (candidate.quality_status or "").strip().upper()
+    if quality_status in {
+        "ERROR",
+        "FAIL",
+        "FAILED",
+        "INVALID",
+    }:
+        rules.append(CanonicalValidationRule.UPSTREAM_QUALITY_FAILED)
+    elif quality_status not in {"PASS", "SUCCESS"}:
+        rules.append(CanonicalValidationRule.UPSTREAM_QUALITY_UNVERIFIED)
     return tuple(rules)
 
 
@@ -97,7 +113,7 @@ def _is_independently_valid_passing_observation(
 
     return (
         candidate.quality_status is not None
-        and candidate.quality_status.strip().lower() == "pass"
+        and candidate.quality_status.strip().lower() in {"pass", "success"}
         and not _base_validation_rules(candidate)
     )
 

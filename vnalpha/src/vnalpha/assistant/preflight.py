@@ -20,10 +20,12 @@ tests drive it with a fake gateway; no live provider call is ever required.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Callable
+from urllib.parse import urlsplit
 
 from vnalpha.assistant.errors import (
     LLMConfigError,
@@ -151,15 +153,19 @@ def run_llm_preflight(
 
     from vnalpha.assistant.gateway import LLMGatewayConfig
 
-    config = LLMGatewayConfig.from_env()
     try:
+        config = LLMGatewayConfig.from_env()
         config.validate()
     except LLMConfigError as exc:
         return LLMPreflightResult(
             LLMPreflightCode.MISSING_CONFIG,
             str(exc),
-            model=config.model or None,
-            endpoint=config.endpoint or None,
+            model=(
+                os.environ.get("VNALPHA_MODEL_DEFAULT", "").strip()
+                or os.environ.get("VNALPHA_LLM_MODEL", "").strip()
+                or None
+            ),
+            endpoint=_safe_endpoint(os.environ.get("VNALPHA_LLM_ENDPOINT")),
         )
 
     resolved_key = (
@@ -170,21 +176,21 @@ def run_llm_preflight(
             LLMPreflightCode.AUTH_NOT_CONFIGURED,
             "VNALPHA_LLM_API_KEY is not set; natural-language chat is unavailable.",
             model=config.model,
-            endpoint=config.endpoint,
+            endpoint=_safe_endpoint(config.endpoint),
         )
 
     if probe is None:
-        probe = _default_probe(config)
+        probe = _default_probe(config, resolved_key)
 
     try:
         route = probe()
-    except LLMConfigError as exc:
+    except LLMConfigError:
         # Routing/model configuration is invalid (no built-in model, bad alias).
         return LLMPreflightResult(
             LLMPreflightCode.MISSING_MODEL,
-            str(exc),
+            "The configured model route is invalid.",
             model=config.model,
-            endpoint=config.endpoint,
+            endpoint=_safe_endpoint(config.endpoint),
         )
     except LLMNoCompatibleFallbackError as exc:
         # The strict route failed and no compatible fallback exists. If the
@@ -195,40 +201,47 @@ def run_llm_preflight(
         if isinstance(primary, LLMTimeoutError):
             return LLMPreflightResult(
                 LLMPreflightCode.UNREACHABLE_GATEWAY,
-                str(primary),
+                "The LLM gateway timed out during the bounded preflight probe.",
                 model=config.model,
-                endpoint=config.endpoint,
+                endpoint=_safe_endpoint(config.endpoint),
             )
         if isinstance(primary, LLMResponseError):
             return _classify_response_error(primary, config)
         return LLMPreflightResult(
             LLMPreflightCode.UNSUPPORTED_STRUCTURED_OUTPUT,
-            str(exc),
+            "No configured route accepted the required structured output.",
             model=config.model,
-            endpoint=config.endpoint,
+            endpoint=_safe_endpoint(config.endpoint),
         )
-    except LLMTimeoutError as exc:
+    except LLMTimeoutError:
         return LLMPreflightResult(
             LLMPreflightCode.UNREACHABLE_GATEWAY,
-            str(exc),
+            "The LLM gateway timed out during the bounded preflight probe.",
             model=config.model,
-            endpoint=config.endpoint,
+            endpoint=_safe_endpoint(config.endpoint),
         )
     except LLMResponseError as exc:
         return _classify_response_error(exc, config)
     except LLMGatewayError as exc:
         return LLMPreflightResult(
             LLMPreflightCode.PROBE_FAILED,
-            str(exc),
+            f"The LLM gateway probe failed ({type(exc).__name__}).",
             model=config.model,
-            endpoint=config.endpoint,
+            endpoint=_safe_endpoint(config.endpoint),
+        )
+    except Exception as exc:  # noqa: BLE001, BROAD_EXCEPT_OK
+        return LLMPreflightResult(
+            LLMPreflightCode.PROBE_FAILED,
+            f"Unexpected {type(exc).__name__} during the bounded LLM probe.",
+            model=config.model,
+            endpoint=_safe_endpoint(config.endpoint),
         )
 
     return LLMPreflightResult(
         LLMPreflightCode.READY,
         f"Verified structured route for model '{config.model}'.",
         model=config.model,
-        endpoint=config.endpoint,
+        endpoint=_safe_endpoint(config.endpoint),
         route=route,
     )
 
@@ -236,12 +249,14 @@ def run_llm_preflight(
 def _classify_response_error(exc: LLMResponseError, config) -> LLMPreflightResult:
     """Map an HTTP-shaped gateway error to a typed preflight code by status."""
     text = str(exc)
-    status = _status_code_from_error(text)
+    status = exc.status_code or _status_code_from_error(text)
     if status in {401, 403}:
         code = LLMPreflightCode.AUTH_FAILED
     elif status == 404:
         code = LLMPreflightCode.MODEL_NOT_FOUND
-    elif status == 400 and _schema_unsupported(text):
+    elif status == 400 and (
+        exc.error_kind == "structured_output_unsupported" or _schema_unsupported(text)
+    ):
         code = LLMPreflightCode.UNSUPPORTED_STRUCTURED_OUTPUT
     elif status is not None and status >= 500:
         code = LLMPreflightCode.UNREACHABLE_GATEWAY
@@ -249,9 +264,9 @@ def _classify_response_error(exc: LLMResponseError, config) -> LLMPreflightResul
         code = LLMPreflightCode.PROBE_FAILED
     return LLMPreflightResult(
         code,
-        text,
+        f"The LLM gateway returned HTTP {status or 'unknown'} during preflight.",
         model=config.model,
-        endpoint=config.endpoint,
+        endpoint=_safe_endpoint(config.endpoint),
     )
 
 
@@ -279,18 +294,50 @@ def _status_code_from_error(text: str) -> int | None:
     return int(digits) if digits else None
 
 
-def _default_probe(config) -> GatewayProbe:
+def _safe_endpoint(endpoint: str | None) -> str | None:
+    if not endpoint:
+        return None
+    parsed = urlsplit(endpoint)
+    if not parsed.scheme or not parsed.hostname:
+        return None
+    try:
+        parsed_port = parsed.port
+    except ValueError:
+        return None
+    port = f":{parsed_port}" if parsed_port is not None else ""
+    return f"{parsed.scheme}://{parsed.hostname}{port}"
+
+
+def _default_probe(config, api_key: str) -> GatewayProbe:
     """Build the real bounded structured probe from environment configuration."""
 
     def probe() -> dict | None:
         from vnalpha.assistant.gateway import LLMGatewayClient
 
-        client = LLMGatewayClient(config)
-        _content, usage = client.chat(
+        client = LLMGatewayClient(config, api_key=api_key)
+        content, usage = client.chat(
             _PROBE_MESSAGES,
             response_schema=_PROBE_SCHEMA,
             stage="preflight",
         )
+        structured_mode = usage.get("structured_output_mode")
+        downgraded = usage.get("structured_output_downgraded")
+        if structured_mode != "json_schema" or downgraded is not False:
+            raise LLMResponseError(
+                "LLM HTTP 400: json_schema unsupported",
+                status_code=400,
+                error_kind="structured_output_unsupported",
+            )
+        try:
+            payload = json.loads(content)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise LLMGatewayError(
+                "The structured preflight response was not valid JSON."
+            ) from exc
+        if payload != {"ok": True}:
+            raise LLMGatewayError(
+                "The structured preflight response failed schema verification."
+            )
         route = usage.get("model_route") if isinstance(usage, dict) else None
         return route if isinstance(route, dict) else None
 

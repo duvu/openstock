@@ -30,6 +30,8 @@ def test_all_tables_created(conn):
         "symbol_master",
         "symbol_source_snapshot",
         "symbol_source_membership",
+        "reference_membership_snapshot",
+        "reference_membership_member",
         "symbol_classification_history",
         "market_ohlcv_raw",
         "canonical_ohlcv",
@@ -143,11 +145,29 @@ def test_insert_raw_ohlcv(conn):
     assert inserted == 1
 
 
+def test_insert_raw_ohlcv_reports_only_rows_stored(conn):
+    run_id = create_ingestion_run(conn, "vnstock-service", "/v1/equity/ohlcv")
+    record = {
+        "time": "2024-01-02",
+        "interval": "1D",
+        "open": 90.0,
+        "high": 92.0,
+        "low": 89.0,
+        "close": 91.5,
+        "volume": 1000000.0,
+    }
+
+    inserted = insert_raw_ohlcv(conn, run_id, "FPT", [record, record], "KBS")
+
+    assert inserted == 1
+    assert conn.execute("SELECT count(*) FROM market_ohlcv_raw").fetchone() == (1,)
+
+
 def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 56
+    assert len(tables) == 58
 
 
 def test_get_watchlist_empty(conn):

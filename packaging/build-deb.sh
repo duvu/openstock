@@ -102,6 +102,22 @@ echo "build-deb.sh: Staging in ${STAGE_DIR}"
 # Copy the package tree
 cp -r "${DEB_TREE}/." "${STAGE_DIR}/"
 
+GIT_COMMIT="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || true)"
+if [[ ! "${GIT_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+  GIT_COMMIT="0000000000000000000000000000000000000000"
+fi
+TREE_STATE="clean"
+UNTRACKED_IN_SCOPE="$(git -C "${REPO_ROOT}" ls-files --others --exclude-standard 2>/dev/null | grep -v '^ya-router/' || true)"
+if ! git -C "${REPO_ROOT}" diff --quiet --ignore-submodules -- 2>/dev/null || \
+   ! git -C "${REPO_ROOT}" diff --cached --quiet --ignore-submodules -- 2>/dev/null || \
+   [[ -n "${UNTRACKED_IN_SCOPE}" ]]; then
+  TREE_STATE="dirty"
+fi
+mkdir -p "${STAGE_DIR}/opt/vnalpha"
+printf 'version=%s\ncommit=%s\ntree_state=%s\n' \
+  "${VERSION}" "${GIT_COMMIT}" "${TREE_STATE}" \
+  >"${STAGE_DIR}/opt/vnalpha/RELEASE"
+
 # ---------------------------------------------------------------------------
 # Update version in control file
 # ---------------------------------------------------------------------------
@@ -165,8 +181,8 @@ chmod 0755 "${STAGE_DIR}/DEBIAN/postrm"
 chmod 0755 "${STAGE_DIR}/usr/bin/vnalpha"
 chmod 0755 "${STAGE_DIR}/usr/bin/vnalpha-poc"
 
-# Config file: readable by all, not executable
-chmod 0644 "${STAGE_DIR}/etc/vnalpha/vnalpha.env"
+chmod 0640 "${STAGE_DIR}/etc/vnalpha/vnalpha.env"
+chmod 0644 "${STAGE_DIR}/opt/vnalpha/RELEASE"
 
 # ---------------------------------------------------------------------------
 # Build .deb

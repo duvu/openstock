@@ -4,7 +4,8 @@
 
 Define a focused OpenSpec change that prevents OpenStock logs and responsive widgets from corrupting the Textual terminal frame.
 
-The change addresses GitHub issue #60:
+The original rendering fix was superseded and completed through GitHub issues
+#189–#192:
 
 ```text
 [Bug] TUI log output corrupts the Textual frame and overlaps composer/widgets
@@ -25,7 +26,7 @@ This is an OpenSpec-only change. It does not implement runtime code.
 The current TUI can show log text over the transcript, composer, footer, or other widgets. The visual symptom resembles an `OutputStream` overlay, but the source indicates two separate mechanisms:
 
 1. OpenStock installs a root `StreamHandler` that writes directly to `stderr` before Textual starts. Those writes bypass Textual's rendering model while Textual owns the terminal.
-2. The layout does not define strict height and overflow contracts for the main body, output stream, expandable composer suggestions, TODO rail, and F12 log screen.
+2. The layout did not define strict height and overflow contracts for the main body, output stream, expandable composer suggestions, and inline F12 drawer.
 
 These defects interact. Direct terminal writes can corrupt any Textual frame, while layout pressure on short terminals makes the corruption and clipping more visible.
 
@@ -58,7 +59,7 @@ StatusBar
 Horizontal main-body
   Vertical output-column
     OutputStream
-  TodoPanel
+  DebugLogDrawer (hidden by default)
 ComposerInput
 footer-hint
 ```
@@ -67,7 +68,9 @@ The output area uses `1fr`, but the containment hierarchy does not consistently 
 
 The composer contains a 3-line input plus an auto-height suggestion panel that can request up to 12 additional lines. On short terminals, the requested height can exceed the viewport after status, footer, borders, and the minimum transcript region are included.
 
-The TODO rail is rendered from an unbounded group without an explicit scrolling owner. The F12 LogScreen also lacks a fully explicit opaque and bounded body contract.
+The superseding workspace removes the competing TODO rail. Task state remains
+available through bounded commands and transcript results, while the inline F12
+drawer has an explicit bounded body contract.
 
 ### Test gap
 
@@ -80,10 +83,10 @@ Existing tests verify mounting, focus, display flags, and selected CSS strings. 
 - Preserve rotating structured file logs and the F12 log viewer.
 - Reconcile logging handlers idempotently instead of relying on a one-shot configured flag.
 - Define one scrolling owner for the transcript region.
-- Ensure the output, composer, footer, TODO rail, and active screen never overlap.
+- Ensure the transcript, inline drawer, composer, and footer never overlap.
 - Make command suggestions responsive to terminal height as well as width.
-- Keep the TODO rail inside a bounded scrolling or truncation region.
-- Make the F12 LogScreen opaque, bounded, keyboard-safe, and independently scrollable.
+- Keep task state in bounded commands or transcript results without a competing rail.
+- Make the inline F12 drawer bounded, keyboard-safe, redacted, and independently scrollable.
 - Add geometry tests at representative terminal sizes.
 - Preserve existing structured conversation messages, command routing, artifact navigation, and research-only safety boundaries.
 
@@ -129,7 +132,7 @@ After TUI mode is activated and before `VnAlphaApp.run()` owns the terminal:
 
 ### 3. Main layout containment
 
-The Screen, main body, output column, OutputStream, nested RichLog, composer, footer, and TODO rail SHALL have explicit size and overflow responsibilities.
+The Screen, main body, output column, OutputStream, nested RichLog, inline drawer, composer, and footer SHALL have explicit size and overflow responsibilities.
 
 The transcript RichLog SHALL own transcript scrolling. Parent layout containers SHALL NOT scroll the entire application frame.
 
@@ -144,20 +147,20 @@ The number of visible command suggestions SHALL be bounded so the TUI preserves:
 - the input region;
 - the footer or a documented compact-footer alternative.
 
-### 5. Bounded TODO rail
+### 5. Full-width transcript
 
-Long TODO and warning content SHALL remain inside the `main-body` region. The TODO rail SHALL have an explicit scrolling or bounded truncation contract.
+Long TODO and warning content SHALL remain available through bounded commands
+or transcript results. No competing task rail SHALL reduce the main transcript.
 
-### 6. F12 log screen
+### 6. Inline F12 log drawer
 
-The LogScreen SHALL:
+The inline drawer SHALL:
 
-- render with an opaque background;
-- fill the active screen;
-- constrain toolbar and log regions;
+- remain inside the bounded main workspace;
+- constrain filter and log regions;
 - retain independent scrolling;
-- close via `Esc`;
-- prevent input from reaching the underlying composer while active;
+- close via F12 or `Esc` without screen navigation;
+- preserve composer focus/value and transcript scroll state;
 - remain usable on narrow and short terminals.
 
 ### 7. Geometry and integrity validation
@@ -175,10 +178,9 @@ The tests SHALL cover:
 
 - default layout;
 - suggestions open;
-- long TODO content;
-- TODO visible and hidden;
+- long TODO-command transcript content;
 - long wrapped transcript content;
-- active LogScreen;
+- inline drawer open and closed;
 - TUI logging with an emitted log event.
 
 ## Relationship to existing OpenSpecs
@@ -201,9 +203,9 @@ This change is complete only when:
 - CLI -> TUI -> TUI -> CLI logging reconfiguration is idempotent.
 - Structured rotating file logs remain available in all supported surfaces.
 - OutputStream, composer, and footer regions do not intersect.
-- TODO content stays inside main-body.
+- TODO state remains available without a competing rail.
 - Suggestion expansion does not make the transcript/composer/footer overlap.
-- LogScreen fully owns the active screen and underlying composer input is isolated.
+- The inline drawer stays bounded and preserves workspace input/scroll state.
 - Geometry tests pass at all required viewport sizes.
 - Existing TUI routing, structured message, artifact navigation, and safety tests pass.
 ```

@@ -85,16 +85,16 @@ Output SHALL be human-readable with colored level labels.
 
 ---
 
-### Requirement: TUI Log Viewer screen
-The system SHALL add a `LogScreen` to the Textual `ContentSwitcher` workspace, accessible
-via the `L` key binding. The screen SHALL tail the live log file and display new records
-in real time (≤1 s latency). It SHALL offer level filter buttons (ALL / DEBUG / INFO /
-WARNING / ERROR) rendered above the log display. The log display SHALL use `RichLog` with
-color-coded level labels.
+### Requirement: TUI inline log drawer
+The system SHALL mount one reusable log drawer inside the Textual main workspace,
+accessible via F12. The drawer SHALL tail the live log file and display new records
+in real time (≤1 s latency). It SHALL provide bounded level filtering and a bounded,
+redacted record view without navigating away from the transcript.
 
 #### Scenario: Open log viewer
-- **WHEN** the user presses `L` in the TUI workspace
-- **THEN** the Log Viewer screen is displayed showing recent log entries
+- **WHEN** the user presses F12 in the TUI workspace
+- **THEN** the inline drawer is shown with recent log entries
+- **AND** the transcript, composer, and footer remain in the current workspace
 
 #### Scenario: Level filter
 - **WHEN** the user activates the WARNING filter button
@@ -103,6 +103,11 @@ color-coded level labels.
 #### Scenario: Live tail
 - **WHEN** a new log record is written to the file while the Log Viewer is open
 - **THEN** the new record appears in the viewer within 1 second
+
+#### Scenario: Close log viewer
+- **WHEN** the user presses F12 or Escape while the drawer is open
+- **THEN** the drawer is hidden without popping a screen
+- **AND** composer focus and transcript scroll state are restored
 
 ---
 

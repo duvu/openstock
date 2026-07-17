@@ -6,6 +6,7 @@ Never raises. On failure, writes diagnostic to stderr and returns silently.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Mapping, TypeVar
@@ -41,10 +42,17 @@ def append_jsonl(path: Path, record: Mapping[str, _RecordValue]) -> None:  # noq
     - Never raises: any exception is swallowed after logging to stderr.
     """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         line = json.dumps(record, default=str) + "\n"
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(line)
+        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags, 0o600)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "a", encoding="utf-8", closefd=False) as handle:
+                handle.write(line)
+        finally:
+            os.close(descriptor)
     except Exception as exc:  # noqa: BLE001
         try:
             sys.stderr.write(f"[observability] append_jsonl failed for {path}: {exc}\n")

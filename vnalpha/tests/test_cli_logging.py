@@ -10,6 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 import vnalpha.core.logging as _log_module
+from vnalpha.core.config import reset_config
 
 
 @pytest.fixture(autouse=True)
@@ -26,22 +27,17 @@ def _reset() -> None:
     import structlog
 
     if _log_module._QUEUE_LISTENER is not None:
-        try:
-            _log_module._QUEUE_LISTENER.stop()
-        except Exception:
-            pass
+        _log_module._QUEUE_LISTENER.stop()
     _log_module._QUEUE_LISTENER = None
     _log_module._CONFIGURED = False
 
     root = logging.getLogger()
     for h in list(root.handlers):
         root.removeHandler(h)
-        try:
-            h.close()
-        except Exception:
-            pass
+        h.close()
 
     structlog.reset_defaults()
+    reset_config()
 
 
 def test_vnalpha_init_emits_log_record(tmp_path: Path) -> None:
@@ -57,6 +53,7 @@ def test_vnalpha_init_emits_log_record(tmp_path: Path) -> None:
         env={
             "VNALPHA_LOG_PATH": str(log_path),
             "VNALPHA_LOG_LEVEL": "DEBUG",
+            "VNALPHA_WAREHOUSE_PATH": str(tmp_path / "warehouse.duckdb"),
         },
         catch_exceptions=False,
     )

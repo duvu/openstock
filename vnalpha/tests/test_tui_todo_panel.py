@@ -51,19 +51,6 @@ def _renderable_text(renderable: object) -> str:
     return console.export_text()
 
 
-def test_responsive_layout_policy_matches_breakpoint_rules() -> None:
-    from vnalpha.tui.responsive_layout import ResponsiveLayoutController
-
-    controller = ResponsiveLayoutController()
-
-    assert controller.should_show_todo(140, user_preference=None) is True
-    assert controller.should_show_todo(120, user_preference=None) is True
-    assert controller.should_show_todo(119, user_preference=None) is False
-    assert controller.should_show_todo(80, user_preference=True) is False
-    assert controller.should_show_todo(140, user_preference=False) is False
-    assert controller.should_show_todo(140, user_preference=True) is True
-
-
 def test_workspace_todo_source_maps_workspace_state_to_items() -> None:
     from vnalpha.tui.todo_source import WorkspaceTodoSource
     from vnalpha.workspace_context.models import WorkspaceState, WorkspaceTask
@@ -156,24 +143,20 @@ def test_composite_todo_source_deduplicates_items() -> None:
 
 
 @pytest.mark.parametrize(
-    ("width", "expected_visible"),
-    [
-        (140, True),
-        (120, True),
-        (119, False),
-        (80, False),
-    ],
+    "width",
+    [140, 120, 119, 80],
 )
 @skip_if_no_textual
 @pytest.mark.asyncio
-async def test_todo_panel_visibility_matches_widths(
-    width: int, expected_visible: bool, mock_get_connection, tmp_path, monkeypatch
+async def test_todo_panel_is_not_mounted_at_any_width(
+    width: int, mock_get_connection, tmp_path, monkeypatch
 ) -> None:
     from textual.widgets import ContentSwitcher, Input, Static
 
     from vnalpha.tui.app import VnAlphaApp
     from vnalpha.tui.widgets.chat_panel import ChatPanel
     from vnalpha.tui.widgets.composer_input import ComposerInput
+    from vnalpha.tui.widgets.debug_log_drawer import DebugLogDrawer
     from vnalpha.tui.widgets.output_stream import OutputStream
     from vnalpha.tui.widgets.status_bar import StatusBar
     from vnalpha.tui.widgets.todo_panel import TodoPanel
@@ -191,54 +174,34 @@ async def test_todo_panel_visibility_matches_widths(
         assert pilot.app.focused is pilot.app.query_one(Input)
         assert len(pilot.app.query(ContentSwitcher)) == 0
         assert len(pilot.app.query(ChatPanel)) == 0
-        panels = pilot.app.query(TodoPanel)
-        assert len(panels) == 1
-        assert panels.first().display is expected_visible
-        assert len(panels.first().query(Input)) == 0
+        assert len(pilot.app.query(TodoPanel)) == 0
+        drawers = pilot.app.query(DebugLogDrawer)
+        assert len(drawers) == 1
+        assert drawers.first().display is False
 
 
 @skip_if_no_textual
 @pytest.mark.asyncio
-async def test_toggle_hides_and_restores_todo_panel_on_wide_terminal(
+async def test_f12_action_toggles_inline_log_drawer(
     mock_get_connection, tmp_path, monkeypatch
 ) -> None:
     from vnalpha.tui.app import VnAlphaApp
-    from vnalpha.tui.widgets.todo_panel import TodoPanel
+    from vnalpha.tui.widgets.debug_log_drawer import DebugLogDrawer
 
     _workspace_root(tmp_path, monkeypatch)
     app = VnAlphaApp(date="2024-01-10")
     async with app.run_test(headless=True, size=(140, 40)) as pilot:
         await pilot.pause()
-        panel = pilot.app.query_one(TodoPanel)
-        assert panel.display is True
+        drawer = pilot.app.query_one(DebugLogDrawer)
+        assert drawer.display is False
 
-        pilot.app.action_toggle_todo_panel()
+        pilot.app.action_toggle_log_viewer()
         await pilot.pause()
-        assert panel.display is False
+        assert drawer.display is True
 
-        pilot.app.action_toggle_todo_panel()
+        pilot.app.action_toggle_log_viewer()
         await pilot.pause()
-        assert panel.display is True
-
-
-@skip_if_no_textual
-@pytest.mark.asyncio
-async def test_toggle_cannot_force_panel_visible_on_narrow_terminal(
-    mock_get_connection, tmp_path, monkeypatch
-) -> None:
-    from vnalpha.tui.app import VnAlphaApp
-    from vnalpha.tui.widgets.todo_panel import TodoPanel
-
-    _workspace_root(tmp_path, monkeypatch)
-    app = VnAlphaApp(date="2024-01-10")
-    async with app.run_test(headless=True, size=(80, 40)) as pilot:
-        await pilot.pause()
-        panel = pilot.app.query_one(TodoPanel)
-        assert panel.display is False
-
-        pilot.app.action_toggle_todo_panel()
-        await pilot.pause()
-        assert panel.display is False
+        assert drawer.display is False
 
 
 @skip_if_no_textual
@@ -327,7 +290,7 @@ async def test_todo_panel_refresh_reloads_its_source() -> None:
 
 @skip_if_no_textual
 @pytest.mark.asyncio
-async def test_wide_mount_emits_todo_panel_visible_event(
+async def test_log_drawer_toggle_emits_visibility_event(
     mock_get_connection, tmp_path, monkeypatch
 ) -> None:
     from vnalpha.tui.app import VnAlphaApp
@@ -337,72 +300,11 @@ async def test_wide_mount_emits_todo_panel_visible_event(
         app = VnAlphaApp(date="2024-01-10")
         async with app.run_test(headless=True, size=(140, 40)) as pilot:
             await pilot.pause()
-
-    assert any(
-        call.args == ("TUI_TODO_PANEL_VISIBLE", "width=140")
-        for call in emit_audit_event.call_args_list
-    )
-
-
-@skip_if_no_textual
-@pytest.mark.asyncio
-async def test_repeated_layout_without_visibility_change_emits_no_duplicate_event(
-    mock_get_connection, tmp_path, monkeypatch
-) -> None:
-    from vnalpha.tui.app import VnAlphaApp
-
-    _workspace_root(tmp_path, monkeypatch)
-    with patch("vnalpha.tui.app._emit_audit_event") as emit_audit_event:
-        app = VnAlphaApp(date="2024-01-10")
-        async with app.run_test(headless=True, size=(140, 40)) as pilot:
-            await pilot.pause()
-            pilot.app._apply_responsive_layout()
-            await pilot.pause()
-
-    visibility_events = [
-        call
-        for call in emit_audit_event.call_args_list
-        if call.args[0] == "TUI_TODO_PANEL_VISIBLE"
-    ]
-    assert len(visibility_events) == 1
-
-
-@skip_if_no_textual
-@pytest.mark.asyncio
-async def test_narrow_mount_emits_todo_panel_hidden_event(
-    mock_get_connection, tmp_path, monkeypatch
-) -> None:
-    from vnalpha.tui.app import VnAlphaApp
-
-    _workspace_root(tmp_path, monkeypatch)
-    with patch("vnalpha.tui.app._emit_audit_event") as emit_audit_event:
-        app = VnAlphaApp(date="2024-01-10")
-        async with app.run_test(headless=True, size=(80, 40)) as pilot:
+            pilot.app.action_toggle_log_viewer()
             await pilot.pause()
 
     assert any(
-        call.args == ("TUI_TODO_PANEL_HIDDEN", "width=80")
-        for call in emit_audit_event.call_args_list
-    )
-
-
-@skip_if_no_textual
-@pytest.mark.asyncio
-async def test_toggle_emits_todo_panel_toggled_event(
-    mock_get_connection, tmp_path, monkeypatch
-) -> None:
-    from vnalpha.tui.app import VnAlphaApp
-
-    _workspace_root(tmp_path, monkeypatch)
-    with patch("vnalpha.tui.app._emit_audit_event") as emit_audit_event:
-        app = VnAlphaApp(date="2024-01-10")
-        async with app.run_test(headless=True, size=(140, 40)) as pilot:
-            await pilot.pause()
-            pilot.app.action_toggle_todo_panel()
-            await pilot.pause()
-
-    assert any(
-        call.args == ("TUI_TODO_PANEL_TOGGLED", "visible=False")
+        call.args == ("TUI_DEBUG_LOG_DRAWER_TOGGLED", "visible=True")
         for call in emit_audit_event.call_args_list
     )
 

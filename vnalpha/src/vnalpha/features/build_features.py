@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import duckdb
@@ -59,7 +59,7 @@ def load_canonical_ohlcv(
     """
     params = [symbol]
     if end_date:
-        query += " AND time <= ?"
+        query += " AND CAST(time AS DATE) <= ?"
         params.append(end_date)
     query += " ORDER BY time"
     df = conn.execute(query, params).df()
@@ -146,8 +146,12 @@ def build_features(
                 {"symbol": symbol, "reason": "INSUFFICIENT_HISTORY", "rows": len(df)}
             )
             continue
-        # Get the row for target_date (last available row up to target_date)
-        row = features_df[features_df.index <= target_date]
+        # Get the row for target_date (last available row up to target_date).
+        # Compare dates, not timestamps: an index entry may carry a non-midnight
+        # time-of-day component (e.g. "target_date 07:00"), which a bare
+        # "<= target_date" string comparison would truncate to midnight and
+        # incorrectly exclude.
+        row = features_df[features_df.index.date <= date.fromisoformat(target_date)]
         if row.empty:
             skipped += 1
             skipped_reasons.append({"symbol": symbol, "reason": "NO_ROW_FOR_DATE"})

@@ -117,6 +117,13 @@ check_executable "${DEB_TREE}/DEBIAN/prerm"
 check_executable "${DEB_TREE}/DEBIAN/postrm"
 check_executable "${PACKAGING_DIR}/build-deb.sh"
 
+if grep -q 'chmod 0640.*vnalpha.env' "${PACKAGING_DIR}/build-deb.sh" && \
+   grep -q 'chown root:openstock /etc/vnalpha/vnalpha.env' "${DEB_TREE}/DEBIAN/postinst"; then
+  ok "vnalpha.env is packaged for root/openstock credential access"
+else
+  fail "vnalpha.env credential permissions are not root/openstock scoped"
+fi
+
 # ---------------------------------------------------------------------------
 # Test group: script syntax
 # ---------------------------------------------------------------------------
@@ -315,7 +322,7 @@ if [[ -n "${DEB_FILE}" ]]; then
     fi
 
     # Check required files are in the .deb
-    for entry in "./usr/bin/vnalpha" "./usr/bin/vnalpha-poc" "./etc/vnalpha/vnalpha.env"; do
+    for entry in "./usr/bin/vnalpha" "./usr/bin/vnalpha-poc" "./etc/vnalpha/vnalpha.env" "./opt/vnalpha/RELEASE"; do
       if dpkg -c "${DEB_FILE}" | grep -F "${entry}" >/dev/null; then
         ok ".deb contains: ${entry}"
       else
@@ -332,6 +339,17 @@ if [[ -n "${DEB_FILE}" ]]; then
 
     DEB_ROOT="$(mktemp -d /tmp/vnalpha-deb-test.XXXXXX)"
     dpkg-deb --extract "${DEB_FILE}" "${DEB_ROOT}"
+    if [[ "$(stat -c '%a' "${DEB_ROOT}/etc/vnalpha/vnalpha.env")" == "640" ]]; then
+      ok ".deb scopes vnalpha.env to mode 0640"
+    else
+      fail ".deb vnalpha.env is not mode 0640"
+    fi
+    if grep -Eq '^commit=[0-9a-f]{40}$' "${DEB_ROOT}/opt/vnalpha/RELEASE" && \
+       grep -Eq '^tree_state=(clean|dirty)$' "${DEB_ROOT}/opt/vnalpha/RELEASE"; then
+      ok ".deb embeds release commit and tree state"
+    else
+      fail ".deb release metadata is missing or malformed"
+    fi
     VNALPHA_WHEEL="$(find "${DEB_ROOT}/opt/vnalpha/wheels" -maxdepth 1 -name 'vnalpha-*.whl' -print -quit)"
     if [[ -n "${VNALPHA_WHEEL}" ]]; then
       ok ".deb bundles the vnalpha application wheel"

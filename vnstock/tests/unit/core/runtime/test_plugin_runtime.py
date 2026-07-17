@@ -194,6 +194,46 @@ class TestPluginRuntimeFetch:
         result = rt.fetch("equity.ohlcv", {}, return_result=True)
         assert result.diagnostics["runtime_path"] == "my_runtime"
 
+    def test_safe_provider_lineage_is_preserved_in_diagnostics(self):
+        class LineageProvider(FakeProviderPlugin):
+            def fetch(self, dataset, params):
+                frame = super().fetch(dataset, params)
+                frame.attrs.update(
+                    {
+                        "sdk_version": "0.1.64",
+                        "contract_version": "fiinquantx-contract-v1",
+                        "source_method": "Fetch_Trading_Data",
+                        "ohlcv_request_policy": {
+                            "basis": "RAW_UNADJUSTED",
+                            "adjusted": "requested_false",
+                        },
+                        "password": "must-not-leak",
+                    }
+                )
+                return frame
+
+        registry = PluginRegistry()
+        registry.register(LineageProvider("LINEAGE"))
+        runtime = PluginRuntime(registry=registry)
+
+        result = runtime.fetch(
+            "equity.ohlcv",
+            {"symbol": "FPT"},
+            source="LINEAGE",
+            return_result=True,
+        )
+
+        assert result.diagnostics["provider_lineage"] == {
+            "sdk_version": "0.1.64",
+            "contract_version": "fiinquantx-contract-v1",
+            "source_method": "Fetch_Trading_Data",
+            "ohlcv_request_policy": {
+                "basis": "RAW_UNADJUSTED",
+                "adjusted": "requested_false",
+            },
+        }
+        assert "must-not-leak" not in str(result.diagnostics)
+
     def test_diagnostics_contains_routing(self):
         rt = _make_runtime()
         result = rt.fetch("equity.ohlcv", {}, return_result=True)
@@ -235,6 +275,23 @@ class TestHealthRecording:
         health = store.get("BROKEN", "equity.ohlcv")
         assert health.failure_count >= 1
 
+    def test_unexpected_failure_does_not_leak_cause_into_error_or_health(self):
+        class BrokenProvider(FakeProviderPlugin):
+            def fetch(self, dataset, params):
+                raise RuntimeError("password=super-secret")
+
+        store = InMemoryProviderHealthStore()
+        reg = PluginRegistry()
+        reg.register(BrokenProvider("BROKEN"))
+        runtime = PluginRuntime(registry=reg, health_store=store)
+
+        with pytest.raises(ProviderFetchError) as error:
+            runtime.fetch("equity.ohlcv", {})
+
+        health = store.get("BROKEN", "equity.ohlcv")
+        assert "super-secret" not in str(error.value)
+        assert "super-secret" not in (health.notes or "")
+
 
 # ---------------------------------------------------------------------------
 # Contract validation
@@ -243,15 +300,32 @@ class TestHealthRecording:
 
 class TestContractValidation:
     def _make_runtime_with_contract(
-        self, required_columns: list[str], provider_name: str = "FAKE"
+        self,
+        required_columns: list[str],
+        provider_name: str = "FAKE",
+        *,
+        dtype_rules: dict[str, str] | None = None,
+        validator: str | None = None,
+        frame: pd.DataFrame | None = None,
     ) -> PluginRuntime:
-        reg = _minimal_registry(provider_name)
+        if frame is None:
+            reg = _minimal_registry(provider_name)
+        else:
+
+            class FrameProvider(FakeProviderPlugin):
+                def fetch(self, dataset, params):
+                    return frame.copy()
+
+            reg = PluginRegistry()
+            reg.register(FrameProvider(provider_name))
         store = InMemoryProviderHealthStore()
         cr = DatasetContractRegistry()
         cr.register(
             DatasetContract(
                 dataset="equity.ohlcv",
                 required_columns=required_columns,
+                dtype_rules=dtype_rules or {},
+                validator=validator,
             )
         )
         return PluginRuntime(registry=reg, contract_registry=cr, health_store=store)
@@ -279,15 +353,251 @@ class TestContractValidation:
         with pytest.raises(DatasetContractError):
             rt.fetch("equity.ohlcv", {}, validate=True, quality_mode="strict")
 
-    def test_no_contract_registered_skips_validation(self):
+    def test_failing_dtype_rule_strict_mode_raises(self):
+        rt = self._make_runtime_with_contract(
+            ["symbol"],
+            dtype_rules={"symbol": "int64"},
+            frame=pd.DataFrame({"symbol": ["FPT"]}),
+        )
+
+        with pytest.raises(DatasetContractError, match="dtype"):
+            rt.fetch("equity.ohlcv", {}, validate=True, quality_mode="strict")
+
+    def test_registered_validator_errors_raise_in_strict_mode(self):
+        class InvalidOHLCVProvider(FakeProviderPlugin):
+            def fetch(self, dataset, params):
+                return pd.DataFrame(
+                    {
+                        "symbol": pd.Series(["FPT"], dtype="string"),
+                        "time": pd.to_datetime(["2026-07-01"]),
+                        "open": [10.0],
+                        "high": [8.0],
+                        "low": [9.0],
+                        "close": [11.0],
+                        "volume": [-1.0],
+                    }
+                )
+
+        registry = PluginRegistry()
+        registry.register(InvalidOHLCVProvider("FAKE"))
+        contracts = DatasetContractRegistry()
+        contracts.register(
+            DatasetContract(
+                dataset="equity.ohlcv",
+                required_columns=[
+                    "symbol",
+                    "time",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                ],
+                dtype_rules={
+                    "symbol": "string",
+                    "time": "datetime64[ns]",
+                    "open": "float64",
+                    "high": "float64",
+                    "low": "float64",
+                    "close": "float64",
+                    "volume": "float64",
+                },
+                validator="ohlcv",
+            )
+        )
+        runtime = PluginRuntime(registry=registry, contract_registry=contracts)
+
+        with pytest.raises(DatasetContractError, match="OHLC"):
+            runtime.fetch("equity.ohlcv", {}, validate=True, quality_mode="strict")
+
+    def test_fiinquantx_cannot_disable_strict_contract_validation(self):
+        rt = self._make_runtime_with_contract(
+            ["symbol"],
+            provider_name="FIINQUANTX",
+            dtype_rules={"symbol": "int64"},
+            frame=pd.DataFrame({"symbol": ["FPT"]}),
+        )
+
+        with pytest.raises(DatasetContractError, match="dtype"):
+            rt.fetch(
+                "equity.ohlcv",
+                {},
+                source="FIINQUANTX",
+                validate=False,
+                quality_mode="warn",
+            )
+
+    def test_fiinquantx_membership_requires_utc_observation_dtype(self):
+        class NaiveMembershipProvider(FakeProviderPlugin):
+            def __init__(self):
+                super().__init__(
+                    "FIINQUANTX",
+                    supported_datasets=["reference.index_membership_snapshot"],
+                )
+
+            def fetch(self, dataset, params):
+                return pd.DataFrame(
+                    {
+                        "entity_id": pd.Series(["VN30"], dtype="string"),
+                        "member_symbol": pd.Series(["FPT"], dtype="string"),
+                        "observed_at": pd.to_datetime(["2026-07-01"]),
+                    }
+                )
+
+        registry = PluginRegistry()
+        registry.register(NaiveMembershipProvider())
+        runtime = PluginRuntime(registry=registry)
+
+        with pytest.raises(DatasetContractError, match=r"datetime64\[ns, UTC\]"):
+            runtime.fetch(
+                "reference.index_membership_snapshot",
+                {"entity": "VN30"},
+                source="FIINQUANTX",
+                validate=False,
+            )
+
+    def test_unknown_registered_validator_is_a_typed_contract_failure(self):
+        rt = self._make_runtime_with_contract(
+            ["symbol"],
+            validator="not_registered",
+            frame=pd.DataFrame({"symbol": ["FPT"]}),
+        )
+
+        with pytest.raises(DatasetContractError, match="No validator registered"):
+            rt.fetch("equity.ohlcv", {}, validate=True, quality_mode="strict")
+
+    @pytest.mark.parametrize("provider_name", ["KBS", "FIINQUANTX"])
+    def test_real_ohlcv_normalizers_pass_semantic_dtype_validation(
+        self, provider_name: str
+    ):
+        from vnstock.providers.fiinquantx.normalize import normalize_ohlcv
+        from vnstock.providers.kbs.normalize import normalize_equity_ohlcv
+
+        class NormalizedProvider(FakeProviderPlugin):
+            def fetch(self, dataset, params):
+                if self.name == "KBS":
+                    raw = pd.DataFrame(
+                        {
+                            "time": pd.to_datetime(["2026-07-01"]),
+                            "open": [100.0],
+                            "high": [102.0],
+                            "low": [99.0],
+                            "close": [101.0],
+                            "volume": [1000],
+                        }
+                    )
+                    return normalize_equity_ohlcv(raw, "FPT")
+                raw = pd.DataFrame(
+                    {
+                        "ticker": ["FPT"],
+                        "timestamp": ["2026-07-01"],
+                        "open": [100.0],
+                        "high": [102.0],
+                        "low": [99.0],
+                        "close": [101.0],
+                        "volume": [1000],
+                    }
+                )
+                return normalize_ohlcv(raw, dataset)
+
+        registry = PluginRegistry()
+        registry.register(NormalizedProvider(provider_name))
+        runtime = PluginRuntime(registry=registry)
+
+        result = runtime.fetch(
+            "equity.ohlcv",
+            {"symbol": "FPT", "interval": "1D"},
+            source=provider_name,
+            validate=True,
+            quality_mode="strict",
+            return_result=True,
+        )
+
+        assert result.quality_status == "PASS"
+
+    def test_structurally_valid_empty_ohlcv_is_not_a_contract_failure(self):
+        from vnstock.providers.fiinquantx.normalize import normalize_ohlcv
+
+        class EmptyProvider(FakeProviderPlugin):
+            def fetch(self, dataset, params):
+                return normalize_ohlcv(pd.DataFrame(), dataset)
+
+        registry = PluginRegistry()
+        registry.register(EmptyProvider("FIINQUANTX"))
+        runtime = PluginRuntime(registry=registry)
+
+        result = runtime.fetch(
+            "equity.ohlcv",
+            {"symbol": "FPT", "interval": "1D"},
+            source="FIINQUANTX",
+            return_result=True,
+        )
+
+        assert result.quality_status == "PASS"
+        assert result.data.empty
+
+    def test_valid_empty_corporate_actions_pass_strict_validation(self):
+        from vnstock.core.corporate_actions import empty_corporate_actions
+
+        class EmptyCorporateActionProvider(FakeProviderPlugin):
+            def __init__(self):
+                super().__init__(
+                    "VCI", supported_datasets=["reference.corporate_actions"]
+                )
+
+            def fetch(self, dataset, params):
+                return empty_corporate_actions("VCI")
+
+        registry = PluginRegistry()
+        registry.register(EmptyCorporateActionProvider())
+        runtime = PluginRuntime(registry=registry)
+
+        result = runtime.fetch(
+            "reference.corporate_actions",
+            {"symbol": "FPT"},
+            source="VCI",
+            validate=True,
+            quality_mode="strict",
+            return_result=True,
+        )
+
+        assert result.quality_status == "PASS"
+        assert result.data.empty
+
+    def test_empty_frame_with_incompatible_contract_dtypes_fails(self):
+        rt = self._make_runtime_with_contract(
+            ["observed_at"],
+            dtype_rules={"observed_at": "datetime64[ns, UTC]"},
+            frame=pd.DataFrame(columns=["observed_at"]),
+        )
+
+        with pytest.raises(DatasetContractError, match=r"datetime64\[ns, UTC\]"):
+            rt.fetch("equity.ohlcv", {}, validate=True, quality_mode="strict")
+
+    def test_strict_contract_failures_accumulate_provider_health(self):
+        store = InMemoryProviderHealthStore(failure_threshold=3, cooldown_seconds=60)
+        runtime = self._make_runtime_with_contract(
+            ["symbol", "missing"], provider_name="FIINQUANTX"
+        )
+        runtime.health_store = store
+        runtime._router.health_store = store
+
+        for _ in range(3):
+            with pytest.raises(DatasetContractError):
+                runtime.fetch("equity.ohlcv", {}, source="FIINQUANTX")
+
+        health = store.get("FIINQUANTX", "equity.ohlcv")
+        assert health.failure_count == 3
+        assert health.success_count == 0
+        assert health.is_in_cooldown()
+
+    def test_strict_validation_fails_when_contract_is_not_registered(self):
         reg = _minimal_registry("FAKE")
         store = InMemoryProviderHealthStore()
         empty_cr = DatasetContractRegistry()
         rt = PluginRuntime(registry=reg, contract_registry=empty_cr, health_store=store)
-        result = rt.fetch("equity.ohlcv", {}, validate=True, return_result=True)
-        # No contract registered → validation skipped → quality_status is PASS (no errors)
-        # or None when contract is entirely absent; current impl sets PASS when 0 errors
-        assert result.quality_status in (None, "PASS")
+        with pytest.raises(DatasetContractError, match="No contract registered"):
+            rt.fetch("equity.ohlcv", {}, validate=True, quality_mode="strict")
 
 
 # ---------------------------------------------------------------------------

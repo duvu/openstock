@@ -89,6 +89,7 @@ if _TEXTUAL_AVAILABLE:
             "chat",
             "compare",
             "context",
+            "copy",
             "data",
             "explain",
             "filter",
@@ -142,9 +143,9 @@ if _TEXTUAL_AVAILABLE:
 
         def _load_command_names(self) -> list[str]:
             try:
-                from vnalpha.commands.setup import build_default_registry
+                from vnalpha.tui.command_catalog import command_names
 
-                return build_default_registry().names()
+                return command_names()
             except Exception as exc:  # noqa: BLE001
                 # A failed registry build (e.g. a missing optional dependency for
                 # one handler) must not silently break slash-command discovery.

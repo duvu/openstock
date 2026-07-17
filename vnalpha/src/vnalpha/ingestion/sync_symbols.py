@@ -8,6 +8,7 @@ from typing import Optional
 import duckdb
 
 from vnalpha.clients.vnstock.client import VnstockClient
+from vnalpha.clients.vnstock.source_policy import validate_persistence_source
 from vnalpha.core.logging import get_logger
 from vnalpha.ingestion.symbol_taxonomy import normalize_symbol_taxonomy
 from vnalpha.observability.audit import log_audit
@@ -39,6 +40,7 @@ def sync_symbols(
     unseen symbols from the same source. Partial and failed runs retain the
     prior active universe.
     """
+    source = validate_persistence_source(source)
     owned = client is None
     if owned:
         client = VnstockClient(base_url=base_url) if base_url else VnstockClient()
@@ -74,11 +76,31 @@ def sync_symbols(
     errors = 0
     observed = 0
     deactivated = 0
+    transaction_started = False
     try:
         response = client.get_symbols(source=source)
-        response_source = getattr(getattr(response, "meta", None), "provider", None)
-        if source is None and response_source:
-            snapshot_source = str(response_source)
+        response_meta = getattr(response, "meta", None)
+        response_dataset = str(getattr(response_meta, "dataset", "")).strip()
+        if response_dataset != "reference.symbols":
+            raise ValueError("unexpected symbol dataset")
+        response_source = validate_persistence_source(
+            str(getattr(response_meta, "provider", ""))
+        )
+        if response_source is None:
+            raise ValueError("symbol provider must not be empty")
+        if source is not None and response_source != source:
+            raise ValueError("symbol provider did not match the selected source")
+        response_quality = (
+            str(getattr(response_meta, "quality_status", "") or "").strip().upper()
+        )
+        if response_quality not in {"PASS", "SUCCESS"}:
+            raise ValueError("symbol provider quality did not pass")
+        if not response.data:
+            raise ValueError("symbol source response is empty")
+        conn.execute("BEGIN TRANSACTION")
+        transaction_started = True
+        if snapshot_source != response_source:
+            snapshot_source = response_source
             conn.execute(
                 "UPDATE symbol_source_snapshot SET source = ? WHERE snapshot_id = ?",
                 [snapshot_source, run_id],
@@ -95,7 +117,7 @@ def sync_symbols(
                     taxonomy,
                 )
                 synced += 1
-            except (TypeError, ValueError, duckdb.Error) as error:
+            except (TypeError, ValueError) as error:
                 logger.warning("Failed to persist source symbol: %s", error)
                 errors += 1
 
@@ -112,6 +134,8 @@ def sync_symbols(
             deactivated,
         )
         finish_ingestion_run(conn, run_id, snapshot_status)
+        conn.execute("COMMIT")
+        transaction_started = False
         log_audit(
             "SYMBOL_SNAPSHOT_COMPLETED",
             "Symbol lifecycle snapshot completed.",
@@ -127,6 +151,9 @@ def sync_symbols(
             "Synced %d symbols, %d errors, %d deactivated", synced, errors, deactivated
         )
     except Exception:  # noqa: BLE001
+        if transaction_started:
+            conn.execute("ROLLBACK")
+            transaction_started = False
         complete_symbol_source_snapshot(
             conn, run_id, "FAILED", observed, synced, errors, deactivated
         )

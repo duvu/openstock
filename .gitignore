@@ -9,6 +9,7 @@ vnalpha/src/*.egg-info/
 !.env.example
 .worktrees/
 .vnalpha/
+/config/
 vnalpha/.vnalpha/
 **/*.egg-info/
 **/__pycache__/

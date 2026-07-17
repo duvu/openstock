@@ -84,6 +84,16 @@ class TestHelpHandler:
         # 2 commands
         assert len(result.tables[0].rows) == 2
 
+    def test_tui_help_includes_copy_targets_from_ui_catalog(self):
+        reg = CommandRegistry()
+        reg.register(_make_meta("help"))
+        parsed = ParsedCommand(command_name="help", raw_text="/help")
+
+        result = handle_help(parsed, registry=reg, surface="tui")
+
+        copy_row = next(row for row in result.tables[0].rows if row[0] == "/copy")
+        assert copy_row[2] == "/copy result|output|logs|artifact-id"
+
     def test_help_no_registry(self):
         parsed = ParsedCommand(command_name="help", raw_text="/help")
         result = handle_help(parsed, registry=None)

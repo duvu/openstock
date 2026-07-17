@@ -1,3 +1,4 @@
+# allow: SIZE_OK — OutputStream owns bounded transcript rendering and artifact navigation.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -5,6 +6,7 @@ from typing import TYPE_CHECKING
 from rich.markup import escape as escape_markup
 from rich.text import Text
 
+from vnalpha.core.text_safety import sanitize_text
 from vnalpha.tui.models.conversation import (
     ActivityMessage,
     ApprovalRequestMessage,
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
     from vnalpha.commands.models import CommandResult
     from vnalpha.tui.models.conversation import ConversationMessage
     from vnalpha.tui.research_navigation import ArtifactDetailState
+    from vnalpha.tui.result_presentation import ResultPresentation
 
 try:
     from rich.console import RenderableType
@@ -41,7 +44,6 @@ if _TEXTUAL_AVAILABLE:
             height: 1fr;
             min-height: 0;
             overflow: hidden;
-            border: round $surface-darken-1;
         }
         OutputStream > RichLog {
             height: 1fr;
@@ -55,13 +57,23 @@ if _TEXTUAL_AVAILABLE:
             super().__init__(**kwargs)
             self._max_messages = max(50, max_messages)
             self._messages: list[ConversationMessage] = []
+            self._render_entries: list[tuple[str, object]] = []
             self._latest_artifact_states: tuple[ArtifactDetailState, ...] = ()
             self._artifact_stack: list[ArtifactDetailState] = []
             self._artifact_snapshot_stack: list[tuple[str, ...]] = []
             self._detail_mode = False
+            self._latest_result: ResultPresentation | None = None
+            self._transcript_entries: list[str] = []
+            self._rerendering = False
 
         def compose(self) -> ComposeResult:
-            yield RichLog(id="output-log", markup=False, wrap=True, highlight=False)
+            yield RichLog(
+                id="output-log",
+                markup=False,
+                wrap=True,
+                highlight=False,
+                max_lines=self._max_messages * 20,
+            )
 
         def on_mount(self) -> None:
             try:
@@ -73,10 +85,12 @@ if _TEXTUAL_AVAILABLE:
             self._messages.append(message)
             if len(self._messages) > self._max_messages:
                 self._messages = self._messages[-self._max_messages :]
+            self._retain_render_entry("message", message)
             if self._detail_mode:
                 self._detail_mode = False
                 self.clear_visible()
-                self._rerender_messages()
+                self._rerender_entries()
+                return
             self._render_typed_message(message)
 
         def show_user_input(self, text: str, *, prompt_type: str = "natural") -> None:
@@ -94,12 +108,73 @@ if _TEXTUAL_AVAILABLE:
         def end(self) -> None:
             self._scroll_to_boundary("scroll_end")
 
+        def is_at_end(self) -> bool:
+            try:
+                return self.query_one("#output-log", RichLog).is_vertical_scroll_end
+            except Exception:
+                return True
+
+        def reflow(self, *, stick_to_end: bool) -> None:
+            try:
+                log = self.query_one("#output-log", RichLog)
+                log.refresh(layout=True)
+                if stick_to_end:
+                    log.scroll_end(
+                        animate=False,
+                        immediate=True,
+                        force=True,
+                        x_axis=False,
+                    )
+                else:
+                    log.scroll_to(
+                        y=min(log.scroll_y, log.max_scroll_y),
+                        animate=False,
+                        immediate=True,
+                        force=True,
+                    )
+            except Exception:
+                pass
+
         def show_assistant_message(self, text: str, style: str | None = None) -> None:
+            self._append_transcript(text)
             self._write(self._safe_text(text, style=style))
 
         def show_command_result(self, command: str, result: "RenderableType") -> None:
             self._write(self._safe_text(f"$ {command}", style="bold"))
-            self._append_command_result(result)
+            self._append_transcript(f"$ {command}")
+            from vnalpha.tui.result_presentation import ResultPresentation
+
+            if isinstance(result, ResultPresentation):
+                self.show_result(result)
+            else:
+                self._append_command_result(result)
+                self._append_transcript(str(result).strip())
+
+        def show_result(self, presentation: "ResultPresentation") -> None:
+            if not self._rerendering:
+                self._retain_render_entry("result", presentation)
+            self._render_result(presentation)
+
+        def _render_result(self, presentation: "ResultPresentation") -> None:
+            if presentation.copyable_as_latest:
+                self._latest_result = presentation
+            self._append_transcript(presentation.plain_text)
+            self._write(presentation.body, expand=True)
+
+        def latest_result_text(self) -> str:
+            if self._latest_result is None:
+                return ""
+            return self._latest_result.plain_text
+
+        def transcript_text(self) -> str:
+            return "\n\n".join(self._transcript_entries)
+
+        def clear_transcript(self) -> None:
+            self.clear_visible()
+            self._messages.clear()
+            self._render_entries.clear()
+            self._transcript_entries.clear()
+            self._latest_result = None
 
         def show_error(self, message: str, source: str | None = None) -> None:
             source_part = f" ({source})" if source else ""
@@ -272,38 +347,26 @@ if _TEXTUAL_AVAILABLE:
             elif message.kind == MessageKind.APPROVAL_REQUEST:
                 self._render_approval_request(message)
             else:
+                self._append_transcript(message.text)
                 self._write(self._safe_text(message.text))
 
         def _render_user_message(self, message: "UserMessage") -> None:
             if message.prompt_type == "slash":
                 text = self._safe_text(f"$ {message.text}", style="dim")
+                plain = f"$ {message.text}"
             else:
                 text = self._safe_text(f"❯ {message.text}", style="bold cyan")
+                plain = f"❯ {message.text}"
+            self._append_transcript(plain)
             self._write(text)
 
         def _render_assistant_answer(self, message: "AssistantAnswerMessage") -> None:
-            summary = message.summary or message.text
-            self._write(self._safe_text("Summary: " + summary, style="bold green"))
-            risks = message.risks_caveats or "No explicit caveats."
-            self._write(self._safe_text(f"Risks: {risks}", style="yellow"))
-            source_count, missing_count = message.source_counts()
-            self._write(
-                self._safe_text(
-                    f"Sources: {source_count}  Missing data: {missing_count}"
-                )
-            )
-            if message.basis:
-                self._write(self._safe_text(f"Basis: {message.basis}"))
-            if message.missing_data:
-                self._write(self._safe_text("Missing data:"))
-                for item in message.missing_data:
-                    self._write(self._safe_text(f"  - {item}"))
-            if message.grounded_source_refs:
-                self._write(self._safe_text("Grounded source refs:"))
-                for item in message.grounded_source_refs:
-                    self._write(self._safe_text(f"  - {item}"))
+            from vnalpha.tui.result_presentation import assistant_result_presentation
+
+            self._render_result(assistant_result_presentation(message))
 
         def _render_command_result(self, message: "CommandResultMessage") -> None:
+            self._append_transcript(message.text)
             self._append_command_result(message.text)
 
         def _render_activity(self, message: "ActivityMessage") -> None:
@@ -318,15 +381,22 @@ if _TEXTUAL_AVAILABLE:
                 style = None
             if message.elapsed_ms is not None:
                 text = f"{text} ({message.elapsed_ms}ms)"
+            self._append_transcript(text)
             self._write(self._safe_text(text, style=style))
 
         def _render_warning(self, message: "WarningMessage") -> None:
+            self._append_transcript(message.text)
             self._write(self._safe_text(message.text, style="yellow"))
 
         def _render_error(self, message: "ErrorMessage") -> None:
+            self._append_transcript(message.text)
             self._write(self._safe_text(message.text, style="bold red"))
 
         def _render_approval_request(self, message: "ApprovalRequestMessage") -> None:
+            approval_lines = ["Approval required", *message.tools]
+            if message.permissions:
+                approval_lines.append(f"Permissions: {message.permissions}")
+            self._append_transcript("\n".join(approval_lines))
             self._write(self._safe_text("Approval required", style="bold magenta"))
             for idx, tool in enumerate(message.tools, start=1):
                 self._write(self._safe_text(f"{idx}. {tool}"))
@@ -353,20 +423,39 @@ if _TEXTUAL_AVAILABLE:
             elif kind == "running":
                 label = f"⟳ {text}"
                 style = "dim"
+            elif kind == "error":
+                label = f"✗ {text}"
+                style = "red"
             else:
-                label = text
+                label = f"⚠ {text}"
                 style = "yellow"
+            self._append_transcript(label)
             self._write(self._safe_text(label, style=style))
 
+        def _append_transcript(self, text: str) -> None:
+            normalized = sanitize_text(text).strip()
+            if not normalized or self._rerendering:
+                return
+            self._transcript_entries.append(normalized)
+            if len(self._transcript_entries) > self._max_messages:
+                self._transcript_entries = self._transcript_entries[
+                    -self._max_messages :
+                ]
+
+        def _retain_render_entry(self, kind: str, payload: object) -> None:
+            self._render_entries.append((kind, payload))
+            if len(self._render_entries) > self._max_messages:
+                self._render_entries = self._render_entries[-self._max_messages :]
+
         def _safe_text(self, value: str, style: str | None = None) -> Text:
-            text = Text(escape_markup(value))
+            text = Text(escape_markup(sanitize_text(value)))
             if style:
                 text.stylize(style)
             return text
 
-        def _write(self, text: "RenderableType") -> None:
+        def _write(self, text: "RenderableType", *, expand: bool = False) -> None:
             try:
-                self.query_one("#output-log", RichLog).write(text)
+                self.query_one("#output-log", RichLog).write(text, expand=expand)
             except Exception as exc:  # noqa: BLE001
                 self._capture_render_error(exc)
 
@@ -431,9 +520,16 @@ if _TEXTUAL_AVAILABLE:
             for line in snapshot:
                 self._write(self._safe_text(line))
 
-        def _rerender_messages(self) -> None:
-            for message in self._messages:
-                self._render_typed_message(message)
+        def _rerender_entries(self) -> None:
+            self._rerendering = True
+            try:
+                for kind, payload in self._render_entries:
+                    if kind == "message":
+                        self._render_typed_message(payload)
+                    elif kind == "result":
+                        self._render_result(payload)
+            finally:
+                self._rerendering = False
 
 else:
 
@@ -447,6 +543,8 @@ else:
             self._latest_artifact_states: tuple[object, ...] = ()
             self._artifact_stack: list[object] = []
             self._artifact_snapshot_stack: list[tuple[str, ...]] = []
+            self._latest_result: object | None = None
+            self._transcript_entries: list[str] = []
 
         def append_message(self, message: "ConversationMessage") -> None:
             self._messages.append(message)
@@ -459,8 +557,31 @@ else:
         def show_assistant_message(self, text: str, style: str | None = None) -> None:
             del text, style
 
+        def is_at_end(self) -> bool:
+            return True
+
+        def reflow(self, *, stick_to_end: bool) -> None:
+            del stick_to_end
+
         def show_command_result(self, command: str, result: "RenderableType") -> None:
             del command, result
+
+        def show_result(self, presentation: "ResultPresentation") -> None:
+            if presentation.copyable_as_latest:
+                self._latest_result = presentation
+            self._transcript_entries.append(presentation.plain_text)
+
+        def latest_result_text(self) -> str:
+            presentation = self._latest_result
+            return getattr(presentation, "plain_text", "")
+
+        def transcript_text(self) -> str:
+            return "\n\n".join(self._transcript_entries)
+
+        def clear_transcript(self) -> None:
+            self._messages.clear()
+            self._transcript_entries.clear()
+            self._latest_result = None
 
         def show_error(self, message: str, source: str | None = None) -> None:
             del message, source

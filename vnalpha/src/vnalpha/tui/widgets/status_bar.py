@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from rich.text import Text
+
+from vnalpha.core.text_safety import sanitize_text
 from vnalpha.tui.runtime_status import RuntimeState, RuntimeStatus
 
 try:
@@ -47,9 +50,19 @@ if _TEXTUAL_AVAILABLE:
         def update_status(self, status: RuntimeStatus) -> None:
             """Update the displayed status."""
             old = self._status
-            self._status = status
+            self._status = RuntimeStatus(
+                state=status.state,
+                label=sanitize_text(status.label),
+                detail=sanitize_text(status.detail),
+                started_at=status.started_at,
+                last_error=(
+                    sanitize_text(status.last_error)
+                    if status.last_error is not None
+                    else None
+                ),
+            )
             self._refresh_display()
-            self._emit_status_changed(old.state, status.state)
+            self._emit_status_changed(old.state, self._status.state)
 
         def _refresh_display(self) -> None:
             try:
@@ -58,18 +71,20 @@ if _TEXTUAL_AVAILABLE:
             except Exception:
                 pass
 
-        def _render_status(self) -> str:
+        def _render_status(self) -> Text:
             """Render the status as a Rich markup string."""
             s = self._status
             state = s.state
             badge = _RICH_BADGES.get(state, f"[dim]{state.value}[/dim]")
-            parts = [badge]
+            rendered = Text.from_markup(badge)
             if s.label:
-                parts.append(s.label)
+                rendered.append(" │ ")
+                rendered.append(s.label)
             if s.detail:
                 d = s.detail[:50] + "…" if len(s.detail) > 50 else s.detail
-                parts.append(f"[dim]{d}[/dim]")
-            return " │ ".join(parts)
+                rendered.append(" │ ")
+                rendered.append(d, style="dim")
+            return rendered
 
         def _emit_status_changed(
             self, from_state: RuntimeState, to_state: RuntimeState

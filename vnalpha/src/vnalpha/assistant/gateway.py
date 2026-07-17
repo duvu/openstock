@@ -5,6 +5,7 @@ import re
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlparse
 
@@ -45,9 +46,8 @@ def _log_llm_error(
             "LLM call failed",
             stage=stage,
             error_type=type(exc).__name__,
-            error=str(exc),
             attempt=attempt,
-            cause=str(cause) if cause else None,
+            cause_type=type(cause).__name__ if cause else None,
             response_content_chars=response_content_chars,
             finish_reason=finish_reason,
         )
@@ -161,6 +161,25 @@ class LLMGatewayConfig:
             raise LLMConfigError(
                 "VNALPHA_LLM_ENDPOINT must be an explicit http:// or https:// URL."
             )
+        try:
+            _parsed_port = parsed.port
+        except ValueError as exc:
+            raise LLMConfigError(
+                "VNALPHA_LLM_ENDPOINT must contain a valid numeric port."
+            ) from exc
+        if parsed.username is not None or parsed.password is not None:
+            raise LLMConfigError("VNALPHA_LLM_ENDPOINT must not contain userinfo.")
+        hostname = parsed.hostname or ""
+        is_loopback = hostname.lower() == "localhost"
+        if not is_loopback:
+            try:
+                is_loopback = ip_address(hostname).is_loopback
+            except ValueError:
+                is_loopback = False
+        if parsed.scheme == "http" and not is_loopback:
+            raise LLMConfigError(
+                "VNALPHA_LLM_ENDPOINT must use HTTPS outside the local loopback host."
+            )
         if self.timeout <= 0:
             raise LLMConfigError("VNALPHA_LLM_TIMEOUT must be greater than zero.")
         if self.max_output_tokens <= 0:
@@ -192,11 +211,13 @@ class LLMGatewayClient:
         self,
         config: LLMGatewayConfig | None = None,
         *,
+        api_key: str | None = None,
         routing_config: ModelRoutingConfig | None = None,
         override_store: ModelOverrideStore | None = None,
     ) -> None:
         self._config = config or LLMGatewayConfig.from_env()
         self._config.validate()
+        self._api_key = api_key
         try:
             self._routing_config = routing_config or ModelRoutingConfig.from_env(
                 default_model_id=self._config.model
@@ -244,7 +265,11 @@ class LLMGatewayClient:
     ) -> tuple[str, dict]:
         from vnalpha.assistant.errors import LLMConfigError, LLMGatewayError
 
-        api_key = os.environ.get("VNALPHA_LLM_API_KEY", "").strip()
+        api_key = (
+            self._api_key
+            if self._api_key is not None
+            else os.environ.get("VNALPHA_LLM_API_KEY", "")
+        ).strip()
         if not api_key:
             err = LLMConfigError(
                 "LLM assistant is disabled because VNALPHA_LLM_API_KEY is not set. "
@@ -428,7 +453,14 @@ class LLMGatewayClient:
                     schema_downgraded = True
                     continue
                 error = LLMResponseError(
-                    f"LLM HTTP {status_code}: {exc.response.text[:200]}"
+                    f"LLM HTTP {status_code}.",
+                    status_code=status_code,
+                    error_kind=(
+                        "structured_output_unsupported"
+                        if status_code == 400
+                        and _schema_format_unsupported(status_code, exc.response.text)
+                        else "http_error"
+                    ),
                 )
                 fallbackable = (
                     status_code in {400, 404, 408, 409, 429} or status_code >= 500

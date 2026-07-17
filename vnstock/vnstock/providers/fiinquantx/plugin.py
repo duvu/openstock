@@ -153,7 +153,7 @@ class FiinQuantXProviderPlugin:
                             "volume",
                             "value",
                         ],
-                        "adjusted": True,
+                        "adjusted": False,
                         "by": "1d",
                         "lasted": False,
                     }
@@ -197,8 +197,10 @@ class FiinQuantXProviderPlugin:
             }
         )
         if dataset in {"equity.ohlcv", "index.ohlcv"}:
+            result.attrs["source_method"] = "Fetch_Trading_Data"
             result.attrs["ohlcv_request_policy"] = {
-                "adjusted": "requested_true",
+                "adjusted": "requested_false",
+                "basis": "RAW_UNADJUSTED",
                 "lasted": "requested_false",
                 "mode": "date_range" if start is not None else "count_back",
                 "start": start.isoformat() if start else None,
@@ -209,6 +211,8 @@ class FiinQuantXProviderPlugin:
             "reference.sector_membership_snapshot",
         }:
             result.attrs["snapshot_semantics"] = "observed_current_membership"
+            result.attrs["source_method"] = "TickerList"
+            result.attrs["source_query"] = symbol
         return result
 
     def diagnostics(self) -> dict[str, Any]:
@@ -228,8 +232,6 @@ class FiinQuantXProviderPlugin:
             "credentials_configured": self._credentials_configured(),
             "licensed_runtime_acknowledged": approval.acknowledged,
             "licensed_runtime_approved": approval.approved,
-            "license_approval_reference_configured": approval.reference_configured,
-            "license_approval_reference_fingerprint": approval.reference_fingerprint,
             "configured_limits": {
                 "max_concurrency": runtime["max_concurrency"],
                 "max_rows": _MAX_ROWS,
@@ -239,7 +241,8 @@ class FiinQuantXProviderPlugin:
             },
             "runtime": runtime,
             "ohlcv_request_policy": {
-                "adjusted": "requested_true",
+                "adjusted": "requested_false",
+                "basis": "RAW_UNADJUSTED",
                 "lasted": "requested_false",
                 "supported_modes": ["count_back", "date_range"],
             },
@@ -266,8 +269,6 @@ class FiinQuantXProviderPlugin:
             return "Disabled until the licensed runtime contract is verified."
         if not approval.acknowledged:
             return "Disabled until the licensed runtime is explicitly acknowledged."
-        if not approval.reference_configured:
-            return "Disabled until a reviewed license approval reference is configured."
         if not self._credentials_configured():
             return (
                 "Disabled until both credential environment variables are configured."

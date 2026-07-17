@@ -8,8 +8,9 @@ from vnalpha.clients.vnstock.client import VnstockClient
 def test_get_corporate_actions_uses_canonical_bounded_endpoint(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_get(self, url):
+    def fake_get(self, url, *, headers):
         captured["url"] = str(url)
+        captured["headers"] = headers
         return httpx.Response(
             200,
             request=httpx.Request("GET", str(url)),
@@ -18,6 +19,7 @@ def test_get_corporate_actions_uses_canonical_bounded_endpoint(monkeypatch) -> N
                 "meta": {
                     "dataset": "reference.corporate_actions",
                     "provider": "VCI",
+                    "quality_status": "PASS",
                 },
                 "diagnostics": {},
             },
@@ -33,5 +35,6 @@ def test_get_corporate_actions_uses_canonical_bounded_endpoint(monkeypatch) -> N
     assert response.meta.dataset == "reference.corporate_actions"
     assert captured["url"] == (
         "/v1/reference/corporate-actions?symbol=SSI&start=2024-01-01"
-        "&end=2024-12-31&source=VCI"
+        "&end=2024-12-31&source=VCI&validate=true&quality_mode=strict"
     )
+    assert isinstance(captured["headers"], dict)

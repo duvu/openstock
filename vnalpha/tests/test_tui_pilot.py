@@ -291,7 +291,6 @@ async def test_legacy_screens_remain_importable(mock_get_connection):
     from vnalpha.tui.screens.assistant import AssistantScreen  # noqa: F401
     from vnalpha.tui.screens.command import CommandScreen  # noqa: F401
     from vnalpha.tui.screens.home import HomeScreen  # noqa: F401
-    from vnalpha.tui.screens.log_viewer import LogScreen  # noqa: F401
     from vnalpha.tui.screens.outcomes import OutcomeScreen  # noqa: F401
     from vnalpha.tui.screens.quality import QualityScreen  # noqa: F401
     from vnalpha.tui.screens.rejected import RejectedScreen  # noqa: F401

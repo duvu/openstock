@@ -214,22 +214,35 @@ class SymbolMemoryCompactionService:
         user_content_factory: Callable[[str], str] | None = None,
     ) -> tuple[T, MemoryCompactionPreview]:
         with symbol_memory_lock(self.root, symbol):
-            with self.repository.transaction():
-                mutation_result = mutation()
-                user_content = None
-                if user_content_factory is not None:
-                    card_path = symbol_card_path(self.root, symbol)
-                    assert_knowledge_path(self.root, card_path)
-                    existing_card = (
-                        parse_symbol_card(card_path.read_text(encoding="utf-8"))
-                        if card_path.exists()
-                        else None
+            card_path = symbol_card_path(self.root, symbol)
+            assert_knowledge_path(self.root, card_path)
+            previous_content = (
+                card_path.read_text(encoding="utf-8") if card_path.exists() else None
+            )
+            try:
+                with self.repository.transaction():
+                    mutation_result = mutation()
+                    user_content = None
+                    if user_content_factory is not None:
+                        existing_card = (
+                            parse_symbol_card(card_path.read_text(encoding="utf-8"))
+                            if card_path.exists()
+                            else None
+                        )
+                        previous = (
+                            "" if existing_card is None else existing_card.user_content
+                        )
+                        user_content = user_content_factory(previous)
+                    preview = self._compact_unlocked(
+                        symbol,
+                        user_content=user_content,
                     )
-                    previous = (
-                        "" if existing_card is None else existing_card.user_content
-                    )
-                    user_content = user_content_factory(previous)
-                preview = self._compact_unlocked(symbol, user_content=user_content)
+            except BaseException:
+                if previous_content is None:
+                    card_path.unlink(missing_ok=True)
+                else:
+                    atomic_write_text(card_path, previous_content)
+                raise
         return mutation_result, preview
 
     def _compact_unlocked(

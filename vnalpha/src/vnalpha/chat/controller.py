@@ -231,7 +231,7 @@ class ChatController:
         try:
             from vnalpha.observability.audit import log_audit
 
-            log_audit("CHAT_TURN_STARTED", f"Chat turn: {question[:80]}")
+            log_audit("CHAT_TURN_STARTED", f"question_chars={len(question)}")
         except Exception:  # noqa: BLE001
             pass
         try:

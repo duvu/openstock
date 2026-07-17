@@ -197,7 +197,10 @@ def _answer_response() -> tuple[str, dict]:
         json.dumps(
             {
                 "summary": "FPT shows a persisted composite score for research review.",
-                "basis": "Based on the deterministic deep-symbol payload.",
+                "basis": (
+                    "Based on the deterministic deep-symbol payload with "
+                    "RAW_UNADJUSTED price basis."
+                ),
                 "risks_caveats": "Research-only context; freshness remains relevant.",
                 "tool_trace_summary": "analysis.deep_symbol completed.",
                 "missing_data": [],
@@ -239,6 +242,7 @@ def test_golden_conversation_empty_to_grounded_answer(empty_conn, monkeypatch) -
 
     assert plan.intent == "deep_analyze_symbol"
     assert isinstance(answer, AssistantAnswer)
+    assert "RAW_UNADJUSTED" in answer.basis
     # Provisioning is a visible, explicit plan step before analysis (issue #163).
     tools = [step.tool_name for step in plan.steps]
     assert tools == ["data.ensure_current_symbol", "analysis.deep_symbol"]

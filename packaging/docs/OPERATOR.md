@@ -39,6 +39,10 @@ sudo cp packaging/docker-compose.yml /opt/openstock/docker-compose.yml
 sudo mkdir -p /etc/openstock /etc/vnalpha
 sudo cp packaging/config/openstock.env /etc/openstock/openstock.env
 sudo cp packaging/config/vnalpha.env   /etc/vnalpha/vnalpha.env
+sudo groupadd --system openstock 2>/dev/null || true
+sudo chown root:openstock /etc/vnalpha/vnalpha.env
+sudo chmod 0640 /etc/vnalpha/vnalpha.env
+sudo usermod -aG openstock "$USER"
 ```
 
 Edit both files to match your environment before enabling the service:
@@ -47,6 +51,10 @@ Edit both files to match your environment before enabling the service:
   demo date
 - `/etc/vnalpha/vnalpha.env` — service URL, warehouse path, optional LLM
   gateway config
+
+The vnalpha environment can contain the LLM credential and is intentionally
+readable only by root and members of the `openstock` group. Start a new login
+session after adding the operator to that group.
 
 ### Step 3: Install the systemd unit
 
@@ -109,9 +117,19 @@ openstock-verify --mvp1             # read-only MVP1 preflight only (safe to re-
 ```
 
 `openstock-verify --mvp1` reports service health, warehouse path/disk,
-knowledge path, LLM route readiness (`vnalpha preflight`), backup/restore
-availability and release metadata. Blockers exit non-zero; degraded LLM or
-optional dependencies are `[WARN]` and leave deterministic commands usable.
+read-only warehouse schema compatibility, active writer-lock state, knowledge
+path, LLM route readiness (`vnalpha preflight`), backup/restore availability and
+release metadata. Corrupt or incompatible warehouses are blockers. `--ci`
+explicitly skips live warehouse inspection. Startup writes compose, migration
+and preflight diagnostics below the reported run log directory; `--skip-preflight`
+is the only verifier bypass and emits a visible warning.
+
+Both commands load `/etc/openstock/openstock.env` and
+`/etc/vnalpha/vnalpha.env`. Compose operations are anchored to
+`OPENSTOCK_HOME` (normally `/opt/openstock`) rather than the caller's current
+directory. FiinQuantX readiness requires the reviewed VCI reference source and
+all four enabled, explicit-only Gate A capabilities under the FiinQuantX
+provider object.
 
 ---
 

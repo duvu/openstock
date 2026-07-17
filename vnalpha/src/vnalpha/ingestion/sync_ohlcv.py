@@ -7,6 +7,7 @@ from dataclasses import replace
 import duckdb
 
 from vnalpha.clients.vnstock.client import VnstockClient
+from vnalpha.clients.vnstock.source_policy import validate_persistence_source
 from vnalpha.core.logging import get_logger
 from vnalpha.ingestion.models import (
     OHLCVBatchResult,
@@ -44,6 +45,7 @@ def sync_ohlcv(
 
     Returns a typed batch with per-symbol outcomes and terminal status.
     """
+    source = validate_persistence_source(source)
     if get_correlation_id() in {"", "unset"}:
         set_correlation_id()
     if universe is None:

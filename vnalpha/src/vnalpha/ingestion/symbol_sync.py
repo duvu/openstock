@@ -10,14 +10,20 @@ from vnalpha.clients.vnstock.errors import (
     VnstockHTTPError,
     VnstockTimeoutError,
 )
+from vnalpha.clients.vnstock.source_policy import validate_persistence_source
 from vnalpha.core.logging import get_logger
+from vnalpha.core.text_safety import redact_structure
 from vnalpha.ingestion.models import (
     IngestionErrorCategory,
     IngestionRemediationAction,
     SymbolIngestionResult,
     SymbolIngestionStatus,
 )
-from vnalpha.ingestion.persistence import persist_raw_ohlcv_metadata
+from vnalpha.ingestion.persistence import (
+    persist_raw_ohlcv_metadata,
+    persistence_diagnostics,
+    validated_ohlcv_price_basis,
+)
 from vnalpha.ingestion.symbol_outcomes import (
     failed_symbol_result,
     invalid_symbol_result,
@@ -134,12 +140,40 @@ def sync_ohlcv_for_symbol(
                 attempt,
             )
 
-        provider = response.meta.provider
+        provider = response.meta.provider.strip().upper()
+        if response.meta.dataset != "equity.ohlcv":
+            return invalid_symbol_result(
+                symbol,
+                start,
+                end,
+                provider,
+                IngestionErrorCategory.PROVIDER_DATA,
+                "Provider returned an unexpected OHLCV dataset.",
+                attempt,
+            )
+        actual_source = validate_persistence_source(provider)
+        requested_source = source.strip().upper() if source else None
+        if requested_source is not None and actual_source != requested_source:
+            return invalid_symbol_result(
+                symbol,
+                start,
+                end,
+                provider,
+                IngestionErrorCategory.PROVIDER_DATA,
+                "Provider response did not match the explicitly selected source.",
+                attempt,
+            )
+        diagnostics = persistence_diagnostics(provider, response.diagnostics)
+        price_basis = validated_ohlcv_price_basis(provider, response.diagnostics)
         quality_report = response.meta.quality_report or response.diagnostics.get(
             "quality", {}
         )
         if not isinstance(quality_report, dict):
             quality_report = {}
+        redacted_quality_report = redact_structure(quality_report)
+        quality_report = (
+            redacted_quality_report if isinstance(redacted_quality_report, dict) else {}
+        )
         quality_status = (response.meta.quality_status or "").lower()
         if quality_status == "skipped":
             return SymbolIngestionResult(
@@ -150,9 +184,26 @@ def sync_ohlcv_for_symbol(
                 provider=provider,
                 diagnostics_ref=response.meta.request_id,
                 quality_report=quality_report,
-                diagnostics=response.diagnostics,
+                diagnostics=diagnostics,
                 message="Provider marked the OHLCV request as skipped.",
                 attempts=attempt,
+            )
+        if quality_status not in {
+            "pass",
+            "success",
+            "error",
+            "fail",
+            "failed",
+            "invalid",
+        }:
+            return invalid_symbol_result(
+                symbol,
+                start,
+                end,
+                provider,
+                IngestionErrorCategory.PROVIDER_DATA,
+                "Provider response lacked validated quality evidence.",
+                attempt,
             )
         if not response.data:
             remediation = remediation_step(
@@ -171,13 +222,14 @@ def sync_ohlcv_for_symbol(
                 provider=provider,
                 diagnostics_ref=response.meta.request_id,
                 quality_report=quality_report,
-                diagnostics=response.diagnostics,
+                diagnostics=diagnostics,
                 message="Provider returned no rows for the requested range.",
                 remediation=f"{remediation.guidance} {remediation.render_command()}",
                 remediation_steps=(remediation,),
                 attempts=attempt,
             )
         records = response.data
+        conn.execute("BEGIN TRANSACTION")
         try:
             inserted = insert_raw_ohlcv(
                 conn,
@@ -185,61 +237,72 @@ def sync_ohlcv_for_symbol(
                 symbol=symbol,
                 records=records,
                 provider=provider,
+                price_basis=price_basis,
                 quality_status=response.meta.quality_status,
                 fetched_at=response.meta.fetched_at,
             )
-        except duckdb.Error:
-            return failed_symbol_result(
+            quality_failed = (response.meta.quality_status or "").upper() in {
+                "ERROR",
+                "FAIL",
+                "FAILED",
+                "INVALID",
+            }
+            remediation = remediation_step(
                 symbol,
                 start,
                 end,
-                provider,
-                IngestionErrorCategory.STORAGE,
-                False,
-                "Warehouse persistence failed.",
-                attempt,
+                source,
+                IngestionRemediationAction.INSPECT_DIAGNOSTICS_AND_RETRY,
+                "Inspect the provider quality report, correct the data, then retry.",
             )
-        quality_failed = (response.meta.quality_status or "").upper() in {
-            "ERROR",
-            "FAIL",
-            "FAILED",
-            "INVALID",
-        }
-        remediation = remediation_step(
-            symbol,
-            start,
-            end,
-            source,
-            IngestionRemediationAction.INSPECT_DIAGNOSTICS_AND_RETRY,
-            "Inspect the provider quality report, correct the data, then retry.",
-        )
-        result = SymbolIngestionResult(
-            symbol=symbol,
-            status=(
-                SymbolIngestionStatus.INVALID
-                if quality_failed
-                else SymbolIngestionStatus.SUCCESS
-            ),
-            requested_start=start,
-            requested_end=end,
-            provider=provider,
-            rows_received=len(response.data),
-            rows_inserted=inserted,
-            error_category=(
-                IngestionErrorCategory.PROVIDER_DATA if quality_failed else None
-            ),
-            diagnostics_ref=response.meta.request_id,
-            message=("Provider quality validation failed." if quality_failed else None),
-            remediation=(
-                f"{remediation.guidance} {remediation.render_command()}"
-                if quality_failed
-                else None
-            ),
-            remediation_steps=((remediation,) if quality_failed else ()),
-            quality_report=quality_report,
-            diagnostics=response.diagnostics,
-            attempts=attempt,
-        )
-        persist_raw_ohlcv_metadata(conn, run_id, result)
+            result = SymbolIngestionResult(
+                symbol=symbol,
+                status=(
+                    SymbolIngestionStatus.INVALID
+                    if quality_failed
+                    else SymbolIngestionStatus.SUCCESS
+                ),
+                requested_start=start,
+                requested_end=end,
+                provider=provider,
+                rows_received=len(response.data),
+                rows_inserted=inserted,
+                error_category=(
+                    IngestionErrorCategory.PROVIDER_DATA if quality_failed else None
+                ),
+                diagnostics_ref=response.meta.request_id,
+                message=(
+                    "Provider quality validation failed." if quality_failed else None
+                ),
+                remediation=(
+                    f"{remediation.guidance} {remediation.render_command()}"
+                    if quality_failed
+                    else None
+                ),
+                remediation_steps=((remediation,) if quality_failed else ()),
+                quality_report=quality_report,
+                diagnostics=diagnostics,
+                attempts=attempt,
+            )
+            persist_raw_ohlcv_metadata(conn, run_id, result)
+            conn.execute("COMMIT")
+        except BaseException as error:
+            try:
+                conn.execute("ROLLBACK")
+            except duckdb.Error:
+                logger.error("Failed to roll back OHLCV persistence transaction.")
+                raise
+            if isinstance(error, duckdb.Error):
+                return failed_symbol_result(
+                    symbol,
+                    start,
+                    end,
+                    provider,
+                    IngestionErrorCategory.STORAGE,
+                    False,
+                    "Warehouse persistence failed.",
+                    attempt,
+                )
+            raise
         return result
     raise AssertionError("bounded retry loop did not return")

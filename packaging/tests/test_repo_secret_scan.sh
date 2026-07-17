@@ -18,6 +18,63 @@ if ! bash "$SCRIPT" --root "$TMP_ROOT" >/dev/null; then
   exit 1
 fi
 
+printf 'API_KEY=%s123456\n' 'live-secret-' > "$TMP_ROOT/staged.env"
+git -C "$TMP_ROOT" add staged.env
+rm "$TMP_ROOT/staged.env"
+if bash "$SCRIPT" --root "$TMP_ROOT" >/dev/null 2>&1; then
+  echo "index-only secret should fail secret scan" >&2
+  exit 1
+fi
+git -C "$TMP_ROOT" restore --staged staged.env
+
+printf 'API_KEY=%s123456\n' 'live-secret-' > "$TMP_ROOT/staged.env"
+git -C "$TMP_ROOT" add staged.env
+printf 'safe worktree content\n' > "$TMP_ROOT/staged.env"
+if bash "$SCRIPT" --root "$TMP_ROOT" >/dev/null 2>&1; then
+  echo "safe worktree must not mask a staged secret" >&2
+  exit 1
+fi
+git -C "$TMP_ROOT" restore --staged staged.env
+rm "$TMP_ROOT/staged.env"
+
+printf 'API_KEY=%s123456\n' 'live-secret-' > "$TMP_ROOT/untracked.env"
+if bash "$SCRIPT" --root "$TMP_ROOT" >/dev/null 2>&1; then
+  echo "untracked secret should fail secret scan" >&2
+  exit 1
+fi
+rm "$TMP_ROOT/untracked.env"
+
+mkdir -p "$TMP_ROOT/ya-router"
+printf 'API_KEY=%s123456\n' 'live-secret-' > "$TMP_ROOT/ya-router/tracked.env"
+git -C "$TMP_ROOT" add ya-router/tracked.env
+git -C "$TMP_ROOT" commit -qm tracked-ya-router-secret
+if bash "$SCRIPT" --root "$TMP_ROOT" >/dev/null 2>&1; then
+  echo "tracked ya-router secret should fail secret scan" >&2
+  exit 1
+fi
+git -C "$TMP_ROOT" rm -q ya-router/tracked.env
+git -C "$TMP_ROOT" commit -qm remove-tracked-ya-router-secret
+
+mkdir "$TMP_ROOT/unreadable"
+chmod 000 "$TMP_ROOT/unreadable"
+if bash "$SCRIPT" --root "$TMP_ROOT" >/dev/null 2>&1; then
+  chmod 700 "$TMP_ROOT/unreadable"
+  echo "unreadable untracked directory should fail secret scan" >&2
+  exit 1
+fi
+chmod 700 "$TMP_ROOT/unreadable"
+rmdir "$TMP_ROOT/unreadable"
+
+printf 'API_KEY=%s123456\n' 'live-secret-' > "$TMP_ROOT/unreadable.env"
+chmod 000 "$TMP_ROOT/unreadable.env"
+if bash "$SCRIPT" --root "$TMP_ROOT" >/dev/null 2>&1; then
+  chmod 600 "$TMP_ROOT/unreadable.env"
+  echo "unreadable untracked file should fail secret scan" >&2
+  exit 1
+fi
+chmod 600 "$TMP_ROOT/unreadable.env"
+rm "$TMP_ROOT/unreadable.env"
+
 printf 'API_KEY=%s123456\n' 'live-secret-' >> "$TMP_ROOT/README.md"
 git -C "$TMP_ROOT" add README.md
 git -C "$TMP_ROOT" commit -qm secret
@@ -41,7 +98,7 @@ fi
 
 NO_RG_BIN="$TMP_ROOT/no-rg-bin"
 mkdir -p "$NO_RG_BIN"
-for command_name in bash git tr grep awk; do
+for command_name in bash git tr grep awk mktemp rm; do
   ln -s "$(command -v "$command_name")" "$NO_RG_BIN/$command_name"
 done
 
@@ -59,7 +116,7 @@ fi
 
 BROKEN_RG_BIN="$TMP_ROOT/broken-rg-bin"
 mkdir -p "$BROKEN_RG_BIN"
-for command_name in bash git tr grep awk; do
+for command_name in bash git tr grep awk mktemp rm; do
   ln -s "$(command -v "$command_name")" "$BROKEN_RG_BIN/$command_name"
 done
 printf '#!/usr/bin/env bash\nexit 2\n' > "$BROKEN_RG_BIN/rg"

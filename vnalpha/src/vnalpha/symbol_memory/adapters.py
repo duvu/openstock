@@ -12,6 +12,12 @@ from vnalpha.research_models.models import (
     SetupAnalysis,
     SymbolLevelSnapshot,
 )
+from vnalpha.symbol_memory.context_snapshots import (
+    CanonicalOhlcvBasisSnapshot,
+    SymbolIdentitySnapshot,
+    canonical_ohlcv_basis_value,
+    symbol_identity_value,
+)
 from vnalpha.symbol_memory.ingestion import MemoryEvidence
 from vnalpha.symbol_memory.paths import normalize_symbol
 
@@ -71,6 +77,48 @@ def feature_snapshot_evidence(snapshot: FeatureSnapshot) -> MemoryEvidence:
         confidence=None,
         correlation_id=snapshot.correlation_id,
         source_published_at=snapshot.as_of_date,
+    )
+
+
+def symbol_identity_evidence(
+    snapshot: SymbolIdentitySnapshot,
+    *,
+    correlation_id: str,
+    observed_at: datetime,
+    as_of_date: date,
+) -> MemoryEvidence:
+    return MemoryEvidence(
+        symbol=normalize_symbol(snapshot.symbol),
+        claim_type="symbol_identity",
+        predicate="security_identity",
+        value=symbol_identity_value(snapshot),
+        source_ref=f"symbol_identity:{snapshot.symbol}:{as_of_date.isoformat()}",
+        observed_at=observed_at,
+        as_of_date=as_of_date,
+        confidence=None,
+        correlation_id=correlation_id,
+        source_published_at=as_of_date,
+    )
+
+
+def canonical_ohlcv_basis_evidence(
+    snapshot: CanonicalOhlcvBasisSnapshot,
+    *,
+    correlation_id: str,
+    observed_at: datetime,
+    as_of_date: date,
+) -> MemoryEvidence:
+    return MemoryEvidence(
+        symbol=normalize_symbol(snapshot.symbol),
+        claim_type="data_readiness",
+        predicate="canonical_ohlcv_basis",
+        value=canonical_ohlcv_basis_value(snapshot),
+        source_ref=f"canonical_ohlcv:{snapshot.symbol}:{as_of_date.isoformat()}",
+        observed_at=observed_at,
+        as_of_date=as_of_date,
+        confidence=None,
+        correlation_id=correlation_id,
+        source_published_at=as_of_date,
     )
 
 
@@ -187,11 +235,15 @@ def research_automation_evidence(
 
 __all__ = [
     "CandidateScoreSnapshot",
+    "CanonicalOhlcvBasisSnapshot",
     "FeatureSnapshot",
+    "SymbolIdentitySnapshot",
+    "canonical_ohlcv_basis_evidence",
     "candidate_score_evidence",
     "feature_snapshot_evidence",
     "market_regime_evidence",
     "research_automation_evidence",
     "setup_analysis_evidence",
+    "symbol_identity_evidence",
     "symbol_level_evidence",
 ]

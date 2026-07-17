@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from datetime import datetime
 
 import duckdb
@@ -11,6 +12,7 @@ from vnalpha.core.logging import get_logger
 from vnalpha.ingestion.canonical_storage import (
     count_canonical_rows,
     delete_canonical_bar,
+    delete_stray_intraday_canonical_rows,
     load_ranked_candidates,
     persist_quarantine,
     resolve_quarantines,
@@ -66,8 +68,18 @@ def build_canonical_ohlcv(
                 delete_canonical_bar(conn, selected_candidate)
                 rejected += 1
             else:
-                upsert_canonical(conn, selected_candidate)
+                upsert_canonical(
+                    conn, replace(selected_candidate, quality_status="pass")
+                )
                 resolve_quarantines(conn, selected_candidate)
+
+        # Daily bars are keyed by trading date, not by an intraday timestamp.
+        # A canonical row with a non-midnight time-of-day is leftover from
+        # before candidates were grouped by date (raw providers occasionally
+        # report different times-of-day for the same trading session); every
+        # current write lands at midnight, so any such row is always stale.
+        if interval == "1D":
+            delete_stray_intraday_canonical_rows(conn, symbol, interval)
 
         canonical_count = count_canonical_rows(conn, symbol, interval)
         conn.execute("COMMIT")

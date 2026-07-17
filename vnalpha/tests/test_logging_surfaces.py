@@ -103,8 +103,8 @@ def test_tui_surface_reports_file_initialization_failure_without_console(
         raise OSError("unavailable")
 
     monkeypatch.setattr(
-        logging.handlers,
-        "RotatingFileHandler",
+        logging_module,
+        "_SecureRotatingFileHandler",
         raise_os_error,
     )
 
@@ -131,6 +131,18 @@ def test_repeated_tui_configuration_writes_each_event_once(tmp_path: Path) -> No
     logging_module._QUEUE_LISTENER = None
 
     assert log_path.read_text(encoding="utf-8").count("single tui record") == 2
+
+
+def test_configure_logging_tightens_existing_log_permissions(tmp_path: Path) -> None:
+    from vnalpha.core.logging import LogSurface, configure_logging
+
+    log_path = tmp_path / "vnalpha.log"
+    log_path.write_text("existing\n", encoding="utf-8")
+    log_path.chmod(0o644)
+
+    configure_logging(log_path=log_path, surface=LogSurface.TUI)
+
+    assert oct(log_path.stat().st_mode & 0o777) == "0o600"
 
 
 def test_tui_command_emits_bounded_surface_transition_event() -> None:

@@ -175,6 +175,13 @@ class GroundednessValidator:
         undisclosed_missing = tuple(
             item for item in required_missing if item.lower() not in disclosed_text
         )
+        required_disclosures = _required_basis_disclosures(tool_outputs)
+        normalized_disclosed_text = disclosed_text.replace("-", " ")
+        undisclosed_basis = tuple(
+            disclosure
+            for disclosure in required_disclosures
+            if disclosure.lower().replace("-", " ") not in normalized_disclosed_text
+        )
 
         messages: list[str] = []
         if not answer.basis.strip():
@@ -193,6 +200,10 @@ class GroundednessValidator:
             )
         if undisclosed_missing:
             messages.append("one or more missing artifacts were not disclosed")
+        if undisclosed_basis:
+            messages.append(
+                "required price-basis or corporate-action caveat was omitted"
+            )
 
         hard_fail = bool(
             unsupported_refs
@@ -200,6 +211,7 @@ class GroundednessValidator:
             or not supplied_refs
             or not answer.basis.strip()
             or not answer.risks_caveats.strip()
+            or undisclosed_basis
         )
         status = "FAIL" if hard_fail else "PARTIAL" if undisclosed_missing else "PASS"
         return GroundednessResult(
@@ -308,6 +320,22 @@ def _missing_data(tool_outputs: dict[str, Any]) -> tuple[str, ...]:
         if isinstance(raw, (list, tuple)):
             values.extend(str(item) for item in raw if item)
     return tuple(dict.fromkeys(values))
+
+
+def _required_basis_disclosures(tool_outputs: dict[str, Any]) -> tuple[str, ...]:
+    disclosures: list[str] = []
+    for output in tool_outputs.values():
+        if not isinstance(output, dict):
+            continue
+        data = output.get("data", output)
+        if not isinstance(data, dict):
+            continue
+        basis = data.get("price_basis")
+        if isinstance(basis, str) and basis:
+            disclosures.append(basis)
+        if data.get("corporate_action_overlap") is True:
+            disclosures.append("corporate action")
+    return tuple(dict.fromkeys(disclosures))
 
 
 __all__ = [

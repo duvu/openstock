@@ -23,32 +23,66 @@ trap 'rm -rf "$WORK"' EXIT
 # --- fake binaries: healthy service, idempotent init, launch no-op ---
 FAKE_BIN="${WORK}/bin"
 mkdir -p "$FAKE_BIN"
+mkdir -p "${WORK}/openstock"
+: >"${WORK}/openstock/docker-compose.yml"
 
 cat > "${FAKE_BIN}/curl" <<'FAKE'
 #!/usr/bin/env bash
-# Always report the health endpoint as HTTP 200.
 for a in "$@"; do :; done
 if printf '%s\n' "$@" | grep -q "write-out"; then
-  echo "200"
+  if [ "${UNHEALTHY:-false}" = "true" ]; then echo "000"; else echo "200"; fi
 fi
 exit 0
 FAKE
 
 cat > "${FAKE_BIN}/vnalpha" <<'FAKE'
 #!/usr/bin/env bash
-# init/tui are no-ops; --date accepted.
+if [ "${FAIL_INIT:-false}" = "true" ] && [ "${1:-}" = "init" ]; then
+  echo "init failed: ${VNALPHA_LLM_API_KEY:-no-secret}" >&2
+  exit 9
+fi
 exit 0
 FAKE
 
-chmod +x "${FAKE_BIN}/curl" "${FAKE_BIN}/vnalpha"
+cat > "${FAKE_BIN}/docker" <<'FAKE'
+#!/usr/bin/env bash
+if [ "${1:-}" = "compose" ] && [ "${2:-}" = "version" ]; then exit 0; fi
+if [ "${1:-}" = "compose" ] && printf '%s\n' "$@" | grep -q '^up$'; then
+  printf 'compose args: %s\n' "$*" >&2
+  echo "compose failed: ${VNALPHA_LLM_API_KEY:-no-secret}" >&2
+  if [ "${FAIL_COMPOSE:-false}" = "true" ]; then exit 8; fi
+fi
+exit 0
+FAKE
+
+cat > "${FAKE_BIN}/openstock-verify" <<'FAKE'
+#!/usr/bin/env bash
+echo "preflight failed: ${VNALPHA_LLM_API_KEY:-no-secret}" >&2
+if [ "${FAIL_PREFLIGHT:-false}" = "true" ]; then exit 7; fi
+exit 0
+FAKE
+
+chmod +x "${FAKE_BIN}/curl" "${FAKE_BIN}/vnalpha" \
+  "${FAKE_BIN}/docker" "${FAKE_BIN}/openstock-verify"
 
 _run() {
   # Run with fakes first on PATH, isolated persistent roots, no TUI launch.
   PATH="${FAKE_BIN}:${PATH}" \
   VNALPHA_LOG_ROOT="${WORK}/logs" \
+  OPENSTOCK_HOME="${WORK}/openstock" \
   OPENSTOCK_WAREHOUSE_DIR="${WORK}/warehouse" \
   VNALPHA_KNOWLEDGE_ROOT="${WORK}/knowledge" \
   bash "$START_SCRIPT" --no-launch --skip-preflight
+}
+
+_run_preflight() {
+  PATH="${FAKE_BIN}:${PATH}" \
+  VNALPHA_LOG_ROOT="${WORK}/logs" \
+  OPENSTOCK_HOME="${WORK}/openstock" \
+  OPENSTOCK_WAREHOUSE_DIR="${WORK}/warehouse" \
+  VNALPHA_KNOWLEDGE_ROOT="${WORK}/knowledge" \
+  VNALPHA_LLM_API_KEY="startup-secret-fixture" \
+  "$@" bash "$START_SCRIPT" --no-launch
 }
 
 # --- test 1: first run succeeds and prints the launch command ---
@@ -84,6 +118,59 @@ if [ -n "$_jsonl" ] && grep -q "MVP1_START_STARTED" "$_jsonl" && grep -q "MVP1_S
   ok "startup emitted MVP1_START_STARTED and MVP1_START_COMPLETED JSONL events"
 else
   fail "expected JSONL start/complete events not found"
+fi
+
+_init_out="$(_run_preflight env FAIL_INIT=true 2>&1)"
+_init_rc=$?
+_init_log="$(printf '%s\n' "$_init_out" | sed -n 's/.*inspect //p' | tail -1)"
+if [ "$_init_rc" -eq 9 ] && [ -s "$_init_log" ] && \
+   [ "$(stat -c '%a' "$_init_log")" = "600" ] && \
+   echo "$_init_out" | grep -q "$_init_log" && \
+   ! grep -q "startup-secret-fixture" "$_init_log" && \
+   ! find "${WORK}/logs" -name '*.raw' -type f -print -quit | grep -q .; then
+  ok "init failure preserves exit and writes an exact redacted log"
+else
+  fail "init failure did not preserve exit/log/redaction contract"
+  echo "$_init_out" | sed 's/^/  # /'
+fi
+
+_preflight_out="$(_run_preflight env FAIL_PREFLIGHT=true 2>&1)"
+_preflight_rc=$?
+_preflight_log="$(find "${WORK}/logs" -name mvp1-preflight.log -type f -print | tail -1)"
+if [ "$_preflight_rc" -eq 7 ] && [ -s "$_preflight_log" ] && \
+   echo "$_preflight_out" | grep -q "$_preflight_log"; then
+  ok "preflight failure preserves exit and writes an exact log"
+else
+  fail "preflight failure did not preserve exit/log contract"
+  echo "$_preflight_out" | sed 's/^/  # /'
+fi
+
+_compose_out="$(_run_preflight env UNHEALTHY=true FAIL_COMPOSE=true 2>&1)"
+_compose_rc=$?
+_compose_log="$(find "${WORK}/logs" -name compose-up.log -type f -print | tail -1)"
+if [ "$_compose_rc" -eq 8 ] && [ -s "$_compose_log" ] && \
+   echo "$_compose_out" | grep -q "$_compose_log" && \
+   grep -q -- "--project-directory ${WORK}/openstock up -d vnstock-service" "$_compose_log"; then
+  ok "compose failure preserves exit and writes an exact log"
+else
+  fail "compose failure did not preserve exit/log contract"
+  echo "$_compose_out" | sed 's/^/  # /'
+fi
+
+_isolated_start="${WORK}/isolated-start"
+cp "$START_SCRIPT" "$_isolated_start"
+chmod +x "$_isolated_start"
+rm -f "${FAKE_BIN}/openstock-verify"
+_missing_out="$(PATH="${FAKE_BIN}:/bin" \
+  VNALPHA_LOG_ROOT="${WORK}/logs" \
+  OPENSTOCK_WAREHOUSE_DIR="${WORK}/warehouse" \
+  VNALPHA_KNOWLEDGE_ROOT="${WORK}/knowledge" \
+  bash "$_isolated_start" --no-launch 2>&1)"
+_missing_rc=$?
+if [ "$_missing_rc" -ne 0 ] && echo "$_missing_out" | grep -q "openstock-verify"; then
+  ok "missing verifier blocks startup with remediation"
+else
+  fail "missing verifier did not block startup"
 fi
 
 echo ""

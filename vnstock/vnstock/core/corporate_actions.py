@@ -34,6 +34,16 @@ CORPORATE_ACTION_COLUMNS = [
     "source_payload_json",
     "quality_status",
 ]
+_CORPORATE_ACTION_STRING_COLUMNS = {
+    "provider_event_id",
+    "symbol",
+    "action_type",
+    "provider",
+    "source_reference",
+    "source_version",
+    "content_hash",
+    "source_payload_json",
+}
 
 
 class CorporateActionType(StrEnum):
@@ -51,7 +61,16 @@ class CorporateActionType(StrEnum):
 
 
 def empty_corporate_actions(provider: str) -> pd.DataFrame:
-    frame = pd.DataFrame(columns=CORPORATE_ACTION_COLUMNS)
+    frame = pd.DataFrame(
+        {
+            column: pd.Series(
+                dtype="string"
+                if column in _CORPORATE_ACTION_STRING_COLUMNS
+                else "object"
+            )
+            for column in CORPORATE_ACTION_COLUMNS
+        }
+    )
     frame.attrs.update(
         {
             "provider": provider.upper(),

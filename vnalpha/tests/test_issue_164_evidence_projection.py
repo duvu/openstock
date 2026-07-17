@@ -8,11 +8,17 @@ next-turn retrieval.
 
 from __future__ import annotations
 
-from datetime import date
+import os
+from contextlib import contextmanager
+from dataclasses import replace
+from datetime import date, datetime
+from pathlib import Path
 
 import duckdb
 import pytest
 
+from vnalpha.symbol_memory import projection as projection_module
+from vnalpha.symbol_memory.compaction import SymbolMemoryCompactionService
 from vnalpha.symbol_memory.projection import project_analysis_evidence
 from vnalpha.symbol_memory.repository import SymbolMemoryRepository
 from vnalpha.symbol_memory.retrieval import SymbolMemoryRetrievalService
@@ -40,6 +46,23 @@ def _seed_analysis_artifacts(
     feature_status: str = "AVAILABLE",
 ) -> None:
     conn.execute(
+        "INSERT INTO symbol_master "
+        "(symbol, exchange, security_type, classification_source, "
+        "classification_effective_from, last_seen_source_snapshot_id) "
+        "VALUES (?, 'HOSE', 'EQUITY', 'VCI', ?, 'reference-snapshot') "
+        "ON CONFLICT (symbol) DO NOTHING",
+        [symbol, as_of],
+    )
+    conn.execute(
+        "INSERT INTO canonical_ohlcv "
+        "(symbol, time, interval, close, selected_provider, price_basis, "
+        "quality_status, ingestion_run_id) "
+        "VALUES (?, ?, '1D', 100.0, 'VCI', 'RAW_UNADJUSTED', "
+        "'PASS', 'ingestion-run') "
+        "ON CONFLICT (symbol, time, interval) DO NOTHING",
+        [symbol, as_of],
+    )
+    conn.execute(
         "INSERT INTO candidate_score (symbol, date, score, candidate_class, setup_type) "
         "VALUES (?, ?, ?, 'WATCH_CANDIDATE', 'ACCUMULATION_BASE')",
         [symbol, as_of, score],
@@ -51,7 +74,9 @@ def _seed_analysis_artifacts(
     )
 
 
-def _tool_outputs(symbol: str = "FPT", as_of: str = "2026-07-13") -> dict:
+def _tool_outputs(
+    symbol: str = "FPT", as_of: str | date | datetime = "2026-07-13"
+) -> dict:
     return {
         "step-1": {
             "data": {
@@ -71,15 +96,145 @@ def test_first_projection_creates_deterministic_claims(conn) -> None:
     assert result.symbol == "FPT"
     assert result.as_of_date == "2026-07-13"
     predicates = {claim.predicate for claim in result.projected}
-    assert predicates == {"composite_score", "feature_data_quality"}
+    assert predicates == {
+        "security_identity",
+        "canonical_ohlcv_basis",
+        "composite_score",
+        "feature_data_quality",
+    }
     assert all(claim.created for claim in result.projected)
     assert not result.warnings
 
     claims = SymbolMemoryRepository(conn).list_claims("FPT")
     assert {claim.predicate for claim in claims} == {
+        "security_identity",
+        "canonical_ohlcv_basis",
         "composite_score",
         "feature_data_quality",
     }
+
+
+def test_multiple_evidences_compact_once(conn, monkeypatch) -> None:
+    _seed_analysis_artifacts(conn)
+    calls = 0
+    original = SymbolMemoryCompactionService.mutate_and_compact
+
+    def _counted(self, symbol, mutation, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(self, symbol, mutation, **kwargs)
+
+    monkeypatch.setattr(
+        SymbolMemoryCompactionService,
+        "mutate_and_compact",
+        _counted,
+    )
+
+    result = project_analysis_evidence(
+        conn,
+        _tool_outputs(),
+        correlation_id="turn-001",
+    )
+
+    assert len(result.projected) == 4
+    assert calls == 1
+
+
+def test_datetime_as_of_is_normalized_to_calendar_date(conn) -> None:
+    _seed_analysis_artifacts(conn)
+
+    result = project_analysis_evidence(
+        conn,
+        _tool_outputs(as_of=datetime(2026, 7, 13, 15, 30)),
+        correlation_id="turn-001",
+    )
+
+    assert result.as_of_date == "2026-07-13"
+    assert len(result.projected) == 4
+
+
+def test_invalid_evidence_rolls_back_entire_projection(conn, monkeypatch) -> None:
+    _seed_analysis_artifacts(conn)
+    original = projection_module._build_evidences
+
+    def _with_invalid(*args, **kwargs):
+        evidences = original(*args, **kwargs)
+        return [
+            evidences[0],
+            replace(evidences[1], source_ref="assistant:untrusted-prose"),
+        ]
+
+    monkeypatch.setattr(projection_module, "_build_evidences", _with_invalid)
+
+    result = project_analysis_evidence(
+        conn,
+        _tool_outputs(),
+        correlation_id="turn-001",
+    )
+
+    assert result.projected == ()
+    assert result.warnings
+    assert SymbolMemoryRepository(conn).list_claims("FPT") == []
+
+
+def test_card_write_failure_rolls_back_claims(conn, monkeypatch) -> None:
+    _seed_analysis_artifacts(conn)
+
+    def _fail_write(*args, **kwargs):
+        raise OSError("simulated card write failure")
+
+    monkeypatch.setattr(
+        "vnalpha.symbol_memory.compaction.write_symbol_card",
+        _fail_write,
+    )
+
+    result = project_analysis_evidence(
+        conn,
+        _tool_outputs(),
+        correlation_id="turn-001",
+    )
+
+    assert result.projected == ()
+    assert result.warnings
+    repository = SymbolMemoryRepository(conn)
+    assert repository.list_claims("FPT") == []
+    assert repository.get_document("FPT") is None
+
+
+def test_transaction_commit_failure_restores_previous_card(conn, monkeypatch) -> None:
+    _seed_analysis_artifacts(conn)
+    original_transaction = SymbolMemoryRepository.transaction
+
+    @contextmanager
+    def fail_outer_commit(repository):
+        if repository._transaction_depth != 0:
+            with original_transaction(repository):
+                yield
+            return
+        repository.connection.execute("BEGIN TRANSACTION")
+        repository._transaction_depth += 1
+        try:
+            yield
+        finally:
+            repository._transaction_depth -= 1
+            repository.connection.execute("ROLLBACK")
+        raise duckdb.TransactionException("simulated commit failure")
+
+    monkeypatch.setattr(SymbolMemoryRepository, "transaction", fail_outer_commit)
+
+    result = project_analysis_evidence(
+        conn,
+        _tool_outputs(),
+        correlation_id="turn-commit-failure",
+    )
+
+    assert result.projected == ()
+    assert result.warnings
+    repository = SymbolMemoryRepository(conn)
+    assert repository.list_claims("FPT") == []
+    assert repository.get_document("FPT") is None
+    knowledge_root = Path(os.environ["VNALPHA_KNOWLEDGE_ROOT"])
+    assert not (knowledge_root / "symbols" / "FPT.md").exists()
 
 
 def test_repeat_projection_is_idempotent(conn) -> None:
@@ -91,8 +246,7 @@ def test_repeat_projection_is_idempotent(conn) -> None:
     assert all(claim.created for claim in first.projected)
     assert all(not claim.created for claim in second.projected)
     events = SymbolMemoryRepository(conn).list_events("FPT")
-    # Two evidence types, one event each, not duplicated on the repeat turn.
-    assert len(events) == 2
+    assert len(events) == 4
 
 
 def test_newer_evidence_supersedes_prior_claim(conn) -> None:

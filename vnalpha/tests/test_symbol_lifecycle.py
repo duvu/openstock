@@ -36,10 +36,21 @@ def conn() -> duckdb.DuckDBPyConnection:
 class SnapshotClient:
     """A deterministic symbol-source client for lifecycle tests."""
 
-    def __init__(self, records: list[dict[str, object]]) -> None:
+    def __init__(
+        self,
+        records: list[dict[str, object]],
+        *,
+        provider: str = "VCI",
+        dataset: str = "reference.symbols",
+        quality_status: str | None = "PASS",
+    ) -> None:
         self._response = SimpleNamespace(
             data=records,
-            meta=SimpleNamespace(provider="fixture-provider"),
+            meta=SimpleNamespace(
+                provider=provider,
+                dataset=dataset,
+                quality_status=quality_status,
+            ),
         )
 
     def get_symbols(self, *, source: str | None = None) -> SimpleNamespace:
@@ -197,6 +208,102 @@ def test_failed_snapshot_never_deactivates_unseen_symbols(
         LIMIT 1
         """
     ).fetchone() == ("FAILED", 0)
+
+
+@pytest.mark.parametrize(
+    ("provider", "dataset", "quality_status"),
+    [
+        ("KBS", "reference.symbols", "PASS"),
+        ("VCI", "equity.ohlcv", "PASS"),
+        ("VCI", "reference.symbols", "FAIL"),
+        ("VCI", "reference.symbols", None),
+    ],
+)
+def test_invalid_authoritative_envelope_never_deactivates_existing_symbols(
+    conn: duckdb.DuckDBPyConnection,
+    provider: str,
+    dataset: str,
+    quality_status: str | None,
+) -> None:
+    sync_symbols(
+        conn,
+        source="VCI",
+        client=SnapshotClient([_common_equity("FPT"), _common_equity("VNM")]),
+        authoritative_snapshot=True,
+    )
+
+    with pytest.raises(ValueError):
+        sync_symbols(
+            conn,
+            source="VCI",
+            client=SnapshotClient(
+                [_common_equity("FPT")],
+                provider=provider,
+                dataset=dataset,
+                quality_status=quality_status,
+            ),
+            authoritative_snapshot=True,
+        )
+
+    assert get_symbols_active(conn) == ["FPT", "VNM"]
+    assert conn.execute(
+        "SELECT snapshot_status, deactivated_count "
+        "FROM symbol_source_snapshot ORDER BY started_at DESC LIMIT 1"
+    ).fetchone() == ("FAILED", 0)
+
+
+def test_empty_authoritative_snapshot_never_deactivates_existing_symbols(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    sync_symbols(
+        conn,
+        source="VCI",
+        client=SnapshotClient([_common_equity("FPT"), _common_equity("VNM")]),
+        authoritative_snapshot=True,
+    )
+
+    with pytest.raises(ValueError, match="empty"):
+        sync_symbols(
+            conn,
+            source="VCI",
+            client=SnapshotClient([]),
+            authoritative_snapshot=True,
+        )
+
+    assert get_symbols_active(conn) == ["FPT", "VNM"]
+    assert conn.execute(
+        "SELECT snapshot_status, deactivated_count "
+        "FROM symbol_source_snapshot ORDER BY started_at DESC LIMIT 1"
+    ).fetchone() == ("FAILED", 0)
+
+
+def test_terminal_update_failure_rolls_back_symbol_projection(
+    conn: duckdb.DuckDBPyConnection, monkeypatch
+) -> None:
+    from vnalpha.ingestion import sync_symbols as module
+
+    original_finish = module.finish_ingestion_run
+
+    def fail_success(connection, run_id, status, **kwargs):
+        if status != "FAILED":
+            raise RuntimeError("terminal update failed")
+        return original_finish(connection, run_id, status, **kwargs)
+
+    monkeypatch.setattr(module, "finish_ingestion_run", fail_success)
+
+    with pytest.raises(RuntimeError, match="terminal update failed"):
+        sync_symbols(
+            conn,
+            client=SnapshotClient([_common_equity("FPT")]),
+        )
+
+    assert conn.execute(
+        "SELECT COUNT(*) FROM symbol_master WHERE symbol = 'FPT'"
+    ).fetchone() == (0,)
+    assert conn.execute(
+        "SELECT snapshot_status FROM symbol_source_snapshot"
+    ).fetchone() == ("FAILED",)
+    assert conn.execute("SELECT status FROM ingestion_run").fetchone() == ("FAILED",)
 
 
 def test_taxonomy_changes_are_available_as_of_their_snapshot_dates(

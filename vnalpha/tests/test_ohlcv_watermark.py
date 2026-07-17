@@ -29,8 +29,9 @@ def test_watermark_uses_latest_complete_raw_and_canonical_with_session_overlap(
     # Given
     conn.execute(
         """
-        INSERT INTO canonical_ohlcv (symbol, time, interval, close)
-        VALUES ('FPT', '2026-09-01', '1D', 100.0)
+        INSERT INTO canonical_ohlcv
+            (symbol, time, interval, close, quality_status)
+        VALUES ('FPT', '2026-09-01', '1D', 100.0, 'pass')
         """
     )
     conn.execute(
@@ -54,6 +55,106 @@ def test_watermark_uses_latest_complete_raw_and_canonical_with_session_overlap(
     assert watermark.last_canonical_date == date(2026, 9, 1)
     assert watermark.last_raw_date == date(2026, 9, 2)
     assert watermark.next_request_start == date(2026, 9, 1)
+
+
+@pytest.mark.parametrize("quality_status", [None, "warn", "skipped", "unknown"])
+def test_watermark_ignores_unverified_raw_rows(conn, quality_status) -> None:
+    conn.execute(
+        """
+        INSERT INTO market_ohlcv_raw
+            (ingestion_run_id, symbol, time, interval, close, quality_status)
+        VALUES ('run-unverified', 'FPT', '2026-09-02', '1D', 101.0, ?)
+        """,
+        [quality_status],
+    )
+    request = OHLCVWatermarkRequest(
+        symbol="FPT",
+        interval="1D",
+        requested_start=date(2026, 8, 1),
+    )
+
+    watermark = OHLCVWatermarkService().resolve(conn, request)
+
+    assert watermark.last_raw_date is None
+    assert watermark.next_request_start == date(2026, 8, 1)
+
+
+@pytest.mark.parametrize("quality_status", [None, "warn", "skipped", "unknown"])
+def test_watermark_ignores_unverified_legacy_canonical_rows(
+    conn, quality_status
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO canonical_ohlcv
+            (symbol, time, interval, close, quality_status)
+        VALUES ('FPT', '2026-09-02', '1D', 101.0, ?)
+        """,
+        [quality_status],
+    )
+    request = OHLCVWatermarkRequest(
+        symbol="FPT",
+        interval="1D",
+        requested_start=date(2026, 8, 1),
+    )
+
+    watermark = OHLCVWatermarkService().resolve(conn, request)
+
+    assert watermark.last_canonical_date is None
+    assert watermark.next_request_start == date(2026, 8, 1)
+
+
+@pytest.mark.parametrize(
+    ("price_basis", "expected_date"),
+    [
+        (None, None),
+        ("ADJUSTED", None),
+        ("RAW_UNADJUSTED", date(2026, 9, 2)),
+    ],
+)
+def test_fiinquantx_raw_watermark_requires_raw_unadjusted_basis(
+    conn, price_basis, expected_date
+) -> None:
+    conn.execute(
+        "INSERT INTO market_ohlcv_raw "
+        "(ingestion_run_id, symbol, time, interval, close, provider, "
+        "price_basis, quality_status) VALUES "
+        "('run-fq', 'FPT', '2026-09-02', '1D', 101.0, 'FIINQUANTX', ?, 'PASS')",
+        [price_basis],
+    )
+    request = OHLCVWatermarkRequest(
+        symbol="FPT", interval="1D", requested_start=date(2026, 8, 1)
+    )
+
+    watermark = OHLCVWatermarkService().resolve(conn, request)
+
+    assert watermark.last_raw_date == expected_date
+
+
+@pytest.mark.parametrize(
+    ("price_basis", "expected_date"),
+    [
+        (None, None),
+        ("ADJUSTED", None),
+        ("RAW_UNADJUSTED", date(2026, 9, 2)),
+    ],
+)
+def test_fiinquantx_canonical_watermark_requires_raw_unadjusted_basis(
+    conn, price_basis, expected_date
+) -> None:
+    conn.execute(
+        "INSERT INTO canonical_ohlcv "
+        "(symbol, time, interval, close, selected_provider, price_basis, "
+        "quality_status) VALUES "
+        "('FPT', '2026-09-02', '1D', 101.0, 'FIINQUANTX', ?, 'PASS')",
+        [price_basis],
+    )
+    request = OHLCVWatermarkRequest(
+        symbol="FPT", interval="1D", requested_start=date(2026, 8, 1)
+    )
+
+    watermark = OHLCVWatermarkService().resolve(conn, request)
+
+    assert watermark.last_canonical_date == expected_date
 
 
 def test_gap_observations_upsert_current_state_with_audit_correlation(conn) -> None:

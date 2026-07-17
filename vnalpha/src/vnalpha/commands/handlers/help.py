@@ -29,6 +29,19 @@ def handle_help(parsed: ParsedCommand, registry=None, **kwargs) -> CommandResult
         )
 
     rows = [[f"/{meta.name}", meta.description, meta.usage] for meta in commands]
+    if kwargs.get("surface") == "tui" and not any(row[0] == "/copy" for row in rows):
+        from vnalpha.tui.command_catalog import find_command
+
+        copy_command = find_command("copy")
+        if copy_command is not None:
+            rows.append(
+                [
+                    f"/{copy_command.name}",
+                    copy_command.description,
+                    copy_command.usage,
+                ]
+            )
+            rows.sort(key=lambda row: row[0])
     table = ResultTable(
         title="Available Commands",
         columns=[
@@ -41,6 +54,9 @@ def handle_help(parsed: ParsedCommand, registry=None, **kwargs) -> CommandResult
     return CommandResult(
         status="SUCCESS",
         title="/help — Available commands",
-        summary=f"{len(commands)} commands registered.",
+        summary=(
+            f"{len(rows)} commands available. "
+            "Keys: PgUp/PgDn scroll, Home/End jump, F12 logs, Ctrl+Y copy result."
+        ),
         tables=[table],
     )

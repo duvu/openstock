@@ -316,6 +316,18 @@ def disable_logging(monkeypatch):
     monkeypatch.setattr(logging, "getLogger", lambda name="": null_logger)
 
 
+@pytest.fixture(autouse=True)
+def reset_vendor_quota_for_offline_tests(request: pytest.FixtureRequest) -> None:
+    if request.node.get_closest_marker("live") is not None:
+        return
+    try:
+        from vnai.beam.quota import guardian
+    except ImportError:
+        return
+    guardian._initialize()
+    request.addfinalizer(guardian._initialize)
+
+
 @pytest.fixture
 def temp_cache_dir(tmp_path):
     """Provide temporary directory for cache during tests."""

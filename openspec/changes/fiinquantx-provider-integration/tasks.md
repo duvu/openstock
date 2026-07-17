@@ -81,6 +81,16 @@
 - [ ] 5.11 Compare bounded adjusted and unadjusted OHLCV against approved KBS/VCI fixtures; emit typed divergence diagnostics. [evidence: comparison tests]
 - [ ] 5.12 Preserve existing public calls and current provider behavior when FiinQuantX is unavailable. [evidence: backward-compatibility suite]
 
+## 5A. Current Gate A remediation evidence
+
+- [x] 5A.1 Enforce raw-unadjusted equity/index OHLCV requests with `adjusted=False`, `lasted=False`, and explicit `RAW_UNADJUSTED` lineage through provider response, raw warehouse, canonical selection, and research disclosure; fail closed on missing/adjusted FiinQuantX basis. [evidence: exact SDK-call, persistence, canonical-validation, and grounded-answer tests]
+- [x] 5A.2 Persist index and sector membership as atomic current observations with separate snapshot/member tables, valid-empty status, correlation, and safe lineage. [evidence: `vnalpha/tests/test_fiinquantx_membership_ingestion.py`]
+- [x] 5A.3 Expose typed vnalpha client and CLI paths for both membership datasets, with the persistence approval gate applied before ingestion-run creation. [evidence: client-route, source-policy, and CLI tests]
+- [x] 5A.4 Document the non-FiinQuantX complete-universe/company-reference bootstrap and prohibit synthesizing a universe from membership lists. [evidence: `vnstock/docs/providers/FIINQUANTX.md`]
+- [x] 5A.5 Add installed-host readiness checks for both approval booleans, a separately approved non-FiinQuantX reference source, and all four Gate A service capabilities. [evidence: `packaging/tests/test_verify_mvp1_warehouse.sh`]
+- [ ] 5A.6 Re-run bounded licensed equity/index OHLCV and membership probes against the exact final commit and SDK version, including timestamp/timezone/price/volume/value/incomplete/valid-empty semantics. [evidence: current licensed environment unavailable]
+- [ ] 5A.7 Record reviewed commercial permission for runtime and DuckDB persistence, then run a sanitized fresh-host service-to-vnalpha smoke. [evidence: commercial decision and licensed host unavailable]
+
 ## 6. FQ-3 flow, ownership, market structure and valuation
 
 - [ ] 6.1 Implement `foreign_flow.daily` from verified `get_foreign()` matched/deal/total buy/sell/net value and volume fields. [evidence: contract tests]

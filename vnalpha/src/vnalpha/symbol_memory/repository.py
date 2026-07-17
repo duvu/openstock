@@ -40,7 +40,14 @@ class SymbolMemoryRepository:
         else:
             self._transaction_depth -= 1
             if outermost:
-                self.connection.execute("COMMIT")
+                try:
+                    self.connection.execute("COMMIT")
+                except BaseException:
+                    try:
+                        self.connection.execute("ROLLBACK")
+                    except duckdb.Error:
+                        pass
+                    raise
 
     def append_event(self, event: MemoryEvent) -> bool:
         symbol = normalize_symbol(event.symbol)
@@ -161,6 +168,50 @@ class SymbolMemoryRepository:
                 and claim_type == "data_quality_caveat"
                 and predicate == "feature_data_quality"
                 and value == {"status": row[0]}
+            )
+        if source_kind in {"symbol_identity", "canonical_ohlcv"}:
+            from vnalpha.symbol_memory.context_snapshots import (
+                canonical_ohlcv_basis_value,
+                load_canonical_ohlcv_basis,
+                load_symbol_identity,
+                symbol_identity_value,
+            )
+
+            parts = identifier.split(":")
+            if len(parts) != 2 or normalize_symbol(parts[0]) != canonical_symbol:
+                return False
+            try:
+                reference_date = date.fromisoformat(parts[1])
+            except ValueError:
+                return False
+            if reference_date != as_of_date:
+                return False
+            if source_kind == "symbol_identity":
+                snapshot = load_symbol_identity(
+                    self.connection,
+                    canonical_symbol,
+                    reference_date,
+                )
+                return (
+                    snapshot is not None
+                    and claim_type == "symbol_identity"
+                    and predicate == "security_identity"
+                    and value == symbol_identity_value(snapshot)
+                )
+            requested_as_of = value.get("requested_as_of_date")
+            if not isinstance(requested_as_of, str):
+                return False
+            basis = load_canonical_ohlcv_basis(
+                self.connection,
+                canonical_symbol,
+                requested_as_of,
+                reference_date,
+            )
+            return (
+                basis is not None
+                and claim_type == "data_readiness"
+                and predicate == "canonical_ohlcv_basis"
+                and value == canonical_ohlcv_basis_value(basis)
             )
         references = {
             "research_market_regime_snapshot": (

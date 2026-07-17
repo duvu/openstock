@@ -1,10 +1,9 @@
 # Registry for non-archived OpenSpec lifecycle and evidence.
-# GitHub issue #90 owns roadmap priority and execution order.
 reviewed_at: 2026-07-16
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
-  roadmap_source: https://github.com/duvu/openstock/issues/90
+  roadmap_source: https://github.com/duvu/openstock/issues/162
   priorities_owned_by: github_issues
   dependencies_owned_by: github_issues
   require_github_issue_for_scheduled_work: true
@@ -13,9 +12,9 @@ policy:
 changes:
 
   mvp1-golden-acceptance:
-    status: in_progress
-    github_issues: [167]
-    roadmap_state: scheduled
+    status: ready
+    github_issues: [162]
+    roadmap_state: review_required
     summary: >-
       One automated golden conversation proving the MVP1 chat vertical slice end
       to end on the real code path from an empty warehouse: provisioning, real
@@ -23,16 +22,14 @@ changes:
       audit and symbol-knowledge projection; plus fresh reuse, explicit refresh,
       fail-closed service failure and slash/NL contract parity.
     evidence: >-
-      Implementation on branch agent/issue-167-e2e-acceptance. Golden test in
-      tests/test_issue_167_golden_conversation.py passes locally (real builders
-      produce FPT score ~0.76; fresh reuse makes no new fetch; failure fails
-      closed). Required-CI on the final release SHA and one sanitized
-      installed-host smoke run are pending the PR.
+      PR #172 merged issue #167 with required CI. The golden test covers real
+      builders, fresh reuse, explicit refresh and fail-closed provisioning.
+      Exact-candidate installed-host acceptance remains owned by #181/#162.
 
   mvp1-startup-preflight:
     status: ready
-    github_issues: [166]
-    roadmap_state: scheduled
+    github_issues: [162]
+    roadmap_state: review_required
     summary: >-
       Add one idempotent `openstock-mvp1-start` command and a read-only
       `openstock-verify --mvp1` installed-host preflight for the MVP1 chat
@@ -40,16 +37,15 @@ changes:
       disk, knowledge path, LLM route (#165), backup/restore availability (#150)
       and release metadata, with PASS/WARN/FAIL and non-zero exit on blockers.
     evidence: >-
-      Implementation on branch agent/issue-166-one-command-startup. Packaging
-      tests in packaging/tests/test_verify_helpers.sh and
-      packaging/test/test_mvp1_start.sh pass locally (--mvp1 --ci exits 0 with
-      no [FAIL]; idempotent startup against fake binaries). An installed-host
-      smoke run and final CI on the merge SHA are pending the PR.
+      PR #171 merged issue #166 with required CI. Current hardening adds secure
+      command logs, exact release metadata, configured Compose project
+      resolution and fail-closed warehouse/FQ readiness. Exact-candidate
+      installed-host acceptance remains owned by #181/#162.
 
   assistant-llm-preflight:
     status: ready
-    github_issues: [165]
-    roadmap_state: scheduled
+    github_issues: [162]
+    roadmap_state: review_required
     summary: >-
       Add a bounded, typed, redaction-safe assistant LLM startup preflight that
       verifies one MVP1 model route (config, credentials, routing, reachability,
@@ -57,15 +53,15 @@ changes:
       a `vnalpha preflight` CLI, degraded-mode messaging in `ask`, and an
       upgraded openstock-verify assistant check.
     evidence: >-
-      Implementation on branch agent/issue-165-llm-preflight. Focused tests in
-      tests/test_issue_165_llm_preflight.py use a fake gateway (no live network)
-      and cover every typed code, redaction safety and the CLI. Real redacted
-      production smoke evidence and final CI on the merge SHA are pending the PR.
+      PR #170 merged issue #165 with required CI. Current hardening requires
+      HTTPS outside loopback, strict non-downgraded schema output and
+      metadata-only error logs. Real deployed-route evidence remains owned by
+      #180/#162.
 
   chat-data-provisioning-contract:
     status: ready
-    github_issues: [163]
-    roadmap_state: scheduled
+    github_issues: [162, 175]
+    roadmap_state: review_required
     summary: >-
       Make bounded current-symbol data provisioning one explicit, idempotent,
       correlation-traced application operation shared by natural-language chat
@@ -75,11 +71,14 @@ changes:
       Merged to main via PR #168 with all required CI checks green. Focused
       tests in tests/test_issue_163_chat_provisioning.py plus updated planner,
       executor, groundedness, deep-readiness and evals-runtime regressions.
+      Follow-on issue 175 owns fail-closed parsing of legacy or malformed
+      readiness remediation; the current implementation bounds both item count
+      and rendered character volume.
 
   symbol-knowledge-projection:
-    status: in_progress
-    github_issues: [164]
-    roadmap_state: scheduled
+    status: ready
+    github_issues: [162]
+    roadmap_state: review_required
     summary: >-
       After a successful chat deep-analysis, project the turn's validated
       deterministic evidence (candidate score, feature-quality snapshot,
@@ -88,11 +87,10 @@ changes:
       ingestion/lifecycle/compaction and source-grounding guards. Never promote
       raw chat text or LLM prose.
     evidence: >-
-      Implementation on branch agent/issue-164-evidence-projection. Focused
-      tests in tests/test_issue_164_evidence_projection.py cover first
-      projection, idempotency, supersession, rejected prose, failed/partial
-      analysis and next-turn retrieval. Final required-CI evidence on the merge
-      SHA is pending the PR.
+      PR #169 merged issue #164 with required CI. Current hardening makes
+      multi-claim projection atomic and adds fail-closed point-in-time identity
+      plus canonical raw-basis evidence. Final integrated acceptance remains
+      owned by #162.
 
   corporate-action-ingestion:
     status: ready
@@ -156,7 +154,7 @@ changes:
       review; archive after merge and roadmap reconciliation.
   fiinquantx-provider-integration:
     status: partial
-    github_issues: [105, 106, 136]
+    github_issues: [193]
     roadmap_state: scheduled
     summary: >-
       Integrate only licensed, verified synchronous FiinQuantX market and
@@ -169,24 +167,29 @@ changes:
       output guards and bounded licensed smoke tests. Issue #136 hardens the
       runtime and persistence gates so boolean acknowledgements also require
       auditable non-secret approval references; it does not establish commercial
-      permission. Issues #105/#106 remain open for commercial approval, session
-      lifecycle, entitlement/quota, company reference and full acceptance
-      evidence. The provider track is optional and does not block the
-      default-provider roadmap.
+      permission. GitHub issue 193 now owns the remaining closure work. Offline
+      implementation and tests cover explicit raw/unadjusted OHLCV requests,
+      basis-aware raw/canonical persistence and research disclosure, safe
+      provider lineage, atomic membership persistence, CLI integration,
+      installed-host readiness checks and fail-closed approval semantics.
+      Current licensed equity/index/member probes, commercial-permission
+      approval and a fresh-host smoke remain pending and must not be inferred
+      from historical evidence. The provider track is optional and does not
+      block the default-provider roadmap.
 
   tui-terminal-rendering-integrity:
     status: partial
-    github_issues: [60]
+    github_issues: [189, 190, 191, 192]
     roadmap_state: review_required
     summary: >-
       Surface-aware file-backed TUI logging and bounded non-overlapping
       Textual regions.
     evidence: >-
-      PR #67 merged the primary rendering/logging implementation and issue #60
-      is closed, while this change remains non-archived and post-merge review
-      identified logging cleanup/degraded-startup findings. Reconcile accepted
-      evidence and either archive completed scope or create a focused follow-up
-      issue for verified residual defects.
+      PR #67 merged the original issue #60 baseline. Reopened issues #189-#192
+      supersede its TODO-rail and separate-LogScreen assumptions with one
+      full-width transcript, an inline F12 log drawer, semantic results,
+      truthful clipboard transport and compact keyboard navigation. Archival is
+      deferred until #162 closure.
 
   prod-d-closed-loop-repair:
     status: partial

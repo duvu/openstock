@@ -190,6 +190,10 @@ async def test_composer_input_focused_at_launch_shows_slash_suggestions():
         await pilot.pause()
         assert str(panel.render()).splitlines() == ["/help", "/history", "/hypothesis"]
 
+        inp.value = "/co"
+        await pilot.pause()
+        assert "/copy" in str(panel.render()).splitlines()
+
 
 @skip_if_no_textual
 @pytest.mark.asyncio
@@ -290,12 +294,7 @@ def test_composer_input_submission_still_works_when_suggestions_enabled():
 
 
 @skip_if_no_textual
-def test_composer_input_falls_back_to_known_command_names_when_registry_fails(
-    monkeypatch,
-):
-    import sys
-    import types
-
+def test_composer_input_uses_ui_catalog_for_root_suggestions():
     from vnalpha.tui.widgets.composer_input import ComposerInput
 
     class _FakePanel:
@@ -306,25 +305,15 @@ def test_composer_input_falls_back_to_known_command_names_when_registry_fails(
         def update(self, value: str) -> None:
             self.text = value
 
-    fake_setup = types.ModuleType("vnalpha.commands.setup")
-
-    def failing_build_default_registry():
-        raise RuntimeError("registry disabled")
-
-    fake_setup.build_default_registry = failing_build_default_registry
-
     panel = _FakePanel()
+    composer = ComposerInput()
 
-    with monkeypatch.context() as m:
-        m.setitem(sys.modules, "vnalpha.commands.setup", fake_setup)
-        composer = ComposerInput()
-
-    assert composer._command_names == composer._FALLBACK_COMMAND_NAMES
+    assert "copy" in composer._command_names
     assert composer._command_names == sorted(composer._command_names)
 
     composer.query_one = lambda selector, _type=None: panel
     composer._render_suggestions("/")
     assert panel.display is True
     assert panel.text.splitlines() == [
-        f"/{name}" for name in composer._FALLBACK_COMMAND_NAMES[:10]
+        f"/{name}" for name in composer._root_command_suggestions()
     ]

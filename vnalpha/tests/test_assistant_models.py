@@ -266,6 +266,7 @@ def test_llm_gateway_config_defaults(monkeypatch):
 
 
 def test_llm_gateway_config_from_env(monkeypatch):
+    monkeypatch.delenv("VNALPHA_MODEL_DEFAULT", raising=False)
     monkeypatch.setenv("VNALPHA_LLM_MODEL", "gpt-4o")
     monkeypatch.setenv(
         "VNALPHA_LLM_ENDPOINT", "https://custom.endpoint/v1/chat/completions"

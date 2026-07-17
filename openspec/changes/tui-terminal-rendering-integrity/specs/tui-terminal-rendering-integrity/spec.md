@@ -109,7 +109,7 @@ Conversation growth SHALL be handled by the transcript RichLog or equivalent bou
 - **WHEN** conversation output exceeds the transcript region
 - **THEN** the transcript widget provides scrolling
 - **AND** the main application frame does not expand beyond the terminal
-- **AND** transcript content does not render over the composer, footer, TODO rail, or status bar
+- **AND** transcript content does not render over the composer, inline drawer, footer, or status bar
 
 ### Requirement: Composer suggestions SHALL be bounded by terminal height
 
@@ -150,58 +150,42 @@ When the terminal cannot fit all normal chrome and content, the TUI SHALL reduce
 - **AND** the transcript retains its configured minimum usable height where physically possible
 - **AND** essential shortcuts remain discoverable through `/help` or another bounded mechanism
 
-### Requirement: TODO content SHALL remain bounded inside the main body
+### Requirement: The main body SHALL remain one full-width transcript
 
-The TODO rail SHALL have an explicit scrolling or bounded truncation contract.
+The TUI SHALL NOT mount a competing TODO rail beside the primary transcript.
 
-#### Scenario: A workspace has many TODO items
+#### Scenario: Workspace tasks are available
 
-- **GIVEN** the TODO rail contains at least 50 tasks or warnings
-- **WHEN** the TUI renders the rail
-- **THEN** the rail region remains inside the main-body region
-- **AND** TODO content scrolls, virtualizes, or truncates with an explicit indicator
-- **AND** the rail does not alter composer or footer geometry
+- **WHEN** the workspace contains TODO items or warnings
+- **THEN** they remain available through bounded commands or transcript results
+- **AND** the primary transcript keeps the full main-body width
+- **AND** composer and footer geometry remain unchanged
 
-#### Scenario: TODO visibility is toggled
+### Requirement: The inline log drawer SHALL remain bounded inside the workspace
 
-- **WHEN** the user shows or hides the TODO rail on a supported width
-- **THEN** the output region is recomputed inside main-body
-- **AND** composer focus is preserved
-- **AND** no regions overlap
+F12 SHALL toggle a bounded drawer below the transcript without navigating to a separate screen.
 
-### Requirement: LogScreen SHALL fully own the active Textual screen
-
-The F12 LogScreen SHALL render as an opaque, bounded screen and SHALL isolate input from the underlying application.
-
-#### Scenario: LogScreen opens
+#### Scenario: Inline log drawer opens
 
 - **WHEN** the user invokes the log-viewer action
-- **THEN** LogScreen becomes the active screen
-- **AND** it covers the underlying application with an opaque background
-- **AND** its toolbar and log display remain inside the active screen region
-- **AND** the log display owns scrolling for log records
+- **THEN** the mounted drawer becomes visible inside the main body
+- **AND** transcript, drawer, composer and footer regions do not overlap
+- **AND** log records are bounded, redacted and keyboard-scrollable
 
-#### Scenario: Printable keys are entered while LogScreen is active
+#### Scenario: Inline log drawer closes
 
-- **GIVEN** LogScreen is active
-- **WHEN** the user enters printable keys or filter-navigation keys
-- **THEN** the underlying composer value is unchanged
-- **AND** input is handled by LogScreen or ignored within LogScreen
-
-#### Scenario: LogScreen closes
-
-- **WHEN** the user presses `Esc`
-- **THEN** LogScreen is popped
-- **AND** the previous screen is restored
+- **WHEN** the user presses F12 or Escape while the drawer is visible
+- **THEN** the drawer is hidden without popping the workspace screen
+- **AND** composer focus and transcript scroll state are restored
 - **AND** the previous composer value and application state are preserved
 
-#### Scenario: LogScreen opens on a narrow terminal
+#### Scenario: Inline drawer opens on a narrow terminal
 
 - **GIVEN** a narrow or short supported viewport
-- **WHEN** LogScreen opens
-- **THEN** level controls use a bounded responsive representation
-- **AND** the toolbar does not overlap the log display
-- **AND** the screen remains closable by keyboard
+- **WHEN** the inline drawer opens
+- **THEN** filtered records use a bounded responsive representation
+- **AND** the drawer does not overlap transcript, composer, or footer
+- **AND** the drawer remains closable by keyboard without screen navigation
 
 ### Requirement: Geometry SHALL be validated using actual Textual regions
 
@@ -213,11 +197,11 @@ The regression suite SHALL inspect runtime widget regions rather than relying on
 - **THEN** it validates at least `80x20`, `100x24`, `120x30`, and `160x50`
 - **AND** each viewport validates the default workspace
 - **AND** each relevant viewport validates suggestions open
-- **AND** each relevant viewport validates long transcript and TODO content
+- **AND** each relevant viewport validates long transcript and TODO-command content
 
 #### Scenario: Region intersection is detected
 
-- **WHEN** any output, composer, footer, TODO, toolbar, or log-display region violates its containment invariant
+- **WHEN** any transcript, drawer, composer, footer, or log-display region violates its containment invariant
 - **THEN** the geometry test fails with the involved region coordinates
 
 ### Requirement: Terminal logging integrity SHALL be regression tested

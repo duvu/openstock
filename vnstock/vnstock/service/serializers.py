@@ -30,6 +30,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from vnstock.core.auth.redaction import is_sensitive_key, redact
+
 if TYPE_CHECKING:
     from vnstock.core.result import DataResult
 
@@ -63,15 +65,17 @@ def _redact(obj: Any, _depth: int = 0) -> Any:
         A copy of *obj* with credential keys removed.
     """
     if _depth > 10:
-        return obj
+        return "[REDACTED]"
     if isinstance(obj, dict):
         return {
             k: _redact(v, _depth + 1)
             for k, v in obj.items()
-            if k.lower() not in _REDACT_KEYS
+            if k.lower() not in _REDACT_KEYS and not is_sensitive_key(k)
         }
-    if isinstance(obj, list):
+    if isinstance(obj, (list, tuple)):
         return [_redact(item, _depth + 1) for item in obj]
+    if isinstance(obj, str):
+        return redact(obj)
     return obj
 
 
@@ -151,7 +155,7 @@ def serialize_data_result(
     diag_out: dict[str, Any] = {
         "routing": safe_diag.get("routing", {}),
         "provider_diagnostics": safe_diag.get("provider_diagnostics", {}),
-        "quality": result.quality_report or {},
+        "quality": _redact(result.quality_report or {}),
         "warnings": safe_diag.get("warnings", []),
     }
     # Pass through any extra keys that aren't already mapped

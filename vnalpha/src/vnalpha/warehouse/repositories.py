@@ -166,18 +166,20 @@ def insert_raw_ohlcv(
     symbol: str,
     records: list[dict[str, Any]],
     provider: str,
+    price_basis: str = "RAW_UNADJUSTED",
     quality_status: Optional[str] = None,
     fetched_at: Optional[str] = None,
 ) -> int:
     """Bulk insert raw OHLCV records. Returns inserted count."""
     inserted = 0
     for r in records:
-        conn.execute(
+        stored = conn.execute(
             """
             INSERT OR IGNORE INTO market_ohlcv_raw
             (ingestion_run_id, symbol, time, interval, open, high, low, close, volume,
-             provider, quality_status, fetched_at, raw_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             provider, price_basis, quality_status, fetched_at, raw_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING 1
             """,
             [
                 run_id,
@@ -190,12 +192,14 @@ def insert_raw_ohlcv(
                 r.get("close"),
                 r.get("volume"),
                 provider,
+                price_basis,
                 quality_status,
                 fetched_at,
                 json.dumps(r),
             ],
-        )
-        inserted += 1
+        ).fetchone()
+        if stored is not None:
+            inserted += 1
     return inserted
 
 

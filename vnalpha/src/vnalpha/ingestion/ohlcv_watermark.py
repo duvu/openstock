@@ -68,6 +68,11 @@ def _latest_canonical_date(
         SELECT MAX(CAST(time AS DATE))
         FROM canonical_ohlcv
         WHERE symbol = ? AND interval = ?
+          AND LOWER(TRIM(COALESCE(quality_status, ''))) IN ('pass', 'success')
+          AND (
+              UPPER(TRIM(COALESCE(selected_provider, ''))) <> 'FIINQUANTX'
+              OR UPPER(TRIM(COALESCE(price_basis, ''))) = 'RAW_UNADJUSTED'
+          )
         """,
         [request.symbol, request.interval],
     ).fetchone()
@@ -84,7 +89,11 @@ def _latest_complete_raw_date(
         FROM market_ohlcv_raw
         WHERE symbol = ?
           AND interval = ?
-          AND LOWER(TRIM(COALESCE(quality_status, ''))) NOT IN ('error', 'fail', 'failed', 'invalid')
+          AND LOWER(TRIM(COALESCE(quality_status, ''))) IN ('pass', 'success')
+          AND (
+              UPPER(TRIM(COALESCE(provider, ''))) <> 'FIINQUANTX'
+              OR UPPER(TRIM(COALESCE(price_basis, ''))) = 'RAW_UNADJUSTED'
+          )
         """,
         [request.symbol, request.interval],
     ).fetchone()

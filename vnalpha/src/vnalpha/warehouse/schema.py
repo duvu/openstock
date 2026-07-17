@@ -82,6 +82,35 @@ CREATE TABLE IF NOT EXISTS symbol_source_membership (
 )
 """
 
+REFERENCE_MEMBERSHIP_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS reference_membership_snapshot (
+    snapshot_id          VARCHAR PRIMARY KEY,
+    ingestion_run_id     VARCHAR NOT NULL,
+    dataset              VARCHAR NOT NULL,
+    membership_type      VARCHAR NOT NULL,
+    entity_id            VARCHAR NOT NULL,
+    observed_at          TIMESTAMPTZ NOT NULL,
+    provider             VARCHAR NOT NULL,
+    source_query         VARCHAR NOT NULL,
+    member_count         INTEGER NOT NULL,
+    status               VARCHAR NOT NULL,
+    request_id           VARCHAR,
+    fetched_at           TIMESTAMPTZ,
+    snapshot_semantics   VARCHAR NOT NULL,
+    lineage_json         VARCHAR NOT NULL,
+    diagnostics_json     VARCHAR,
+    correlation_id       VARCHAR NOT NULL
+)
+"""
+
+REFERENCE_MEMBERSHIP_MEMBER_DDL = """
+CREATE TABLE IF NOT EXISTS reference_membership_member (
+    snapshot_id          VARCHAR NOT NULL,
+    member_symbol        VARCHAR NOT NULL,
+    PRIMARY KEY (snapshot_id, member_symbol)
+)
+"""
+
 SYMBOL_CLASSIFICATION_HISTORY_DDL = """
 CREATE TABLE IF NOT EXISTS symbol_classification_history (
     symbol              VARCHAR NOT NULL,
@@ -116,6 +145,7 @@ CREATE TABLE IF NOT EXISTS market_ohlcv_raw (
     close              DOUBLE,
     volume             DOUBLE,
     provider           VARCHAR,
+    price_basis        VARCHAR DEFAULT 'RAW_UNADJUSTED',
     quality_status     VARCHAR,
     quality_report_json VARCHAR,
     diagnostics_json   VARCHAR,
@@ -136,6 +166,7 @@ CREATE TABLE IF NOT EXISTS canonical_ohlcv (
     close                   DOUBLE,
     volume                  DOUBLE,
     selected_provider       VARCHAR,
+    price_basis             VARCHAR DEFAULT 'RAW_UNADJUSTED',
     quality_status          VARCHAR,
     ingestion_run_id        VARCHAR,
     source_service_run_id   VARCHAR,
@@ -306,6 +337,8 @@ ALL_DDL = [
     SYMBOL_MASTER_DDL,
     SYMBOL_SOURCE_SNAPSHOT_DDL,
     SYMBOL_SOURCE_MEMBERSHIP_DDL,
+    REFERENCE_MEMBERSHIP_SNAPSHOT_DDL,
+    REFERENCE_MEMBERSHIP_MEMBER_DDL,
     SYMBOL_CLASSIFICATION_HISTORY_DDL,
     MARKET_OHLCV_RAW_DDL,
     CANONICAL_OHLCV_DDL,

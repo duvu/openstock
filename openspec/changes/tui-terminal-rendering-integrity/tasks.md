@@ -9,8 +9,8 @@ Do not mark a task complete from PR prose alone. A checked task requires the cod
 ## 0. Governance and baseline
 
 - [x] **0.1 Confirm the change remains a TUI/logging integrity fix.** No research command semantics, assistant policy, or trading-related capability may be added. [evidence: diff review and safety regression tests]
-- [ ] **0.2 Link implementation work to GitHub issue #60.** [evidence: PR body]
-- [ ] **0.3 Record implementation base SHA and current TUI/logging test status in `validation.md`.** [evidence: command rows]
+- [ ] **0.2 Link the superseding implementation work to GitHub issues #189–#192.** [evidence: PR body]
+- [x] **0.3 Record implementation base SHA and current TUI/logging test status in `validation.md`.** [evidence: command rows]
 - [x] **0.4 Capture a reproducible terminal-frame corruption case or, if nondeterministic, a deterministic stderr-bypass test that proves the same root cause.** [evidence: test or sanitized transcript]
 - [x] **0.5 Confirm no overlapping active OpenSpec already owns surface-aware TUI logging and geometry integrity.** `tui-research-workflow-polish` remains responsible for research workflow presentation, not terminal ownership. [evidence: OpenSpec review note]
 
@@ -35,7 +35,7 @@ Do not mark a task complete from PR prose alone. A checked task requires the cod
 - [x] **2.3 Verify the transition `CLI → TUI` removes only the OpenStock console handler.** [evidence: handler transition test]
 - [x] **2.4 Verify the sequence `CLI → TUI → TUI → CLI` is idempotent and restores expected console behavior exactly once.** [evidence: transition matrix test]
 - [x] **2.5 Confirm intentional Typer/Rich command output is not suppressed by diagnostic-handler changes.** [evidence: CLI command-output regression test]
-- [x] **2.6 Confirm F12 LogScreen continues to read the same structured log file.** [evidence: file-tail integration test]
+- [x] **2.6 Confirm the inline F12 drawer continues to read the same structured log file.** [evidence: file-tail integration test]
 
 ## 3. Main workspace containment
 
@@ -57,24 +57,22 @@ Do not mark a task complete from PR prose alone. A checked task requires the cod
 - [x] **4.6 Add a documented compact-footer behavior when terminal height cannot fit the normal footer.** [evidence: responsive test]
 - [x] **4.7 Preserve command filtering, submission, history, and fallback command-list behavior.** [evidence: existing composer tests]
 
-## 5. TODO rail containment
+## 5. Full-width transcript integrity
 
-- [x] **5.1 Give TodoPanel an explicit flexible height and zero minimum height within `main-body`.** [files: `widgets/todo_panel.py`] [evidence: geometry test]
-- [x] **5.2 Add an explicit vertical scrolling or bounded truncation owner for TODO content.** [evidence: long-list interaction test]
-- [x] **5.3 Seed at least 50 TODO/warning items and prove the rail remains inside `main-body`.** [evidence: headless pilot]
-- [x] **5.4 Preserve current responsive visibility and toggle behavior.** [evidence: existing TODO tests]
-- [x] **5.5 Preserve composer focus when the TODO rail is shown, hidden, or resized.** [evidence: focus test]
+- [x] **5.1 Remove the competing TODO rail from `main-body`.** [files: `tui/app.py`] [evidence: mounted-workspace geometry test]
+- [x] **5.2 Keep TODO and warning state available through bounded commands and transcript results.** [evidence: command and routing tests]
+- [x] **5.3 Preserve the full transcript width at every supported viewport.** [evidence: viewport matrix]
+- [x] **5.4 Preserve composer focus and scroll state while task results render.** [evidence: focus and scroll tests]
 
-## 6. F12 LogScreen integrity
+## 6. Inline F12 drawer integrity
 
-- [x] **6.1 Give LogScreen an explicit opaque background and fixed screen ownership.** [files: `tui/screens/log_viewer.py`] [evidence: screen geometry test]
-- [x] **6.2 Introduce a bounded log body with `height: 1fr`, zero minimum height, and contained overflow.** [evidence: short-terminal test]
-- [x] **6.3 Keep the log RichLog as the sole scrolling owner inside LogScreen.** [evidence: scroll test]
-- [x] **6.4 Add explicit `Esc` behavior to close LogScreen.** [evidence: pilot test]
-- [x] **6.5 Prove printable input does not modify the underlying composer while LogScreen is active.** [depends: 6.4] [evidence: input-isolation test]
-- [x] **6.6 Make level filtering usable on narrow terminals through a compact selector, bounded wrapping, or keyboard bindings.** [evidence: `80x20` LogScreen test]
-- [x] **6.7 Bound in-memory log records or document and create a follow-up issue for pagination if deliberately deferred.** [evidence: implementation or linked issue]
-- [x] **6.8 Preserve ANSI/control-sequence sanitization and existing level semantics.** [evidence: existing log-viewer tests]
+- [x] **6.1 Mount one reusable drawer inside `main-body` without screen navigation.** [files: `tui/widgets/debug_log_drawer.py`] [evidence: mounted-workspace test]
+- [x] **6.2 Introduce a bounded log body with zero minimum height and contained overflow.** [evidence: short-terminal test]
+- [x] **6.3 Keep one bounded record model shared by rendered and copied logs.** [evidence: boundedness and copy-parity tests]
+- [x] **6.4 Make F12 and Escape close the visible drawer without popping the workspace.** [evidence: pilot test]
+- [x] **6.5 Preserve composer focus, value, and transcript scroll position across drawer toggles.** [evidence: interaction test]
+- [x] **6.6 Keep filtered records readable and complete on narrow terminals.** [evidence: `80x20` drawer test]
+- [x] **6.7 Preserve ANSI/control-sequence sanitization, credential redaction, and level semantics.** [evidence: log-viewer and clipboard tests]
 
 ## 7. Geometry and terminal-integrity regression suite
 
@@ -82,8 +80,8 @@ Do not mark a task complete from PR prose alone. A checked task requires the cod
 - [x] **7.2 Test default workspace geometry at `80x20`, `100x24`, `120x30`, and `160x50`.** [evidence: parametrized test]
 - [x] **7.3 Repeat geometry tests with slash suggestions open.** [evidence: parametrized test]
 - [x] **7.4 Repeat geometry tests with long wrapped transcript content.** [evidence: parametrized test]
-- [x] **7.5 Repeat geometry tests with long TODO content and both allowed visibility states.** [evidence: parametrized test]
-- [x] **7.6 Push LogScreen and verify its toolbar/body/log regions stay within the active screen.** [evidence: screen-region test]
+- [x] **7.5 Repeat geometry tests with long TODO transcript results.** [evidence: parametrized test]
+- [x] **7.6 Toggle the inline drawer and verify transcript/drawer/composer/footer regions remain contained.** [evidence: region test]
 - [x] **7.7 Emit logging events during a mounted TUI and prove direct stderr remains empty while the file receives the event.** [evidence: integration test]
 - [x] **7.8 Verify no duplicate log file records are produced after repeated surface configuration.** [evidence: exact-count test]
 - [x] **7.9 Verify user results and errors still render through OutputStream/typed messages rather than logger stderr.** [evidence: routing test]
@@ -99,17 +97,17 @@ Do not mark a task complete from PR prose alone. A checked task requires the cod
 
 - [x] **9.1 Run focused Ruff checks for logging, CLI integration, TUI widgets/screens, and changed tests.** [evidence: command row]
 - [x] **9.2 Run focused Ruff format check.** [evidence: command row]
-- [x] **9.3 Run focused TUI, routing, structured-message, TODO, composer, and log-viewer tests.** [evidence: command row]
+- [x] **9.3 Run focused TUI, routing, structured-message, TODO-command, composer, result, clipboard, and inline-drawer tests.** [evidence: command row]
 - [x] **9.4 Run existing CLI/logging tests.** [evidence: command row]
 - [x] **9.5 Run relevant research-only policy and safety regression tests.** [evidence: command row]
 - [x] **9.6 Perform manual QA at one short terminal and one wide terminal under visible log traffic.** [evidence: sanitized notes or recording]
-- [x] **9.7 Confirm F12 displays new file-backed records while direct terminal stderr stays clean.** [evidence: manual and automated evidence]
+- [x] **9.7 Confirm the inline F12 drawer displays new file-backed records while direct terminal stderr stays clean.** [evidence: manual and automated evidence]
 - [ ] **9.8 Record final tested commit SHA and residual risks in `validation.md`.** [evidence: final ledger]
 
 ## 10. Documentation and closure
 
 - [x] **10.1 Document logging surface behavior for operators and developers.** [files: TUI/logging docs]
 - [x] **10.2 Document responsive height behavior and supported minimum viewport.** [files: TUI docs]
-- [ ] **10.3 Link implementation PR and validation evidence from issue #60.** [evidence: issue comment]
+- [ ] **10.3 Link implementation PR and validation evidence from issues #189–#192.** [evidence: issue comments]
 - [x] **10.4 Update `tui-research-workflow-polish` dependency/evidence after rendering integrity is implemented.** [evidence: OpenSpec registry update]
 - [ ] **10.5 Archive this OpenSpec only after runtime code, tests, evidence, and accepted delta synchronization are complete.**
