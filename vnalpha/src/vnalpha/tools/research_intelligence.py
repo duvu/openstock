@@ -383,6 +383,10 @@ def generate_shortlist(
                 "risk_quality_score": risk_quality,
                 "risk_flags": risks,
                 "data_quality_status": row.get("data_quality_status"),
+                "scoring_policy_id": row.get("scoring_policy_id"),
+                "scoring_policy_version": row.get("scoring_policy_version"),
+                "scoring_policy_hash": row.get("scoring_policy_hash"),
+                "scoring_policy_status": row.get("scoring_policy_status"),
                 "why_shortlisted": reasons,
                 "why_not_immediate": (
                     [f"risk flag: {flag}" for flag in risks]
@@ -430,6 +434,22 @@ def generate_shortlist(
             "formula": "0.75*candidate_score + 0.15*sector_score + 0.10*risk_quality - risk_flag_penalty",
             "top": limit,
             "min_score": threshold,
+            "scoring_policy_id": (
+                watchlist_rows[0].get("scoring_policy_id") if watchlist_rows else None
+            ),
+            "scoring_policy_version": (
+                watchlist_rows[0].get("scoring_policy_version")
+                if watchlist_rows
+                else None
+            ),
+            "scoring_policy_hash": (
+                watchlist_rows[0].get("scoring_policy_hash") if watchlist_rows else None
+            ),
+            "scoring_policy_status": (
+                watchlist_rows[0].get("scoring_policy_status")
+                if watchlist_rows
+                else None
+            ),
         },
         "shortlist": selected,
         "considered_count": len(rows),

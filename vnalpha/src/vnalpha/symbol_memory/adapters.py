@@ -31,6 +31,8 @@ class CandidateScoreSnapshot:
     setup_type: str | None
     correlation_id: str
     persisted_at: datetime
+    scoring_policy_id: str = "legacy-unknown"
+    scoring_policy_hash: str = "legacy-unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,17 +47,22 @@ class FeatureSnapshot:
 
 def candidate_score_evidence(snapshot: CandidateScoreSnapshot) -> MemoryEvidence:
     symbol = normalize_symbol(snapshot.symbol)
+    value = {
+        "value": snapshot.score,
+        "unit": "score",
+        "meaning": "persisted composite candidate score",
+        "candidate_class": snapshot.candidate_class,
+        "setup_type": snapshot.setup_type,
+    }
+    if snapshot.scoring_policy_id != "legacy-unknown":
+        value["scoring_policy_id"] = snapshot.scoring_policy_id
+    if snapshot.scoring_policy_hash != "legacy-unknown":
+        value["scoring_policy_hash"] = snapshot.scoring_policy_hash
     return MemoryEvidence(
         symbol=symbol,
         claim_type="candidate_score",
         predicate="composite_score",
-        value={
-            "value": snapshot.score,
-            "unit": "score",
-            "meaning": "persisted composite candidate score",
-            "candidate_class": snapshot.candidate_class,
-            "setup_type": snapshot.setup_type,
-        },
+        value=value,
         source_ref=f"candidate_score:{symbol}:{snapshot.as_of_date.isoformat()}",
         observed_at=snapshot.persisted_at,
         as_of_date=snapshot.as_of_date,

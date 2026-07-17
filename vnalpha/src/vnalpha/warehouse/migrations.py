@@ -90,6 +90,7 @@ def run_migrations(
     _migrate_symbol_classification_history_columns(conn)
     _migrate_feature_snapshot_columns(conn)
     _migrate_ohlcv_price_basis_columns(conn)
+    _migrate_scoring_policy_columns(conn)
     _seed_benchmark_definitions(conn)
     _backfill_legacy_relative_strength(conn)
     _migrate_rejected_symbol_columns(conn)
@@ -384,6 +385,11 @@ def _migrate_candidate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("metric_policy_version", "VARCHAR"),
         ("symbol_bar_count", "INTEGER"),
         ("benchmark_bar_count", "INTEGER"),
+        ("price_basis", "VARCHAR"),
+        ("benchmark_price_basis", "VARCHAR"),
+        ("adjustment_methodology", "VARCHAR"),
+        ("action_overlap_status", "VARCHAR"),
+        ("invalidation_reason", "VARCHAR"),
     ]
     for col, col_type in cols:
         conn.execute(
@@ -412,7 +418,24 @@ def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
 
 
 def _migrate_outcome_evaluation_run_columns(conn: duckdb.DuckDBPyConnection) -> None:
-    """No-op: outcome_evaluation_run was created fresh in Phase 6 DDL."""
+    for column in ("price_basis", "adjustment_methodology"):
+        conn.execute(
+            f"ALTER TABLE outcome_evaluation_run ADD COLUMN IF NOT EXISTS {column} VARCHAR"
+        )
+
+
+def _migrate_scoring_policy_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    columns = (
+        ("scoring_policy_id", "VARCHAR"),
+        ("scoring_policy_version", "VARCHAR"),
+        ("scoring_policy_hash", "VARCHAR"),
+        ("scoring_policy_status", "VARCHAR"),
+    )
+    for table in ("candidate_score", "daily_watchlist"):
+        for column, column_type in columns:
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {column_type}"
+            )
 
 
 def _migrate_chat_message_visibility_columns(conn: duckdb.DuckDBPyConnection) -> None:

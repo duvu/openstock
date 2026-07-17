@@ -11,6 +11,11 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.outcomes.aggregations import aggregate_all
+from vnalpha.outcomes.basis import (
+    ActionOverlapStatus,
+    BasisValidationError,
+    assess_observation_lineage,
+)
 from vnalpha.outcomes.horizons import (
     BENCHMARK_SYMBOL,
     DEFAULT_HORIZONS,
@@ -170,11 +175,41 @@ def _evaluate_single_candidate(
 
     entry_close = select_entry_close(symbol_bars, watchlist_date)
     if entry_close is None:
+        rec.price_basis = "UNKNOWN"
+        rec.benchmark_price_basis = "UNKNOWN"
+        rec.adjustment_methodology = "UNKNOWN"
+        rec.action_overlap_status = "NOT_EVALUATED"
+        rec.invalidation_reason = "NO_SYMBOL_BARS"
         rec.outcome_status = OutcomeStatus.MISSING_DATA.value
         return rec
 
-    rec.entry_close = entry_close
     _, future_bars = split_bars(symbol_bars, watchlist_date)
+    end_date = (
+        future_bars[min(horizon, len(future_bars)) - 1]["time"]
+        if future_bars
+        else watchlist_date
+    )
+    try:
+        symbol_lineage = assess_observation_lineage(
+            conn, symbol, watchlist_date, end_date
+        )
+    except BasisValidationError as exc:
+        rec.price_basis = "UNKNOWN"
+        rec.benchmark_price_basis = "UNKNOWN"
+        rec.adjustment_methodology = "UNKNOWN"
+        rec.action_overlap_status = ActionOverlapStatus.INVALID.value
+        rec.invalidation_reason = str(exc)
+        rec.outcome_status = OutcomeStatus.INVALID.value
+        return rec
+    rec.price_basis = symbol_lineage.price_basis
+    rec.adjustment_methodology = symbol_lineage.adjustment_methodology
+    rec.action_overlap_status = symbol_lineage.action_overlap_status.value
+    rec.invalidation_reason = symbol_lineage.invalidation_reason
+    if symbol_lineage.action_overlap_status is ActionOverlapStatus.INVALID:
+        rec.outcome_status = OutcomeStatus.INVALID.value
+        return rec
+
+    rec.entry_close = entry_close
     rec.bars_available = count_bars_available(future_bars)
 
     if not is_complete(future_bars, horizon):
@@ -189,6 +224,26 @@ def _evaluate_single_candidate(
     bench_exit = select_exit_close(bench_future, horizon)
     rec.benchmark_entry_close = bench_entry
     rec.benchmark_exit_close = bench_exit
+
+    if bench_entry is None or bench_exit is None:
+        rec.benchmark_price_basis = "UNKNOWN"
+    else:
+        try:
+            benchmark_lineage = assess_observation_lineage(
+                conn, BENCHMARK_SYMBOL, watchlist_date, end_date
+            )
+        except BasisValidationError as exc:
+            rec.benchmark_price_basis = "UNKNOWN"
+            rec.action_overlap_status = ActionOverlapStatus.INVALID.value
+            rec.invalidation_reason = str(exc)
+            rec.outcome_status = OutcomeStatus.INVALID.value
+            return rec
+        rec.benchmark_price_basis = benchmark_lineage.price_basis
+        if benchmark_lineage.action_overlap_status is ActionOverlapStatus.INVALID:
+            rec.action_overlap_status = ActionOverlapStatus.INVALID.value
+            rec.invalidation_reason = benchmark_lineage.invalidation_reason
+            rec.outcome_status = OutcomeStatus.INVALID.value
+            return rec
 
     fwd = calc_forward_return(entry_close, exit_close)
     bench = calc_benchmark_return(bench_entry, bench_exit)

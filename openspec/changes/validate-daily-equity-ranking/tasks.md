@@ -5,13 +5,13 @@
 - [x] 1.3 Measure hypotheses from complete `candidate_outcome` observations.
 - [x] 1.4 Persist status and measurement contracts in artifact lineage.
 - [x] 1.5 Cover production-builder, excluded, legacy, CLI, and assistant paths.
-- [ ] 1.6 Run focused, full, packaging, OpenSpec, and exact-SHA CI gates; close #197.
+- [x] 1.6 Run focused, full, packaging, OpenSpec, and exact-SHA CI gates; close #197.
 
 ## 2. Basis and immutable scoring foundations (#198-#199)
 
-- [ ] 2.1 Add price-basis, adjustment, action-overlap, and invalidation lineage.
-- [ ] 2.2 Freeze current score behavior as immutable policy `v1` with a payload hash.
-- [ ] 2.3 Add migrations, replay, legacy, mixed-basis, and silent-overwrite guards.
+- [x] 2.1 Add price-basis, adjustment, action-overlap, and invalidation lineage.
+- [x] 2.2 Freeze current score behavior as immutable policy `v1` with a payload hash.
+- [x] 2.3 Add migrations, replay, legacy, mixed-basis, and silent-overwrite guards.
 - [ ] 2.4 Validate every affected surface and close #198 and #199.
 
 ## 3. Held-out evaluation and assumptions (#200-#201)

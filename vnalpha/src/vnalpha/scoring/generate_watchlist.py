@@ -17,6 +17,7 @@ from typing import List, Optional
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY, resolve_scoring_policy
 from vnalpha.scoring.score import compute_composite_score
 from vnalpha.warehouse.repositories import (
     get_candidate_scores,
@@ -38,6 +39,9 @@ def score_universe(
     universe: Optional[List[str]] = None,
     *,
     memory_root: Path | None = None,
+    scoring_policy_id: str = BASELINE_SCORING_POLICY.policy_id,
+    scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
+    rebuild_policy: bool = False,
 ) -> int:
     """Score all symbols for a given date using feature_snapshot.
 
@@ -103,6 +107,14 @@ def score_universe(
         "lineage_json",
     ]
 
+    policy = resolve_scoring_policy(scoring_policy_id, scoring_policy_version)
+    _guard_policy_replay(
+        conn,
+        date,
+        [str(row[0]) for row in rows],
+        policy.payload_hash,
+        allow_rebuild=rebuild_policy,
+    )
     scored_count = 0
     for row in rows:
         features = dict(zip(cols, row, strict=True))
@@ -116,7 +128,7 @@ def score_universe(
                 feature_lineage = json.loads(lineage_raw)
             except (ValueError, TypeError):
                 pass
-        scored = compute_composite_score(features)
+        scored = compute_composite_score(features, policy=policy)
         scored["symbol"] = symbol
         scored["date"] = str(date_val)
         # Propagate lineage from feature_snapshot into scored result
@@ -132,7 +144,13 @@ def score_universe(
                 date_val,
             )
         # Persist to candidate_score table — single authoritative record
-        save_candidate_score(conn, symbol, str(date_val), scored)
+        save_candidate_score(
+            conn,
+            symbol,
+            str(date_val),
+            scored,
+            allow_policy_rebuild=rebuild_policy,
+        )
         _project_candidate_score_to_memory(
             conn, symbol, date_val, scored, memory_root=memory_root
         )
@@ -140,6 +158,32 @@ def score_universe(
 
     logger.info("Scored and persisted %d symbols for %s", scored_count, date)
     return scored_count
+
+
+def _guard_policy_replay(
+    conn: duckdb.DuckDBPyConnection,
+    date: str,
+    symbols: list[str],
+    policy_hash: str,
+    *,
+    allow_rebuild: bool,
+) -> None:
+    if allow_rebuild or not symbols:
+        return
+    placeholders = ", ".join(["?"] * len(symbols))
+    rows = conn.execute(
+        "SELECT symbol, scoring_policy_hash FROM candidate_score "
+        f"WHERE date=? AND symbol IN ({placeholders})",
+        [date, *symbols],
+    ).fetchall()
+    conflicts = sorted(
+        str(symbol) for symbol, row_hash in rows if row_hash != policy_hash
+    )
+    if conflicts:
+        raise ValueError(
+            "Existing candidate scores have a different or legacy policy hash; "
+            f"explicit rebuild is required for: {', '.join(conflicts)}"
+        )
 
 
 def _relative_strength_snapshot_exists(conn: duckdb.DuckDBPyConnection) -> bool:
@@ -181,6 +225,8 @@ def _project_candidate_score_to_memory(
             ),
             correlation_id=f"candidate-score:{symbol}:{resolved_date.isoformat()}",
             persisted_at=datetime.now(UTC),
+            scoring_policy_id=str(scored["scoring_policy_id"]),
+            scoring_policy_hash=str(scored["scoring_policy_hash"]),
         )
         repository = SymbolMemoryRepository(conn)
         ingestion = SymbolMemoryIngestionService(repository)
@@ -218,6 +264,11 @@ def save_watchlist(
     ][:top_n]
 
     # Clear existing entries for this date
+    policy_hashes = {str(c.get("scoring_policy_hash") or "") for c in candidates}
+    if "" in policy_hashes or len(policy_hashes) > 1:
+        raise ValueError(
+            "Watchlist candidates have missing or mixed scoring policy hashes"
+        )
     conn.execute("DELETE FROM daily_watchlist WHERE date = ?", [date])
 
     for rank, candidate in enumerate(candidates, start=1):
@@ -226,8 +277,9 @@ def save_watchlist(
         conn.execute(
             """
             INSERT INTO daily_watchlist
-            (date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json,
+             scoring_policy_id, scoring_policy_version, scoring_policy_hash, scoring_policy_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 date,
@@ -238,6 +290,10 @@ def save_watchlist(
                 candidate["setup_type"],
                 json.dumps(risk_flags) if isinstance(risk_flags, list) else risk_flags,
                 json.dumps(lineage) if isinstance(lineage, dict) else lineage,
+                candidate.get("scoring_policy_id"),
+                candidate.get("scoring_policy_version"),
+                candidate.get("scoring_policy_hash"),
+                candidate.get("scoring_policy_status"),
             ],
         )
     logger.info(
@@ -254,6 +310,9 @@ def generate_watchlist(
     universe: Optional[List[str]] = None,
     top_n: int = DEFAULT_TOP_N,
     min_score: float = DEFAULT_MIN_SCORE,
+    scoring_policy_id: str = BASELINE_SCORING_POLICY.policy_id,
+    scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
+    rebuild_policy: bool = False,
 ) -> dict:
     """Full pipeline: compute scores → persist → derive watchlist from persisted data.
 
@@ -267,7 +326,14 @@ def generate_watchlist(
     except Exception:  # noqa: BLE001
         pass
     try:
-        scored = score_universe(conn, date, universe=universe)
+        scored = score_universe(
+            conn,
+            date,
+            universe=universe,
+            scoring_policy_id=scoring_policy_id,
+            scoring_policy_version=scoring_policy_version,
+            rebuild_policy=rebuild_policy,
+        )
         saved = save_watchlist(conn, date, top_n=top_n, min_score=min_score)
     except Exception as exc:
         logger.error("Watchlist generation failed for %s: %s", date, exc)
@@ -285,4 +351,12 @@ def generate_watchlist(
         log_watchlist_success(date, scored=scored, saved=saved)
     except Exception:  # noqa: BLE001
         pass
-    return {"scored": scored, "saved": saved}
+    policy = resolve_scoring_policy(scoring_policy_id, scoring_policy_version)
+    return {
+        "scored": scored,
+        "saved": saved,
+        "scoring_policy_id": policy.policy_id,
+        "scoring_policy_version": policy.version,
+        "scoring_policy_hash": policy.payload_hash,
+        "scoring_policy_status": policy.lifecycle_status.value,
+    }

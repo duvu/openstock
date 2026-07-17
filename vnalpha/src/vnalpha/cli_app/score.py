@@ -13,6 +13,7 @@ from vnalpha.data_provisioning.service import (
     ProvisioningStatus,
 )
 from vnalpha.observability.commands import command_lifecycle
+from vnalpha.scoring.policy import resolve_scoring_policy
 
 
 def score(
@@ -26,6 +27,16 @@ def score(
     min_score: float = typer.Option(
         0.40, "--min-score", help="Minimum composite score threshold."
     ),
+    scoring_policy: str = typer.Option(
+        "openstock-candidate-score@v1.0",
+        "--scoring-policy",
+        help="Immutable scoring policy ID and version selected by the operator.",
+    ),
+    rebuild_policy: bool = typer.Option(
+        False,
+        "--rebuild-policy",
+        help="Explicitly replace legacy or different-policy rows in the requested scope.",
+    ),
 ) -> None:
     """Run the shared provisioning path that invokes ``generate_watchlist``."""
     set_correlation_id()
@@ -33,6 +44,16 @@ def score(
         from vnalpha.warehouse.connection import get_connection
 
         conn = get_connection()
+        try:
+            policy_id, policy_version = scoring_policy.rsplit("@", 1)
+        except ValueError as exc:
+            typer.echo("--scoring-policy must use ID@version", err=True)
+            raise typer.Exit(code=1) from exc
+        try:
+            selected_policy = resolve_scoring_policy(policy_id, policy_version)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
         result = _execute(
             conn,
             DataProvisioningRequest(
@@ -43,10 +64,20 @@ def score(
                 date=date,
                 top_n=top_n,
                 min_score=min_score,
+                scoring_policy_id=policy_id,
+                scoring_policy_version=policy_version,
+                rebuild_policy=rebuild_policy,
             ),
         )
         typer.echo(
             f"Scored {result.counts['scored']} symbols — {result.counts['saved']} candidates in watchlist for {result.resolved_date}"
+        )
+        typer.echo(
+            "Scoring policy: "
+            f"{selected_policy.policy_id}@{selected_policy.version} "
+            f"status={selected_policy.lifecycle_status.value} "
+            f"hash={selected_policy.payload_hash} "
+            f"rebuild={'explicit' if rebuild_policy else 'guarded'}"
         )
 
 

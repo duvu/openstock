@@ -33,6 +33,8 @@ def create_evaluation_run(
     evaluator_version: Optional[str],
     metric_policy_version: Optional[str],
     horizons: List[int],
+    price_basis: str = "RAW_UNADJUSTED",
+    adjustment_methodology: str = "NONE",
 ) -> str:
     """Insert a new RUNNING evaluation run record; return its ID."""
     run_id = str(uuid.uuid4())
@@ -40,8 +42,9 @@ def create_evaluation_run(
         """
         INSERT INTO outcome_evaluation_run
             (evaluation_run_id, watchlist_date, started_at, status,
-             evaluator_version, metric_policy_version, horizons_json)
-        VALUES (?, ?, ?, 'RUNNING', ?, ?, ?)
+             evaluator_version, metric_policy_version, horizons_json,
+             price_basis, adjustment_methodology)
+        VALUES (?, ?, ?, 'RUNNING', ?, ?, ?, ?, ?)
         """,
         [
             run_id,
@@ -50,6 +53,8 @@ def create_evaluation_run(
             evaluator_version,
             metric_policy_version,
             str(horizons),
+            price_basis,
+            adjustment_methodology,
         ],
     )
     return run_id
@@ -104,7 +109,8 @@ def get_evaluation_run(
         SELECT evaluation_run_id, watchlist_date::VARCHAR, started_at::VARCHAR,
                finished_at::VARCHAR, status, evaluator_version, metric_policy_version,
                horizons_json, symbol_bar_count_json, benchmark_bar_count,
-               evaluated, persisted, errors, error_json
+               evaluated, persisted, errors, error_json, price_basis,
+               adjustment_methodology
         FROM outcome_evaluation_run
         WHERE evaluation_run_id = ?
         """,
@@ -127,6 +133,8 @@ def get_evaluation_run(
         "persisted",
         "errors",
         "error_json",
+        "price_basis",
+        "adjustment_methodology",
     ]
     return dict(zip(cols, row, strict=True))
 
@@ -150,9 +158,14 @@ def upsert_candidate_outcome(
             max_gain, max_drawdown, hit, failure, outcome_status,
             bars_available, required_bars, computed_at, error_json,
             evaluation_run_id, evaluator_version, metric_policy_version,
-            symbol_bar_count, benchmark_bar_count
+            symbol_bar_count, benchmark_bar_count, price_basis,
+            benchmark_price_basis, adjustment_methodology,
+            action_overlap_status, invalidation_reason
         ) VALUES (
-            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+            ?,?,?,?,?,?,?,?,?,?,
+            ?,?,?,?,?,?,?,?,?,?,
+            ?,?,?,?,?,?,?,?,?,?,
+            ?,?,?,?
         )
         ON CONFLICT (symbol, watchlist_date, horizon_sessions)
         DO UPDATE SET
@@ -179,6 +192,11 @@ def upsert_candidate_outcome(
             metric_policy_version=excluded.metric_policy_version,
             symbol_bar_count=excluded.symbol_bar_count,
             benchmark_bar_count=excluded.benchmark_bar_count
+            ,price_basis=excluded.price_basis
+            ,benchmark_price_basis=excluded.benchmark_price_basis
+            ,adjustment_methodology=excluded.adjustment_methodology
+            ,action_overlap_status=excluded.action_overlap_status
+            ,invalidation_reason=excluded.invalidation_reason
         """,
         [
             rec.symbol,
@@ -210,6 +228,11 @@ def upsert_candidate_outcome(
             rec.metric_policy_version,
             rec.symbol_bar_count,
             rec.benchmark_bar_count,
+            rec.price_basis,
+            rec.benchmark_price_basis,
+            rec.adjustment_methodology,
+            rec.action_overlap_status,
+            rec.invalidation_reason,
         ],
     )
 
@@ -227,7 +250,11 @@ def get_candidate_outcomes(
                entry_close, exit_close, benchmark_entry_close, benchmark_exit_close,
                forward_return, benchmark_return, excess_return_vs_vnindex,
                max_gain, max_drawdown, hit, failure, outcome_status,
-               bars_available, required_bars, computed_at::VARCHAR, error_json
+               bars_available, required_bars, computed_at::VARCHAR, error_json,
+               evaluation_run_id, evaluator_version, metric_policy_version,
+               symbol_bar_count, benchmark_bar_count, price_basis,
+               benchmark_price_basis, adjustment_methodology,
+               action_overlap_status, invalidation_reason
         FROM candidate_outcome
         WHERE watchlist_date = ? AND horizon_sessions = ?
         ORDER BY score DESC NULLS LAST
@@ -259,6 +286,16 @@ def get_candidate_outcomes(
         "required_bars",
         "computed_at",
         "error_json",
+        "evaluation_run_id",
+        "evaluator_version",
+        "metric_policy_version",
+        "symbol_bar_count",
+        "benchmark_bar_count",
+        "price_basis",
+        "benchmark_price_basis",
+        "adjustment_methodology",
+        "action_overlap_status",
+        "invalidation_reason",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 

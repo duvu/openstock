@@ -281,6 +281,10 @@ CREATE TABLE IF NOT EXISTS candidate_score (
     evidence_json             VARCHAR,
     risk_flags_json           VARCHAR,
     lineage_json              VARCHAR,
+    scoring_policy_id         VARCHAR,
+    scoring_policy_version    VARCHAR,
+    scoring_policy_hash       VARCHAR,
+    scoring_policy_status     VARCHAR,
     PRIMARY KEY (symbol, date)
 )
 """
@@ -295,6 +299,10 @@ CREATE TABLE IF NOT EXISTS daily_watchlist (
     setup_type       VARCHAR,
     risk_flags_json  VARCHAR,
     lineage_json     VARCHAR,
+    scoring_policy_id VARCHAR,
+    scoring_policy_version VARCHAR,
+    scoring_policy_hash VARCHAR,
+    scoring_policy_status VARCHAR,
     created_at       TIMESTAMPTZ DEFAULT current_timestamp,
     PRIMARY KEY (date, rank)
 )
@@ -495,6 +503,11 @@ CREATE TABLE IF NOT EXISTS candidate_outcome (
     metric_policy_version    VARCHAR,
     symbol_bar_count         INTEGER,
     benchmark_bar_count      INTEGER,
+    price_basis              VARCHAR,
+    benchmark_price_basis    VARCHAR,
+    adjustment_methodology   VARCHAR,
+    action_overlap_status    VARCHAR,
+    invalidation_reason      VARCHAR,
     PRIMARY KEY (symbol, watchlist_date, horizon_sessions)
 )
 """
@@ -592,6 +605,8 @@ CREATE TABLE IF NOT EXISTS outcome_evaluation_run (
     status                VARCHAR NOT NULL,
     evaluator_version     VARCHAR,
     metric_policy_version VARCHAR,
+    price_basis          VARCHAR,
+    adjustment_methodology VARCHAR,
     horizons_json         VARCHAR,
     symbol_bar_count_json VARCHAR,
     benchmark_bar_count   INTEGER,

@@ -53,6 +53,9 @@ class DataProvisioningRequest:
     benchmark: str | None = None
     requested_date: str | None = None
     authoritative_snapshot: bool = False
+    scoring_policy_id: str = "openstock-candidate-score"
+    scoring_policy_version: str = "v1.0"
+    rebuild_policy: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +254,9 @@ class DataProvisioningService:
             min_score=request.min_score,
             benchmark=_normalize_symbol(request.benchmark),
             requested_date=request.requested_date or request.date,
+            scoring_policy_id=request.scoring_policy_id,
+            scoring_policy_version=request.scoring_policy_version,
+            rebuild_policy=request.rebuild_policy,
         )
 
     def _execute(
@@ -366,6 +372,9 @@ class DataProvisioningService:
                         universe=_requested_symbols(request),
                         top_n=request.top_n,
                         min_score=request.min_score,
+                        scoring_policy_id=request.scoring_policy_id,
+                        scoring_policy_version=request.scoring_policy_version,
+                        rebuild_policy=request.rebuild_policy,
                     )
                 )
                 return _result(

@@ -19,6 +19,7 @@ class OutcomeStatus(str, Enum):
     PARTIAL = "PARTIAL"
     MISSING_DATA = "MISSING_DATA"
     ERROR = "ERROR"
+    INVALID = "INVALID"
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +98,11 @@ class CandidateOutcomeRecord:
     metric_policy_version: Optional[str] = None
     symbol_bar_count: Optional[int] = None
     benchmark_bar_count: Optional[int] = None
+    price_basis: Optional[str] = None
+    benchmark_price_basis: Optional[str] = None
+    adjustment_methodology: Optional[str] = None
+    action_overlap_status: Optional[str] = None
+    invalidation_reason: Optional[str] = None
 
 
 @dataclass
