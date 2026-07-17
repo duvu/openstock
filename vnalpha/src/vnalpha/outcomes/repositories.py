@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from math import isfinite
 from typing import Any, Dict, List, Optional
 
 import duckdb
 
-from vnalpha.features.status import parse_feature_snapshot_eligibility
+from vnalpha.features.status import feature_eligibility_sql
 from vnalpha.outcomes.models import (
     CandidateOutcomeRecord,
     HypothesisOutcomeSummary,
@@ -269,13 +268,22 @@ def summarize_hypothesis_outcomes(
     *,
     horizon_sessions: int,
 ) -> HypothesisOutcomeSummary:
-    rows = conn.execute(
-        """
+    eligible_sql = feature_eligibility_sql("f")
+    row = conn.execute(
+        f"""
         SELECT
-            f.feature_data_status,
-            f.lineage_json,
-            o.outcome_status,
-            o.forward_return
+            count(*),
+            count(*) FILTER (WHERE {eligible_sql}),
+            count(o.forward_return) FILTER (
+                WHERE {eligible_sql}
+                  AND o.outcome_status = ?
+                  AND isfinite(o.forward_return)
+            ),
+            avg(o.forward_return) FILTER (
+                WHERE {eligible_sql}
+                  AND o.outcome_status = ?
+                  AND isfinite(o.forward_return)
+            )
         FROM feature_snapshot f
         LEFT JOIN candidate_outcome o
           ON o.symbol = f.symbol
@@ -283,26 +291,18 @@ def summarize_hypothesis_outcomes(
          AND o.horizon_sessions = ?
         WHERE f.rs_20d_vs_vnindex > 0
         """,
-        [horizon_sessions],
-    ).fetchall()
-    selected = len(rows)
-    eligible = 0
-    observations: list[float] = []
-    for raw_status, raw_lineage, outcome_status, forward_return in rows:
-        eligibility = parse_feature_snapshot_eligibility(
-            str(raw_status) if raw_status is not None else None,
-            raw_lineage,
-        )
-        if not eligibility.eligible:
-            continue
-        eligible += 1
-        if outcome_status != OutcomeStatus.COMPLETE.value or forward_return is None:
-            continue
-        value = float(forward_return)
-        if isfinite(value):
-            observations.append(value)
-    complete = len(observations)
-    mean_forward_return = sum(observations) / complete if complete else None
+        [
+            OutcomeStatus.COMPLETE.value,
+            OutcomeStatus.COMPLETE.value,
+            horizon_sessions,
+        ],
+    ).fetchone()
+    selected = int(row[0]) if row is not None else 0
+    eligible = int(row[1]) if row is not None else 0
+    complete = int(row[2]) if row is not None else 0
+    mean_forward_return = (
+        float(row[3]) if row is not None and row[3] is not None else None
+    )
     return HypothesisOutcomeSummary(
         selected_feature_rows=selected,
         eligible_feature_rows=eligible,

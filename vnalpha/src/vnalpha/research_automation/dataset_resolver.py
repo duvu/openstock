@@ -8,8 +8,8 @@ import duckdb
 
 from vnalpha.features.status import (
     FEATURE_STATUS_CONTRACT_VERSION,
-    FeatureExclusionReason,
-    parse_feature_snapshot_eligibility,
+    feature_eligibility_sql,
+    feature_exclusion_reason_sql,
 )
 from vnalpha.research_automation.models import DatasetRef
 
@@ -50,22 +50,20 @@ class DatasetResolver:
             f"FROM feature_snapshot WHERE {where}",
             parameters,
         ).fetchone()
-        eligibility_rows = self._conn.execute(
-            "SELECT symbol, feature_data_status, lineage_json "
-            f"FROM feature_snapshot WHERE {where} ORDER BY symbol",
+        exclusion_sql = feature_exclusion_reason_sql("f")
+        status_rows = self._conn.execute(
+            f"SELECT {exclusion_sql} AS exclusion_reason, count(*) "
+            f"FROM feature_snapshot f WHERE {where} GROUP BY exclusion_reason",
             parameters,
         ).fetchall()
         symbols = tuple(
-            sorted(
-                {
-                    str(symbol)
-                    for symbol, raw_status, raw_lineage in eligibility_rows
-                    if parse_feature_snapshot_eligibility(
-                        str(raw_status) if raw_status is not None else None,
-                        raw_lineage,
-                    ).eligible
-                }
-            )
+            str(item[0])
+            for item in self._conn.execute(
+                "SELECT DISTINCT f.symbol FROM feature_snapshot f "
+                f"WHERE {where} AND {feature_eligibility_sql('f')} "
+                "ORDER BY f.symbol",
+                parameters,
+            ).fetchall()
         )
         row_count = int(row[0]) if row else 0
         period_start = row[1] if row else None
@@ -73,19 +71,14 @@ class DatasetResolver:
         symbol_count = int(row[3]) if row else 0
         eligible_rows = 0
         exclusion_counts: dict[str, int] = {}
-        for _, raw_status, raw_lineage in eligibility_rows:
-            eligibility = parse_feature_snapshot_eligibility(
-                str(raw_status) if raw_status is not None else None,
-                raw_lineage,
-            )
-            if eligibility.eligible:
-                eligible_rows += 1
+        for reason, count in status_rows:
+            if reason is None:
+                eligible_rows += int(count)
                 continue
-            reason = (
-                eligibility.exclusion_reason
-                or FeatureExclusionReason.UNKNOWN_FEATURE_STATUS
-            )
-            exclusion_counts[reason.value] = exclusion_counts.get(reason.value, 0) + 1
+            typed_reason = str(reason)
+            exclusion_counts[typed_reason] = exclusion_counts.get(
+                typed_reason, 0
+            ) + int(count)
         warnings: list[str] = []
         if eligible_rows < _MIN_RESEARCH_ROWS:
             warnings.append(

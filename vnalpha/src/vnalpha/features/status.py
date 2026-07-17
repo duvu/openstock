@@ -102,12 +102,47 @@ def parse_feature_snapshot_eligibility(
     )
 
 
+def feature_exclusion_reason_sql(table_alias: str) -> str:
+    if (
+        not table_alias
+        or not table_alias[0].isascii()
+        or not table_alias[0].isalpha()
+        or not all(
+            character.isascii() and (character.isalnum() or character == "_")
+            for character in table_alias
+        )
+    ):
+        raise ValueError("table_alias must be an ASCII SQL identifier")
+    status = f"upper(trim(coalesce({table_alias}.feature_data_status, '')))"
+    contract_version = (
+        "json_extract_string("
+        f"try_cast({table_alias}.lineage_json AS JSON), "
+        "'$.feature_status_contract_version')"
+    )
+    return (
+        "CASE "
+        f"WHEN {status} = '{FeatureDataStatus.EXACT_DATE.value}' "
+        f"AND {contract_version} = '{FEATURE_STATUS_CONTRACT_VERSION}' THEN NULL "
+        f"WHEN {status} = '{FeatureDataStatus.STALE_DATE.value}' "
+        f"THEN '{FeatureExclusionReason.STALE_FEATURE_DATE.value}' "
+        f"WHEN {status} = '{FeatureDataStatus.MISSING_BENCHMARK.value}' "
+        f"THEN '{FeatureExclusionReason.MISSING_BENCHMARK.value}' "
+        f"ELSE '{FeatureExclusionReason.UNKNOWN_FEATURE_STATUS.value}' END"
+    )
+
+
+def feature_eligibility_sql(table_alias: str) -> str:
+    return f"({feature_exclusion_reason_sql(table_alias)}) IS NULL"
+
+
 __all__ = [
     "FEATURE_STATUS_CONTRACT_VERSION",
     "FeatureDataStatus",
     "FeatureEligibility",
     "FeatureEligibilityStatus",
     "FeatureExclusionReason",
+    "feature_eligibility_sql",
+    "feature_exclusion_reason_sql",
     "parse_feature_eligibility",
     "parse_feature_snapshot_eligibility",
 ]

@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 from datetime import date
-from math import isfinite
 from statistics import fmean
 from typing import Final
 
@@ -12,8 +11,7 @@ import duckdb
 from vnalpha.features.status import (
     FEATURE_STATUS_CONTRACT_VERSION,
     FeatureDataStatus,
-    FeatureExclusionReason,
-    parse_feature_snapshot_eligibility,
+    feature_exclusion_reason_sql,
 )
 from vnalpha.outcomes.models import (
     FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION,
@@ -360,9 +358,16 @@ class ResearchStudyService:
             clauses.append("f.date <= ?")
             parameters.append(end_date)
         where = " AND ".join(clauses)
-        raw_rows = self._conn.execute(
+        feature_exclusion_sql = feature_exclusion_reason_sql("source")
+        return self._conn.execute(
             f"""
-            WITH price_path AS (
+            WITH feature_rows AS (
+                SELECT
+                    source.*,
+                    {feature_exclusion_sql} AS feature_exclusion_reason
+                FROM feature_snapshot source
+            ),
+            price_path AS (
                 SELECT
                     symbol,
                     CAST(time AS DATE) AS price_date,
@@ -390,11 +395,16 @@ class ResearchStudyService:
                 p.outcome_date,
                 p.outcome_close,
                 CASE
-                    WHEN p.entry_close IS NULL OR p.entry_close = 0 OR p.outcome_close IS NULL
+                    WHEN p.entry_close IS NULL OR p.entry_close = 0
+                         OR p.outcome_close IS NULL
+                         OR NOT isfinite(p.entry_close)
+                         OR NOT isfinite(p.outcome_close)
                     THEN NULL
                     ELSE p.outcome_close / p.entry_close - 1
                 END AS forward_return,
                 CASE
+                    WHEN f.feature_exclusion_reason IS NOT NULL
+                    THEN f.feature_exclusion_reason
                     WHEN f.as_of_bar_date IS NULL OR f.as_of_bar_date > f.date
                     THEN 'non_observable_feature'
                     WHEN f.benchmark_as_of_bar_date IS NULL OR f.benchmark_as_of_bar_date > f.date
@@ -402,14 +412,14 @@ class ResearchStudyService:
                     WHEN q.symbol IS NOT NULL
                     THEN 'unresolved_quarantine'
                     WHEN p.entry_close IS NULL OR p.entry_close = 0
+                         OR NOT isfinite(p.entry_close)
                     THEN 'missing_entry_price'
                     WHEN p.outcome_close IS NULL OR p.outcome_date IS NULL
+                         OR NOT isfinite(p.outcome_close)
                     THEN 'missing_outcome'
                     ELSE 'included'
-                END AS observation_status,
-                f.feature_data_status,
-                f.lineage_json
-            FROM feature_snapshot f
+                END AS observation_status
+            FROM feature_rows f
             LEFT JOIN price_path p
               ON p.symbol = f.symbol AND p.price_date = f.date
             LEFT JOIN unresolved_quarantine q
@@ -419,24 +429,6 @@ class ResearchStudyService:
             """,
             parameters,
         ).fetchall()
-        observations: list[tuple] = []
-        for row in raw_rows:
-            eligibility = parse_feature_snapshot_eligibility(
-                str(row[8]) if row[8] is not None else None,
-                row[9],
-            )
-            status = row[7]
-            if not eligibility.eligible:
-                status = (
-                    eligibility.exclusion_reason
-                    or FeatureExclusionReason.UNKNOWN_FEATURE_STATUS
-                ).value
-            elif status == "included" and (
-                row[6] is None or not isfinite(float(row[6]))
-            ):
-                status = "invalid_outcome"
-            observations.append((*row[:7], status))
-        return observations
 
 
 __all__ = ["ResearchStudyService"]
