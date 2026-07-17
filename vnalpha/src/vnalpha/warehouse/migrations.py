@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Optional
 
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.corporate_action_schema import ALL_DDL_CORPORATE_ACTIONS
 from vnalpha.warehouse.ingestion_migrations import migrate_ingestion_run_outcome_columns
@@ -77,6 +79,7 @@ def run_migrations(
     _migrate_symbol_memory_columns(conn)
     _migrate_research_answer_audit_columns(conn)
     _migrate_research_artifact_columns(conn)
+    _migrate_research_experiment_columns(conn)
     for ddl in ALL_DDL_PHASE6:
         conn.execute(ddl)
     for ddl in ALL_DDL_RESEARCH_AUTOMATION:
@@ -90,6 +93,9 @@ def run_migrations(
     _migrate_symbol_classification_history_columns(conn)
     _migrate_feature_snapshot_columns(conn)
     _migrate_ohlcv_price_basis_columns(conn)
+    _migrate_scoring_policy_columns(conn)
+    _migrate_scoring_policy_decision_tables(conn)
+    _seed_scoring_policy_decisions(conn)
     _seed_benchmark_definitions(conn)
     _backfill_legacy_relative_strength(conn)
     _migrate_rejected_symbol_columns(conn)
@@ -273,6 +279,67 @@ def _migrate_research_artifact_columns(conn: duckdb.DuckDBPyConnection) -> None:
         )
 
 
+def _migrate_research_experiment_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    if not _table_exists(conn, "research_experiment"):
+        return
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS provider_name VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS dataset_name VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS extension_name VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS consumer_name VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS dataset_version VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS entitlement_json VARCHAR "
+        "DEFAULT '{}' "
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS missingness_json VARCHAR "
+        "DEFAULT '{}' "
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS transformation VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS experiment_hash VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS capability_status VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS capability_payload VARCHAR "
+        "DEFAULT '{}' "
+    )
+    conn.execute(
+        "UPDATE research_experiment "
+        "SET capability_payload = '{}' "
+        "WHERE capability_payload IS NULL"
+    )
+    conn.execute(
+        "UPDATE research_experiment "
+        "SET entitlement_json = '{}' "
+        "WHERE entitlement_json IS NULL"
+    )
+    conn.execute(
+        "UPDATE research_experiment "
+        "SET missingness_json = '{}' "
+        "WHERE missingness_json IS NULL"
+    )
+    conn.execute(
+        "UPDATE research_experiment "
+        "SET capability_status = COALESCE(capability_status, 'unsupported') "
+        "WHERE capability_status IS NULL"
+    )
+
+
 def _table_exists(conn: duckdb.DuckDBPyConnection, table: str) -> bool:
     return (
         conn.execute(
@@ -382,8 +449,21 @@ def _migrate_candidate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("evaluation_run_id", "VARCHAR"),
         ("evaluator_version", "VARCHAR"),
         ("metric_policy_version", "VARCHAR"),
+        ("observation_start_date", "DATE"),
+        ("observation_end_date", "DATE"),
         ("symbol_bar_count", "INTEGER"),
         ("benchmark_bar_count", "INTEGER"),
+        ("price_basis", "VARCHAR"),
+        ("benchmark_price_basis", "VARCHAR"),
+        ("adjustment_methodology", "VARCHAR"),
+        ("adjustment_version", "VARCHAR DEFAULT 'UNKNOWN'"),
+        ("action_overlap_status", "VARCHAR"),
+        ("invalidation_reason", "VARCHAR"),
+        ("corporate_action_lineage_json", "VARCHAR DEFAULT '[]'"),
+        ("scoring_policy_id", "VARCHAR"),
+        ("scoring_policy_version", "VARCHAR"),
+        ("scoring_policy_hash", "VARCHAR"),
+        ("scoring_policy_status", "VARCHAR"),
     ]
     for col, col_type in cols:
         conn.execute(
@@ -403,7 +483,18 @@ def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("evaluation_run_id", "VARCHAR"),
         ("evaluator_version", "VARCHAR"),
         ("metric_policy_version", "VARCHAR"),
+        ("price_basis", "VARCHAR"),
+        ("adjustment_methodology", "VARCHAR"),
+        ("adjustment_version", "VARCHAR"),
+        ("action_overlap_status", "VARCHAR"),
+        ("scoring_policy_id", "VARCHAR"),
+        ("scoring_policy_version", "VARCHAR"),
+        ("scoring_policy_hash", "VARCHAR"),
+        ("scoring_policy_status", "VARCHAR"),
     ]
+    conn.execute(
+        "ALTER TABLE watchlist_outcome ADD COLUMN IF NOT EXISTS invalid_count INTEGER"
+    )
     for table in aggregate_tables:
         for col, col_type in cols:
             conn.execute(
@@ -412,7 +503,36 @@ def _migrate_aggregate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
 
 
 def _migrate_outcome_evaluation_run_columns(conn: duckdb.DuckDBPyConnection) -> None:
-    """No-op: outcome_evaluation_run was created fresh in Phase 6 DDL."""
+    for column in (
+        "assumptions_contract_version",
+        "assumptions_payload_json",
+        "assumptions_hash",
+        "price_basis",
+        "adjustment_methodology",
+        "adjustment_version",
+        "action_overlap_status",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
+    ):
+        conn.execute(
+            f"ALTER TABLE outcome_evaluation_run ADD COLUMN IF NOT EXISTS {column} VARCHAR"
+        )
+
+
+def _migrate_scoring_policy_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    columns = (
+        ("scoring_policy_id", "VARCHAR"),
+        ("scoring_policy_version", "VARCHAR"),
+        ("scoring_policy_hash", "VARCHAR"),
+        ("scoring_policy_status", "VARCHAR"),
+    )
+    for table in ("candidate_score", "daily_watchlist"):
+        for column, column_type in columns:
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {column_type}"
+            )
 
 
 def _migrate_chat_message_visibility_columns(conn: duckdb.DuckDBPyConnection) -> None:
@@ -422,6 +542,151 @@ def _migrate_chat_message_visibility_columns(conn: duckdb.DuckDBPyConnection) ->
     )
     conn.execute(
         "ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ"
+    )
+
+
+def _migrate_scoring_policy_decision_tables(conn: duckdb.DuckDBPyConnection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS scoring_policy_decision (
+            decision_id            VARCHAR PRIMARY KEY,
+            scoring_policy_id      VARCHAR NOT NULL,
+            scoring_policy_version VARCHAR NOT NULL,
+            scoring_policy_hash    VARCHAR NOT NULL,
+            decision_status        VARCHAR NOT NULL,
+            effective_date         DATE NOT NULL,
+            decision_cutoff_date   DATE,
+            reviewer               VARCHAR NOT NULL,
+            rationale              VARCHAR NOT NULL,
+            evidence_json          VARCHAR NOT NULL,
+            limitations_json       VARCHAR NOT NULL,
+            reviewed_at            TIMESTAMPTZ NOT NULL,
+            created_at             TIMESTAMPTZ NOT NULL DEFAULT current_timestamp
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS scoring_policy_active_pointer (
+            policy_context VARCHAR NOT NULL PRIMARY KEY,
+            decision_id    VARCHAR NOT NULL,
+            assigned_by    VARCHAR,
+            assigned_at    TIMESTAMPTZ NOT NULL DEFAULT current_timestamp
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS scoring_policy_active_pointer_audit (
+            policy_context    VARCHAR NOT NULL,
+            decision_id       VARCHAR NOT NULL,
+            assigned_by       VARCHAR,
+            assigned_at       TIMESTAMPTZ NOT NULL
+        )
+        """
+    )
+
+
+def _seed_scoring_policy_decisions(conn: duckdb.DuckDBPyConnection) -> None:
+    if not _table_exists(conn, "scoring_policy_decision"):
+        return
+    if not _table_exists(conn, "scoring_policy_active_pointer"):
+        return
+
+    decision_id = (
+        f"baseline::{BASELINE_SCORING_POLICY.policy_id}::"
+        f"{BASELINE_SCORING_POLICY.version}::{BASELINE_SCORING_POLICY.payload_hash}"
+    )
+    conn.execute(
+        """
+        INSERT INTO scoring_policy_decision (
+            decision_id,
+            scoring_policy_id,
+            scoring_policy_version,
+            scoring_policy_hash,
+            decision_status,
+            effective_date,
+            decision_cutoff_date,
+            reviewer,
+            rationale,
+            evidence_json,
+            limitations_json,
+            reviewed_at
+        )
+        VALUES (?, ?, ?, ?, 'EXPERIMENTAL', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT (decision_id) DO NOTHING
+        """,
+        [
+            decision_id,
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.effective_from,
+            BASELINE_SCORING_POLICY.effective_from,
+            "system",
+            "Baseline deterministic scoring policy seeded for policy governance."
+            " Review status, rationale, and governance evidence are required for future review decisions.",
+            json.dumps(
+                {
+                    "source": "baseline-seed",
+                    "rationale_id": "initial-frozen-policy",
+                    "policy_payload_hash": BASELINE_SCORING_POLICY.payload_hash,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            json.dumps(
+                [
+                    "No manual review has run yet.",
+                    "Policy is active for legacy compatibility until governance review records override.",
+                ],
+                separators=(",", ":"),
+            ),
+        ],
+    )
+    conn.execute(
+        """
+        INSERT INTO scoring_policy_active_pointer (
+            policy_context,
+            decision_id,
+            assigned_by
+        )
+        SELECT
+            'global',
+            ?,
+            'system'
+        WHERE EXISTS (
+            SELECT 1 FROM scoring_policy_decision WHERE decision_id = ?
+        )
+          AND NOT EXISTS (
+            SELECT 1 FROM scoring_policy_active_pointer
+        )
+        """,
+        [decision_id, decision_id],
+    )
+
+    conn.execute(
+        """
+        INSERT INTO scoring_policy_active_pointer_audit (
+            policy_context,
+            decision_id,
+            assigned_by,
+            assigned_at
+        )
+        SELECT
+            policy_context,
+            decision_id,
+            assigned_by,
+            assigned_at
+        FROM scoring_policy_active_pointer
+        WHERE NOT EXISTS (
+            SELECT 1 FROM scoring_policy_active_pointer_audit
+            WHERE policy_context = scoring_policy_active_pointer.policy_context
+              AND decision_id = scoring_policy_active_pointer.decision_id
+              AND assigned_by IS NOT DISTINCT FROM scoring_policy_active_pointer.assigned_by
+              AND assigned_at = scoring_policy_active_pointer.assigned_at
+        )
+        """
     )
 
 

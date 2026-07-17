@@ -32,6 +32,7 @@ from vnalpha.commands.handlers.research_context import (
 from vnalpha.commands.handlers.research_plan import handle_research_plan
 from vnalpha.commands.handlers.sandbox import handle_sandbox
 from vnalpha.commands.handlers.scan import handle_scan
+from vnalpha.commands.handlers.scoring_policy import handle_scoring_policy
 from vnalpha.commands.handlers.setup_evidence import handle_setup_evidence
 from vnalpha.commands.handlers.shortlist import handle_shortlist
 from vnalpha.commands.handlers.todo import handle_todo
@@ -78,6 +79,43 @@ def build_default_registry() -> CommandRegistry:
             ],
             permissions=permission_names("memory"),
             handler=handle_memory,
+        )
+    )
+    reg.register(
+        CommandMeta(
+            name="scoring-policy",
+            description="Inspect and set active scoring-policy governance decisions.",
+            usage=(
+                "/scoring-policy active [--context CONTEXT] | /scoring-policy list"
+                " [--status STATUS] [--policy-id ID] [--policy-version VERSION]"
+                " [--context CONTEXT] | /scoring-policy create"
+                " --policy-id ID --policy-version VERSION --policy-hash HASH"
+                " --status STATUS --effective-date DATE --reviewer REVIEWER"
+                " --rationale TEXT [--activate] [--context CONTEXT]"
+                " [--decision-cutoff-date DATE] [--evidence-json JSON]"
+                " [--limitations-json JSON]"
+                " [--context CONTEXT] | /scoring-policy set --decision-id DECISION_ID"
+                " [--context CONTEXT] | /scoring-policy rollback [--context CONTEXT]"
+            ),
+            examples=[
+                "/scoring-policy active",
+                "/scoring-policy list",
+                "/scoring-policy list --status ACCEPTED",
+                "/scoring-policy create --policy-id openstock-candidate-score --policy-version v1.0"
+                " --policy-hash 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                " --status EXPERIMENTAL --effective-date 2026-07-01 --reviewer qa.bot"
+                " --rationale 'Baseline candidate scoring policy review'",
+                "/scoring-policy create --policy-id openstock-candidate-score --policy-version v1.0"
+                " --policy-hash 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                " --status ACCEPTED --effective-date 2026-07-01 --reviewer qa.bot"
+                " --rationale 'Accepted with evidence' "
+                "--evidence-json '[\"shortlisted\"]' "
+                "--activate",
+                "/scoring-policy set --decision-id baseline::openstock-candidate-score::v1.0::<POLICY_HASH>",
+                "/scoring-policy rollback --context global",
+            ],
+            permissions=permission_names("scoring-policy"),
+            handler=handle_scoring_policy,
         )
     )
 

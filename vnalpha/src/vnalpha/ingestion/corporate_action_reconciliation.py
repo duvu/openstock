@@ -333,6 +333,55 @@ def _insert_affected_range(
            VALUES (?, ?, ?, ?, ?, ?)""",
         [str(uuid.uuid4()), action_id, revision_id, symbol, affected_from, reason],
     )
+    affected_rows = conn.execute(
+        """SELECT watchlist_date, horizon_sessions, evaluation_run_id
+           FROM candidate_outcome
+           WHERE symbol=? AND outcome_status='COMPLETE'
+             AND observation_start_date IS NOT NULL
+             AND observation_end_date IS NOT NULL
+             AND observation_start_date <= ?
+             AND observation_end_date >= ?""",
+        [symbol, affected_from, affected_from],
+    ).fetchall()
+    if not affected_rows:
+        return
+    invalidation_reason = "CORPORATE_ACTION_EVIDENCE_REVISED"
+    conn.execute(
+        """UPDATE candidate_outcome
+           SET outcome_status='INVALID', forward_return=NULL,
+               benchmark_return=NULL, excess_return_vs_vnindex=NULL,
+               max_gain=NULL, max_drawdown=NULL, hit=NULL, failure=NULL,
+               action_overlap_status='INVALID', invalidation_reason=?
+           WHERE symbol=? AND outcome_status='COMPLETE'
+             AND observation_start_date IS NOT NULL
+             AND observation_end_date IS NOT NULL
+             AND observation_start_date <= ?
+             AND observation_end_date >= ?""",
+        [invalidation_reason, symbol, affected_from, affected_from],
+    )
+    aggregate_keys = sorted({(row[0], row[1]) for row in affected_rows})
+    aggregate_date_columns = {
+        "watchlist_outcome": "watchlist_date",
+        "score_bucket_performance": "as_of_date",
+        "setup_type_performance": "as_of_date",
+        "risk_flag_performance": "as_of_date",
+    }
+    for table, date_column in aggregate_date_columns.items():
+        conn.executemany(
+            f"DELETE FROM {table} WHERE {date_column}=? AND horizon_sessions=?",
+            aggregate_keys,
+        )
+    evaluation_run_ids = sorted({row[2] for row in affected_rows if row[2]})
+    if evaluation_run_ids:
+        conn.executemany(
+            """UPDATE outcome_evaluation_run
+               SET status='PARTIAL', action_overlap_status='INVALID', error_json=?
+               WHERE evaluation_run_id=?""",
+            [
+                [json.dumps({"reason": invalidation_reason}), run_id]
+                for run_id in evaluation_run_ids
+            ],
+        )
 
 
 def _validation_rules(

@@ -18,6 +18,7 @@ from vnalpha.research_intelligence.models import (
     SectorStrengthSnapshot,
     SymbolSectorAlignment,
 )
+from vnalpha.scoring.policy import resolve_scoring_policy
 from vnalpha.warehouse.symbol_lifecycle import (
     SymbolTaxonomyAsOf,
 )
@@ -233,6 +234,8 @@ def save_candidate_score(
     symbol: str,
     date: str,
     score_result: dict[str, Any],
+    *,
+    allow_policy_rebuild: bool = False,
 ) -> None:
     """Upsert a candidate_score row from a compute_composite_score result dict.
 
@@ -253,6 +256,36 @@ def save_candidate_score(
             f"Must be one of {sorted(CANONICAL_SETUP_TYPES)}."
         )
     generated_at = _now_utc().isoformat()
+    policy_values = tuple(
+        score_result.get(key)
+        for key in (
+            "scoring_policy_id",
+            "scoring_policy_version",
+            "scoring_policy_hash",
+            "scoring_policy_status",
+        )
+    )
+    if any(value in (None, "") for value in policy_values):
+        raise ValueError("Scoring policy identity is required for persistence")
+    policy_id, policy_version, policy_hash, policy_status = map(str, policy_values)
+    policy = resolve_scoring_policy(policy_id, policy_version, as_of_date=date)
+    if (policy_hash, policy_status) != (
+        policy.payload_hash,
+        policy.lifecycle_status.value,
+    ):
+        raise ValueError(
+            "Scoring policy identity is unknown: policy hash or lifecycle status "
+            "is malformed or inconsistent"
+        )
+    existing = conn.execute(
+        "SELECT scoring_policy_hash FROM candidate_score WHERE symbol=? AND date=?",
+        [symbol, date],
+    ).fetchone()
+    if existing is not None and existing[0] != policy_hash and not allow_policy_rebuild:
+        raise ValueError(
+            "Existing candidate score has a different or legacy policy hash; "
+            "explicit rebuild is required"
+        )
     evidence = {
         "trend_score": score_result.get("trend_score"),
         "relative_strength_score": score_result.get("relative_strength_score"),
@@ -275,6 +308,10 @@ def save_candidate_score(
         lineage_status = "PARTIAL"
     lineage = {
         "scoring_version": SCORING_VERSION,
+        "scoring_policy_id": policy_id,
+        "scoring_policy_version": policy_version,
+        "scoring_policy_hash": policy_hash,
+        "scoring_policy_status": policy_status,
         "feature_build_version": score_result.get("feature_build_version"),
         "feature_date": date,
         "as_of_bar_date": score_result.get("as_of_bar_date"),
@@ -292,8 +329,9 @@ def save_candidate_score(
         (symbol, date, score, candidate_class, setup_type,
          trend_score, relative_strength_score, volume_score,
          base_score, breakout_score, risk_quality_score,
-         evidence_json, risk_flags_json, lineage_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         evidence_json, risk_flags_json, lineage_json,
+         scoring_policy_id, scoring_policy_version, scoring_policy_hash, scoring_policy_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (symbol, date) DO UPDATE SET
             score = excluded.score,
             candidate_class = excluded.candidate_class,
@@ -307,6 +345,10 @@ def save_candidate_score(
             evidence_json = excluded.evidence_json,
             risk_flags_json = excluded.risk_flags_json,
             lineage_json = excluded.lineage_json
+            ,scoring_policy_id = excluded.scoring_policy_id
+            ,scoring_policy_version = excluded.scoring_policy_version
+            ,scoring_policy_hash = excluded.scoring_policy_hash
+            ,scoring_policy_status = excluded.scoring_policy_status
         """,
         [
             symbol,
@@ -323,6 +365,10 @@ def save_candidate_score(
             json.dumps(evidence),
             json.dumps(score_result.get("risk_flags", [])),
             json.dumps(lineage),
+            policy_id,
+            policy_version,
+            policy_hash,
+            policy_status,
         ],
     )
 
@@ -338,7 +384,8 @@ def get_candidate_score(
         SELECT symbol, date, score, candidate_class, setup_type,
                trend_score, relative_strength_score, volume_score,
                base_score, breakout_score, risk_quality_score,
-               evidence_json, risk_flags_json, lineage_json
+               evidence_json, risk_flags_json, lineage_json,
+               scoring_policy_id, scoring_policy_version, scoring_policy_hash, scoring_policy_status
         FROM candidate_score WHERE symbol = ? AND date = ?
         """,
         [symbol, date],
@@ -360,6 +407,10 @@ def get_candidate_score(
         "evidence_json",
         "risk_flags_json",
         "lineage_json",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     result = dict(zip(cols, row, strict=True))
     # Normalise date to string
@@ -383,7 +434,9 @@ def get_candidate_scores(
         SELECT symbol, date, score, candidate_class, setup_type,
                trend_score, relative_strength_score, volume_score,
                base_score, breakout_score, risk_quality_score,
-               evidence_json, risk_flags_json, lineage_json
+               evidence_json, risk_flags_json, lineage_json,
+               scoring_policy_id, scoring_policy_version,
+               scoring_policy_hash, scoring_policy_status
         FROM candidate_score WHERE date = ? AND score >= ?
         ORDER BY score DESC
         """,
@@ -404,6 +457,10 @@ def get_candidate_scores(
         "evidence_json",
         "risk_flags_json",
         "lineage_json",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     results = []
     for row in rows:
@@ -421,7 +478,9 @@ def get_watchlist(conn: duckdb.DuckDBPyConnection, date: str) -> list[dict[str, 
     """Return the daily watchlist for a date, ordered by rank."""
     rows = conn.execute(
         """
-        SELECT date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json
+        SELECT date, rank, symbol, score, candidate_class, setup_type,
+               risk_flags_json, lineage_json, scoring_policy_id,
+               scoring_policy_version, scoring_policy_hash, scoring_policy_status
         FROM daily_watchlist WHERE date = ? ORDER BY rank
         """,
         [date],
@@ -435,6 +494,10 @@ def get_watchlist(conn: duckdb.DuckDBPyConnection, date: str) -> list[dict[str, 
         "setup_type",
         "risk_flags_json",
         "lineage_json",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 
@@ -461,6 +524,10 @@ def get_watchlist_rich(
             dw.risk_flags_json,
             cs.lineage_json,
             COALESCE(co.quality_status, 'unknown') AS data_quality_status
+            ,dw.scoring_policy_id
+            ,dw.scoring_policy_version
+            ,dw.scoring_policy_hash
+            ,dw.scoring_policy_status
         FROM daily_watchlist dw
         LEFT JOIN candidate_score cs
             ON cs.symbol = dw.symbol AND cs.date = dw.date
@@ -487,6 +554,10 @@ def get_watchlist_rich(
         "risk_flags_json",
         "lineage_json",
         "data_quality_status",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     results = []
     for row in rows:

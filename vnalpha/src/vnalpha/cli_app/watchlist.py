@@ -42,6 +42,8 @@ def watchlist(
             table.add_column("Class", width=18)
             table.add_column("Setup", width=22)
             table.add_column("Risk Flags", width=30)
+            table.add_column("Policy", width=28)
+            table.add_column("Lifecycle", width=14)
 
             import json as _json
 
@@ -54,8 +56,17 @@ def watchlist(
                     row.get("candidate_class", ""),
                     row.get("setup_type", ""),
                     ", ".join(flags) if flags else "—",
+                    (
+                        f"{row.get('scoring_policy_id') or 'UNKNOWN'}@"
+                        f"{row.get('scoring_policy_version') or 'UNKNOWN'}"
+                    ),
+                    row.get("scoring_policy_status") or "UNKNOWN",
                 )
             console.print(table)
+            console.print(
+                "[dim]Policy hash: "
+                f"{rows[0].get('scoring_policy_hash') or 'UNKNOWN'}[/dim]"
+            )
             console.print(
                 f"[dim]Score range: 0.0–1.0 | For evidence details run: vnalpha tui --date {target_date}[/dim]"
             )
@@ -68,6 +79,13 @@ def watchlist(
                 )
             typer.echo(
                 f"Score range: 0.0-1.0 | For evidence: vnalpha tui --date {target_date}"
+            )
+            typer.echo(
+                "Policy: "
+                f"{rows[0].get('scoring_policy_id') or 'UNKNOWN'}@"
+                f"{rows[0].get('scoring_policy_version') or 'UNKNOWN'} "
+                f"status={rows[0].get('scoring_policy_status') or 'UNKNOWN'} "
+                f"hash={rows[0].get('scoring_policy_hash') or 'UNKNOWN'}"
             )
 
 

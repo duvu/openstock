@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final, List, Optional
@@ -9,6 +11,29 @@ from typing import Final, List, Optional
 FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION: Final = (
     "candidate-outcome-forward-return-v1"
 )
+OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION: Final = (
+    "outcome-evaluation-assumptions-v1"
+)
+OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD: Final = {
+    "market_friction": (
+        "No transaction costs, fees, slippage, or taxes are applied for held-out outcomes.",
+    ),
+    "eligibility": (
+        "Only symbols and watch dates that pass the production-compatible feature "
+        "pipeline are treated as eligible for held-out measurement.",
+    ),
+    "capacity": (
+        "Evaluations assume no liquidity or capital-capacity constraints on entry size.",
+    ),
+}
+OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON: Final = json.dumps(
+    OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD,
+    sort_keys=True,
+    separators=(",", ":"),
+)
+OUTCOME_EVALUATION_ASSUMPTIONS_HASH: Final = hashlib.sha256(
+    OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON.encode("utf-8")
+).hexdigest()
 
 
 class OutcomeStatus(str, Enum):
@@ -19,6 +44,7 @@ class OutcomeStatus(str, Enum):
     PARTIAL = "PARTIAL"
     MISSING_DATA = "MISSING_DATA"
     ERROR = "ERROR"
+    INVALID = "INVALID"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +55,10 @@ class HypothesisOutcomeSummary:
     excluded_feature_rows: int
     missing_observation_rows: int
     mean_forward_return: float | None
+    price_basis: str
+    adjustment_methodology: str
+    adjustment_version: str
+    scoring_policy_hash: str | None
 
 
 DEFAULT_HORIZONS: List[int] = [5, 10, 20, 60]
@@ -75,6 +105,8 @@ class CandidateOutcomeRecord:
     candidate_class: Optional[str] = None
     setup_type: Optional[str] = None
     risk_flags_json: Optional[str] = None
+    observation_start_date: Optional[str] = None
+    observation_end_date: Optional[str] = None
     entry_close: Optional[float] = None
     exit_close: Optional[float] = None
     benchmark_entry_close: Optional[float] = None
@@ -97,6 +129,17 @@ class CandidateOutcomeRecord:
     metric_policy_version: Optional[str] = None
     symbol_bar_count: Optional[int] = None
     benchmark_bar_count: Optional[int] = None
+    price_basis: str = "UNKNOWN"
+    benchmark_price_basis: str = "UNKNOWN"
+    adjustment_methodology: str = "UNKNOWN"
+    adjustment_version: str = "UNKNOWN"
+    action_overlap_status: str = "NOT_EVALUATED"
+    invalidation_reason: Optional[str] = None
+    corporate_action_lineage_json: str = "[]"
+    scoring_policy_id: Optional[str] = None
+    scoring_policy_version: Optional[str] = None
+    scoring_policy_hash: Optional[str] = None
+    scoring_policy_status: Optional[str] = None
 
 
 @dataclass
@@ -109,6 +152,7 @@ class WatchlistOutcomeRecord:
     complete_count: Optional[int] = None
     pending_count: Optional[int] = None
     missing_data_count: Optional[int] = None
+    invalid_count: Optional[int] = None
     avg_forward_return: Optional[float] = None
     median_forward_return: Optional[float] = None
     avg_excess_return: Optional[float] = None
@@ -122,6 +166,14 @@ class WatchlistOutcomeRecord:
     evaluation_run_id: Optional[str] = None
     evaluator_version: Optional[str] = None
     metric_policy_version: Optional[str] = None
+    price_basis: str = "UNKNOWN"
+    adjustment_methodology: str = "UNKNOWN"
+    adjustment_version: str = "UNKNOWN"
+    action_overlap_status: str = "NOT_EVALUATED"
+    scoring_policy_id: Optional[str] = None
+    scoring_policy_version: Optional[str] = None
+    scoring_policy_hash: Optional[str] = None
+    scoring_policy_status: Optional[str] = None
 
 
 @dataclass
@@ -143,6 +195,14 @@ class ScoreBucketPerformanceRecord:
     evaluation_run_id: Optional[str] = None
     evaluator_version: Optional[str] = None
     metric_policy_version: Optional[str] = None
+    price_basis: str = "UNKNOWN"
+    adjustment_methodology: str = "UNKNOWN"
+    adjustment_version: str = "UNKNOWN"
+    action_overlap_status: str = "NOT_EVALUATED"
+    scoring_policy_id: Optional[str] = None
+    scoring_policy_version: Optional[str] = None
+    scoring_policy_hash: Optional[str] = None
+    scoring_policy_status: Optional[str] = None
 
 
 @dataclass
@@ -164,6 +224,14 @@ class SetupTypePerformanceRecord:
     evaluation_run_id: Optional[str] = None
     evaluator_version: Optional[str] = None
     metric_policy_version: Optional[str] = None
+    price_basis: str = "UNKNOWN"
+    adjustment_methodology: str = "UNKNOWN"
+    adjustment_version: str = "UNKNOWN"
+    action_overlap_status: str = "NOT_EVALUATED"
+    scoring_policy_id: Optional[str] = None
+    scoring_policy_version: Optional[str] = None
+    scoring_policy_hash: Optional[str] = None
+    scoring_policy_status: Optional[str] = None
 
 
 @dataclass
@@ -185,3 +253,11 @@ class RiskFlagPerformanceRecord:
     evaluation_run_id: Optional[str] = None
     evaluator_version: Optional[str] = None
     metric_policy_version: Optional[str] = None
+    price_basis: str = "UNKNOWN"
+    adjustment_methodology: str = "UNKNOWN"
+    adjustment_version: str = "UNKNOWN"
+    action_overlap_status: str = "NOT_EVALUATED"
+    scoring_policy_id: Optional[str] = None
+    scoring_policy_version: Optional[str] = None
+    scoring_policy_hash: Optional[str] = None
+    scoring_policy_status: Optional[str] = None

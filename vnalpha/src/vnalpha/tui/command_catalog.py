@@ -38,11 +38,16 @@ def _static_catalog() -> list[UiCommand]:
         UiCommand(
             name="experiment",
             description="Run indicator experiments or offline research event studies.",
-            usage="/experiment indicator DESCRIPTION | /experiment event-study ALLOWLISTED_CONDITION",
+            usage=(
+                "/experiment indicator <description> [--universe VN30] [--start YYYY-MM-DD] "
+                "[--end YYYY-MM-DD] | /experiment event-study <ALLOWLISTED_CONDITION> "
+                "[--horizon N] | /experiment dataset-extension <PROVIDER> <DATASET> <EXTENSION>"
+            ),
             category="Research Automation",
             examples=(
                 "/experiment indicator relative strength 20 sessions vs VNINDEX --universe VN30",
                 "/experiment event-study rs_20d_vs_vnindex > 0 --horizon 10",
+                "/experiment dataset-extension VNEXAMPLE ohlcv v3 --consumer VNALPHA",
             ),
         ),
         UiCommand(
@@ -213,6 +218,27 @@ def _static_catalog() -> list[UiCommand]:
             examples=(
                 "/data download ohlcv FPT --start 2026-01-01",
                 "/data build features FPT --date 2026-07-10",
+            ),
+        ),
+        UiCommand(
+            name="scoring-policy",
+            description="Inspect and control scoring-policy governance defaults.",
+            usage="/scoring-policy active [--context CONTEXT] | /scoring-policy list [--context CONTEXT] [--status STATUS] [--policy-id ID] [--policy-version VERSION] | /scoring-policy create --policy-id ID --policy-version VERSION --policy-hash HASH --status STATUS --effective-date DATE --reviewer REVIEWER --rationale TEXT [--activate] [--context CONTEXT] [--decision-cutoff-date DATE] [--evidence-json JSON] [--limitations-json JSON] | /scoring-policy set --decision-id DECISION_ID | /scoring-policy rollback [--context CONTEXT]",
+            category="Operations",
+            examples=(
+                "/scoring-policy active",
+                "/scoring-policy list",
+                "/scoring-policy create --policy-id openstock-candidate-score --policy-version v1.0"
+                " --policy-hash 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                " --status EXPERIMENTAL --effective-date 2026-07-01 --reviewer qa.bot"
+                ' --rationale "Open-stock baseline review."',
+                "/scoring-policy create --policy-id openstock-candidate-score --policy-version v1.0"
+                " --policy-hash 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                " --status ACCEPTED --effective-date 2026-07-01 --reviewer qa.bot"
+                ' --rationale "Accepted with short-list evidence." '
+                "--evidence-json '[\"shortlisted\"]' --activate",
+                "/scoring-policy set --decision-id baseline::openstock-candidate-score::v1.0::<POLICY_HASH>",
+                "/scoring-policy rollback --context global",
             ),
         ),
         UiCommand(

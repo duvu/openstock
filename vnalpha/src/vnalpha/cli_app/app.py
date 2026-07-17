@@ -9,6 +9,7 @@ from vnalpha.cli_app import (
     log,
     preflight,
     score,
+    shortlist,
     tui,
     warehouse,
     watchlist,
@@ -29,6 +30,7 @@ app.add_typer(data.app, name="data")
 app.add_typer(warehouse.app, name="warehouse")
 init.register(app)
 score.register(app)
+shortlist.register(app)
 watchlist.register(app)
 tui.register(app)
 app.add_typer(outcome_app, name="outcome")

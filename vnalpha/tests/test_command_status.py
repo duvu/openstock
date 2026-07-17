@@ -11,6 +11,7 @@ from vnalpha.commands.models import CommandResult, CommandStatus, status_color
 from vnalpha.commands.parser import parse
 from vnalpha.commands.setup import build_default_registry
 from vnalpha.data_availability.models import EnsureDataResult, EnsureDataStatus
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import build_local_tool_registry
 from vnalpha.warehouse.migrations import run_migrations
@@ -56,6 +57,10 @@ def _save_score(conn, symbol: str, target_date: str) -> None:
             "risk_quality_score": 0.9,
             "risk_flags": [],
             "rule_outcomes": {},
+            "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+            "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+            "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+            "scoring_policy_status": BASELINE_SCORING_POLICY.lifecycle_status.value,
         },
     )
 

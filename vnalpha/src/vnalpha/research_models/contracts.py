@@ -10,6 +10,7 @@ from vnalpha.research_models.models import (
     SetupAnalysis,
     SetupEvidenceSnapshot,
     ShortlistCandidate,
+    ShortlistDecisionReport,
     SymbolLevelSnapshot,
 )
 
@@ -19,6 +20,7 @@ ResearchModel: TypeAlias = (
     | SymbolLevelSnapshot
     | SetupAnalysis
     | ShortlistCandidate
+    | ShortlistDecisionReport
     | ResearchScenarioPlan
     | SetupEvidenceSnapshot
     | ResearchAnswerAudit
@@ -30,6 +32,7 @@ PERSISTED_RESEARCH_MODEL_TYPES = (
     SymbolLevelSnapshot,
     SetupAnalysis,
     ShortlistCandidate,
+    ShortlistDecisionReport,
     ResearchScenarioPlan,
     SetupEvidenceSnapshot,
     ResearchAnswerAudit,

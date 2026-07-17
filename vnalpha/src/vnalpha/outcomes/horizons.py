@@ -13,18 +13,10 @@ def select_entry_close(
     bars: List[Dict],
     watchlist_date: str,
 ) -> Optional[float]:
-    """Return the close on watchlist_date, or latest close at or before it.
-
-    bars: list of dicts with keys 'time' (str ISO date) and 'close' (float),
-          sorted ascending by time.
-    """
-    candidate: Optional[float] = None
     for bar in bars:
-        if bar["time"] <= watchlist_date:
-            candidate = bar["close"]
-        else:
-            break
-    return candidate
+        if bar["time"] > watchlist_date:
+            return bar["close"]
+    return None
 
 
 def select_exit_close(

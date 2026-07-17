@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import pytest
 
+from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.parser import parse
 from vnalpha.commands.setup import build_default_registry
+from vnalpha.outcomes.models import DEFAULT_HORIZONS
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import build_local_tool_registry
 from vnalpha.warehouse.migrations import run_migrations
@@ -63,6 +67,12 @@ def conn_with_data(conn):
                 "risk_quality_score": 0.9,
                 "risk_flags": ["THIN_VOLUME"] if sym == "HPG" else [],
                 "rule_outcomes": {},
+                "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+                "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+                "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+                "scoring_policy_status": (
+                    BASELINE_SCORING_POLICY.lifecycle_status.value
+                ),
             },
         )
 
@@ -73,10 +83,24 @@ def conn_with_data(conn):
     ]:
         conn.execute(
             """
-            INSERT INTO daily_watchlist (date, rank, symbol, score, candidate_class, setup_type)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO daily_watchlist (
+                date, rank, symbol, score, candidate_class, setup_type,
+                scoring_policy_id, scoring_policy_version,
+                scoring_policy_hash, scoring_policy_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            [today, rank, sym, score_val, cls, "ACCUMULATION_BASE"],
+            [
+                today,
+                rank,
+                sym,
+                score_val,
+                cls,
+                "ACCUMULATION_BASE",
+                BASELINE_SCORING_POLICY.policy_id,
+                BASELINE_SCORING_POLICY.version,
+                BASELINE_SCORING_POLICY.payload_hash,
+                BASELINE_SCORING_POLICY.lifecycle_status.value,
+            ],
         )
 
     # Insert a session for /history tests
@@ -327,6 +351,181 @@ class TestSetupEvidenceHandler:
         )
         assert result.status == "EMPTY_RESULT"
         assert result.summary is not None
+
+
+class TestScoringPolicyCreateHandler:
+    def test_scoring_policy_create_rejects_missing_required_fields(self, conn, reg):
+        parsed = parse(
+            "/scoring-policy create --policy-id openstock-candidate-score "
+            "--policy-version v1.0 --policy-hash "
+            f"{BASELINE_SCORING_POLICY.payload_hash} --status EXPERIMENTAL "
+            "--effective-date 2026-07-10 --reviewer qa.bot"
+        )
+        with pytest.raises(CommandValidationError, match="--rationale"):
+            reg.execute(
+                parsed,
+                conn=conn,
+                registry=reg,
+                tool_executor=_make_tool_executor(conn),
+            )
+
+    def test_scoring_policy_create_rejects_invalid_hash(self, conn, reg):
+        parsed = parse(
+            "/scoring-policy create --policy-id openstock-candidate-score "
+            "--policy-version v1.0 --policy-hash not-a-hash --status EXPERIMENTAL "
+            "--effective-date 2026-07-10 --reviewer qa.bot --rationale baseline"
+        )
+        with pytest.raises(CommandValidationError, match="64"):
+            reg.execute(
+                parsed,
+                conn=conn,
+                registry=reg,
+                tool_executor=_make_tool_executor(conn),
+            )
+
+    def test_scoring_policy_create_rejects_accepted_without_readiness(self, conn, reg):
+        parsed = parse(
+            f"/scoring-policy create --policy-id {BASELINE_SCORING_POLICY.policy_id} "
+            f"--policy-version {BASELINE_SCORING_POLICY.version} --policy-hash "
+            f"{BASELINE_SCORING_POLICY.payload_hash} --status ACCEPTED "
+            "--effective-date 2026-07-10 --reviewer qa.bot "
+            "--rationale accepted --evidence-json '[\"shortlist\"]'"
+        )
+        with pytest.raises(
+            CommandValidationError, match="matching shortlist decision report"
+        ):
+            reg.execute(
+                parsed,
+                conn=conn,
+                registry=reg,
+                tool_executor=_make_tool_executor(conn),
+            )
+
+    def test_scoring_policy_create_succeeds_without_activation(self, conn, reg):
+        parsed = parse(
+            f"/scoring-policy create --policy-id {BASELINE_SCORING_POLICY.policy_id} "
+            f"--policy-version {BASELINE_SCORING_POLICY.version} --policy-hash "
+            f"{BASELINE_SCORING_POLICY.payload_hash} --status EXPERIMENTAL "
+            "--effective-date 2026-07-10 --reviewer qa.bot --rationale baseline"
+        )
+        result = reg.execute(
+            parsed,
+            conn=conn,
+            registry=reg,
+            tool_executor=_make_tool_executor(conn),
+        )
+
+        assert result.status == "SUCCESS"
+        panel = result.panels[0].content
+        assert panel["activated"] is False
+        assert panel["decision"]["policy_id"] == BASELINE_SCORING_POLICY.policy_id
+        assert panel["active_decision"]["decision_id"] == (
+            "baseline::"
+            f"{BASELINE_SCORING_POLICY.policy_id}::"
+            f"{BASELINE_SCORING_POLICY.version}::"
+            f"{BASELINE_SCORING_POLICY.payload_hash}"
+        )
+        assert (
+            panel["decision"]["decision_id"] != panel["active_decision"]["decision_id"]
+        )
+
+    def test_scoring_policy_create_succeeds_with_activation_when_accepted_with_readiness(
+        self,
+        conn,
+        reg,
+    ):
+        conn.execute(
+            """
+            INSERT INTO research_shortlist_decision_report (
+                shortlist_decision_report_id,
+                as_of_date,
+                correlation_id,
+                quality_status,
+                created_at,
+                payload_json
+            )
+            VALUES (
+                'shortlist-report-1',
+                DATE '2026-07-10',
+                'corr-1',
+                'passed',
+                CURRENT_TIMESTAMP,
+                ?
+            )
+            """,
+            [
+                json.dumps(
+                    {
+                        "scoring_policy": {
+                            "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+                            "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+                            "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+                        },
+                    }
+                )
+            ],
+        )
+
+        for horizon in DEFAULT_HORIZONS:
+            conn.execute(
+                """
+                INSERT INTO candidate_outcome (
+                    symbol,
+                    watchlist_date,
+                    horizon_sessions,
+                    outcome_status,
+                    price_basis,
+                    benchmark_price_basis,
+                    adjustment_methodology,
+                    adjustment_version,
+                    action_overlap_status,
+                    scoring_policy_id,
+                    scoring_policy_version,
+                    scoring_policy_hash
+                ) VALUES (
+                    'FPT',
+                    DATE '2026-07-10',
+                    ?,
+                    'COMPLETE',
+                    'RAW_UNADJUSTED',
+                    'RAW_UNADJUSTED',
+                    'NONE',
+                    'raw-unadjusted-v1',
+                    'CLEAR',
+                    ?,
+                    ?,
+                    ?
+                )
+                """,
+                [
+                    horizon,
+                    BASELINE_SCORING_POLICY.policy_id,
+                    BASELINE_SCORING_POLICY.version,
+                    BASELINE_SCORING_POLICY.payload_hash,
+                ],
+            )
+
+        parsed = parse(
+            f"/scoring-policy create --policy-id {BASELINE_SCORING_POLICY.policy_id} "
+            f"--policy-version {BASELINE_SCORING_POLICY.version} --policy-hash "
+            f"{BASELINE_SCORING_POLICY.payload_hash} --status ACCEPTED "
+            "--effective-date 2026-07-10 --reviewer qa.bot --rationale accepted "
+            "--evidence-json '[\"shortlist\"]' --activate"
+        )
+        result = reg.execute(
+            parsed,
+            conn=conn,
+            registry=reg,
+            tool_executor=_make_tool_executor(conn),
+        )
+
+        assert result.status == "SUCCESS"
+        panel = result.panels[0].content
+        assert panel["activated"] is True
+        assert (
+            panel["active_decision"]["decision_id"] == panel["decision"]["decision_id"]
+        )
+        assert panel["decision"]["status"] == "ACCEPTED"
 
 
 # ---------------------------------------------------------------------------

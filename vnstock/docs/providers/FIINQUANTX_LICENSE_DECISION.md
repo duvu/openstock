@@ -81,7 +81,7 @@ permit DuckDB, Postgres, files, bulk export, derived analytics or model training
 - [ ] Session, expiry, concurrency and cleanup behavior is verified.
 - [ ] Timestamp, timezone, empty-response and adjustment semantics are verified.
 - [ ] No credentials, session state or licensed production rows are stored here.
-- [ ] Issue #105 and the OpenSpec validation ledger link the approved reference.
+- [ ] Issue #193 and the OpenSpec validation ledger link the approved reference.
 
 ## Revocation
 
@@ -90,4 +90,4 @@ When a decision expires, is revoked or its scope changes:
 1. set both acknowledgement booleans to `false`;
 2. stop the optional provider image/service;
 3. apply the approved retention/deletion policy to persisted data;
-4. record the revocation in issue #105 and the external decision system.
+4. record the revocation in issue #193 and the external decision system.

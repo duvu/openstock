@@ -41,6 +41,7 @@ from vnalpha.data_provisioning.ensure_current_symbol import (
     ProvisioningOutcome,
 )
 from vnalpha.observability.context import get_correlation_id
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.migrations import run_migrations
 
 
@@ -307,7 +308,11 @@ def test_snapshot_collects_per_artifact_provenance_from_the_warehouse() -> None:
     lineage = (
         '{"as_of_bar_date":"2026-07-10","scoring_version":"score-v1",'
         '"feature_build_version":"features-v1","selected_provider":"VCI",'
-        '"ingestion_run_id":"ing-fpt"}'
+        '"ingestion_run_id":"ing-fpt",'
+        f'"scoring_policy_id":"{BASELINE_SCORING_POLICY.policy_id}",'
+        f'"scoring_policy_version":"{BASELINE_SCORING_POLICY.version}",'
+        f'"scoring_policy_hash":"{BASELINE_SCORING_POLICY.payload_hash}",'
+        f'"scoring_policy_status":"{BASELINE_SCORING_POLICY.lifecycle_status.value}"}}'
     )
     conn.execute(
         """
@@ -322,10 +327,19 @@ def test_snapshot_collects_per_artifact_provenance_from_the_warehouse() -> None:
     )
     conn.execute(
         """
-        INSERT INTO candidate_score (symbol, date, score, candidate_class, lineage_json)
-        VALUES ('FPT', '2026-07-10', 1.0, 'A', ?)
+        INSERT INTO candidate_score (
+            symbol, date, score, candidate_class, lineage_json,
+            scoring_policy_id, scoring_policy_version,
+            scoring_policy_hash, scoring_policy_status
+        ) VALUES ('FPT', '2026-07-10', 1.0, 'A', ?, ?, ?, ?, ?)
         """,
-        [lineage],
+        [
+            lineage,
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.lifecycle_status.value,
+        ],
     )
 
     snapshot = capture_availability_snapshot(conn, "FPT", "2026-07-10", DEFAULT_POLICY)
@@ -382,10 +396,19 @@ def test_stale_score_evidence_renders_stale_freshness() -> None:
     run_migrations(conn=conn)
     conn.execute(
         """
-        INSERT INTO candidate_score (symbol, date, score, candidate_class, lineage_json)
-        VALUES ('FPT', '2026-07-10', 1.0, 'A',
-                '{"as_of_bar_date":"2026-06-01"}')
-        """
+        INSERT INTO candidate_score (
+            symbol, date, score, candidate_class, lineage_json,
+            scoring_policy_id, scoring_policy_version,
+            scoring_policy_hash, scoring_policy_status
+        ) VALUES ('FPT', '2026-07-10', 1.0, 'A', ?, ?, ?, ?, ?)
+        """,
+        [
+            '{"as_of_bar_date":"2026-06-01"}',
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.lifecycle_status.value,
+        ],
     )
 
     snapshot = capture_availability_snapshot(conn, "FPT", "2026-07-10", DEFAULT_POLICY)

@@ -21,6 +21,7 @@ from vnalpha.features.build_features import (
 )
 from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
 from vnalpha.scoring.generate_watchlist import generate_watchlist
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.repositories import (
@@ -293,6 +294,10 @@ class TestDataQuality:
             "breakout_score": 0.50,
             "risk_quality_score": 0.80,
             "risk_flags": [],
+            "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+            "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+            "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+            "scoring_policy_status": BASELINE_SCORING_POLICY.lifecycle_status.value,
         }
         save_candidate_score(conn, "FPT", "2024-01-15", score_result)
 

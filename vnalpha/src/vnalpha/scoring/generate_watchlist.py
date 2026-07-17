@@ -17,6 +17,7 @@ from typing import List, Optional
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY, resolve_scoring_policy
 from vnalpha.scoring.score import compute_composite_score
 from vnalpha.warehouse.repositories import (
     get_candidate_scores,
@@ -38,6 +39,11 @@ def score_universe(
     universe: Optional[List[str]] = None,
     *,
     memory_root: Path | None = None,
+    scoring_policy_id: str = BASELINE_SCORING_POLICY.policy_id,
+    scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
+    rebuild_policy: bool = False,
+    project_memory: bool = True,
+    scoring_policy_auto: bool = False,
 ) -> int:
     """Score all symbols for a given date using feature_snapshot.
 
@@ -73,7 +79,9 @@ def score_universe(
           AND fs.relative_strength_completeness = 'COMPLETE'
     """
     params: list = [date]
-    if universe:
+    if universe is not None:
+        if not universe:
+            return 0
         placeholders = ", ".join(["?"] * len(universe))
         query += f" AND fs.symbol IN ({placeholders})"
         params.extend(universe)
@@ -103,6 +111,20 @@ def score_universe(
         "lineage_json",
     ]
 
+    policy = resolve_scoring_policy(
+        scoring_policy_id,
+        scoring_policy_version,
+        as_of_date=date,
+        conn=conn,
+        use_active_default=scoring_policy_auto,
+    )
+    _guard_policy_replay(
+        conn,
+        date,
+        [str(row[0]) for row in rows],
+        policy.payload_hash,
+        allow_rebuild=rebuild_policy,
+    )
     scored_count = 0
     for row in rows:
         features = dict(zip(cols, row, strict=True))
@@ -116,7 +138,7 @@ def score_universe(
                 feature_lineage = json.loads(lineage_raw)
             except (ValueError, TypeError):
                 pass
-        scored = compute_composite_score(features)
+        scored = compute_composite_score(features, policy=policy)
         scored["symbol"] = symbol
         scored["date"] = str(date_val)
         # Propagate lineage from feature_snapshot into scored result
@@ -132,14 +154,47 @@ def score_universe(
                 date_val,
             )
         # Persist to candidate_score table — single authoritative record
-        save_candidate_score(conn, symbol, str(date_val), scored)
-        _project_candidate_score_to_memory(
-            conn, symbol, date_val, scored, memory_root=memory_root
+        save_candidate_score(
+            conn,
+            symbol,
+            str(date_val),
+            scored,
+            allow_policy_rebuild=rebuild_policy,
         )
+        if project_memory:
+            _project_candidate_score_to_memory(
+                conn, symbol, date_val, scored, memory_root=memory_root
+            )
         scored_count += 1
 
     logger.info("Scored and persisted %d symbols for %s", scored_count, date)
     return scored_count
+
+
+def _guard_policy_replay(
+    conn: duckdb.DuckDBPyConnection,
+    date: str,
+    symbols: list[str],
+    policy_hash: str,
+    *,
+    allow_rebuild: bool,
+) -> None:
+    if allow_rebuild or not symbols:
+        return
+    placeholders = ", ".join(["?"] * len(symbols))
+    rows = conn.execute(
+        "SELECT symbol, scoring_policy_hash FROM candidate_score "
+        f"WHERE date=? AND symbol IN ({placeholders})",
+        [date, *symbols],
+    ).fetchall()
+    conflicts = sorted(
+        str(symbol) for symbol, row_hash in rows if row_hash != policy_hash
+    )
+    if conflicts:
+        raise ValueError(
+            "Existing candidate scores have a different or legacy policy hash; "
+            f"explicit rebuild is required for: {', '.join(conflicts)}"
+        )
 
 
 def _relative_strength_snapshot_exists(conn: duckdb.DuckDBPyConnection) -> bool:
@@ -181,6 +236,8 @@ def _project_candidate_score_to_memory(
             ),
             correlation_id=f"candidate-score:{symbol}:{resolved_date.isoformat()}",
             persisted_at=datetime.now(UTC),
+            scoring_policy_id=str(scored["scoring_policy_id"]),
+            scoring_policy_hash=str(scored["scoring_policy_hash"]),
         )
         repository = SymbolMemoryRepository(conn)
         ingestion = SymbolMemoryIngestionService(repository)
@@ -202,6 +259,12 @@ def save_watchlist(
     date: str,
     top_n: int = DEFAULT_TOP_N,
     min_score: float = DEFAULT_MIN_SCORE,
+    *,
+    scoring_policy_id: str = BASELINE_SCORING_POLICY.policy_id,
+    scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
+    allow_policy_rebuild: bool = False,
+    manage_transaction: bool = True,
+    scoring_policy_auto: bool = False,
 ) -> int:
     """Derive and save daily_watchlist FROM persisted candidate_score rows.
 
@@ -217,29 +280,88 @@ def save_watchlist(
         c for c in candidates if c.get("candidate_class") in WATCHLIST_CLASSES
     ][:top_n]
 
-    # Clear existing entries for this date
-    conn.execute("DELETE FROM daily_watchlist WHERE date = ?", [date])
-
-    for rank, candidate in enumerate(candidates, start=1):
-        risk_flags = candidate.get("risk_flags_json", [])
-        lineage = candidate.get("lineage_json", {})
-        conn.execute(
-            """
-            INSERT INTO daily_watchlist
-            (date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                date,
-                rank,
-                candidate["symbol"],
-                candidate["score"],
-                candidate["candidate_class"],
-                candidate["setup_type"],
-                json.dumps(risk_flags) if isinstance(risk_flags, list) else risk_flags,
-                json.dumps(lineage) if isinstance(lineage, dict) else lineage,
-            ],
+    policy = resolve_scoring_policy(
+        scoring_policy_id,
+        scoring_policy_version,
+        as_of_date=date,
+        conn=conn,
+        use_active_default=scoring_policy_auto,
+    )
+    identities = {
+        (
+            str(c.get("scoring_policy_id") or ""),
+            str(c.get("scoring_policy_version") or ""),
+            str(c.get("scoring_policy_hash") or ""),
+            str(c.get("scoring_policy_status") or ""),
         )
+        for c in candidates
+    }
+    expected_identity = (
+        policy.policy_id,
+        policy.version,
+        policy.payload_hash,
+        policy.lifecycle_status.value,
+    )
+    if identities and identities != {expected_identity}:
+        raise ValueError(
+            "Watchlist candidates have missing, mixed, or invalid policy identity"
+        )
+    existing_identities = set(
+        conn.execute(
+            "SELECT DISTINCT scoring_policy_id, scoring_policy_version, "
+            "scoring_policy_hash, scoring_policy_status "
+            "FROM daily_watchlist WHERE date=?",
+            [date],
+        ).fetchall()
+    )
+    if (
+        existing_identities
+        and existing_identities != {expected_identity}
+        and not allow_policy_rebuild
+    ):
+        raise ValueError(
+            "Existing watchlist has a different or legacy policy identity; "
+            "explicit rebuild is required"
+        )
+
+    if manage_transaction:
+        conn.execute("BEGIN TRANSACTION")
+    try:
+        conn.execute("DELETE FROM daily_watchlist WHERE date = ?", [date])
+
+        for rank, candidate in enumerate(candidates, start=1):
+            risk_flags = candidate.get("risk_flags_json", [])
+            lineage = candidate.get("lineage_json", {})
+            conn.execute(
+                """
+            INSERT INTO daily_watchlist
+            (date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json,
+             scoring_policy_id, scoring_policy_version, scoring_policy_hash, scoring_policy_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    date,
+                    rank,
+                    candidate["symbol"],
+                    candidate["score"],
+                    candidate["candidate_class"],
+                    candidate["setup_type"],
+                    json.dumps(risk_flags)
+                    if isinstance(risk_flags, list)
+                    else risk_flags,
+                    json.dumps(lineage) if isinstance(lineage, dict) else lineage,
+                    candidate.get("scoring_policy_id"),
+                    candidate.get("scoring_policy_version"),
+                    candidate.get("scoring_policy_hash"),
+                    candidate.get("scoring_policy_status"),
+                ],
+            )
+        if manage_transaction:
+            conn.execute("COMMIT")
+    except duckdb.Error:
+        if manage_transaction:
+            conn.execute("ROLLBACK")
+        raise
     logger.info(
         "Saved %d watchlist entries for %s (from persisted scores)",
         len(candidates),
@@ -254,12 +376,25 @@ def generate_watchlist(
     universe: Optional[List[str]] = None,
     top_n: int = DEFAULT_TOP_N,
     min_score: float = DEFAULT_MIN_SCORE,
+    scoring_policy_id: str = BASELINE_SCORING_POLICY.policy_id,
+    scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
+    rebuild_policy: bool = False,
+    scoring_policy_auto: bool = False,
 ) -> dict:
     """Full pipeline: compute scores → persist → derive watchlist from persisted data.
 
     Returns:
         dict with "scored" count (all symbols scored) and "saved" count (watchlist entries).
     """
+    policy = resolve_scoring_policy(
+        scoring_policy_id,
+        scoring_policy_version,
+        as_of_date=date,
+        conn=conn,
+        use_active_default=scoring_policy_auto,
+    )
+    requested_symbols = sorted(set(universe or ()))
+    requested_count = len(requested_symbols) if universe is not None else 0
     try:
         from vnalpha.observability.domain import log_watchlist_start
 
@@ -267,9 +402,34 @@ def generate_watchlist(
     except Exception:  # noqa: BLE001
         pass
     try:
-        scored = score_universe(conn, date, universe=universe)
-        saved = save_watchlist(conn, date, top_n=top_n, min_score=min_score)
+        conn.execute("BEGIN TRANSACTION")
+        scored = score_universe(
+            conn,
+            date,
+            universe=universe,
+            scoring_policy_id=scoring_policy_id,
+            scoring_policy_version=scoring_policy_version,
+            rebuild_policy=rebuild_policy,
+            project_memory=False,
+            scoring_policy_auto=scoring_policy_auto,
+        )
+        saved = save_watchlist(
+            conn,
+            date,
+            top_n=top_n,
+            min_score=min_score,
+            scoring_policy_id=policy.policy_id,
+            scoring_policy_version=policy.version,
+            allow_policy_rebuild=rebuild_policy,
+            manage_transaction=False,
+            scoring_policy_auto=scoring_policy_auto,
+        )
+        conn.execute("COMMIT")
     except Exception as exc:
+        try:
+            conn.execute("ROLLBACK")
+        except duckdb.Error:
+            pass
         logger.error("Watchlist generation failed for %s: %s", date, exc)
         try:
             from vnalpha.observability.domain import log_watchlist_failure
@@ -285,4 +445,25 @@ def generate_watchlist(
         log_watchlist_success(date, scored=scored, saved=saved)
     except Exception:  # noqa: BLE001
         pass
-    return {"scored": scored, "saved": saved}
+    persisted_scores = get_candidate_scores(conn, date)
+    requested_set = set(requested_symbols)
+    for scored_result in persisted_scores:
+        if universe is None or str(scored_result["symbol"]) in requested_set:
+            _project_candidate_score_to_memory(
+                conn,
+                str(scored_result["symbol"]),
+                scored_result["date"],
+                scored_result,
+                memory_root=None,
+            )
+    missing_count = max(0, requested_count - scored) if universe is not None else 0
+    return {
+        "scored": scored,
+        "saved": saved,
+        "requested": requested_count,
+        "missing": missing_count,
+        "scoring_policy_id": policy.policy_id,
+        "scoring_policy_version": policy.version,
+        "scoring_policy_hash": policy.payload_hash,
+        "scoring_policy_status": policy.lifecycle_status.value,
+    }

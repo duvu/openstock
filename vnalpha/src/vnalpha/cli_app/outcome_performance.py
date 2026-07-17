@@ -31,6 +31,8 @@ def outcome_buckets(
         table.add_column("Avg Fwd Rtn")
         table.add_column("Hit Rate")
         table.add_column("Failure Rate")
+        table.add_column("Basis")
+        table.add_column("Policy")
         for row in rows:
             fwd = (
                 f"{row['avg_forward_return']:.2%}"
@@ -42,7 +44,13 @@ def outcome_buckets(
                 f"{row['failure_rate']:.1%}" if row["failure_rate"] is not None else "—"
             )
             table.add_row(
-                row["score_bucket"], str(row["candidate_count"] or 0), fwd, hit, fail
+                row["score_bucket"],
+                str(row["candidate_count"] or 0),
+                fwd,
+                hit,
+                fail,
+                row.get("price_basis") or "UNKNOWN",
+                row.get("scoring_policy_version") or "UNKNOWN",
             )
         console.print(table)
 
@@ -74,6 +82,8 @@ def outcome_setups(
         table.add_column("Avg Fwd Rtn")
         table.add_column("Hit Rate")
         table.add_column("Failure Rate")
+        table.add_column("Basis")
+        table.add_column("Policy")
         for row in rows:
             fwd = (
                 f"{row['avg_forward_return']:.2%}"
@@ -85,7 +95,13 @@ def outcome_setups(
                 f"{row['failure_rate']:.1%}" if row["failure_rate"] is not None else "—"
             )
             table.add_row(
-                row["setup_type"], str(row["candidate_count"] or 0), fwd, hit, fail
+                row["setup_type"],
+                str(row["candidate_count"] or 0),
+                fwd,
+                hit,
+                fail,
+                row.get("price_basis") or "UNKNOWN",
+                row.get("scoring_policy_version") or "UNKNOWN",
             )
         console.print(table)
 
@@ -117,6 +133,8 @@ def outcome_risks(
         table.add_column("Avg Fwd Rtn")
         table.add_column("Hit Rate")
         table.add_column("Failure Rate")
+        table.add_column("Basis")
+        table.add_column("Policy")
         for row in rows:
             fwd = (
                 f"{row['avg_forward_return']:.2%}"
@@ -128,6 +146,12 @@ def outcome_risks(
                 f"{row['failure_rate']:.1%}" if row["failure_rate"] is not None else "—"
             )
             table.add_row(
-                row["risk_flag"], str(row["candidate_count"] or 0), fwd, hit, fail
+                row["risk_flag"],
+                str(row["candidate_count"] or 0),
+                fwd,
+                hit,
+                fail,
+                row.get("price_basis") or "UNKNOWN",
+                row.get("scoring_policy_version") or "UNKNOWN",
             )
         console.print(table)

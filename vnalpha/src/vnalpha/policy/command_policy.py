@@ -30,6 +30,7 @@ COMMAND_PERMISSIONS: Final[Mapping[str, tuple[ToolPermission, ...]]] = MappingPr
         "note": (ToolPermission.WRITE_NOTE,),
         "memory": (),
         "history": (ToolPermission.READ_HISTORY,),
+        "scoring-policy": (ToolPermission.WRITE_DATA,),
         "context": (),
         "todo": (),
         "sandbox": (),

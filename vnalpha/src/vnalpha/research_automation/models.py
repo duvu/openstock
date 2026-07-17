@@ -47,6 +47,7 @@ class ResearchArtifactType(str, Enum):
     """Research artifact kinds supported by this slice."""
 
     INDICATOR_EXPERIMENT = "indicator_experiment"
+    DATASET_EXTENSION_EXPERIMENT = "dataset_extension_experiment"
     FEATURE = "feature"
     HYPOTHESIS_TEST = "hypothesis_test"
     PATTERN_SCAN = "pattern_scan"
@@ -83,6 +84,17 @@ def _normalize_identifier(value: str, field_name: str) -> str:
         raise ValueError(f"{field_name} must be non-empty")
     if ".." in normalized:
         raise ValueError(f"{field_name} must not contain '..'")
+    if len(normalized) > _MAX_IDENTIFIER_LENGTH:
+        raise ValueError(f"{field_name} exceeds {_MAX_IDENTIFIER_LENGTH} characters")
+    return normalized
+
+
+def _normalize_dataset_token(value: str, field_name: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must be non-empty")
+    if any(ch.isspace() for ch in normalized):
+        raise ValueError(f"{field_name} must not contain whitespace")
     if len(normalized) > _MAX_IDENTIFIER_LENGTH:
         raise ValueError(f"{field_name} exceeds {_MAX_IDENTIFIER_LENGTH} characters")
     return normalized
@@ -350,6 +362,91 @@ class ResearchExperiment:
                 raise ValueError(
                     "experiment start_date must be before or equal end_date"
                 )
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetExtensionExperiment:
+    """Dataset/provider extension capability experiment metadata."""
+
+    artifact: ResearchArtifact
+    definition: str
+    provider_name: str
+    dataset_name: str
+    extension_name: str
+    consumer_name: str | None = None
+    dataset_version: str | None = None
+    entitlement: Mapping[str, Any] = field(default_factory=dict)
+    missingness: Mapping[str, Any] = field(default_factory=dict)
+    transformation: str | None = None
+    experiment_hash: str | None = None
+    capability_status: str | None = None
+    capability_payload: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        definition = self.definition.strip()
+        if not definition:
+            raise ValueError("experiment definition must be non-empty")
+        object.__setattr__(self, "definition", definition)
+        object.__setattr__(
+            self,
+            "provider_name",
+            _normalize_identifier(self.provider_name.upper(), "provider_name"),
+        )
+        object.__setattr__(
+            self,
+            "dataset_name",
+            _normalize_dataset_token(self.dataset_name, "dataset_name").lower(),
+        )
+        object.__setattr__(
+            self,
+            "extension_name",
+            _normalize_dataset_token(self.extension_name, "extension_name").lower(),
+        )
+        if self.consumer_name is not None:
+            object.__setattr__(
+                self,
+                "consumer_name",
+                _normalize_identifier(
+                    self.consumer_name,
+                    "consumer_name",
+                ),
+            )
+        if self.dataset_version is not None:
+            dataset_version = str(self.dataset_version).strip()
+            if not dataset_version:
+                raise ValueError("dataset_version must not be empty")
+            if len(dataset_version) > _MAX_IDENTIFIER_LENGTH:
+                raise ValueError(
+                    f"dataset_version exceeds {_MAX_IDENTIFIER_LENGTH} characters"
+                )
+            object.__setattr__(self, "dataset_version", dataset_version)
+        if self.entitlement is not None:
+            object.__setattr__(
+                self, "entitlement", _normalize_mapping(self.entitlement)
+            )
+        if self.missingness is not None:
+            object.__setattr__(
+                self, "missingness", _normalize_mapping(self.missingness)
+            )
+        if self.transformation is not None:
+            object.__setattr__(
+                self,
+                "transformation",
+                str(self.transformation).strip(),
+            )
+        if self.transformation == "":
+            object.__setattr__(self, "transformation", None)
+        if self.experiment_hash is not None:
+            experiment_hash = str(self.experiment_hash).strip()
+            if not experiment_hash:
+                object.__setattr__(self, "experiment_hash", None)
+            else:
+                object.__setattr__(self, "experiment_hash", experiment_hash)
+        object.__setattr__(
+            self,
+            "capability_payload",
+            _normalize_mapping(self.capability_payload),
+        )
 
 
 @dataclass(frozen=True, slots=True)

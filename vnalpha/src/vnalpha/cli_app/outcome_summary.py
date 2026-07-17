@@ -39,6 +39,11 @@ def outcome_candidates(
         table.add_column("Excess Rtn")
         table.add_column("Hit")
         table.add_column("Failure")
+        table.add_column("Basis")
+        table.add_column("Adjustment")
+        table.add_column("Adj Version")
+        table.add_column("Action overlap")
+        table.add_column("Invalidation")
 
         for row in rows:
             fwd = (
@@ -60,8 +65,24 @@ def outcome_candidates(
                 exc,
                 str(row["hit"]) if row["hit"] is not None else "—",
                 str(row["failure"]) if row["failure"] is not None else "—",
+                row.get("price_basis") or "UNKNOWN",
+                row.get("adjustment_methodology") or "UNKNOWN",
+                row.get("adjustment_version") or "UNKNOWN",
+                row.get("action_overlap_status") or "UNKNOWN",
+                row.get("invalidation_reason") or "—",
             )
         console.print(table)
+        for row in rows:
+            typer.echo(
+                f"Lineage {row['symbol']}: "
+                f"basis={row.get('price_basis') or 'UNKNOWN'} "
+                f"benchmark_basis={row.get('benchmark_price_basis') or 'UNKNOWN'} "
+                f"adjustment={row.get('adjustment_methodology') or 'UNKNOWN'} "
+                f"adjustment_version={row.get('adjustment_version') or 'UNKNOWN'} "
+                f"action_overlap={row.get('action_overlap_status') or 'UNKNOWN'} "
+                f"policy_hash={row.get('scoring_policy_hash') or 'UNKNOWN'} "
+                f"invalidation={row.get('invalidation_reason') or 'none'}"
+            )
 
 
 def outcome_watchlist(
@@ -111,7 +132,9 @@ def outcome_watchlist(
         )
         lines = [
             f"Candidates: {result.get('candidate_count')}",
-            f"Complete: {result.get('complete_count')} | Pending: {result.get('pending_count')} | Missing: {result.get('missing_data_count')}",
+            f"Complete: {result.get('complete_count')} | Pending: {result.get('pending_count')} | Missing: {result.get('missing_data_count')} | Invalid: {result.get('invalid_count')}",
+            f"Basis: {result.get('price_basis') or 'UNKNOWN'} | Adjustment: {result.get('adjustment_methodology') or 'UNKNOWN'}@{result.get('adjustment_version') or 'UNKNOWN'}",
+            f"Policy: {result.get('scoring_policy_id') or 'UNKNOWN'}@{result.get('scoring_policy_version') or 'UNKNOWN'} | {result.get('scoring_policy_status') or 'UNKNOWN'} | hash={result.get('scoring_policy_hash') or 'UNKNOWN'}",
             f"Avg Forward Return: {avg_fwd}",
             f"Avg Excess Return: {avg_exc}",
             f"Hit Rate: {hit_rate}",

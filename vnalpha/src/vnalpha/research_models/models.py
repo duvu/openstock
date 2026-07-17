@@ -110,6 +110,30 @@ class ShortlistCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class ShortlistDecisionReport:
+    shortlist_decision_report_id: str
+    shortlist_run_id: str
+    as_of_date: date
+    requested_limit: int
+    requested_min_score: float
+    considered_count: int
+    shortlisted_count: int
+    truncated_to_limit: bool
+    artifact_refs: tuple[str, ...]
+    missing_data: tuple[str, ...]
+    validation_signature: str
+    validation_checks: Mapping[str, Any]
+    scoring_policy: Mapping[str, Any]
+    freshness: str
+    methodology_version: str
+    lineage: Mapping[str, str]
+    correlation_id: str
+    quality_status: str
+    caveats: tuple[str, ...]
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class ResearchScenarioPlan:
     scenario_plan_id: str
     symbol: str
@@ -179,5 +203,6 @@ __all__ = [
     "SetupAnalysis",
     "SetupEvidenceSnapshot",
     "ShortlistCandidate",
+    "ShortlistDecisionReport",
     "SymbolLevelSnapshot",
 ]

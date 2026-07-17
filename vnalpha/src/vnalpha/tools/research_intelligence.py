@@ -8,17 +8,25 @@ inferred or fabricated.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import Counter
 from datetime import date as calendar_date
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Mapping
+from uuid import uuid4
 
 import duckdb
 
 from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.normalizers import normalize_date, normalize_symbol
 from vnalpha.data_availability.deep_readiness_models import ContextRequirement
+from vnalpha.observability.context import get_correlation_id
 from vnalpha.research_models import ResearchModelsRepository
+from vnalpha.research_models.models import (
+    ShortlistCandidate,
+    ShortlistDecisionReport,
+)
 from vnalpha.research_models.scenario_plan import ScenarioPlanBuilder
 from vnalpha.research_models.scenario_policy import validate_research_scenario_payload
 from vnalpha.tools.artifact_references import ArtifactReferenceBuilder
@@ -338,6 +346,31 @@ def generate_shortlist(
         )
 
     watchlist_rows = get_watchlist_rich(conn, target_date)
+    policy_identities = {
+        (
+            row.get("scoring_policy_id"),
+            row.get("scoring_policy_version"),
+            row.get("scoring_policy_hash"),
+            row.get("scoring_policy_status"),
+        )
+        for row in watchlist_rows
+    }
+    if watchlist_rows and (
+        len(policy_identities) != 1
+        or any(value in (None, "") for value in next(iter(policy_identities)))
+    ):
+        caveat = "Persisted watchlist policy identity is missing or mixed."
+        return ToolOutput(
+            data=_missing_payload(
+                "shortlist.generate",
+                target_date,
+                date,
+                ["scoring_policy_identity"],
+                caveat,
+            ),
+            summary=caveat,
+            warnings=[caveat],
+        )
     rows = [row for row in watchlist_rows if float(row.get("score") or 0) >= threshold]
     sectors = _symbol_sector_map(conn, [row["symbol"] for row in rows], target_date)
     sector_scores = _sector_score_map(conn, target_date)
@@ -383,6 +416,10 @@ def generate_shortlist(
                 "risk_quality_score": risk_quality,
                 "risk_flags": risks,
                 "data_quality_status": row.get("data_quality_status"),
+                "scoring_policy_id": row.get("scoring_policy_id"),
+                "scoring_policy_version": row.get("scoring_policy_version"),
+                "scoring_policy_hash": row.get("scoring_policy_hash"),
+                "scoring_policy_status": row.get("scoring_policy_status"),
                 "why_shortlisted": reasons,
                 "why_not_immediate": (
                     [f"risk flag: {flag}" for flag in risks]
@@ -393,7 +430,34 @@ def generate_shortlist(
             }
         )
     ranked.sort(key=lambda item: (-item["shortlist_score"], item["symbol"]))
-    selected = ranked[:limit]
+    symbol_counts: dict[str, int] = {}
+    for row in rows:
+        symbol = str(row.get("symbol"))
+        symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
+    duplicate_symbols = sorted(
+        [symbol for symbol, count in symbol_counts.items() if count > 1]
+    )
+
+    selected_symbols: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for item in ranked:
+        symbol = str(item.get("symbol") or "")
+        if symbol in selected_symbols:
+            continue
+        deduped.append(item)
+        selected_symbols.add(symbol)
+    for position, item in enumerate(deduped, start=1):
+        item["rank"] = position
+    selected = deduped[:limit]
+    truncated_to_limit = len(deduped) > limit
+    validation_checks = _build_shortlist_validation_checks(selected, duplicate_symbols)
+    checks_passed = all(
+        isinstance(check, Mapping) and bool(check.get("passed"))
+        for check in validation_checks.values()
+    )
+
+    shortlist_run_id = _build_shortlist_run_id(target_date, limit, threshold)
+    correlation_id = _shortlist_correlation_id()
     caveats = [_RESEARCH_ONLY_CAVEAT]
     missing_data: list[str] = []
     if len(rows) < limit:
@@ -415,6 +479,75 @@ def generate_shortlist(
     artifact_refs.add_if_present(
         "sector_strength_snapshot", target_date, bool(sector_scores)
     )
+    methodology = {
+        "version": "shortlist-v1",
+        "top": limit,
+        "min_score": threshold,
+        "scoring_policy_id": (
+            watchlist_rows[0].get("scoring_policy_id") if watchlist_rows else None
+        ),
+        "scoring_policy_version": (
+            watchlist_rows[0].get("scoring_policy_version") if watchlist_rows else None
+        ),
+        "scoring_policy_hash": (
+            watchlist_rows[0].get("scoring_policy_hash") if watchlist_rows else None
+        ),
+        "scoring_policy_status": (
+            watchlist_rows[0].get("scoring_policy_status") if watchlist_rows else None
+        ),
+    }
+    freshness = {
+        "watchlist_date": target_date if watchlist_rows else None,
+        "sector_context_date": target_date if sector_scores else None,
+    }
+    quality_status = "AVAILABLE" if (not missing_data and checks_passed) else "PARTIAL"
+    _persist_shortlist_candidates(
+        conn=conn,
+        shortlist_run_id=shortlist_run_id,
+        shortlist_as_of=calendar_date.fromisoformat(target_date),
+        selected=selected,
+        limit=limit,
+        threshold=threshold,
+        methodology=methodology,
+        freshness=freshness,
+        missing_data=missing_data,
+        general_caveats=caveats,
+        quality_status=quality_status,
+        correlation_id=correlation_id,
+    )
+    report_artifact_refs = artifact_refs.build()
+    validation_signature = _build_shortlist_validation_signature(
+        shortlist_run_id=shortlist_run_id,
+        as_of_date=target_date,
+        requested_limit=limit,
+        requested_min_score=threshold,
+        shortlist_selected=selected,
+        checks=validation_checks,
+        artifact_refs=report_artifact_refs,
+        missing_data=missing_data,
+    )
+    decision_report = _build_shortlist_decision_report(
+        shortlist_run_id=shortlist_run_id,
+        as_of_date=calendar_date.fromisoformat(target_date),
+        requested_limit=limit,
+        requested_min_score=threshold,
+        considered_count=len(rows),
+        shortlisted_count=len(selected),
+        truncated_to_limit=truncated_to_limit,
+        artifact_refs=tuple(report_artifact_refs),
+        missing_data=tuple(missing_data),
+        validation_signature=validation_signature,
+        validation_checks=validation_checks,
+        scoring_policy=methodology,
+        freshness=freshness,
+        quality_status=quality_status,
+        caveats=tuple(caveats),
+        correlation_id=correlation_id,
+        created_at=datetime.now(timezone.utc),
+    )
+    repository = ResearchModelsRepository(conn)
+    repository.create_shortlist_decision_report(decision_report)
+    artifact_refs = ArtifactReferenceBuilder()
     lineage_sources: list[str] = []
     if watchlist_rows:
         lineage_sources.append("persisted watchlist")
@@ -430,18 +563,40 @@ def generate_shortlist(
             "formula": "0.75*candidate_score + 0.15*sector_score + 0.10*risk_quality - risk_flag_penalty",
             "top": limit,
             "min_score": threshold,
+            "shortlist_run_id": shortlist_run_id,
+            "scoring_policy_id": (
+                watchlist_rows[0].get("scoring_policy_id") if watchlist_rows else None
+            ),
+            "scoring_policy_version": (
+                watchlist_rows[0].get("scoring_policy_version")
+                if watchlist_rows
+                else None
+            ),
+            "scoring_policy_hash": (
+                watchlist_rows[0].get("scoring_policy_hash") if watchlist_rows else None
+            ),
+            "scoring_policy_status": (
+                watchlist_rows[0].get("scoring_policy_status")
+                if watchlist_rows
+                else None
+            ),
         },
         "shortlist": selected,
         "considered_count": len(rows),
-        "artifact_refs": artifact_refs.build(),
+        "shortlist_decision_report_id": decision_report.shortlist_decision_report_id,
+        "validation_signature": validation_signature,
+        "validation_checks": validation_checks,
+        "artifact_refs": report_artifact_refs,
         "freshness": {
             "watchlist_date": target_date if watchlist_rows else None,
             "sector_context_date": target_date if sector_scores else None,
         },
+        "shortlist_run_id": shortlist_run_id,
         "lineage": {
             "source": " and ".join(lineage_sources)
             or "no persisted shortlist artifacts"
         },
+        "shortlist_candidate_count": len(selected),
         "missing_data": missing_data,
         "caveats": caveats,
         "policy": {"mode": "research_only", "disclaimer": _RESEARCH_ONLY_CAVEAT},
@@ -623,6 +778,251 @@ def get_setup_history(
         ),
         warnings=caveats,
     )
+
+
+def _build_shortlist_validation_checks(
+    shortlisted: list[dict[str, Any]], duplicate_symbols: list[str]
+) -> dict[str, dict[str, Any]]:
+    score_order = True
+    for previous, next_item in zip(shortlisted, shortlisted[1:], strict=False):
+        previous_score = float(previous.get("shortlist_score") or 0.0)
+        next_score = float(next_item.get("shortlist_score") or 0.0)
+        previous_symbol = str(previous.get("symbol") or "")
+        next_symbol = str(next_item.get("symbol") or "")
+        if previous_score < next_score:
+            score_order = False
+            break
+        if previous_score == next_score and previous_symbol > next_symbol:
+            score_order = False
+            break
+
+    expected_ranks = list(range(1, len(shortlisted) + 1))
+    actual_ranks = [int(item.get("rank") or 0) for item in shortlisted]
+    return {
+        "score_order": {
+            "passed": score_order,
+            "details": (
+                "Shortlist scores are not in descending order with "
+                "alphabetical tie-break."
+                if not score_order
+                else "Scores are in descending order."
+            ),
+        },
+        "rank_contiguity": {
+            "passed": actual_ranks == expected_ranks,
+            "details": (
+                "Candidate ranks are contiguous starting at one."
+                if actual_ranks == expected_ranks
+                else f"Ranks observed: {actual_ranks}, expected: {expected_ranks}."
+            ),
+        },
+        "duplicate_symbol_exclusion": {
+            "passed": len(duplicate_symbols) == 0,
+            "details": (
+                "Duplicate symbols were detected in watchlist inputs."
+                if duplicate_symbols
+                else "No duplicate symbols were observed in watchlist inputs."
+            ),
+            "symbols": duplicate_symbols,
+        },
+    }
+
+
+def _build_shortlist_validation_signature(
+    shortlist_run_id: str,
+    as_of_date: str,
+    requested_limit: int,
+    requested_min_score: float,
+    shortlist_selected: list[dict[str, Any]],
+    checks: Mapping[str, Any],
+    artifact_refs: list[str],
+    missing_data: list[str],
+) -> str:
+    signature_payload = {
+        "tool": "shortlist.generate",
+        "shortlist_run_id": shortlist_run_id,
+        "as_of_date": as_of_date,
+        "requested_limit": requested_limit,
+        "requested_min_score": requested_min_score,
+        "artifact_refs": sorted(artifact_refs),
+        "missing_data": sorted(set(missing_data)),
+        "checks": checks,
+        "shortlist": [
+            {
+                "symbol": item.get("symbol"),
+                "rank": item.get("rank"),
+                "shortlist_score": item.get("shortlist_score"),
+            }
+            for item in shortlist_selected
+        ],
+    }
+    encoded = json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _build_shortlist_decision_report_id(shortlist_run_id: str) -> str:
+    return f"{shortlist_run_id}:decision_report"
+
+
+def _build_shortlist_decision_report(
+    shortlist_run_id: str,
+    as_of_date: calendar_date,
+    requested_limit: int,
+    requested_min_score: float,
+    considered_count: int,
+    shortlisted_count: int,
+    truncated_to_limit: bool,
+    artifact_refs: tuple[str, ...],
+    missing_data: tuple[str, ...],
+    validation_signature: str,
+    validation_checks: Mapping[str, Any],
+    scoring_policy: Mapping[str, Any],
+    freshness: Mapping[str, Any],
+    quality_status: str,
+    caveats: tuple[str, ...],
+    correlation_id: str,
+    created_at: datetime,
+) -> ShortlistDecisionReport:
+    return ShortlistDecisionReport(
+        shortlist_decision_report_id=_build_shortlist_decision_report_id(
+            shortlist_run_id
+        ),
+        shortlist_run_id=shortlist_run_id,
+        as_of_date=as_of_date,
+        requested_limit=requested_limit,
+        requested_min_score=requested_min_score,
+        considered_count=considered_count,
+        shortlisted_count=shortlisted_count,
+        truncated_to_limit=truncated_to_limit,
+        artifact_refs=artifact_refs,
+        missing_data=missing_data,
+        validation_signature=validation_signature,
+        validation_checks=validation_checks,
+        scoring_policy=scoring_policy,
+        freshness=json.dumps(freshness, ensure_ascii=False, sort_keys=True),
+        methodology_version="shortlist-v1",
+        lineage={
+            "tool": "shortlist.generate",
+            "shortlist_run_id": shortlist_run_id,
+            "correlation_id": correlation_id,
+        },
+        correlation_id=correlation_id,
+        quality_status=quality_status,
+        caveats=caveats,
+        created_at=created_at,
+    )
+
+
+def _build_shortlist_run_id(target_date: str, limit: int, threshold: float) -> str:
+    threshold_key = f"{threshold:.3f}".replace(".", "_")
+    return f"shortlist-{target_date}-top{limit}-{threshold_key}-{uuid4().hex[:12]}"
+
+
+def _build_shortlist_candidate_id(
+    shortlist_run_id: str, symbol: str, position: int
+) -> str:
+    return f"{shortlist_run_id}:{symbol}:{position}"
+
+
+def _shortlist_correlation_id() -> str:
+    correlation_id = get_correlation_id()
+    return correlation_id if correlation_id != "unset" else f"shortlist-{uuid4().hex}"
+
+
+def _persist_shortlist_candidates(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    shortlist_run_id: str,
+    shortlist_as_of: calendar_date,
+    selected: list[dict[str, Any]],
+    limit: int,
+    threshold: float,
+    methodology: dict[str, Any],
+    freshness: dict[str, Any],
+    missing_data: list[str],
+    general_caveats: list[str],
+    quality_status: str,
+    correlation_id: str,
+) -> None:
+    repository = ResearchModelsRepository(conn)
+    for position, item in enumerate(selected, start=1):
+        risks = _risk_flags(item.get("risk_flags", item.get("risk_flags_json")))
+        freshness_payload = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            **freshness,
+        }
+        lineage_payload = {
+            "tool": "shortlist.generate",
+            "rank": str(position),
+            "top": str(limit),
+            "threshold": str(threshold),
+            "run_id": shortlist_run_id,
+            "correlation_id": correlation_id,
+            "scoring_policy_id": str(methodology.get("scoring_policy_id") or "UNKNOWN"),
+            "scoring_policy_status": str(
+                methodology.get("scoring_policy_status") or "UNKNOWN"
+            ),
+        }
+        repository.create_shortlist_candidate(
+            ShortlistCandidate(
+                shortlist_candidate_id=_build_shortlist_candidate_id(
+                    shortlist_run_id, str(item.get("symbol") or "UNKNOWN"), position
+                ),
+                shortlist_run_id=shortlist_run_id,
+                as_of_date=shortlist_as_of,
+                rank=position,
+                symbol=str(item.get("symbol") or "UNKNOWN"),
+                setup_type=str(item.get("setup_type") or "UNCLASSIFIED"),
+                setup_quality=str(item.get("candidate_class") or "UNCLASSIFIED"),
+                shortlist_score=float(item.get("shortlist_score") or 0.0),
+                why_shortlisted=tuple(
+                    str(reason) for reason in item.get("why_shortlisted", ())
+                ),
+                why_restrained=tuple(
+                    str(reason) for reason in item.get("why_not_immediate", ())
+                ),
+                confirmation_conditions=(
+                    "candidate passed persisted shortlist scoring policy",
+                    f"shortlist rank <= {limit}",
+                ),
+                invalidation_conditions=(
+                    "No hard invalidation condition has been persisted yet.",
+                ),
+                risk_context=(
+                    "risk_flags="
+                    + (",".join(risks) if risks else "none")
+                    + f"; risk_quality={item.get('risk_quality_score') or 0.0:.3f}"
+                ),
+                freshness=json.dumps(
+                    freshness_payload, ensure_ascii=False, sort_keys=True
+                ),
+                lineage=json.dumps(lineage_payload, ensure_ascii=False, sort_keys=True),
+                methodology_version=str(methodology.get("version") or "shortlist-v1"),
+                correlation_id=correlation_id,
+                quality_status=quality_status,
+                caveats=tuple(
+                    _dedupe_str_items(
+                        [
+                            *_normalise_optional_list(general_caveats),
+                            *[
+                                f"missing_shortlist_data: {','.join(sorted(set(missing_data)))}"
+                                if missing_data
+                                else ""
+                            ],
+                        ]
+                    )
+                ),
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+
+
+def _normalise_optional_list(values: list[str] | tuple[str, ...]) -> list[str]:
+    return [str(value) for value in values if str(value).strip()]
+
+
+def _dedupe_str_items(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(_normalise_optional_list(values)))
 
 
 def _resolve_symbol_date(

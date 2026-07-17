@@ -61,7 +61,7 @@ Older text stating that runtime routing is still round-robin is obsolete. `Plugi
 | FMARKET | Fund NAV and fund information | Fund-only provider |
 | FIINQUANTX | Bounded licensed daily equity/index OHLCV and current index/sector membership snapshots | Experimental, explicit source only, exact SDK/credentials/license acknowledgement required |
 
-The current FiinQuantX implementation is not a general replacement for public providers. It remains limited to capabilities with runtime evidence, and issues #105/#106 own the unresolved commercial, session, entitlement/quota, company-reference and closure work.
+The current FiinQuantX implementation is not a general replacement for public providers. It remains limited to capabilities with runtime evidence, and issue #193 owns the unresolved commercial, session, entitlement/quota, company-reference and closure work.
 
 SSI and ABS are discovery candidates, not implemented providers.
 

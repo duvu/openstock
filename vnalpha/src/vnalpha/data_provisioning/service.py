@@ -53,6 +53,10 @@ class DataProvisioningRequest:
     benchmark: str | None = None
     requested_date: str | None = None
     authoritative_snapshot: bool = False
+    scoring_policy_id: str = "openstock-candidate-score"
+    scoring_policy_version: str = "v1.0"
+    rebuild_policy: bool = False
+    scoring_policy_auto: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +255,10 @@ class DataProvisioningService:
             min_score=request.min_score,
             benchmark=_normalize_symbol(request.benchmark),
             requested_date=request.requested_date or request.date,
+            scoring_policy_id=request.scoring_policy_id,
+            scoring_policy_version=request.scoring_policy_version,
+            scoring_policy_auto=request.scoring_policy_auto,
+            rebuild_policy=request.rebuild_policy,
         )
 
     def _execute(
@@ -366,12 +374,31 @@ class DataProvisioningService:
                         universe=_requested_symbols(request),
                         top_n=request.top_n,
                         min_score=request.min_score,
+                        scoring_policy_id=request.scoring_policy_id,
+                        scoring_policy_version=request.scoring_policy_version,
+                        scoring_policy_auto=request.scoring_policy_auto,
+                        rebuild_policy=request.rebuild_policy,
                     )
                 )
+                counts = _counts(raw, "scored", "saved", "requested", "missing")
+                empty_scope = request.symbols is not None and counts["requested"] == 0
+                partial = counts["missing"] > 0 or empty_scope
                 return _result(
                     request,
                     correlation_id,
-                    counts=_counts(raw, "scored", "saved"),
+                    counts=counts,
+                    status=(
+                        ProvisioningStatus.PARTIAL
+                        if partial
+                        else ProvisioningStatus.SUCCESS
+                    ),
+                    warnings=(
+                        ("Requested score scope was only partially available.",)
+                        if counts["missing"] > 0
+                        else (
+                            ("Requested score scope was empty.",) if empty_scope else ()
+                        )
+                    ),
                     raw_result=raw,
                 )
             case "build", "market-regime":
@@ -1005,6 +1032,15 @@ def _result(
         run_id = raw_result.get("run_id") or raw_result.get("ingestion_run_id")
         if run_id:
             lineage["ingestion_run_id"] = str(run_id)
+        for key in (
+            "scoring_policy_id",
+            "scoring_policy_version",
+            "scoring_policy_hash",
+            "scoring_policy_status",
+        ):
+            value = raw_result.get(key)
+            if value not in (None, ""):
+                lineage[key] = str(value)
     if lineage_extra:
         lineage.update(
             {key: str(value) for key, value in lineage_extra.items() if value}
@@ -1091,6 +1127,9 @@ def _audit_provisioning(
             "symbol": request.symbol,
             "correlation_id": correlation_id,
             "counts": dict(counts or {}),
+            "scoring_policy_id": request.scoring_policy_id,
+            "scoring_policy_version": request.scoring_policy_version,
+            "rebuild_policy": request.rebuild_policy,
         },
         object_type="data_provisioning",
         object_id=request.artifact,

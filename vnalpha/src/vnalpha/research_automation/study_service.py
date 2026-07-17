@@ -146,6 +146,10 @@ class ResearchStudyService:
                     "watchlist_date",
                     "horizon_sessions",
                 ],
+                "price_basis": observation_summary.price_basis,
+                "adjustment_methodology": (observation_summary.adjustment_methodology),
+                "adjustment_version": observation_summary.adjustment_version,
+                "scoring_policy_hash": observation_summary.scoring_policy_hash,
             },
             validation_extra={
                 "eligible_feature_rows": observation_summary.eligible_feature_rows,
@@ -246,6 +250,8 @@ class ResearchStudyService:
             "feature_observable_at_event": True,
             "canonical_interval": "1D",
             "canonical_quality": "good|ok|pass",
+            "price_basis": spec.price_basis,
+            "corporate_action_overlap": False,
             "unresolved_quarantine": False,
         }
         result = {
@@ -373,9 +379,13 @@ class ResearchStudyService:
                     symbol,
                     CAST(time AS DATE) AS price_date,
                     close AS entry_close,
+                    price_basis AS entry_price_basis,
                     LEAD(close, {horizon}) OVER (
                         PARTITION BY symbol ORDER BY time
                     ) AS outcome_close,
+                    LEAD(price_basis, {horizon}) OVER (
+                        PARTITION BY symbol ORDER BY time
+                    ) AS outcome_price_basis,
                     LEAD(CAST(time AS DATE), {horizon}) OVER (
                         PARTITION BY symbol ORDER BY time
                     ) AS outcome_date
@@ -419,6 +429,31 @@ class ResearchStudyService:
                     WHEN p.outcome_close IS NULL OR p.outcome_date IS NULL
                          OR NOT isfinite(p.outcome_close)
                     THEN 'missing_outcome'
+                    WHEN p.entry_price_basis <> 'RAW_UNADJUSTED'
+                         OR p.outcome_price_basis <> 'RAW_UNADJUSTED'
+                    THEN 'mixed_price_basis'
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM corporate_action action
+                        WHERE action.symbol = f.symbol
+                          AND action.canonical_status <> 'SUPERSEDED'
+                          AND COALESCE(
+                              action.ex_date,
+                              action.effective_date,
+                              action.record_date,
+                              action.affected_from_date
+                          ) BETWEEN p.price_date AND p.outcome_date
+                    ) OR EXISTS (
+                        SELECT 1
+                        FROM corporate_action_affected_range affected
+                        WHERE affected.symbol = f.symbol
+                          AND affected.affected_from_date <= p.outcome_date
+                          AND COALESCE(
+                              affected.affected_to_date,
+                              affected.affected_from_date
+                          ) >= p.price_date
+                    )
+                    THEN 'corporate_action_overlap'
                     WHEN NOT isfinite({forward_return_sql})
                     THEN 'invalid_outcome'
                     ELSE 'included'

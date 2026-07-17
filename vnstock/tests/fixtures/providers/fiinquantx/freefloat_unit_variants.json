@@ -1,0 +1,19 @@
+{
+  "fixture_reference": "DOC_INCONSISTENCY_REGRESSION",
+  "scenario": "freefloat_units",
+  "rows": [
+    {
+      "ticker": "VCB",
+      "timestamp": "2026-07-14",
+      "freefloat": 0.25,
+      "unit_hint": "ratio_0_to_1"
+    },
+    {
+      "ticker": "VCB",
+      "timestamp": "2026-07-14",
+      "freefloat": 25,
+      "unit_hint": "percent"
+    }
+  ],
+  "notes": "Free-float unit is unresolved; no capability should be advertised until verified."
+}

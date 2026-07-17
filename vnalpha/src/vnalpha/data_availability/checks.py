@@ -155,6 +155,8 @@ def get_candidate_score_evidence(
     row = conn.execute(
         """
         SELECT cs.candidate_class, cs.lineage_json,
+               cs.scoring_policy_id, cs.scoring_policy_version,
+               cs.scoring_policy_hash, cs.scoring_policy_status,
                (
                    SELECT co.quality_status
                    FROM canonical_ohlcv co
@@ -172,7 +174,15 @@ def get_candidate_score_evidence(
     ).fetchone()
     if row is None:
         return CandidateScoreEvidence(exists=False)
-    candidate_class, lineage_raw, quality_status = row
+    (
+        candidate_class,
+        lineage_raw,
+        policy_id,
+        policy_version,
+        policy_hash,
+        policy_status,
+        quality_status,
+    ) = row
     lineage: dict = {}
     if lineage_raw:
         try:
@@ -184,6 +194,14 @@ def get_candidate_score_evidence(
         except (json.JSONDecodeError, TypeError):
             lineage = {}
     as_of_bar_date = lineage.get("as_of_bar_date") or lineage.get("feature_date")
+    for key, persisted_value in (
+        ("scoring_policy_id", policy_id),
+        ("scoring_policy_version", policy_version),
+        ("scoring_policy_hash", policy_hash),
+        ("scoring_policy_status", policy_status),
+    ):
+        if persisted_value in (None, "") or lineage.get(key) != persisted_value:
+            lineage.pop(key, None)
     lineage_fields = frozenset(
         str(key) for key, value in lineage.items() if value not in (None, "")
     )

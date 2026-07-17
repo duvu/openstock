@@ -135,8 +135,10 @@ def test_experiment_catalog_advertises_the_enabled_event_study_path():
 
     assert experiment is not None
     assert "event-study" in experiment.usage
+    assert "dataset-extension" in experiment.usage
     assert "backtest" not in experiment.usage
-    assert all("event-study" in example for example in experiment.examples[1:])
+    assert any("event-study" in example for example in experiment.examples)
+    assert any("dataset-extension" in example for example in experiment.examples)
 
 
 def test_catalog_command_suggestions_are_alphabetical():

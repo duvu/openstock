@@ -11,6 +11,7 @@ from typing import Any
 import duckdb
 
 from vnalpha.research_automation.models import (
+    DatasetExtensionExperiment,
     DatasetRef,
     OfflineEventStudy,
     PatternScan,
@@ -93,6 +94,43 @@ class ResearchAutomationRepository:
                         "horizon_sessions": experiment.horizon_sessions,
                     }
                 ),
+            ),
+        )
+
+    def save_dataset_extension(self, experiment: DatasetExtensionExperiment) -> None:
+        self.save_artifact(experiment.artifact)
+        self._upsert_definition(
+            _UPSERT_DATASET_EXTENSION_SQL,
+            (
+                experiment.artifact.artifact_id,
+                experiment.definition,
+                _serialize_payload(
+                    {
+                        "definition": experiment.definition,
+                        "provider_name": experiment.provider_name,
+                        "dataset_name": experiment.dataset_name,
+                        "extension_name": experiment.extension_name,
+                        "consumer_name": experiment.consumer_name,
+                        "dataset_version": experiment.dataset_version,
+                        "entitlement": experiment.entitlement,
+                        "missingness": experiment.missingness,
+                        "transformation": experiment.transformation,
+                        "experiment_hash": experiment.experiment_hash,
+                        "capability_status": experiment.capability_status,
+                        "capability_payload": experiment.capability_payload,
+                    }
+                ),
+                experiment.provider_name,
+                experiment.dataset_name,
+                experiment.extension_name,
+                experiment.consumer_name,
+                experiment.dataset_version,
+                _serialize_payload(experiment.entitlement),
+                _serialize_payload(experiment.missingness),
+                experiment.transformation,
+                experiment.experiment_hash,
+                experiment.capability_status,
+                _serialize_payload(experiment.capability_payload),
             ),
         )
 
@@ -490,5 +528,29 @@ ON CONFLICT (artifact_id) DO UPDATE SET
     start_date = excluded.start_date,
     end_date = excluded.end_date,
     definition_json = excluded.definition_json,
+    updated_at_ts = now()
+"""
+
+_UPSERT_DATASET_EXTENSION_SQL = """
+INSERT INTO research_experiment (
+    artifact_id, definition, definition_json, provider_name, dataset_name,
+    extension_name,
+    consumer_name, dataset_version, entitlement_json, missingness_json,
+    transformation, experiment_hash, capability_status, capability_payload
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (artifact_id) DO UPDATE SET
+    definition = excluded.definition,
+    definition_json = excluded.definition_json,
+    provider_name = excluded.provider_name,
+    dataset_name = excluded.dataset_name,
+    extension_name = excluded.extension_name,
+    consumer_name = excluded.consumer_name,
+    dataset_version = excluded.dataset_version,
+    entitlement_json = excluded.entitlement_json,
+    missingness_json = excluded.missingness_json,
+    transformation = excluded.transformation,
+    experiment_hash = excluded.experiment_hash,
+    capability_status = excluded.capability_status,
+    capability_payload = excluded.capability_payload,
     updated_at_ts = now()
 """

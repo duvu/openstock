@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import duckdb
 
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.migrations import run_migrations
 
 
@@ -228,6 +229,10 @@ class TestObservabilityEvents:
             "ingestion_run_id": "test-run",
             "source_quality_status": "pass",
             "lineage_status": "COMPLETE",
+            "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
+            "scoring_policy_version": BASELINE_SCORING_POLICY.version,
+            "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+            "scoring_policy_status": BASELINE_SCORING_POLICY.lifecycle_status.value,
         }
         conn.execute(
             """
@@ -235,11 +240,19 @@ class TestObservabilityEvents:
             (symbol, date, score, candidate_class, setup_type,
              trend_score, relative_strength_score, volume_score,
              base_score, breakout_score, risk_quality_score,
-             evidence_json, risk_flags_json, lineage_json)
+             evidence_json, risk_flags_json, lineage_json,
+             scoring_policy_id, scoring_policy_version,
+             scoring_policy_hash, scoring_policy_status)
             VALUES ('FPT', '2025-06-30', 0.75, 'STRONG_CANDIDATE', 'MOMENTUM_CONTINUATION',
-                    0.8, 0.7, 0.6, 0.5, 0.4, 0.9, '{}', '[]', ?)
+                    0.8, 0.7, 0.6, 0.5, 0.4, 0.9, '{}', '[]', ?, ?, ?, ?, ?)
             """,
-            [json.dumps(lineage)],
+            [
+                json.dumps(lineage),
+                BASELINE_SCORING_POLICY.policy_id,
+                BASELINE_SCORING_POLICY.version,
+                BASELINE_SCORING_POLICY.payload_hash,
+                BASELINE_SCORING_POLICY.lifecycle_status.value,
+            ],
         )
 
         policy = DataAvailabilityPolicy(auto_sync=False, min_required_bars=1)

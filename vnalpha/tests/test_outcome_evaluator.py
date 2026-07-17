@@ -16,12 +16,18 @@ from vnalpha.outcomes.aggregations import (
 )
 from vnalpha.outcomes.evaluator import evaluate_date_range, evaluate_watchlist_date
 from vnalpha.outcomes.metrics import CLOSE_ONLY_V1 as METRIC_POLICY_VERSION
-from vnalpha.outcomes.models import OutcomeStatus
+from vnalpha.outcomes.models import (
+    OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION,
+    OUTCOME_EVALUATION_ASSUMPTIONS_HASH,
+    OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON,
+    OutcomeStatus,
+)
 from vnalpha.outcomes.repositories import (
     get_candidate_outcomes,
     get_evaluation_run,
     get_watchlist_outcome,
 )
+from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -84,15 +90,21 @@ def _insert_watchlist(
     conn.execute(
         """
         INSERT INTO daily_watchlist
-           (date, rank, symbol, score, candidate_class, setup_type, risk_flags_json, lineage_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, '{}')
+           (date, rank, symbol, score, candidate_class, setup_type,
+            risk_flags_json, lineage_json, scoring_policy_id,
+            scoring_policy_version, scoring_policy_hash, scoring_policy_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?)
            ON CONFLICT (date, rank) DO UPDATE SET
                symbol=excluded.symbol,
                score=excluded.score,
                candidate_class=excluded.candidate_class,
                setup_type=excluded.setup_type,
                risk_flags_json=excluded.risk_flags_json,
-               lineage_json=excluded.lineage_json
+               lineage_json=excluded.lineage_json,
+               scoring_policy_id=excluded.scoring_policy_id,
+               scoring_policy_version=excluded.scoring_policy_version,
+               scoring_policy_hash=excluded.scoring_policy_hash,
+               scoring_policy_status=excluded.scoring_policy_status
         """,
         [
             watchlist_date,
@@ -102,6 +114,10 @@ def _insert_watchlist(
             candidate_class,
             setup_type,
             json.dumps(risk_flags or []),
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.lifecycle_status.value,
         ],
     )
 
@@ -132,6 +148,58 @@ class TestEvaluatorComplete:
         assert rows[0]["outcome_status"] == OutcomeStatus.COMPLETE.value
         assert rows[0]["forward_return"] is not None
         assert rows[0]["excess_return_vs_vnindex"] is not None
+
+    def test_next_session_entry_bases_forward_return_for_benchmark(self, conn):
+        conn.execute(
+            """
+            INSERT INTO canonical_ohlcv
+                (symbol, time, interval, open, high, low, close, volume)
+            VALUES
+                ('FPT', '2026-01-01', '1D', 100, 100, 100, 100, 100),
+                ('FPT', '2026-01-02', '1D', 110, 110, 110, 110, 100),
+                ('FPT', '2026-01-03', '1D', 120, 120, 120, 120, 100),
+                ('VNINDEX', '2026-01-01', '1D', 1000, 1000, 1000, 1000, 100),
+                ('VNINDEX', '2026-01-02', '1D', 1100, 1100, 1100, 1100, 100),
+                ('VNINDEX', '2026-01-03', '1D', 1200, 1200, 1200, 1200, 100)
+            ON CONFLICT (symbol, time, interval) DO NOTHING
+            """
+        )
+        _insert_watchlist(conn, "FPT", "2026-01-01", score=0.80)
+
+        evaluate_watchlist_date(conn, "2026-01-01", horizons=[2])
+        rows = get_candidate_outcomes(conn, "2026-01-01", 2)
+        assert rows[0]["observation_start_date"] == "2026-01-02"
+        assert rows[0]["observation_end_date"] == "2026-01-03"
+        assert rows[0]["entry_close"] == 110.0
+        assert rows[0]["exit_close"] == 120.0
+        assert rows[0]["forward_return"] == pytest.approx(10.0 / 110.0)
+        assert rows[0]["benchmark_return"] == pytest.approx(100.0 / 1100.0)
+
+    def test_next_session_entry_bases_forward_return(self, conn):
+        conn.execute(
+            """
+            INSERT INTO canonical_ohlcv
+                (symbol, time, interval, open, high, low, close, volume)
+            VALUES
+                ('FPT', '2026-01-01', '1D', 100, 100, 100, 100, 100),
+                ('FPT', '2026-01-02', '1D', 110, 110, 110, 110, 100),
+                ('FPT', '2026-01-03', '1D', 120, 120, 120, 120, 100),
+                ('VNINDEX', '2026-01-01', '1D', 1000, 1000, 1000, 1000, 100),
+                ('VNINDEX', '2026-01-02', '1D', 1100, 1100, 1100, 1100, 100),
+                ('VNINDEX', '2026-01-03', '1D', 1200, 1200, 1200, 1200, 100)
+            ON CONFLICT (symbol, time, interval) DO NOTHING
+            """
+        )
+        _insert_watchlist(conn, "FPT", "2026-01-01", score=0.80)
+
+        evaluate_watchlist_date(conn, "2026-01-01", horizons=[2])
+        rows = get_candidate_outcomes(conn, "2026-01-01", 2)
+        assert rows[0]["observation_start_date"] == "2026-01-02"
+        assert rows[0]["observation_end_date"] == "2026-01-03"
+        assert rows[0]["entry_close"] == 110.0
+        assert rows[0]["exit_close"] == 120.0
+        assert rows[0]["forward_return"] == pytest.approx(10.0 / 110.0)
+        assert rows[0]["benchmark_return"] == pytest.approx(100.0 / 1100.0)
 
     def test_complete_outcome_has_max_gain_and_drawdown(self, conn):
         bars = _make_bars(100.0, 80, "2026-01-01")
@@ -355,6 +423,24 @@ class TestEvaluationRunVersioning:
         assert "FPT" in counts
         assert counts["FPT"] == 80
         assert run["benchmark_bar_count"] == 80
+
+    def test_evaluate_run_records_assumption_metadata(self, conn):
+        bars = _make_bars(100.0, 80, "2026-01-01")
+        _insert_ohlcv(conn, "FPT", bars)
+        _insert_ohlcv(conn, "VNINDEX", _make_bars(1200.0, 80, "2026-01-01"))
+        _insert_watchlist(conn, "FPT", "2026-01-01")
+
+        result = evaluate_watchlist_date(conn, "2026-01-01", horizons=[20])
+        run = get_evaluation_run(conn, result["evaluation_run_id"])
+        assert (
+            run["assumptions_contract_version"]
+            == OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION
+        )
+        assert (
+            run["assumptions_payload_json"]
+            == OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON
+        )
+        assert run["assumptions_hash"] == OUTCOME_EVALUATION_ASSUMPTIONS_HASH
 
     def test_no_watchlist_returns_no_run_id(self, conn):
         """When no watchlist rows, evaluation_run_id is None (no run created)."""

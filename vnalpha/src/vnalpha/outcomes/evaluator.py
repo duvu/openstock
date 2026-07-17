@@ -11,6 +11,11 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.outcomes.aggregations import aggregate_all
+from vnalpha.outcomes.basis import (
+    ActionOverlapStatus,
+    BasisValidationError,
+    assess_observation_lineage,
+)
 from vnalpha.outcomes.horizons import (
     BENCHMARK_SYMBOL,
     DEFAULT_HORIZONS,
@@ -46,6 +51,9 @@ from vnalpha.outcomes.metrics import (
     max_gain_from_highs as calc_max_gain_from_highs,
 )
 from vnalpha.outcomes.models import (
+    OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION,
+    OUTCOME_EVALUATION_ASSUMPTIONS_HASH,
+    OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON,
     CandidateOutcomeRecord,
     OutcomeStatus,
 )
@@ -86,7 +94,8 @@ def _get_watchlist_rows(
             candidate_class,
             setup_type,
             risk_flags_json,
-            lineage_json
+            lineage_json, scoring_policy_id, scoring_policy_version,
+            scoring_policy_hash, scoring_policy_status
         FROM daily_watchlist
         WHERE date = ?
         ORDER BY rank ASC NULLS LAST
@@ -102,6 +111,10 @@ def _get_watchlist_rows(
         "setup_type",
         "risk_flags_json",
         "lineage_json",
+        "scoring_policy_id",
+        "scoring_policy_version",
+        "scoring_policy_hash",
+        "scoring_policy_status",
     ]
     return [dict(zip(cols, r, strict=True)) for r in rows]
 
@@ -166,15 +179,63 @@ def _evaluate_single_candidate(
         metric_policy_version=metric_policy,
         symbol_bar_count=len(symbol_bars),
         benchmark_bar_count=len(benchmark_bars),
+        scoring_policy_id=candidate.get("scoring_policy_id"),
+        scoring_policy_version=candidate.get("scoring_policy_version"),
+        scoring_policy_hash=candidate.get("scoring_policy_hash"),
+        scoring_policy_status=candidate.get("scoring_policy_status"),
     )
 
     entry_close = select_entry_close(symbol_bars, watchlist_date)
     if entry_close is None:
+        rec.price_basis = "UNKNOWN"
+        rec.benchmark_price_basis = "UNKNOWN"
+        rec.adjustment_methodology = "UNKNOWN"
+        rec.action_overlap_status = "NOT_EVALUATED"
+        rec.invalidation_reason = "NO_SYMBOL_BARS"
         rec.outcome_status = OutcomeStatus.MISSING_DATA.value
         return rec
 
-    rec.entry_close = entry_close
     _, future_bars = split_bars(symbol_bars, watchlist_date)
+    if not future_bars:
+        rec.price_basis = "UNKNOWN"
+        rec.benchmark_price_basis = "UNKNOWN"
+        rec.adjustment_methodology = "UNKNOWN"
+        rec.action_overlap_status = "NOT_EVALUATED"
+        rec.invalidation_reason = "NO_SYMBOL_BARS"
+        rec.outcome_status = OutcomeStatus.MISSING_DATA.value
+        return rec
+
+    entry_date = future_bars[0]["time"]
+    end_date = (
+        future_bars[min(horizon, len(future_bars)) - 1]["time"]
+        if future_bars
+        else watchlist_date
+    )
+    rec.observation_start_date = str(entry_date)
+    rec.observation_end_date = str(end_date)
+    try:
+        symbol_lineage = assess_observation_lineage(conn, symbol, entry_date, end_date)
+    except BasisValidationError as exc:
+        rec.price_basis = "UNKNOWN"
+        rec.benchmark_price_basis = "UNKNOWN"
+        rec.adjustment_methodology = "UNKNOWN"
+        rec.action_overlap_status = ActionOverlapStatus.INVALID.value
+        rec.invalidation_reason = str(exc)
+        rec.outcome_status = OutcomeStatus.INVALID.value
+        return rec
+    rec.price_basis = symbol_lineage.price_basis
+    rec.adjustment_methodology = symbol_lineage.adjustment_methodology
+    rec.adjustment_version = symbol_lineage.adjustment_version
+    rec.action_overlap_status = symbol_lineage.action_overlap_status.value
+    rec.invalidation_reason = symbol_lineage.invalidation_reason
+    rec.corporate_action_lineage_json = json.dumps(
+        symbol_lineage.corporate_action_lineage
+    )
+    if symbol_lineage.action_overlap_status is ActionOverlapStatus.INVALID:
+        rec.outcome_status = OutcomeStatus.INVALID.value
+        return rec
+
+    rec.entry_close = entry_close
     rec.bars_available = count_bars_available(future_bars)
 
     if not is_complete(future_bars, horizon):
@@ -189,6 +250,29 @@ def _evaluate_single_candidate(
     bench_exit = select_exit_close(bench_future, horizon)
     rec.benchmark_entry_close = bench_entry
     rec.benchmark_exit_close = bench_exit
+
+    if bench_entry is None or bench_exit is None:
+        rec.benchmark_price_basis = "UNKNOWN"
+    else:
+        try:
+            benchmark_lineage = assess_observation_lineage(
+                conn,
+                BENCHMARK_SYMBOL,
+                bench_future[0]["time"],
+                bench_future[horizon - 1]["time"],
+            )
+        except BasisValidationError as exc:
+            rec.benchmark_price_basis = "UNKNOWN"
+            rec.action_overlap_status = ActionOverlapStatus.INVALID.value
+            rec.invalidation_reason = str(exc)
+            rec.outcome_status = OutcomeStatus.INVALID.value
+            return rec
+        rec.benchmark_price_basis = benchmark_lineage.price_basis
+        if benchmark_lineage.action_overlap_status is ActionOverlapStatus.INVALID:
+            rec.action_overlap_status = ActionOverlapStatus.INVALID.value
+            rec.invalidation_reason = benchmark_lineage.invalidation_reason
+            rec.outcome_status = OutcomeStatus.INVALID.value
+            return rec
 
     fwd = calc_forward_return(entry_close, exit_close)
     bench = calc_benchmark_return(bench_entry, bench_exit)
@@ -248,6 +332,13 @@ def evaluate_watchlist_date(
         evaluator_version=_EVALUATOR_VERSION,
         metric_policy_version=metric_policy,
         horizons=horizons,
+        assumptions_contract_version=OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION,
+        assumptions_payload_json=OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON,
+        assumptions_hash=OUTCOME_EVALUATION_ASSUMPTIONS_HASH,
+        scoring_policy_id=candidates[0].get("scoring_policy_id"),
+        scoring_policy_version=candidates[0].get("scoring_policy_version"),
+        scoring_policy_hash=candidates[0].get("scoring_policy_hash"),
+        scoring_policy_status=candidates[0].get("scoring_policy_status"),
     )
 
     benchmark_bars = _get_ohlcv_bars(conn, BENCHMARK_SYMBOL)
@@ -256,6 +347,7 @@ def evaluate_watchlist_date(
     errors = 0
     evaluated = 0
     symbol_bar_counts: Dict[str, int] = {}
+    outcome_records: list[CandidateOutcomeRecord] = []
 
     for candidate in candidates:
         symbol = candidate["symbol"]
@@ -275,6 +367,7 @@ def evaluate_watchlist_date(
                     metric_policy=metric_policy,
                 )
                 upsert_candidate_outcome(conn, rec)
+                outcome_records.append(rec)
                 persisted += 1
             except Exception as exc:
                 errors += 1
@@ -292,8 +385,13 @@ def evaluate_watchlist_date(
                         evaluation_run_id=run_id,
                         evaluator_version=_EVALUATOR_VERSION,
                         metric_policy_version=metric_policy,
+                        scoring_policy_id=candidate.get("scoring_policy_id"),
+                        scoring_policy_version=candidate.get("scoring_policy_version"),
+                        scoring_policy_hash=candidate.get("scoring_policy_hash"),
+                        scoring_policy_status=candidate.get("scoring_policy_status"),
                     )
                     upsert_candidate_outcome(conn, err_rec)
+                    outcome_records.append(err_rec)
                 except Exception:
                     pass
 
@@ -312,6 +410,23 @@ def evaluate_watchlist_date(
             errors += 1
             logger.warning(f"Error aggregating {watchlist_date}/h{horizon}: {exc}")
 
+    complete_run = bool(outcome_records) and all(
+        record.outcome_status == OutcomeStatus.COMPLETE.value
+        for record in outcome_records
+    )
+    run_status = "FAILED" if errors else ("COMPLETE" if complete_run else "PARTIAL")
+    complete_records = [
+        record
+        for record in outcome_records
+        if record.outcome_status == OutcomeStatus.COMPLETE.value
+    ]
+    run_basis = complete_records[0].price_basis if complete_records else "UNKNOWN"
+    run_method = (
+        complete_records[0].adjustment_methodology if complete_records else "UNKNOWN"
+    )
+    run_version = (
+        complete_records[0].adjustment_version if complete_records else "UNKNOWN"
+    )
     finish_evaluation_run(
         conn,
         run_id=run_id,
@@ -320,6 +435,11 @@ def evaluate_watchlist_date(
         errors=errors,
         symbol_bar_count_json=json.dumps(symbol_bar_counts),
         benchmark_bar_count=len(benchmark_bars),
+        status=run_status,
+        price_basis=run_basis,
+        adjustment_methodology=run_method,
+        adjustment_version=run_version,
+        action_overlap_status="CLEAR" if complete_run else "NOT_EVALUATED",
     )
     try:
         from vnalpha.observability.domain import log_outcome_eval_success

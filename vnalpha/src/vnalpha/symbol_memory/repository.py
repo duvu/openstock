@@ -140,7 +140,9 @@ class SymbolMemoryRepository:
                 return False
             if source_kind == "candidate_score":
                 row = self.connection.execute(
-                    "SELECT score, candidate_class, setup_type FROM candidate_score WHERE symbol = ? AND date = ?",
+                    "SELECT score, candidate_class, setup_type, "
+                    "scoring_policy_id, scoring_policy_hash "
+                    "FROM candidate_score WHERE symbol = ? AND date = ?",
                     [canonical_symbol, reference_date],
                 ).fetchone()
                 return (
@@ -151,13 +153,23 @@ class SymbolMemoryRepository:
                     and value.get("unit") == "score"
                     and value.get("meaning") == "persisted composite candidate score"
                     and set(value).issubset(
-                        {"value", "unit", "meaning", "candidate_class", "setup_type"}
+                        {
+                            "value",
+                            "unit",
+                            "meaning",
+                            "candidate_class",
+                            "setup_type",
+                            "scoring_policy_id",
+                            "scoring_policy_hash",
+                        }
                     )
                     and (
                         "candidate_class" not in value
                         or value["candidate_class"] == row[1]
                     )
                     and ("setup_type" not in value or value["setup_type"] == row[2])
+                    and value.get("scoring_policy_id") == row[3]
+                    and value.get("scoring_policy_hash") == row[4]
                 )
             row = self.connection.execute(
                 "SELECT feature_data_status FROM feature_snapshot WHERE symbol = ? AND date = ?",

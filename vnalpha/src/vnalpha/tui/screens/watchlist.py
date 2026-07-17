@@ -50,7 +50,9 @@ class WatchlistScreen(Screen):
 
     def on_mount(self) -> None:
         table = self.query_one("#wl-table", DataTable)
-        table.add_columns("Rank", "Symbol", "Score", "Class", "Setup", "Risk Flags")
+        table.add_columns(
+            "Rank", "Symbol", "Score", "Class", "Setup", "Risk Flags", "Policy"
+        )
         self._load_data()
 
     def _load_data(self) -> None:
@@ -80,9 +82,16 @@ class WatchlistScreen(Screen):
                     row.get("candidate_class") or "—",
                     row.get("setup_type") or "—",
                     flags_str,
+                    (
+                        f"{row.get('scoring_policy_version') or 'UNKNOWN'} / "
+                        f"{row.get('scoring_policy_status') or 'UNKNOWN'}"
+                    ),
                 )
             self.query_one("#wl-status", Static).update(
-                f"[green]{len(rows)} research candidates[/green]"
+                f"[green]{len(rows)} research candidates[/green] | "
+                f"policy={rows[0].get('scoring_policy_id') or 'UNKNOWN'}@"
+                f"{rows[0].get('scoring_policy_version') or 'UNKNOWN'} | "
+                f"hash={rows[0].get('scoring_policy_hash') or 'UNKNOWN'}"
             )
         except Exception as e:
             self.query_one("#wl-status", Static).update(f"[red]Error: {e}[/red]")

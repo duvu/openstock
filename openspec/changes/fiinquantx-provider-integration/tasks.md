@@ -137,16 +137,16 @@
 ## 10. Documentation, service and operator surfaces
 
 - [x] 10.1 Add `vnstock/docs/providers/FIINQUANTX.md` with secure installation, credentials, enabled datasets, limitations, contract versions and license controls. [evidence: `vnstock/docs/providers/FIINQUANTX.md` at `0bd6a5d`]
-- [ ] 10.2 Update provider hardening and plugin architecture status documentation.
+- [x] 10.2 Update provider hardening and plugin architecture status documentation. [evidence: `vnstock/docs/PROVIDER_HARDENING.md`, `vnstock/docs/PLUGIN_ARCHITECTURE_STATUS.md`, `vnstock/docs/providers/FIINQUANTX_LICENSE_DECISION.md`]
 - [ ] 10.3 Expose only safe install/auth/access/health/version metadata through existing provider metadata endpoints. [evidence: capability status is exposed at `0bd6a5d`; complete operator metadata contract remains pending]
 - [x] 10.4 Do not add FiinQuantX REST login/logout or raw-secret endpoints. [evidence: forbidden-route tests and HTTP smoke at `0bd6a5d`]
-- [ ] 10.5 Add bounded explicit-source examples that never print credentials, session objects or raw auth payloads.
+- [x] 10.5 Add bounded explicit-source examples that never print credentials, session objects or raw auth payloads. [evidence: `vnstock/docs/providers/FIINQUANTX.md`]
 
 ## 11. Validation
 
 - [x] 11.1 Add offline provider protocol/conformance tests. [evidence: focused provider tests at `0bd6a5d`]
 - [x] 11.2 Add dataset contract and versioned normalizer tests for every enabled capability. [evidence: provider, contract and service tests at `0bd6a5d`]
-- [ ] 11.3 Add documentation-inconsistency regression fixtures: timestamp variants, field casing, return-object variants, `fb/fs` direction and free-float unit.
+- [x] 11.3 Add documentation-inconsistency regression fixtures: timestamp variants, field casing, return-object variants, `fb/fs` direction and free-float unit.
 - [ ] 11.4 Add auth, access, version, limits, schema, empty-result, secret-redaction, forbidden-member and runtime-path tests.
 - [x] 11.5 Add opt-in bounded live tests guarded by `VNSTOCK_LIVE_TESTS`, `VNSTOCK_LIVE_PROVIDERS=FIINQUANTX` and licensed acknowledgement. [evidence: `tests/live/providers/test_fiinquantx_live.py` at `0bd6a5d`]
 - [x] 11.6 Ensure live tests record only SDK version, method, shape, row count, hashes and safe statuses, not raw licensed rows. [evidence: live test assertions and redacted run at `0bd6a5d`]

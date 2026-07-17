@@ -51,6 +51,19 @@ def _safe_rate(count: int, total: int) -> Optional[float]:
     return count / total
 
 
+def _performance_lineage(row: List) -> Dict[str, Any]:
+    return {
+        "price_basis": row[5],
+        "adjustment_methodology": row[6],
+        "adjustment_version": row[7],
+        "action_overlap_status": row[8],
+        "scoring_policy_id": row[9],
+        "scoring_policy_version": row[10],
+        "scoring_policy_hash": row[11],
+        "scoring_policy_status": row[12],
+    }
+
+
 def aggregate_watchlist_outcome(
     conn: duckdb.DuckDBPyConnection,
     watchlist_date: str,
@@ -61,7 +74,15 @@ def aggregate_watchlist_outcome(
 ) -> WatchlistOutcomeRecord:
     rows = get_candidate_outcomes(conn, watchlist_date, horizon)
 
-    complete = [r for r in rows if r["outcome_status"] == OutcomeStatus.COMPLETE.value]
+    complete = [
+        r
+        for r in rows
+        if r["outcome_status"] == OutcomeStatus.COMPLETE.value
+        and r.get("price_basis") == "RAW_UNADJUSTED"
+        and r.get("adjustment_methodology") == "NONE"
+        and r.get("action_overlap_status") == "CLEAR"
+        and r.get("scoring_policy_hash") not in (None, "")
+    ]
     pending = [r for r in rows if r["outcome_status"] == OutcomeStatus.PENDING.value]
     missing = [
         r
@@ -72,6 +93,12 @@ def aggregate_watchlist_outcome(
             OutcomeStatus.PARTIAL.value,
             OutcomeStatus.ERROR.value,
         )
+    ]
+    invalid = [
+        r
+        for r in rows
+        if r["outcome_status"] == OutcomeStatus.INVALID.value
+        or (r["outcome_status"] == OutcomeStatus.COMPLETE.value and r not in complete)
     ]
 
     fwd_returns = [
@@ -94,6 +121,7 @@ def aggregate_watchlist_outcome(
         complete_count=len(complete),
         pending_count=len(pending),
         missing_data_count=len(missing),
+        invalid_count=len(invalid),
         avg_forward_return=_safe_mean(fwd_returns),
         median_forward_return=_safe_median(fwd_returns),
         avg_excess_return=_safe_mean(excess_returns),
@@ -106,6 +134,26 @@ def aggregate_watchlist_outcome(
         evaluation_run_id=evaluation_run_id,
         evaluator_version=evaluator_version,
         metric_policy_version=metric_policy_version,
+        price_basis=(complete[0]["price_basis"] if complete else "UNKNOWN"),
+        adjustment_methodology=(
+            complete[0]["adjustment_methodology"] if complete else "UNKNOWN"
+        ),
+        adjustment_version=(
+            (complete[0].get("adjustment_version") or "UNKNOWN")
+            if complete
+            else "UNKNOWN"
+        ),
+        action_overlap_status="CLEAR" if complete else "NOT_EVALUATED",
+        scoring_policy_id=(complete[0].get("scoring_policy_id") if complete else None),
+        scoring_policy_version=(
+            complete[0].get("scoring_policy_version") if complete else None
+        ),
+        scoring_policy_hash=(
+            complete[0].get("scoring_policy_hash") if complete else None
+        ),
+        scoring_policy_status=(
+            complete[0].get("scoring_policy_status") if complete else None
+        ),
     )
     upsert_watchlist_outcome(conn, rec)
     return rec
@@ -122,21 +170,28 @@ def aggregate_score_bucket_performance(
     rows = conn.execute(
         """
         SELECT score, forward_return, excess_return_vs_vnindex,
-               max_drawdown, hit, failure
+               max_drawdown, hit, failure, price_basis,
+               adjustment_methodology, adjustment_version,
+               action_overlap_status, scoring_policy_id,
+               scoring_policy_version, scoring_policy_hash, scoring_policy_status
         FROM candidate_outcome
         WHERE horizon_sessions = ?
           AND outcome_status = 'COMPLETE'
+          AND price_basis = 'RAW_UNADJUSTED'
+          AND adjustment_methodology = 'NONE'
+          AND action_overlap_status = 'CLEAR'
+          AND scoring_policy_hash IS NOT NULL
           AND watchlist_date <= ?
         """,
         [horizon, as_of_date],
     ).fetchall()
 
     buckets: Dict[str, List] = {}
-    for score, fwd, excess, dd, hit, failure in rows:
+    for score, fwd, excess, dd, hit, failure, *lineage in rows:
         bucket = assign_score_bucket(score)
         if bucket not in buckets:
             buckets[bucket] = []
-        buckets[bucket].append((fwd, excess, dd, hit, failure))
+        buckets[bucket].append((fwd, excess, dd, hit, failure, *lineage))
 
     records = []
     for bucket, data in sorted(buckets.items()):
@@ -161,6 +216,7 @@ def aggregate_score_bucket_performance(
             evaluation_run_id=evaluation_run_id,
             evaluator_version=evaluator_version,
             metric_policy_version=metric_policy_version,
+            **_performance_lineage(data[0]),
         )
         upsert_score_bucket_performance(conn, rec)
         records.append(rec)
@@ -178,10 +234,17 @@ def aggregate_setup_type_performance(
     rows = conn.execute(
         """
         SELECT setup_type, forward_return, excess_return_vs_vnindex,
-               max_drawdown, hit, failure
+               max_drawdown, hit, failure, price_basis,
+               adjustment_methodology, adjustment_version,
+               action_overlap_status, scoring_policy_id,
+               scoring_policy_version, scoring_policy_hash, scoring_policy_status
         FROM candidate_outcome
         WHERE horizon_sessions = ?
           AND outcome_status = 'COMPLETE'
+          AND price_basis = 'RAW_UNADJUSTED'
+          AND adjustment_methodology = 'NONE'
+          AND action_overlap_status = 'CLEAR'
+          AND scoring_policy_hash IS NOT NULL
           AND watchlist_date <= ?
           AND setup_type IS NOT NULL
         """,
@@ -189,10 +252,10 @@ def aggregate_setup_type_performance(
     ).fetchall()
 
     by_setup: Dict[str, List] = {}
-    for setup, fwd, excess, dd, hit, failure in rows:
+    for setup, fwd, excess, dd, hit, failure, *lineage in rows:
         if setup not in by_setup:
             by_setup[setup] = []
-        by_setup[setup].append((fwd, excess, dd, hit, failure))
+        by_setup[setup].append((fwd, excess, dd, hit, failure, *lineage))
 
     records = []
     for setup, data in sorted(by_setup.items()):
@@ -217,6 +280,7 @@ def aggregate_setup_type_performance(
             evaluation_run_id=evaluation_run_id,
             evaluator_version=evaluator_version,
             metric_policy_version=metric_policy_version,
+            **_performance_lineage(data[0]),
         )
         upsert_setup_type_performance(conn, rec)
         records.append(rec)
@@ -234,10 +298,17 @@ def aggregate_risk_flag_performance(
     rows = conn.execute(
         """
         SELECT risk_flags_json, forward_return, excess_return_vs_vnindex,
-               max_drawdown, hit, failure
+               max_drawdown, hit, failure, price_basis,
+               adjustment_methodology, adjustment_version,
+               action_overlap_status, scoring_policy_id,
+               scoring_policy_version, scoring_policy_hash, scoring_policy_status
         FROM candidate_outcome
         WHERE horizon_sessions = ?
           AND outcome_status = 'COMPLETE'
+          AND price_basis = 'RAW_UNADJUSTED'
+          AND adjustment_methodology = 'NONE'
+          AND action_overlap_status = 'CLEAR'
+          AND scoring_policy_hash IS NOT NULL
           AND watchlist_date <= ?
           AND risk_flags_json IS NOT NULL
         """,
@@ -245,7 +316,7 @@ def aggregate_risk_flag_performance(
     ).fetchall()
 
     by_flag: Dict[str, List] = {}
-    for flags_json, fwd, excess, dd, hit, failure in rows:
+    for flags_json, fwd, excess, dd, hit, failure, *lineage in rows:
         try:
             flags = json.loads(flags_json) if flags_json else []
         except Exception:
@@ -253,7 +324,7 @@ def aggregate_risk_flag_performance(
         for flag in flags:
             if flag not in by_flag:
                 by_flag[flag] = []
-            by_flag[flag].append((fwd, excess, dd, hit, failure))
+            by_flag[flag].append((fwd, excess, dd, hit, failure, *lineage))
 
     records = []
     for flag, data in sorted(by_flag.items()):
@@ -278,6 +349,7 @@ def aggregate_risk_flag_performance(
             evaluation_run_id=evaluation_run_id,
             evaluator_version=evaluator_version,
             metric_policy_version=metric_policy_version,
+            **_performance_lineage(data[0]),
         )
         upsert_risk_flag_performance(conn, rec)
         records.append(rec)

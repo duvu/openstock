@@ -741,6 +741,7 @@ class ChatController:
             "",
             "Research slash commands (routed to CommandExecutor):",
             "  /experiment event-study — Run an offline research event study",
+            "  /experiment dataset-extension — Probe provider dataset extension capability",
             "  /market-regime    — Show persisted market regime research context",
             "  /sector-strength  — Show persisted sector strength research context",
             "  /scan             — Scan daily watchlist for candidates",

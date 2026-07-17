@@ -17,6 +17,7 @@ ALL_DDL_RESEARCH_MODELS = (
     _record_ddl("research_symbol_level_snapshot", "symbol_level_snapshot_id"),
     _record_ddl("research_setup_analysis", "setup_analysis_id"),
     _record_ddl("research_shortlist_candidate", "shortlist_candidate_id"),
+    _record_ddl("research_shortlist_decision_report", "shortlist_decision_report_id"),
     _record_ddl("research_scenario_plan", "scenario_plan_id"),
     _record_ddl("research_setup_evidence_snapshot", "setup_evidence_snapshot_id"),
 )

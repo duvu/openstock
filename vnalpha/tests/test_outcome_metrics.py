@@ -35,21 +35,21 @@ class TestDefaultHorizons:
 
 
 class TestSelectEntryClose:
-    def test_exact_date_match(self):
+    def test_next_session_after_exact_date(self):
         bars = [{"time": "2026-07-01", "close": 100.0}]
-        assert select_entry_close(bars, "2026-07-01") == 100.0
+        bars.append({"time": "2026-07-02", "close": 101.0})
+        assert select_entry_close(bars, "2026-07-01") == 101.0
 
-    def test_latest_before_date(self):
+    def test_no_bars_after_date(self):
         bars = [
             {"time": "2026-06-29", "close": 98.0},
             {"time": "2026-06-30", "close": 99.0},
         ]
-        # watchlist_date is 2026-07-01, no bar exists, use latest <= date
-        assert select_entry_close(bars, "2026-07-01") == 99.0
-
-    def test_no_bars_before_date(self):
-        bars = [{"time": "2026-07-02", "close": 101.0}]
         assert select_entry_close(bars, "2026-07-01") is None
+
+    def test_no_bars_before_watchlist(self):
+        bars = [{"time": "2026-07-03", "close": 101.0}]
+        assert select_entry_close(bars, "2026-07-01") == 101.0
 
     def test_empty_bars(self):
         assert select_entry_close([], "2026-07-01") is None
