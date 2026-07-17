@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final, assert_never
+from typing import Any, Final, Mapping, assert_never
 
 FEATURE_STATUS_CONTRACT_VERSION: Final = "feature-data-status-v1"
 
@@ -71,6 +72,36 @@ def parse_feature_eligibility(raw_status: str | None) -> FeatureEligibility:
     )
 
 
+def parse_feature_snapshot_eligibility(
+    raw_status: str | None,
+    raw_lineage: str | Mapping[str, Any] | None,
+) -> FeatureEligibility:
+    eligibility = parse_feature_eligibility(raw_status)
+    if not eligibility.eligible:
+        return eligibility
+    lineage: Mapping[str, Any]
+    if isinstance(raw_lineage, str):
+        try:
+            decoded = json.loads(raw_lineage)
+        except (json.JSONDecodeError, TypeError):
+            decoded = None
+        lineage = decoded if isinstance(decoded, Mapping) else {}
+    elif isinstance(raw_lineage, Mapping):
+        lineage = raw_lineage
+    else:
+        lineage = {}
+    if lineage.get("feature_status_contract_version") == (
+        FEATURE_STATUS_CONTRACT_VERSION
+    ):
+        return eligibility
+    return FeatureEligibility(
+        raw_status=raw_status,
+        status=eligibility.status,
+        eligibility_status=FeatureEligibilityStatus.EXCLUDED,
+        exclusion_reason=FeatureExclusionReason.UNKNOWN_FEATURE_STATUS,
+    )
+
+
 __all__ = [
     "FEATURE_STATUS_CONTRACT_VERSION",
     "FeatureDataStatus",
@@ -78,4 +109,5 @@ __all__ = [
     "FeatureEligibilityStatus",
     "FeatureExclusionReason",
     "parse_feature_eligibility",
+    "parse_feature_snapshot_eligibility",
 ]

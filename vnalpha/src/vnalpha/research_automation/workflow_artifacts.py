@@ -38,11 +38,24 @@ def persist_workflow_artifact(
     correlation_id = _correlation_id(artifact_id)
     quality_status = dict(resolution.dataset.quality_status)
     period_coverage = 1.0 if resolution.sufficient else 0.0
-    caveats = generate_research_caveats(
-        sample_size=resolution.dataset.row_count,
-        period_coverage=period_coverage,
-        quality_status=quality_status,
-        transaction_costs_included=False,
+    raw_sample_size = metrics.get("sample_size", resolution.dataset.row_count)
+    sample_size = (
+        int(raw_sample_size)
+        if isinstance(raw_sample_size, (int, float))
+        else resolution.dataset.row_count
+    )
+    caveats = tuple(
+        dict.fromkeys(
+            (
+                *generate_research_caveats(
+                    sample_size=sample_size,
+                    period_coverage=period_coverage,
+                    quality_status=quality_status,
+                    transaction_costs_included=False,
+                ),
+                *resolution.warnings,
+            )
+        )
     )
     lineage = {
         "computation": "approved_deterministic_tool",
@@ -57,7 +70,7 @@ def persist_workflow_artifact(
         else ResearchArtifactStatus.REJECTED
     )
     result_payload = dict(result)
-    result_payload.setdefault("sample_size", resolution.dataset.row_count)
+    result_payload.setdefault("sample_size", sample_size)
     result_payload.update(
         {
             "dataset_row_count": resolution.dataset.row_count,
@@ -69,7 +82,7 @@ def persist_workflow_artifact(
     validation = {
         "schema_valid": True,
         "dataset_sufficient": resolution.sufficient,
-        "sample_size": resolution.dataset.row_count,
+        "sample_size": sample_size,
         "period_coverage": period_coverage,
         "warnings": list(resolution.warnings),
         **dict(validation_extra or {}),

@@ -29,9 +29,11 @@ def research_connection(tmp_path: Path) -> Iterator[duckdb.DuckDBPyConnection]:
             "volatility_20d, volume_ratio, feature_data_status, as_of_bar_date, "
             "benchmark_as_of_bar_date, feature_build_version, lineage_json) VALUES "
             "('FPT', DATE '2026-07-01', 100, 0.12, 0.04, 0.10, 0.02, 0.60, "
-            "'EXACT_DATE', DATE '2026-07-01', DATE '2026-07-01', 'v1', '{}'), "
+            "'EXACT_DATE', DATE '2026-07-01', DATE '2026-07-01', 'v1', "
+            '\'{"feature_status_contract_version":"feature-data-status-v1"}\'), '
             "('VNM', DATE '2026-07-01', 80, 0.08, 0.01, 0.20, 0.05, 1.10, "
-            "'EXACT_DATE', DATE '2026-07-01', DATE '2026-07-01', 'v1', '{}')"
+            "'EXACT_DATE', DATE '2026-07-01', DATE '2026-07-01', 'v1', "
+            '\'{"feature_status_contract_version":"feature-data-status-v1"}\')'
         )
         start = date(2026, 7, 1)
         for symbol, base in (("FPT", 100.0), ("VNM", 80.0)):
@@ -341,3 +343,26 @@ def test_insufficient_dataset_coverage_warns_without_claiming_success(
             "rejected",
         )
     reset_run_context()
+
+
+def test_missing_hypothesis_outcome_is_partial_on_public_command_surface(
+    research_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    research_connection.execute("DELETE FROM candidate_outcome WHERE symbol = 'VNM'")
+
+    result = _execute(
+        "/hypothesis test symbols with rs_20 > 0 have better 20-session return",
+        research_connection,
+    )
+
+    assert result.status is CommandStatus.PARTIAL
+    assert any("no complete later observation" in item for item in result.warnings)
+    artifact = research_connection.execute(
+        "SELECT status, caveats_json FROM research_artifact "
+        "ORDER BY created_at_ts DESC LIMIT 1"
+    ).fetchone()
+    assert artifact is not None
+    assert artifact[0] == "rejected"
+    assert any(
+        "no complete later observation" in item for item in json.loads(artifact[1])
+    )

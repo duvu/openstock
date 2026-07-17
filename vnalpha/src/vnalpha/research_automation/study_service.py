@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 from datetime import date
+from math import isfinite
 from statistics import fmean
 from typing import Final
 
@@ -11,8 +12,13 @@ import duckdb
 from vnalpha.features.status import (
     FEATURE_STATUS_CONTRACT_VERSION,
     FeatureDataStatus,
+    FeatureExclusionReason,
+    parse_feature_snapshot_eligibility,
 )
-from vnalpha.outcomes.models import FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION
+from vnalpha.outcomes.models import (
+    FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION,
+    OutcomeStatus,
+)
 from vnalpha.outcomes.repositories import summarize_hypothesis_outcomes
 from vnalpha.research_automation.dataset_resolver import DatasetResolver
 from vnalpha.research_automation.event_study_spec import parse_event_study_spec
@@ -60,7 +66,6 @@ class ResearchStudyService:
         observation_summary = summarize_hypothesis_outcomes(
             self._conn,
             horizon_sessions=horizon,
-            required_feature_status=FeatureDataStatus.EXACT_DATE.value,
         )
         measurement_warnings: list[str] = []
         if observation_summary.missing_observation_rows:
@@ -72,16 +77,35 @@ class ResearchStudyService:
             measurement_warnings.append(
                 f"At least {_MIN_EVENT_OBSERVATIONS} complete later observations are required."
             )
+        measurement_complete = (
+            observation_summary.complete_observation_rows >= _MIN_EVENT_OBSERVATIONS
+            and observation_summary.missing_observation_rows == 0
+            and observation_summary.excluded_feature_rows == 0
+        )
+        successful = (
+            resolution.sufficient and not resolution.warnings and measurement_complete
+        )
+        effective_warnings = tuple(
+            dict.fromkeys((*resolution.warnings, *measurement_warnings))
+        )
+        quality_status = dict(resolution.dataset.quality_status)
+        if effective_warnings:
+            quality_status["status"] = "warning"
+            quality_status["warnings"] = effective_warnings
         effective_resolution = replace(
             resolution,
-            sufficient=(
-                resolution.sufficient
-                and observation_summary.complete_observation_rows
-                >= _MIN_EVENT_OBSERVATIONS
-            ),
-            warnings=tuple(
-                dict.fromkeys((*resolution.warnings, *measurement_warnings))
-            ),
+            dataset=replace(resolution.dataset, quality_status=quality_status),
+            sufficient=successful,
+            warnings=effective_warnings,
+        )
+        measurement_status = (
+            OutcomeStatus.COMPLETE.value
+            if successful
+            else (
+                OutcomeStatus.PARTIAL.value
+                if observation_summary.complete_observation_rows
+                else OutcomeStatus.MISSING_DATA.value
+            )
         )
         metrics = {
             "sample_size": observation_summary.complete_observation_rows,
@@ -117,8 +141,13 @@ class ResearchStudyService:
                     FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION
                 ),
                 "measurement_source": "candidate_outcome.forward_return",
-                "measurement_status": "COMPLETE",
-                "measurement_join_keys": ["symbol", "watchlist_date"],
+                "measurement_status": measurement_status,
+                "measurement_horizon_sessions": horizon,
+                "measurement_join_keys": [
+                    "symbol",
+                    "watchlist_date",
+                    "horizon_sessions",
+                ],
             },
             validation_extra={
                 "eligible_feature_rows": observation_summary.eligible_feature_rows,
@@ -331,7 +360,7 @@ class ResearchStudyService:
             clauses.append("f.date <= ?")
             parameters.append(end_date)
         where = " AND ".join(clauses)
-        return self._conn.execute(
+        raw_rows = self._conn.execute(
             f"""
             WITH price_path AS (
                 SELECT
@@ -366,15 +395,6 @@ class ResearchStudyService:
                     ELSE p.outcome_close / p.entry_close - 1
                 END AS forward_return,
                 CASE
-                    WHEN f.feature_data_status IS NULL
-                         OR trim(f.feature_data_status) = ''
-                    THEN 'UNKNOWN_FEATURE_STATUS'
-                    WHEN upper(trim(f.feature_data_status)) = 'STALE_DATE'
-                    THEN 'STALE_FEATURE_DATE'
-                    WHEN upper(trim(f.feature_data_status)) = 'MISSING_BENCHMARK'
-                    THEN 'MISSING_BENCHMARK'
-                    WHEN upper(trim(f.feature_data_status)) <> 'EXACT_DATE'
-                    THEN 'UNKNOWN_FEATURE_STATUS'
                     WHEN f.as_of_bar_date IS NULL OR f.as_of_bar_date > f.date
                     THEN 'non_observable_feature'
                     WHEN f.benchmark_as_of_bar_date IS NULL OR f.benchmark_as_of_bar_date > f.date
@@ -386,7 +406,9 @@ class ResearchStudyService:
                     WHEN p.outcome_close IS NULL OR p.outcome_date IS NULL
                     THEN 'missing_outcome'
                     ELSE 'included'
-                END AS observation_status
+                END AS observation_status,
+                f.feature_data_status,
+                f.lineage_json
             FROM feature_snapshot f
             LEFT JOIN price_path p
               ON p.symbol = f.symbol AND p.price_date = f.date
@@ -397,6 +419,24 @@ class ResearchStudyService:
             """,
             parameters,
         ).fetchall()
+        observations: list[tuple] = []
+        for row in raw_rows:
+            eligibility = parse_feature_snapshot_eligibility(
+                str(row[8]) if row[8] is not None else None,
+                row[9],
+            )
+            status = row[7]
+            if not eligibility.eligible:
+                status = (
+                    eligibility.exclusion_reason
+                    or FeatureExclusionReason.UNKNOWN_FEATURE_STATUS
+                ).value
+            elif status == "included" and (
+                row[6] is None or not isfinite(float(row[6]))
+            ):
+                status = "invalid_outcome"
+            observations.append((*row[:7], status))
+        return observations
 
 
 __all__ = ["ResearchStudyService"]

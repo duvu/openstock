@@ -1,10 +1,10 @@
 ## 1. Production-aligned research semantics (#197)
 
-- [ ] 1.1 Add shared feature status, eligibility, exclusion, and contract types.
-- [ ] 1.2 Make builder, resolver, hypothesis, and event study consume the contract.
-- [ ] 1.3 Measure hypotheses from complete `candidate_outcome` observations.
-- [ ] 1.4 Persist status and measurement contracts in artifact lineage.
-- [ ] 1.5 Cover production-builder, excluded, legacy, CLI, and assistant paths.
+- [x] 1.1 Add shared feature status, eligibility, exclusion, and contract types.
+- [x] 1.2 Make builder, resolver, hypothesis, and event study consume the contract.
+- [x] 1.3 Measure hypotheses from complete `candidate_outcome` observations.
+- [x] 1.4 Persist status and measurement contracts in artifact lineage.
+- [x] 1.5 Cover production-builder, excluded, legacy, CLI, and assistant paths.
 - [ ] 1.6 Run focused, full, packaging, OpenSpec, and exact-SHA CI gates; close #197.
 
 ## 2. Basis and immutable scoring foundations (#198-#199)

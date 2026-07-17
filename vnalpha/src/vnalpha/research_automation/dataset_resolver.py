@@ -8,9 +8,8 @@ import duckdb
 
 from vnalpha.features.status import (
     FEATURE_STATUS_CONTRACT_VERSION,
-    FeatureDataStatus,
     FeatureExclusionReason,
-    parse_feature_eligibility,
+    parse_feature_snapshot_eligibility,
 )
 from vnalpha.research_automation.models import DatasetRef
 
@@ -51,19 +50,22 @@ class DatasetResolver:
             f"FROM feature_snapshot WHERE {where}",
             parameters,
         ).fetchone()
-        status_rows = self._conn.execute(
-            "SELECT feature_data_status, count(*) FROM feature_snapshot "
-            f"WHERE {where} GROUP BY feature_data_status",
+        eligibility_rows = self._conn.execute(
+            "SELECT symbol, feature_data_status, lineage_json "
+            f"FROM feature_snapshot WHERE {where} ORDER BY symbol",
             parameters,
         ).fetchall()
         symbols = tuple(
-            item[0]
-            for item in self._conn.execute(
-                f"SELECT DISTINCT symbol FROM feature_snapshot WHERE {where} "
-                "AND upper(trim(coalesce(feature_data_status, ''))) = ? "
-                "ORDER BY symbol",
-                [*parameters, FeatureDataStatus.EXACT_DATE.value],
-            ).fetchall()
+            sorted(
+                {
+                    str(symbol)
+                    for symbol, raw_status, raw_lineage in eligibility_rows
+                    if parse_feature_snapshot_eligibility(
+                        str(raw_status) if raw_status is not None else None,
+                        raw_lineage,
+                    ).eligible
+                }
+            )
         )
         row_count = int(row[0]) if row else 0
         period_start = row[1] if row else None
@@ -71,20 +73,19 @@ class DatasetResolver:
         symbol_count = int(row[3]) if row else 0
         eligible_rows = 0
         exclusion_counts: dict[str, int] = {}
-        for raw_status, count in status_rows:
-            eligibility = parse_feature_eligibility(
-                str(raw_status) if raw_status is not None else None
+        for _, raw_status, raw_lineage in eligibility_rows:
+            eligibility = parse_feature_snapshot_eligibility(
+                str(raw_status) if raw_status is not None else None,
+                raw_lineage,
             )
             if eligibility.eligible:
-                eligible_rows += int(count)
+                eligible_rows += 1
                 continue
             reason = (
                 eligibility.exclusion_reason
                 or FeatureExclusionReason.UNKNOWN_FEATURE_STATUS
             )
-            exclusion_counts[reason.value] = exclusion_counts.get(
-                reason.value, 0
-            ) + int(count)
+            exclusion_counts[reason.value] = exclusion_counts.get(reason.value, 0) + 1
         warnings: list[str] = []
         if eligible_rows < _MIN_RESEARCH_ROWS:
             warnings.append(

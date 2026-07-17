@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from vnalpha.features.status import (
     FeatureDataStatus,
     FeatureExclusionReason,
     parse_feature_eligibility,
+    parse_feature_snapshot_eligibility,
 )
 from vnalpha.observability.context import init_run_context, reset_run_context
 from vnalpha.outcomes.models import (
@@ -51,6 +53,13 @@ def test_feature_status_parser_fails_closed_for_legacy_values(
 
     assert parsed.eligible is eligible
     assert parsed.exclusion_reason is reason
+
+
+def test_unversioned_exact_date_snapshot_fails_closed() -> None:
+    parsed = parse_feature_snapshot_eligibility("EXACT_DATE", {})
+
+    assert parsed.eligible is False
+    assert parsed.exclusion_reason is FeatureExclusionReason.UNKNOWN_FEATURE_STATUS
 
 
 def test_production_builder_statuses_drive_typed_dataset_eligibility(
@@ -95,6 +104,31 @@ def test_production_builder_statuses_drive_typed_dataset_eligibility(
     }
 
 
+def test_production_builder_emits_missing_benchmark_status(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    target = date(2026, 5, 1)
+    conn.execute(
+        """
+        INSERT INTO canonical_ohlcv (
+            symbol, interval, time, open, high, low, close, volume,
+            selected_provider, quality_status, ingestion_run_id
+        )
+        SELECT 'FPT', '1D', ?::DATE - (19 - i)::INTEGER,
+               100 + i, 101 + i, 99 + i, 100.5 + i, 1000000 + i,
+               'FIXTURE', 'good', 'issue-197-missing-benchmark'
+        FROM range(20) AS bars(i)
+        """,
+        [target],
+    )
+
+    result = build_features(conn, target.isoformat(), universe=["FPT"])
+    status = conn.execute("SELECT feature_data_status FROM feature_snapshot").fetchone()
+
+    assert result == {"built": 1, "skipped": 0}
+    assert status == (FeatureDataStatus.MISSING_BENCHMARK.value,)
+
+
 def test_hypothesis_reads_complete_later_observations_and_persists_contracts(
     conn: duckdb.DuckDBPyConnection,
     tmp_path: Path,
@@ -105,18 +139,29 @@ def test_hypothesis_reads_complete_later_observations_and_persists_contracts(
         fixtures = (
             ("FPT", "EXACT_DATE", 0.90, 0.10, "COMPLETE"),
             ("VNM", "EXACT_DATE", 0.70, -0.02, "COMPLETE"),
-            ("ACB", "good", 5.00, 4.00, "COMPLETE"),
         )
         for symbol, status, trailing_return, forward_return, outcome_status in fixtures:
             conn.execute(
                 """
                 INSERT INTO feature_snapshot (
                     symbol, date, return_20d, rs_20d_vs_vnindex,
-                    feature_data_status, as_of_bar_date, benchmark_as_of_bar_date
+                    feature_data_status, as_of_bar_date, benchmark_as_of_bar_date,
+                    lineage_json
                 ) VALUES (?, DATE '2026-07-01', ?, 0.05, ?,
-                          DATE '2026-07-01', DATE '2026-07-01')
+                          DATE '2026-07-01', DATE '2026-07-01', ?)
                 """,
-                [symbol, trailing_return, status],
+                [
+                    symbol,
+                    trailing_return,
+                    status,
+                    json.dumps(
+                        {
+                            "feature_status_contract_version": (
+                                FEATURE_STATUS_CONTRACT_VERSION
+                            )
+                        }
+                    ),
+                ],
             )
             upsert_candidate_outcome(
                 conn,
@@ -137,7 +182,8 @@ def test_hypothesis_reads_complete_later_observations_and_persists_contracts(
 
     assert outcome.artifact.metrics["sample_size"] == 2
     assert outcome.artifact.metrics["mean_return_20d"] == pytest.approx(0.04)
-    assert outcome.artifact.metrics["excluded_feature_rows"] == 1
+    assert outcome.artifact.metrics["excluded_feature_rows"] == 0
+    assert outcome.artifact.status.value == "succeeded"
     assert (
         outcome.artifact.lineage["feature_status_contract_version"]
         == FEATURE_STATUS_CONTRACT_VERSION
@@ -149,3 +195,63 @@ def test_hypothesis_reads_complete_later_observations_and_persists_contracts(
     assert outcome.artifact.lineage["measurement_source"] == (
         "candidate_outcome.forward_return"
     )
+    assert outcome.artifact.lineage["measurement_status"] == "COMPLETE"
+    assert outcome.artifact.lineage["measurement_horizon_sessions"] == 20
+    assert outcome.artifact.lineage["measurement_join_keys"] == [
+        "symbol",
+        "watchlist_date",
+        "horizon_sessions",
+    ]
+
+
+def test_incomplete_and_non_finite_outcomes_are_partial_and_explicit(
+    conn: duckdb.DuckDBPyConnection,
+    tmp_path: Path,
+) -> None:
+    current_lineage = json.dumps(
+        {"feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION}
+    )
+    for symbol, lineage in (
+        ("FPT", current_lineage),
+        ("VNM", current_lineage),
+        ("HPG", current_lineage),
+        ("ACB", "{}"),
+    ):
+        conn.execute(
+            "INSERT INTO feature_snapshot "
+            "(symbol, date, rs_20d_vs_vnindex, feature_data_status, lineage_json) "
+            "VALUES (?, DATE '2026-07-01', 0.05, 'EXACT_DATE', ?)",
+            [symbol, lineage],
+        )
+    for symbol, value in (("FPT", 0.1), ("HPG", float("nan")), ("ACB", 9.0)):
+        upsert_candidate_outcome(
+            conn,
+            CandidateOutcomeRecord(
+                symbol=symbol,
+                watchlist_date="2026-07-01",
+                horizon_sessions=20,
+                outcome_status="COMPLETE",
+                forward_return=value,
+            ),
+        )
+    reset_run_context()
+    _ = init_run_context(surface="test", actor="pytest", log_root=tmp_path)
+    try:
+        outcome = ResearchStudyService(conn).hypothesis(
+            "positive rs_20 has better 20-session return"
+        )
+    finally:
+        reset_run_context()
+
+    assert outcome.artifact.status.value == "rejected"
+    assert outcome.artifact.metrics["sample_size"] == 1
+    assert outcome.artifact.metrics["missing_observation_rows"] == 2
+    assert outcome.artifact.metrics["excluded_feature_rows"] == 1
+    assert outcome.artifact.lineage["measurement_status"] == "PARTIAL"
+    assert any(
+        "no complete later observation" in item for item in outcome.artifact.caveats
+    )
+    validation = json.loads(
+        outcome.artifact.outputs.validation_json.read_text(encoding="utf-8")
+    )
+    assert validation["sample_size"] == 1
