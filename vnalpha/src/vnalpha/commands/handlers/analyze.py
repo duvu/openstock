@@ -20,6 +20,8 @@ from vnalpha.commands.normalizers import normalize_symbol
 from vnalpha.data_availability.deep_readiness import ContextRequirement
 from vnalpha.data_provisioning import ensure_current_symbol_ready
 
+_ANALYZE_SYMBOL_PREFIXES = {"CP", "CK"}
+
 
 def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
     if conn is None:
@@ -36,12 +38,13 @@ def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
     validate_workflow_command(
         parsed,
         allowed_options={"date", "with-sector", "with-regime"},
-        maximum_positionals=1,
+        maximum_positionals=2,
     )
-    if len(parsed.positional) != 1:
+    normalized_positionals = _normalize_positionals(parsed.positional)
+    if len(normalized_positionals) != 1:
         raise CommandValidationError("/analyze requires exactly one symbol.")
 
-    symbol = normalize_symbol(parsed.positional[0])
+    symbol = normalize_symbol(normalized_positionals[0])
     date = optional_date(parsed)
     market_regime_requirement = _requirement(parsed, "with-regime")
     sector_strength_requirement = _requirement(parsed, "with-sector")
@@ -249,3 +252,10 @@ def _requirement(parsed: ParsedCommand, option: str) -> ContextRequirement:
         if parsed.options.get(option)
         else ContextRequirement.NOT_REQUESTED
     )
+
+
+def _normalize_positionals(positionals: list[str]) -> list[str]:
+    normalized = [token.strip().upper() for token in positionals]
+    if len(normalized) == 2 and normalized[0] in _ANALYZE_SYMBOL_PREFIXES:
+        return [normalized[1]]
+    return normalized

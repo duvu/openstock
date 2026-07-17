@@ -15,8 +15,15 @@ from vnalpha.assistant.research_automation_plans import (
 def _resolve_symbol(entities: dict) -> str:
     symbols = entities.get("symbols", [])
     if symbols:
-        return str(symbols[0]).strip().upper()
+        return _resolve_symbol_from_tokens([str(item) for item in symbols])
     return str(entities.get("symbol", "")).strip().upper()
+
+
+def _resolve_symbol_from_tokens(symbols: list[str]) -> str:
+    normalized = [str(token).strip().upper() for token in symbols if str(token).strip()]
+    if len(normalized) >= 2 and normalized[0] in {"CP", "CK"}:
+        return normalized[1]
+    return normalized[0] if normalized else ""
 
 
 def _step(tool: str, args: dict, purpose: str, permission: str) -> ToolPlanStep:
