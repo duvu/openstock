@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import Final, List, Optional
+
+FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION: Final = (
+    "candidate-outcome-forward-return-v1"
+)
 
 
 class OutcomeStatus(str, Enum):
@@ -15,6 +19,16 @@ class OutcomeStatus(str, Enum):
     PARTIAL = "PARTIAL"
     MISSING_DATA = "MISSING_DATA"
     ERROR = "ERROR"
+
+
+@dataclass(frozen=True, slots=True)
+class HypothesisOutcomeSummary:
+    selected_feature_rows: int
+    eligible_feature_rows: int
+    complete_observation_rows: int
+    excluded_feature_rows: int
+    missing_observation_rows: int
+    mean_forward_return: float | None
 
 
 DEFAULT_HORIZONS: List[int] = [5, 10, 20, 60]

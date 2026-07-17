@@ -147,6 +147,17 @@ marked live test. Keep network I/O mocked, run the complete suite in one
 process, and treat order-dependent quota failures as test-isolation defects
 rather than product evidence.
 
+## 18. Offline tests inherit a developer's live localhost service
+
+An offline fail-closed test can silently call a service already running on the
+default localhost port. The same test then fails locally, passes on a clean CI
+worker, and proves neither intended path deterministically.
+
+**Prevent it:** make each offline fixture own its provider boundary. Use an
+in-process wire fake for response behavior or an explicitly unreachable local
+endpoint for fail-closed behavior. Never let the ambient default service URL
+decide an offline test's expected status.
+
 # Mandatory checklist
 
 ## Before coding
@@ -160,6 +171,7 @@ rather than product evidence.
 - [ ] Define the complete failure and audit boundary.
 - [ ] Confirm bounded behavior and the read-only research boundary.
 - [ ] Write the negative and backward-compatibility test matrix.
+- [ ] Isolate offline tests from ambient localhost services and vendor state.
 
 ## During implementation
 

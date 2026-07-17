@@ -6,6 +6,11 @@ from typing import Final
 
 import duckdb
 
+from vnalpha.features.status import (
+    FEATURE_STATUS_CONTRACT_VERSION,
+    feature_eligibility_sql,
+    feature_exclusion_reason_sql,
+)
 from vnalpha.research_automation.models import DatasetRef
 
 _MIN_RESEARCH_ROWS: Final = 2
@@ -41,16 +46,22 @@ class DatasetResolver:
             parameters.append(end_date)
         where = " AND ".join(clauses)
         row = self._conn.execute(
-            "SELECT count(*), min(date), max(date), count(DISTINCT symbol), "
-            "count(*) FILTER (WHERE feature_data_status IS NULL OR "
-            "lower(feature_data_status) NOT IN ('good', 'ok', 'pass')) "
+            "SELECT count(*), min(date), max(date), count(DISTINCT symbol) "
             f"FROM feature_snapshot WHERE {where}",
             parameters,
         ).fetchone()
+        exclusion_sql = feature_exclusion_reason_sql("f")
+        status_rows = self._conn.execute(
+            f"SELECT {exclusion_sql} AS exclusion_reason, count(*) "
+            f"FROM feature_snapshot f WHERE {where} GROUP BY exclusion_reason",
+            parameters,
+        ).fetchall()
         symbols = tuple(
-            item[0]
+            str(item[0])
             for item in self._conn.execute(
-                f"SELECT DISTINCT symbol FROM feature_snapshot WHERE {where} ORDER BY symbol",
+                "SELECT DISTINCT f.symbol FROM feature_snapshot f "
+                f"WHERE {where} AND {feature_eligibility_sql('f')} "
+                "ORDER BY f.symbol",
                 parameters,
             ).fetchall()
         )
@@ -58,24 +69,38 @@ class DatasetResolver:
         period_start = row[1] if row else None
         period_end = row[2] if row else None
         symbol_count = int(row[3]) if row else 0
-        low_quality_rows = int(row[4]) if row else 0
+        eligible_rows = 0
+        exclusion_counts: dict[str, int] = {}
+        for reason, count in status_rows:
+            if reason is None:
+                eligible_rows += int(count)
+                continue
+            typed_reason = str(reason)
+            exclusion_counts[typed_reason] = exclusion_counts.get(
+                typed_reason, 0
+            ) + int(count)
         warnings: list[str] = []
-        if row_count < _MIN_RESEARCH_ROWS:
+        if eligible_rows < _MIN_RESEARCH_ROWS:
             warnings.append(
-                f"Insufficient dataset coverage: {row_count} rows; at least {_MIN_RESEARCH_ROWS} required."
+                "Insufficient eligible dataset coverage: "
+                f"{eligible_rows} rows; at least {_MIN_RESEARCH_ROWS} required."
             )
-        if low_quality_rows:
-            warnings.append(f"{low_quality_rows} rows have non-good data quality.")
+        for reason, count in sorted(exclusion_counts.items()):
+            warnings.append(f"{count} feature rows excluded: {reason}.")
         if universe:
             warnings.append(
                 f"Universe {universe.upper()} is recorded as a research scope; warehouse rows are the persisted members available."
             )
         quality_status = {
             "status": "good"
-            if not warnings or row_count >= _MIN_RESEARCH_ROWS and not low_quality_rows
+            if eligible_rows >= _MIN_RESEARCH_ROWS and not exclusion_counts
             else "warning",
             "warnings": tuple(warnings),
             "symbol_count": symbol_count,
+            "eligible_row_count": eligible_rows,
+            "excluded_row_count": row_count - eligible_rows,
+            "exclusion_counts": exclusion_counts,
+            "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
             "period_start": str(period_start) if period_start else None,
             "period_end": str(period_end) if period_end else None,
             "benchmark": benchmark,
@@ -92,7 +117,7 @@ class DatasetResolver:
                 row_count=row_count,
                 quality_status=quality_status,
             ),
-            sufficient=row_count >= _MIN_RESEARCH_ROWS,
+            sufficient=eligible_rows >= _MIN_RESEARCH_ROWS,
             warnings=tuple(warnings),
         )
 

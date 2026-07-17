@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from vnalpha.assistant.intent import CLASSIFIER_SYSTEM_PROMPT
 from vnalpha.assistant.models import SUPPORTED_INTENTS, IntentResult
 from vnalpha.assistant.planner import PlanBuilder
 from vnalpha.assistant.tool_policy import is_safe_tool
+from vnalpha.features.status import FEATURE_STATUS_CONTRACT_VERSION
+from vnalpha.observability.context import init_run_context, reset_run_context
+from vnalpha.tools.models import ToolPermission
 from vnalpha.tools.setup import build_local_tool_registry
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
@@ -73,3 +79,39 @@ def test_live_execution_language_builds_refusal_plan() -> None:
 
     assert plan.is_refusal()
     assert "live" in (plan.refusal_reason or "").lower()
+
+
+def test_assistant_hypothesis_tool_exposes_partial_measurement_caveat(
+    tmp_path: Path,
+) -> None:
+    reset_run_context()
+    _ = init_run_context(surface="assistant-test", actor="pytest", log_root=tmp_path)
+    try:
+        with in_memory_connection() as conn:
+            run_migrations(conn=conn)
+            lineage = json.dumps(
+                {"feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION}
+            )
+            conn.execute(
+                "INSERT INTO feature_snapshot "
+                "(symbol, date, rs_20d_vs_vnindex, feature_data_status, lineage_json) "
+                "VALUES ('FPT', DATE '2026-07-01', 0.05, 'EXACT_DATE', ?), "
+                "('VNM', DATE '2026-07-01', 0.04, 'EXACT_DATE', ?)",
+                [lineage, lineage],
+            )
+            conn.execute(
+                "INSERT INTO candidate_outcome "
+                "(symbol, watchlist_date, horizon_sessions, forward_return, outcome_status) "
+                "VALUES ('FPT', DATE '2026-07-01', 20, 0.1, 'COMPLETE')"
+            )
+
+            output = build_local_tool_registry(conn).call(
+                "research.hypothesis.test",
+                {ToolPermission.WRITE_DATA},
+                hypothesis="positive rs_20 has better 20-session return",
+            )
+    finally:
+        reset_run_context()
+
+    assert output["status"] == "rejected"
+    assert any("no complete later observation" in item for item in output["caveats"])
