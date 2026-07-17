@@ -23,7 +23,9 @@ class FakeCorporateActionClient:
         return VnstockResponse(
             data=self.rows,
             meta=ResponseMeta(
-                dataset="reference.corporate_actions", provider=self.provider
+                dataset="reference.corporate_actions",
+                provider=self.provider,
+                quality_status="PASS",
             ),
         )
 
@@ -380,6 +382,36 @@ def test_valid_empty_sync_is_truthful_success(conn) -> None:
     assert result["status"] == "EMPTY"
     assert result["observed"] == 0
     assert result["canonical_inserted"] == 0
+
+
+def test_terminal_update_failure_rolls_back_corporate_action_rows(
+    conn, monkeypatch
+) -> None:
+    from vnalpha.ingestion import corporate_actions as module
+
+    original_finish = module.finish_ingestion_run
+
+    def fail_success(connection, run_id, status, **kwargs):
+        if status != "FAILED":
+            raise RuntimeError("terminal update failed")
+        return original_finish(connection, run_id, status, **kwargs)
+
+    monkeypatch.setattr(module, "finish_ingestion_run", fail_success)
+
+    with pytest.raises(RuntimeError, match="terminal update failed"):
+        sync_corporate_actions(
+            conn,
+            symbol="SSI",
+            client=FakeCorporateActionClient([_cash_event()]),
+        )
+
+    assert conn.execute(
+        "SELECT COUNT(*) FROM corporate_action_raw_evidence"
+    ).fetchone() == (0,)
+    assert conn.execute("SELECT COUNT(*) FROM corporate_action").fetchone() == (0,)
+    assert conn.execute(
+        "SELECT status FROM ingestion_run ORDER BY started_at DESC LIMIT 1"
+    ).fetchone() == ("FAILED",)
 
 
 def test_unsupported_and_failed_provider_results_are_typed(conn) -> None:

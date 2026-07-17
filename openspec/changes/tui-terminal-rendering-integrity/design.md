@@ -19,11 +19,10 @@ The layout must also establish one owner for each region:
 ```text
 status bar      -> fixed status region
 main body       -> bounded flexible region
-output RichLog  -> transcript scrolling
-TODO rail       -> task scrolling inside main body
+output RichLog  -> transcript scrolling and task results
 composer        -> bounded input and suggestions
 footer          -> fixed or compact footer region
-LogScreen       -> active-screen log scrolling
+inline drawer   -> bounded filtered-log scrolling inside main body
 ```
 
 ## 2. Root cause model
@@ -130,7 +129,7 @@ The second call must remove the previously installed OpenStock console handler.
 
 TUI surface changes SHALL NOT change the canonical log path or JSON record format.
 
-The F12 LogScreen must continue to tail the same file. Existing rotation limits remain unless separately changed.
+The inline F12 drawer must continue to tail the same file. Existing rotation limits remain unless separately changed.
 
 ### 3.6 Failure behavior
 
@@ -153,7 +152,7 @@ Screen vertical
 │   ├── output-column flexible and contained
 │   │   └── OutputStream
 │   │       └── RichLog transcript scroll owner
-│   └── TodoPanel bounded rail
+│   └── DebugLogDrawer bounded and hidden by default
 ├── ComposerInput bounded
 └── footer-hint fixed or compact-hidden
 ```
@@ -212,7 +211,7 @@ At every supported viewport size:
 output.region.bottom <= composer.region.y
 composer.region.bottom <= footer.region.y
 output.region.bottom <= main_body.region.bottom
-todo.region.bottom <= main_body.region.bottom
+drawer.region.bottom <= main_body.region.bottom
 ```
 
 When the footer is intentionally hidden in compact-height mode, the composer must remain inside the Screen and below the main body.
@@ -274,89 +273,23 @@ Mount and resize paths update the limit.
 
 Suggestion expansion must preserve a minimum usable transcript height. The policy may reduce suggestion count or hide the footer before allowing the transcript to collapse below that minimum.
 
-## 6. TODO rail containment
+## 6. Full-width transcript
 
-### 6.1 Requirements
+The main body contains one authoritative full-width transcript. TODO items and
+warnings render through bounded commands or transcript results; no competing
+right rail is mounted. This keeps transcript width, composer geometry, focus,
+and scroll ownership stable across task-state changes.
 
-The TODO rail remains optional and responsive, but its content must not change the height of `main-body` or collide with the composer.
+## 7. Inline log drawer design
 
-### 6.2 Preferred composition
+The drawer is mounted once inside `main-body`, hidden by default, and toggled by
+F12. It never pushes or pops a screen. Its bounded record model is shared by
+rendering and `/copy logs`, applies control-sequence and credential sanitization,
+and preserves complete identifiers at compact widths.
 
-Preferred implementation:
-
-```text
-TodoPanel
-└── VerticalScroll
-    └── task rows or a bounded rendered group
-```
-
-At minimum, it must establish:
-
-```css
-TodoPanel {
-    height: 1fr;
-    min-height: 0;
-    overflow-y: auto;
-}
-```
-
-### 6.3 Long content
-
-Tests seed at least 50 items and verify the rail region remains inside the main body. Content may scroll, virtualize, or be truncated with an explicit indicator; silent overflow outside the region is prohibited.
-
-## 7. LogScreen design
-
-### 7.1 Screen ownership
-
-When pushed, LogScreen becomes the active screen and must visually cover the underlying application.
-
-Suggested CSS contract:
-
-```css
-LogScreen {
-    layout: vertical;
-    background: $background;
-    overflow: hidden;
-}
-
-#log-body {
-    height: 1fr;
-    min-height: 0;
-    overflow: hidden;
-}
-
-#log-toolbar {
-    height: auto;
-    max-height: 3;
-}
-
-#log-display {
-    height: 1fr;
-    min-height: 0;
-}
-```
-
-### 7.2 Keyboard behavior
-
-LogScreen SHALL bind `Esc` to `pop_screen`.
-
-While LogScreen is active:
-
-- printable input must not modify the underlying composer;
-- scrolling keys affect the log view;
-- filter controls remain accessible;
-- closing restores the previous screen and composer state.
-
-### 7.3 Narrow toolbar
-
-The current five-button toolbar may exceed narrow widths. The implementation may:
-
-- use a Select widget;
-- use compact labels;
-- wrap within a bounded toolbar;
-- expose keyboard filter bindings.
-
-The toolbar must not expand over the log region or beyond the screen.
+When visible, the transcript and drawer share only the flexible main-body
+height. The composer and footer remain anchored. F12 or Escape hides the drawer
+and restores composer focus, value, and transcript scroll position.
 
 ### 7.4 Record bounds
 
@@ -401,11 +334,9 @@ For every relevant viewport, cover:
 - default app;
 - slash suggestions open;
 - long wrapping transcript;
-- TODO hidden;
-- TODO visible where allowed;
-- 50 TODO items;
+- long TODO command results;
 - router busy state;
-- LogScreen active.
+- inline drawer open and closed.
 
 ### 8.4 Logging integrity
 
@@ -422,13 +353,13 @@ A TUI pilot test should emit a log event while the app is mounted and verify no 
 
 ### 8.5 Input isolation
 
-With LogScreen active:
+With the inline drawer active:
 
 1. capture underlying composer value;
 2. send printable keys;
 3. assert composer value is unchanged;
 4. press Esc;
-5. assert the main screen is active again.
+5. assert the drawer is hidden without screen navigation.
 
 ## 9. Observability
 
@@ -448,10 +379,10 @@ Layout tests provide the primary evidence; production layout should not emit hig
 ## 10. Backward compatibility
 
 - `configure_logging()` without an explicit surface retains CLI-compatible behavior.
-- Existing canonical log files remain readable by LogScreen.
+- Existing canonical log files remain readable by the inline drawer.
 - Existing command output remains separate from diagnostic logging.
 - Existing TUI public imports and structured conversation models remain intact.
-- Existing shortcuts remain unless they conflict with LogScreen input isolation.
+- Existing shortcuts remain unless they conflict with inline-drawer input isolation.
 - Existing research-only policy is unchanged.
 
 ## 11. Rollout strategy
@@ -463,8 +394,8 @@ Recommended implementation order:
 2. CLI/TUI integration
 3. main layout containment and geometry tests
 4. height-aware suggestion policy
-5. TODO rail containment
-6. LogScreen containment and keyboard isolation
+5. full-width transcript containment
+6. inline drawer containment and keyboard isolation
 7. full focused regression suite and manual terminal QA
 ```
 
@@ -479,5 +410,5 @@ The implementation PR must attach:
 - handler transition test output;
 - viewport geometry matrix result;
 - manual QA notes at one short and one wide terminal size;
-- confirmation that TUI log events remain visible in the F12 viewer;
+- confirmation that TUI log events remain visible in the inline F12 drawer;
 - confirmation that non-TUI commands retain expected console behavior.

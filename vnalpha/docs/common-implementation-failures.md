@@ -135,6 +135,18 @@ Adding an enum member can break fixed maps, renderers, permissions, remediation,
 
 **Prevent it:** update and test the complete registry matrix: validator, adapter, status/action map, remediation, renderer, audit, CLI/TUI catalog, permission policy, serialization, and tests.
 
+## 17. Offline tests inherit process-global vendor quotas
+
+Mocked provider tests can still execute a third-party decorator before the
+mock boundary. Its process-global request counter then makes a full suite fail
+or skip based on test order even though isolated tests pass.
+
+**Prevent it:** reset third-party process-global quota state between offline
+tests while retaining normal enforcement inside each test and every explicitly
+marked live test. Keep network I/O mocked, run the complete suite in one
+process, and treat order-dependent quota failures as test-isolation defects
+rather than product evidence.
+
 # Mandatory checklist
 
 ## Before coding

@@ -142,6 +142,25 @@ class TestHealthEndpoint:
         status, _ = _fetch(f"{service_url}/health")
         assert status == 200
 
+    def test_health_echoes_valid_correlation_id(self, service_url):
+        request = urllib.request.Request(
+            f"{service_url}/healthz",
+            headers={"X-Correlation-ID": "corr-173-warehouse"},
+        )
+        with urllib.request.urlopen(request, timeout=3.0) as response:
+            assert response.headers["X-Correlation-ID"] == "corr-173-warehouse"
+
+    def test_health_replaces_invalid_correlation_id(self, service_url):
+        request = urllib.request.Request(
+            f"{service_url}/healthz",
+            headers={"X-Correlation-ID": "contains spaces"},
+        )
+        with urllib.request.urlopen(request, timeout=3.0) as response:
+            correlation_id = response.headers["X-Correlation-ID"]
+
+        assert correlation_id != "contains spaces"
+        assert len(correlation_id) == 32
+
 
 class TestProvidersEndpoints:
     def test_providers_returns_200(self, service_url):

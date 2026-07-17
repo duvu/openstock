@@ -24,6 +24,7 @@ RawCandidateRow = tuple[
     float | None,
     str | None,
     str | None,
+    str | None,
     str,
 ]
 
@@ -40,7 +41,17 @@ def load_ranked_candidates(
     rows = conn.execute(
         f"""
         SELECT
-            symbol, time, interval, open, high, low, close, volume, provider,
+            symbol,
+            CASE WHEN interval = '1D'
+                 THEN CAST(CAST(time AS DATE) AS TIMESTAMP)
+                 ELSE time END AS time,
+            interval,
+            open, high, low, close, volume, provider,
+            CASE
+                WHEN UPPER(TRIM(COALESCE(provider, ''))) = 'FIINQUANTX'
+                THEN price_basis
+                ELSE COALESCE(price_basis, 'RAW_UNADJUSTED')
+            END AS price_basis,
             quality_status, ingestion_run_id
         FROM market_ohlcv_raw
         WHERE interval = ? {symbol_filter}
@@ -49,7 +60,11 @@ def load_ranked_candidates(
             time,
             interval,
             CASE
-                WHEN LOWER(TRIM(COALESCE(quality_status, ''))) = 'pass' THEN 0
+                WHEN price_basis = 'RAW_UNADJUSTED' THEN 0
+                ELSE 1
+            END,
+            CASE
+                WHEN LOWER(TRIM(COALESCE(quality_status, ''))) IN ('pass', 'success') THEN 0
                 ELSE 1
             END,
             CASE
@@ -86,6 +101,7 @@ def persist_quarantine(
         "validation_version": CANONICAL_VALIDATION_VERSION,
         "timestamp": candidate.timestamp.isoformat(),
         "interval": candidate.interval,
+        "price_basis": candidate.price_basis,
         **invalid_values,
     }
     conn.execute(
@@ -146,8 +162,8 @@ def upsert_canonical(
         """
         INSERT INTO canonical_ohlcv
             (symbol, time, interval, open, high, low, close, volume,
-             selected_provider, quality_status, ingestion_run_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             selected_provider, price_basis, quality_status, ingestion_run_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (symbol, time, interval) DO UPDATE SET
             open = excluded.open,
             high = excluded.high,
@@ -155,6 +171,7 @@ def upsert_canonical(
             close = excluded.close,
             volume = excluded.volume,
             selected_provider = excluded.selected_provider,
+            price_basis = excluded.price_basis,
             quality_status = excluded.quality_status,
             ingestion_run_id = excluded.ingestion_run_id
         """,
@@ -168,6 +185,7 @@ def upsert_canonical(
             candidate.close,
             candidate.volume,
             candidate.provider,
+            candidate.price_basis,
             candidate.quality_status,
             candidate.ingestion_run_id,
         ],
@@ -187,6 +205,33 @@ def delete_canonical_bar(
         """,
         [candidate.symbol, candidate.timestamp, candidate.interval],
     )
+
+
+def delete_stray_intraday_canonical_rows(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str | None,
+    interval: str,
+) -> int:
+    """Remove daily canonical rows whose timestamp is not midnight.
+
+    Every current daily-bar write lands at midnight (candidates are grouped by
+    trading date). A row with a non-midnight time-of-day predates that
+    normalization — a duplicate the promotion loop above never re-selects — so
+    it is always safe to remove; the correct midnight row for its date has
+    already been written earlier in this same build. Returns the deleted count.
+    """
+
+    symbol_filter = "AND symbol = ?" if symbol is not None else ""
+    params: list[str] = [interval] + ([symbol] if symbol is not None else [])
+    result = conn.execute(
+        f"""
+        DELETE FROM canonical_ohlcv
+        WHERE interval = ? {symbol_filter}
+          AND time != CAST(CAST(time AS DATE) AS TIMESTAMP)
+        """,
+        params,
+    )
+    return result.fetchone()[0]
 
 
 def resolve_quarantines(

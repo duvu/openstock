@@ -74,7 +74,7 @@ def test_workspace_refresh_predicate_accepts_only_successful_mutations(
 
 
 @pytest.mark.asyncio
-async def test_todo_add_refreshes_panel_after_composer_worker_completes(
+async def test_todo_add_updates_workspace_without_side_panel(
     mock_get_connection, tmp_path, monkeypatch
 ) -> None:
     from textual.widgets import Input
@@ -84,7 +84,7 @@ async def test_todo_add_refreshes_panel_after_composer_worker_completes(
     from vnalpha.workspace_context.lifecycle import get_or_create_latest_workspace
 
     monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
-    task_text = "Refresh panel after routing"
+    task_text = "Persist TODO after routing"
     app = VnAlphaApp(date="2024-01-10")
 
     async with app.run_test(headless=True, size=(140, 40)) as pilot:
@@ -93,9 +93,8 @@ async def test_todo_add_refreshes_panel_after_composer_worker_completes(
         executor = app._router._command_executor
         assert executor is not None
         composer = pilot.app.query_one("#composer-input-field", Input)
-        panel = pilot.app.query_one("#todo-panel", TodoPanel)
+        assert len(pilot.app.query(TodoPanel)) == 0
         assert pilot.app.focused is composer
-        assert task_text not in _renderable_text(panel.renderable)
 
         composer.value = f'/todo add "{task_text}"'
         results = []
@@ -113,14 +112,11 @@ async def test_todo_add_refreshes_panel_after_composer_worker_completes(
             workers.append(worker)
             return worker
 
-        with patch.object(
-            app, "_refresh_todo_panel", wraps=app._refresh_todo_panel
-        ) as refresh_panel:
-            with patch.object(executor, "execute", side_effect=capture_result):
-                with patch.object(app, "run_worker", side_effect=capture_worker):
-                    await pilot.press("enter")
-                    await pilot.pause()
-                    await workers[0].wait()
+        with patch.object(executor, "execute", side_effect=capture_result):
+            with patch.object(app, "run_worker", side_effect=capture_worker):
+                await pilot.press("enter")
+                await pilot.pause()
+                await workers[0].wait()
         await pilot.pause()
 
         assert workers[0].error is None
@@ -128,8 +124,6 @@ async def test_todo_add_refreshes_panel_after_composer_worker_completes(
         assert task_text in [
             task.text for task in get_or_create_latest_workspace().open_tasks
         ]
-        refresh_panel.assert_called_once()
-        assert task_text in _renderable_text(panel.renderable)
         assert pilot.app.focused is composer
 
 

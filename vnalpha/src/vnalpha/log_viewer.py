@@ -1,24 +1,27 @@
 """vnalpha log file reader — read, filter, and display structured log entries.
 
-Used by the 'vnalpha log' CLI command and the TUI LogScreen.
+Used by the ``vnalpha log`` CLI command and the inline TUI log drawer.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
+from rich.markup import escape
+
 from vnalpha.core.logging import _DEFAULT_LOG_PATH
+from vnalpha.core.text_safety import is_sensitive_key, redact_structure, sanitize_text
 
 # ---------------------------------------------------------------------------
 # Types
 # ---------------------------------------------------------------------------
 
 LogRecord = dict[str, object]
+LEVEL_ORDER = {"debug": 0, "info": 1, "warning": 2, "error": 3, "critical": 4}
 
 # ---------------------------------------------------------------------------
 # Log file location
@@ -108,18 +111,10 @@ def read_log_records(
     level_filter = level.upper() if level else "ALL"
     grep_lower = grep.lower() if grep else None
 
-    level_order = {"debug": 0, "info": 1, "warning": 2, "error": 3, "critical": 4}
-    min_level_ord = (
-        level_order.get(level_filter.lower(), -1) if level_filter != "ALL" else -1
-    )
-
     records: list[LogRecord] = []
     for rec in _iter_log_file(path):
-        # Level filter
-        if min_level_ord >= 0:
-            rec_level = str(rec.get("level", "")).lower()
-            if level_order.get(rec_level, 0) < min_level_ord:
-                continue
+        if not record_passes_level(rec, level_filter):
+            continue
 
         # Since filter
         if since_dt is not None:
@@ -140,6 +135,15 @@ def read_log_records(
         records = records[-tail:]
 
     return records
+
+
+def record_passes_level(record: LogRecord, minimum: str) -> bool:
+    normalized = minimum.upper() if minimum else "ALL"
+    if normalized == "ALL":
+        return True
+    threshold = LEVEL_ORDER.get(normalized.lower(), 0)
+    record_level = str(record.get("level", "info")).lower()
+    return LEVEL_ORDER.get(record_level, 0) >= threshold
 
 
 def _iter_log_file(path: Path) -> Iterator[LogRecord]:
@@ -166,13 +170,36 @@ _LEVEL_COLORS = {
     "error": "red",
     "critical": "bold red",
 }
-_TERMINAL_CONTROLS = re.compile(
-    r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))|[\x00-\x08\x0b-\x1f\x7f]"
-)
 
 
 def _clean_log_text(value: object) -> str:
-    return _TERMINAL_CONTROLS.sub("", str(value))
+    return sanitize_text(value, strip_rich=False)
+
+
+def _plain_log_text(value: object) -> str:
+    return sanitize_text(value)
+
+
+def format_record_plain(rec: LogRecord) -> str:
+    level = _plain_log_text(rec.get("level", "info")).upper()
+    timestamp = _plain_log_text(rec.get("timestamp", ""))[:23]
+    logger_name = _plain_log_text(rec.get("logger", ""))
+    event = _plain_log_text(rec.get("event", ""))
+    correlation_id = _plain_log_text(rec.get("correlation_id", ""))[:8]
+    header = f"{timestamp}  {level:<8}  {logger_name}".strip()
+    details = event
+    if correlation_id:
+        details += f"  cid={correlation_id}"
+    skip_keys = {"level", "timestamp", "event", "logger", "correlation_id"}
+    extras = [
+        f"{_plain_log_text(key)}="
+        f"{_plain_log_text('[REDACTED]' if is_sensitive_key(key) else redact_structure(value))!r}"
+        for key, value in rec.items()
+        if key not in skip_keys
+    ]
+    if extras:
+        details += "  " + "  ".join(extras)
+    return f"{header}\n{details}"
 
 
 def format_record_rich(rec: LogRecord) -> str:
@@ -180,20 +207,101 @@ def format_record_rich(rec: LogRecord) -> str:
     level = _clean_log_text(rec.get("level", "info")).lower()
     color = _LEVEL_COLORS.get(level, "white")
     ts = _clean_log_text(rec.get("timestamp", ""))[:23]
-    event = _clean_log_text(rec.get("event", ""))
-    logger_name = _clean_log_text(rec.get("logger", ""))
-    cid = _clean_log_text(rec.get("correlation_id", ""))
+    event = escape(_clean_log_text(rec.get("event", "")))
+    logger_name = escape(_clean_log_text(rec.get("logger", "")))
+    cid = escape(_clean_log_text(rec.get("correlation_id", "")))
 
     extra_parts = []
     skip_keys = {"level", "timestamp", "event", "logger", "correlation_id"}
     for k, v in rec.items():
         if k not in skip_keys:
-            extra_parts.append(f"{_clean_log_text(k)}={_clean_log_text(v)!r}")
+            extra_parts.append(
+                f"{escape(_clean_log_text(k))}="
+                f"{escape(_clean_log_text('[REDACTED]' if is_sensitive_key(k) else redact_structure(v)))!r}"
+            )
 
     extra_str = "  " + "  ".join(extra_parts) if extra_parts else ""
     cid_str = f"  [dim]cid={cid[:8]}[/dim]" if cid else ""
 
     return (
         f"[dim]{ts}[/dim]  [{color}]{level.upper():<8}[/{color}]"
-        f"  [cyan]{logger_name}[/cyan]  {event}{cid_str}{extra_str}"
+        f"  [cyan]{logger_name}[/cyan]\n{event}{cid_str}{extra_str}"
     )
+
+
+class IncrementalLogSource:
+    def __init__(self, path: Path | None = None, *, max_records: int = 1_000) -> None:
+        self.path = path or default_log_path()
+        self.max_records = max(1, max_records)
+        self._records: list[LogRecord] = []
+        self._position = 0
+        self._file_identity: tuple[int, int] | None = None
+        self.last_error: str | None = None
+
+    @property
+    def records(self) -> tuple[LogRecord, ...]:
+        return tuple(self._records)
+
+    def filtered_records(self, level: str) -> tuple[LogRecord, ...]:
+        return tuple(
+            record for record in self._records if record_passes_level(record, level)
+        )
+
+    def filtered_plain_text(self, level: str) -> str:
+        return "\n".join(
+            format_record_plain(record) for record in self.filtered_records(level)
+        )
+
+    def read_new_records(self) -> list[LogRecord]:
+        try:
+            stat = self.path.stat()
+            identity = (stat.st_dev, stat.st_ino)
+            if self._file_identity is None or identity != self._file_identity:
+                self._position = self._bounded_tail_offset(stat.st_size)
+            elif stat.st_size < self._position:
+                self._position = 0
+            self._file_identity = identity
+            if stat.st_size == self._position:
+                self.last_error = None
+                return []
+            new_records: list[LogRecord] = []
+            with self.path.open(encoding="utf-8", errors="replace") as handle:
+                handle.seek(self._position)
+                for raw_line in handle:
+                    try:
+                        record = json.loads(raw_line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(record, dict):
+                        new_records.append(record)
+                self._position = handle.tell()
+        except FileNotFoundError:
+            self.last_error = "Log file is unavailable."
+            self._file_identity = None
+            self._position = 0
+            return []
+        except OSError:
+            self.last_error = "Log file is temporarily unreadable."
+            return []
+
+        self.last_error = None
+        self._records.extend(new_records)
+        if len(self._records) > self.max_records:
+            self._records = self._records[-self.max_records :]
+        return new_records
+
+    def _bounded_tail_offset(self, file_size: int) -> int:
+        if file_size == 0:
+            return 0
+        cursor = file_size
+        buffered = b""
+        with self.path.open("rb") as handle:
+            while cursor > 0 and buffered.count(b"\n") <= self.max_records:
+                block_size = min(65_536, cursor)
+                cursor -= block_size
+                handle.seek(cursor)
+                buffered = handle.read(block_size) + buffered
+        lines = buffered.splitlines(keepends=True)
+        if len(lines) <= self.max_records:
+            return cursor
+        return file_size - sum(len(line) for line in lines[-self.max_records :])

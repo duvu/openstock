@@ -18,6 +18,9 @@ The `vnalpha tui` command launches an opencode-style workspace with a vertical s
 │                                                                │
 │                                                                │
 ├────────────────────────────────────────────────────────────────┤
+│  DebugLogDrawer (id="debug-log-drawer")                       │
+│  Hidden by default; F12 opens a bounded inline file-log view.  │
+├────────────────────────────────────────────────────────────────┤
 │  ComposerInput (id="composer-input")  height=3                 │
 │  > Ask or run /command ...                                     │
 ├────────────────────────────────────────────────────────────────┤
@@ -48,9 +51,10 @@ and re-export the routing router class.
 | Input | Action |
 |-------|--------|
 | (empty) | No-op |
-| `/clear` | `OutputStream.clear_visible()` — visible output only, no audit log deletion |
+| `/clear` | `OutputStream.clear_transcript()` — visible output only, no audit log deletion |
 | `/approve` or `approve` | `ChatController.approve_pending_plan()` |
 | `/cancel` or `cancel` | `ChatController.cancel_pending_plan()` |
+| `/copy result\|output\|logs\|artifact-id` | Local clipboard transport before the busy gate |
 | operational route | Routed before the generic executor, then rendered inline |
 | other text starting with `/` | `CommandExecutor.execute(text)` → result rendered inline |
 | anything else | `ChatController.handle_turn(text)` → assistant reply rendered inline |
@@ -89,7 +93,9 @@ The seven operational routes are handled before the generic command executor:
 
 ### Safe tools and LLM boundary
 
-`SAFE_TOOLS` calls run automatically. Trusted local `note.create` and `data.fetch` calls are included in this policy.
+`SAFE_TOOLS` calls run automatically. Trusted local `note.create` is included
+in this policy. `data.fetch` is not eligible for autonomous assistant plans;
+deterministic application provisioning owns current-symbol data preparation.
 
 The planner, executor, and chat path refuse unknown or forbidden tools. The LLM is limited to research work. It can explain, summarize, and propose work, but it cannot bypass deterministic routing, invoke forbidden tools, or perform deployment actions outside the operational routes above.
 
@@ -113,12 +119,7 @@ Every TUI interaction emits structured events to the run's JSONL logs:
 | `TUI_HISTORY_NEXT` | User navigated to next history item |
 | `TUI_HISTORY_DRAFT_RESTORED` | Draft restored after history navigation |
 | `TUI_STATUS_CHANGED` | Status bar state transition |
-| `TUI_TODO_PANEL_VISIBLE` | Responsive policy made the TODO rail visible |
-| `TUI_TODO_PANEL_HIDDEN` | Responsive policy hid the TODO rail |
-| `TUI_TODO_PANEL_TOGGLED` | User toggled the TODO rail on a wide terminal |
-| `TUI_TODO_PANEL_REFRESHED` | TODO rail reloaded items from its source |
-| `TUI_TODO_ITEM_ADDED` | `/todo add` persisted an item (redacted metadata only) |
-| `TUI_TODO_ITEM_UPDATED` | `/todo done`, `/todo block`, or `/todo clear-done` changed items (redacted metadata only) |
+| `TUI_DEBUG_LOG_DRAWER_TOGGLED` | F12 opened or closed the bounded inline log drawer |
 
 Correlation ID is auto-assigned if not already set.
 
@@ -135,9 +136,11 @@ The following screens are **importable but not mounted by default**:
 - `RejectedScreen` — `vnalpha.tui.screens.rejected`
 - `QualityScreen` — `vnalpha.tui.screens.quality`
 - `OutcomeScreen` — `vnalpha.tui.screens.outcomes`
-- `LogScreen` — `vnalpha.tui.screens.log_viewer`
 
-Screen-switching bindings (`h/w/c/a/r/p/o/l`) are removed. These screens remain available for direct use via `app.push_screen()` if needed in future.
+Screen-switching bindings (`h/w/c/a/r/p/o/l`) are removed. These legacy
+screens remain available for direct use via `app.push_screen()` if needed in
+future. The former `LogScreen` was removed; F12 now toggles the inline
+`DebugLogDrawer` mounted in the primary workspace.
 
 ---
 
@@ -148,10 +151,12 @@ Screen-switching bindings (`h/w/c/a/r/p/o/l`) are removed. These screens remain 
 | `Enter` | Submit input, push to history |
 | `Up` / `Ctrl+P` | Previous history item |
 | `Down` / `Ctrl+N` | Next history item (restore draft past newest) |
-| `Ctrl+T` | Toggle TODO side panel on wide terminals |
+| `PageUp` / `PageDown` | Scroll the transcript while retaining composer focus |
+| `Home` / `End` | Jump to the transcript start or end while retaining composer focus |
+| `F12` | Toggle the bounded inline debug-log drawer |
 | `Ctrl+O` | Open latest research artifact detail view |
 | `Ctrl+B` | Return from artifact detail to transcript |
-| `Ctrl+Y` | Surface current artifact ID inline |
+| `Ctrl+Y` | Submit the latest final result to the clipboard transport |
 | `Ctrl+S` | Prefill a `/note ...` command from current artifact |
 | `Ctrl+R` | Prefill an assistant follow-up prompt from current artifact |
 | `q` | Quit |
@@ -160,32 +165,11 @@ Screen-switching bindings (`h/w/c/a/r/p/o/l`) are removed. These screens remain 
 
 ---
 
-## Responsive TODO Side Panel
+## TODO output in the main transcript
 
-The chat-first layout now keeps the primary stack intact while adding a read-only TODO rail on sufficiently wide terminals.
-
-### Layout behavior
-
-- Width `<120`: the TODO side panel is hidden.
-- Width `>=120`: the TODO side panel is shown beside the main chat stack.
-- `Ctrl+T` toggles the side panel only when the terminal is wide enough.
-- Resize events re-evaluate visibility automatically.
-- Composer focus is restored after mount, clear, toggle, and resize so the single input workflow stays uninterrupted.
-
-### Data model and sources
-
-The panel is display-only. It does **not** mount a second `Input`, and it does not introduce a new command surface.
-
-Current TODO items are derived from workspace context state:
-
-- `WorkspaceState.open_tasks`
-- `WorkspaceState.warnings`
-
-Warnings are surfaced as blocked TODO-style items so the operator can see unresolved workspace risks in the same rail. When no workspace TODO data is available, the panel renders an empty-state hint instead of opening an editor.
-
-### TODO commands
-
-The panel remains read-only; use the primary composer to manage persisted workspace tasks:
+No TODO side panel is mounted. Use the primary composer to manage persisted
+workspace tasks; results and warnings render through the same transcript as
+other command output:
 
 ```text
 /todo list
@@ -195,10 +179,10 @@ The panel remains read-only; use the primary composer to manage persisted worksp
 /todo clear-done
 ```
 
-`/todo list` returns structured item rows (`id`, `status`, `priority`, `text`, and
-`updated_at`). Adding defaults to `pending` and `medium`; completing uses
+`/todo list` returns structured item rows (`id`, `status`, `priority`, `text`,
+and `updated_at`). Adding defaults to `pending` and `medium`; completing uses
 `completed`; blocking uses `blocked`; and `clear-done` removes only `completed`
-or legacy `done` items. Item events and audit metadata redact task text.
+or legacy `done` items. Audit metadata redacts task text.
 
 ---
 
@@ -214,17 +198,19 @@ surface-aware:
 | Test | Fixture-selected | No by default |
 
 The `vnalpha tui` command reconciles logging to the TUI surface before Textual
-starts. F12 reads the same structured file log, so diagnostics remain available
-without bypassing Textual's frame. If file logging cannot initialize, the TUI
-shows the stable `TUI_LOGGING_INIT_FAILED` warning instead of falling back to
-stderr.
+starts. F12 reads the same structured file log into a bounded inline drawer, so
+diagnostics remain available without bypassing Textual's frame or navigating to
+another screen. One tail worker is created at mount and reused across toggles.
+If file logging cannot initialize, the TUI shows the stable
+`TUI_LOGGING_INIT_FAILED` warning instead of falling back to stderr.
 
 The workspace requires a minimum `80x20` viewport. At shorter heights the
-footer may be hidden; transcript, composer, and active screen regions remain
+footer may be hidden; transcript, drawer, and composer regions remain
 contained. Slash-command suggestions are limited to four rows below 24 lines,
 six rows from 24 through 29 lines, and ten rows at 30 lines or more. The
-transcript RichLog and F12 LogScreen own their respective scrolling regions;
-the TODO rail scrolls inside the main body.
+transcript RichLog and inline drawer own their respective scrolling regions.
+Copied results, transcript output, and filtered logs share the same recursive
+redaction and plain-text control stripping as their rendered counterparts.
 
 ---
 
@@ -285,7 +271,10 @@ Append-only RichLog-based widget. Methods:
 - `show_table_or_markup(markup)` — renders rich markup / tables
 - `show_repair_bundle(path, repair_id=None)` — renders repair bundle path
 - `show_deploy_status(status, details=None)` — renders deploy status
-- `clear_visible()` — clears visible area only (does not affect JSONL logs)
+- `show_result(presentation)` — renders and retains one canonical Rich/plain final result
+- `latest_result_text()` — returns the redacted copy-ready final result
+- `transcript_text()` — returns the redacted copy-ready transcript
+- `clear_transcript()` — clears visible output and retained transcript state without affecting JSONL logs
 
 The stream also tracks the latest research artifact returned by `/analyze`,
 `/market-regime`, `/sector-strength`, `/watchlist-summary`, `/shortlist`,
@@ -364,7 +353,8 @@ Historical outcome metrics
 
 1. Run a research command such as `/analyze FPT`.
 2. Press `Ctrl+O` to open the latest artifact detail.
-3. Press `Ctrl+Y` to surface the current artifact ID in the transcript.
+3. Press `Ctrl+Y` to submit the latest final result to the clipboard transport,
+   or run `/copy artifact-id` to copy the current artifact identifier.
 4. Press `Ctrl+S` to prefill a note command or `Ctrl+R` to prefill an assistant prompt.
 5. Press `Ctrl+B` to return to the main transcript.
 

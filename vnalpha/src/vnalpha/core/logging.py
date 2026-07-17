@@ -78,6 +78,23 @@ def _inject_correlation_id(
 
 _CONFIGURED = False
 _QUEUE_LISTENER: logging.handlers.QueueListener | None = None
+
+
+class _SecureRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    def _open(self):
+        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(self.baseFilename, flags, 0o600)
+        os.fchmod(descriptor, 0o600)
+        return open(
+            descriptor,
+            self.mode,
+            encoding=self.encoding,
+            errors=self.errors,
+            closefd=True,
+        )
+
+
 _OWNED_HANDLER_NAMES = frozenset({"vnalpha-queue", "vnalpha-file", "vnalpha-console"})
 
 
@@ -154,7 +171,7 @@ def configure_logging(
 
     # --- File handler: plain %(message)s — JSON string was rendered by QueueHandler ---
     try:
-        file_handler = logging.handlers.RotatingFileHandler(
+        file_handler = _SecureRotatingFileHandler(
             resolved_path,
             maxBytes=10 * 1024 * 1024,
             backupCount=5,

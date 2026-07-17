@@ -8,10 +8,9 @@ licensed rows, or proprietary source.
 
 The provider is an optional integration. It stays disabled unless the approved
 SDK version, both credential environment variables,
-`VNSTOCK_FIINQUANTX_LICENSED=true`, and a valid non-secret
-`VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF` are present. The acknowledgement and
-reference are operational audit guards; they are not substitutes for commercial
-approval and do not create or expand license rights.
+and `VNSTOCK_FIINQUANTX_LICENSED=true` are present. The boolean acknowledgement
+is an operational guard; it is not a substitute for commercial approval and
+does not create or expand license rights.
 
 The runtime-verified, experimental datasets are:
 
@@ -52,16 +51,13 @@ fixtures, request parameters, logs, or responses:
 FIINQUANT_USERNAME=<licensed-account>
 FIINQUANT_PASSWORD=<licensed-secret>
 VNSTOCK_FIINQUANTX_LICENSED=true
-VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF=<non-secret-decision-id>
 VNSTOCK_FIINQUANTX_SESSION_TTL=900
 VNSTOCK_FIINQUANTX_ACQUIRE_TIMEOUT=30
 ```
 
-The approval reference must be a stable internal identifier such as a legal,
-procurement or vendor decision ID. Blank values, free-form sentences and
-placeholders such as `PENDING`, `TBD` or `UNAPPROVED` fail closed. Provider
-diagnostics expose only whether the reference is configured and a short
-SHA-256 fingerprint; they never expose the reference itself.
+The runtime boolean defaults to false and fails closed when absent, malformed,
+or false. Commercial decision records remain in the organization's approved
+document system rather than runtime configuration or provider diagnostics.
 
 The runtime caches one authenticated session for the configured TTL, allows one
 provider request at a time, closes expired sessions on replacement, and clears
@@ -90,17 +86,16 @@ advice remain in the organization's approved document system, not Git.
 | Model training and derived analytics | Require a separate written license decision |
 | Synthetic fixtures | Allowed only after review; must contain no credentials or licensed production values |
 
-`vnalpha` additionally requires both:
+`vnalpha` additionally requires:
 
 ```text
 VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true
-VNALPHA_FIINQUANTX_PERSISTENCE_APPROVAL_REF=<non-secret-decision-id>
 ```
 
 before it accepts `--source FIINQUANTX` for warehouse-bound sync or repair. The
-default is false and blank. The persistence reference must identify a decision
-that explicitly permits the actual storage target and downstream use. Runtime
-access approval does not automatically permit persistence, bulk export, derived
+default is false. The operator must separately confirm that the commercial
+decision permits the actual storage target and downstream use. Runtime access
+approval does not automatically permit persistence, bulk export, derived
 analytics or model training.
 
 ## Boundary and capabilities
@@ -117,6 +112,41 @@ all broker/account/trading surfaces.
 
 Membership timestamps are local observation times. They are not effective
 dates and must not be used to infer historical index or sector composition.
+`vnalpha sync membership --type index|sector --entity ENTITY --source
+FIINQUANTX` persists one atomic observed snapshot. The snapshot header records
+`SUCCESS` or valid `EMPTY`, observation time, request/correlation identity,
+provider/SDK/contract/source-method lineage, and only allowlisted safe fields.
+Member rows are keyed to that snapshot. The warehouse contract
+does not expose these observations as official effective-date history.
+
+FiinQuantX does not advertise `reference.symbols`, and a few index or sector
+lists must never be combined into a synthetic full universe. Bootstrap
+`symbol_master` and company/exchange/ICB reference from a separately approved
+provider whose completeness has been verified for the deployment. The MVP1
+candidate uses the existing VCI-backed `reference.symbols` contract for symbol,
+exchange, company name and ICB fields, configured as
+`OPENSTOCK_REFERENCE_SOURCE=VCI`. Use
+`vnalpha sync symbols --source VCI --authoritative` only after a bounded current
+completeness check is recorded for the candidate host; otherwise omit
+`--authoritative` so unseen symbols are not deactivated. This mixed-provider
+workflow preserves each provider in lineage rather than attributing the
+reference universe to FiinQuantX.
+
+A bounded Gate A operator sequence is therefore:
+
+```text
+OPENSTOCK_REFERENCE_SOURCE=VCI openstock-verify --mvp1
+vnalpha sync symbols --source VCI [--authoritative]
+vnalpha sync membership --type index --entity VN30 --source FIINQUANTX
+vnalpha sync membership --type sector --entity <ICB_OR_ALIAS> --source FIINQUANTX
+vnalpha sync ohlcv --symbols <BOUNDED_LIST> --start <DATE> --end <DATE> --source FIINQUANTX
+vnalpha sync index --symbol VNINDEX --start <DATE> --end <DATE> --source FIINQUANTX
+```
+
+The two approval gates must be configured before the FiinQuantX steps. A
+successful offline unit test, a valid empty snapshot, or a historical live
+probe does not prove current entitlement, commercial permission, universe
+completeness, or the semantics of a newly changed request.
 
 For OHLCV, supported request modes are:
 
@@ -124,13 +154,17 @@ For OHLCV, supported request modes are:
 - `symbol`, bounded `start` plus `end`, `interval=1D`.
 
 `count_back` and date range are mutually exclusive. Open-ended date ranges are
-rejected before session creation. The provider sends the verified bounded SDK
-request policy (`adjusted=True`, `lasted=False`); callers cannot override those
-controls until their semantics are verified. The output metadata says
-`adjusted=requested_true`, not independently verified adjusted-price lineage.
-Unknown vendor columns are dropped before the canonical response is returned.
+rejected before session creation. The provider sends the bounded canonical
+request policy (`adjusted=False`, `lasted=False`). FiinQuantX rows therefore
+enter the shared OHLCV contract only with `basis=RAW_UNADJUSTED`; adjusted rows
+are never selected under the same canonical warehouse key. Both raw and
+canonical rows retain `price_basis=RAW_UNADJUSTED`; legacy FiinQuantX rows with
+missing basis and any adjusted-basis rows fail closed in canonical validation.
+Callers cannot override either SDK control. Output metadata records the exact
+request controls, source method, SDK and contract versions, plus only the
+verified raw-unadjusted basis. Unknown vendor columns are dropped before the
+canonical response is returned.
 
-Credentials and approval references must come from local environment or
-credential/configuration abstractions. They must never be passed as dataset
-parameters or written in full to logs, diagnostics, dataframes, service
-responses, or fixtures.
+Credentials must come from local environment or credential/configuration
+abstractions. They must never be passed as dataset parameters or written to
+logs, diagnostics, dataframes, service responses, or fixtures.

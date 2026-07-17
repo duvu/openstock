@@ -199,11 +199,18 @@ def test_handle_natural_language_emits_classifying_and_final():
         connection_factory=lambda: MagicMock(),
     )
 
-    with patch(
-        "vnalpha.chat.controller.ChatController._run_ask",
-        return_value=(fake_answer, fake_plan),
+    with (
+        patch(
+            "vnalpha.chat.controller.ChatController._run_ask",
+            return_value=(fake_answer, fake_plan),
+        ),
+        patch("vnalpha.observability.audit.log_audit") as log_audit,
     ):
         controller.handle_natural_language("What is VPB price?")
+
+    assert all(
+        "What is VPB price?" not in str(call) for call in log_audit.call_args_list
+    )
 
     styles = [style for style, _ in messages]
     texts = [text for _, text in messages]

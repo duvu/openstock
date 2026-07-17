@@ -27,7 +27,6 @@ def _configure(monkeypatch, module: ModuleType) -> None:
     monkeypatch.setenv("FIINQUANT_USERNAME", "u")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "p")
     monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", "LEGAL-2026-001")
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -86,7 +85,33 @@ def test_date_range_is_bounded_and_forwarded_without_period(monkeypatch) -> None
     assert requests[0]["from_date"] == "2026-07-02"
     assert requests[0]["to_date"] == "2026-07-03"
     assert "period" not in requests[0]
-    assert result.attrs["ohlcv_request_policy"]["mode"] == "date_range"
+    assert requests[0]["adjusted"] is False
+    assert requests[0]["lasted"] is False
+    assert result.attrs["ohlcv_request_policy"] == {
+        "adjusted": "requested_false",
+        "basis": "RAW_UNADJUSTED",
+        "lasted": "requested_false",
+        "mode": "date_range",
+        "start": "2026-07-02",
+        "end": "2026-07-03",
+    }
+    assert result.attrs["source_method"] == "Fetch_Trading_Data"
+    assert all("approval_reference" not in key for key in result.attrs)
+    assert all("approval_fingerprint" not in key for key in result.attrs)
+
+
+def test_diagnostics_publish_raw_unadjusted_contract(monkeypatch) -> None:
+    module = ModuleType("FiinQuantX")
+    _configure(monkeypatch, module)
+
+    diagnostics = FiinQuantXProviderPlugin().diagnostics()
+
+    assert diagnostics["ohlcv_request_policy"] == {
+        "adjusted": "requested_false",
+        "basis": "RAW_UNADJUSTED",
+        "lasted": "requested_false",
+        "supported_modes": ["count_back", "date_range"],
+    }
 
 
 def test_open_ended_date_range_fails_before_login(monkeypatch) -> None:

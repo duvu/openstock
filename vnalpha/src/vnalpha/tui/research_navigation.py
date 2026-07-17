@@ -49,7 +49,7 @@ def artifact_detail_renderable(state: ArtifactDetailState) -> RenderableType:
     return Group(
         Text("Artifact detail", style="bold cyan"),
         Text(
-            "Ctrl+B back  Ctrl+Y artifact id  Ctrl+S note  Ctrl+R assistant",
+            "Ctrl+B back  /copy artifact-id  Ctrl+S note  Ctrl+R assistant",
             style="dim",
         ),
         result_to_markup(state.result),

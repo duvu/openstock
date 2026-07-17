@@ -46,6 +46,20 @@ class SymbolRecord(BaseModel):
     is_active: Optional[bool] = None
 
 
+class MembershipRecord(BaseModel):
+    entity_id: str
+    member_symbol: str
+    observed_at: datetime
+
+    @field_validator("entity_id", "member_symbol")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("membership identifiers must not be empty")
+        return normalized
+
+
 class ProviderHealthRecord(BaseModel):
     provider: str
     dataset: Optional[str] = None
@@ -72,6 +86,18 @@ class OHLCVResponse(VnstockResponse):
     def parse_ohlcv_records(cls, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
             OHLCVRecord.model_validate(record).model_dump(mode="json")
+            for record in records
+        ]
+
+
+class MembershipResponse(VnstockResponse):
+    @field_validator("data")
+    @classmethod
+    def parse_membership_records(
+        cls, records: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        return [
+            MembershipRecord.model_validate(record).model_dump(mode="json")
             for record in records
         ]
 

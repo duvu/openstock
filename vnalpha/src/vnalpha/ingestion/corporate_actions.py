@@ -10,6 +10,7 @@ import duckdb
 
 from vnalpha.clients.vnstock.client import VnstockClient
 from vnalpha.clients.vnstock.errors import VnstockClientError, VnstockHTTPError
+from vnalpha.clients.vnstock.source_policy import validate_persistence_source
 from vnalpha.ingestion.corporate_action_reconciliation import _ingest_record
 from vnalpha.warehouse.repositories import create_ingestion_run, finish_ingestion_run
 
@@ -50,7 +51,17 @@ def sync_corporate_actions(
         response = client.get_corporate_actions(
             symbol=symbol, start=start, end=end, source=source
         )
-        provider = str(response.meta.provider).strip().upper()
+        if response.meta.dataset != "reference.corporate_actions":
+            raise ValueError("Unexpected corporate-action dataset.")
+        provider = validate_persistence_source(str(response.meta.provider))
+        if provider is None:
+            raise ValueError("Corporate-action provider must not be empty.")
+        requested_source = validate_persistence_source(source)
+        if requested_source is not None and provider != requested_source:
+            raise ValueError("Corporate-action provider did not match selected source.")
+        quality_status = (response.meta.quality_status or "").strip().upper()
+        if quality_status not in {"PASS", "SUCCESS"}:
+            raise ValueError("Corporate-action provider quality did not pass.")
         conn.execute("BEGIN TRANSACTION")
         for record in response.data:
             counts["observed"] += 1
@@ -72,9 +83,9 @@ def sync_corporate_actions(
             if counts["quarantined"] == 0 and counts["conflicts"] == 0
             else "PARTIAL"
         )
-        conn.execute("COMMIT")
         _persist_run_outcome(conn, run_id=run_id, status=status, counts=counts)
         finish_ingestion_run(conn, run_id, status)
+        conn.execute("COMMIT")
         return {"run_id": run_id, "status": status, **counts}
     except VnstockHTTPError as exc:
         try:

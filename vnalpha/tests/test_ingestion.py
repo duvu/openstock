@@ -108,6 +108,9 @@ def test_sync_symbols_inserts_records(respx_mock, conn):
     result = sync_symbols(conn, client=client)
     assert result["synced"] == 2
     assert result["errors"] == 0
+    request = respx_mock.calls.last.request
+    assert request.url.params["validate"] == "true"
+    assert request.url.params["quality_mode"] == "strict"
     symbols = get_symbols_active(conn)
     assert "FPT" in symbols
     assert "VNM" in symbols

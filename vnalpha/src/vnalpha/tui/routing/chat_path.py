@@ -41,6 +41,7 @@ class ChatPath:
             await anyio.to_thread.run_sync(handle_turn)
             router._set_status_ready()
         except Exception as exc:
-            router._output.show_error(str(exc), source="chat")
-            router._set_status_error(str(exc))
+            public_message = "Assistant request failed unexpectedly. Inspect the debug logs for details."
+            router._output.show_error(public_message, source="chat")
+            router._set_status_error(public_message)
             events.capture_render_error(exc)

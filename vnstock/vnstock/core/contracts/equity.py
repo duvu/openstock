@@ -50,7 +50,7 @@ QUOTE_CONTRACT = DatasetContract(
         "volume_accumulated": "float64",
     },
     symbol_column="symbol",
-    validator="quote",
+    validator="price_board",
     description="Real-time or delayed price board snapshot for equities.",
 )
 

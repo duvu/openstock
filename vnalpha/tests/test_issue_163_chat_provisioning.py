@@ -21,6 +21,8 @@ from vnalpha.data_availability.deep_readiness_models import (
     ReadinessArtifact,
     ReadinessArtifactStatus,
     ReadinessResult,
+    RemediationAction,
+    RemediationStep,
 )
 from vnalpha.data_provisioning import ensure_current_symbol as ecs_module
 from vnalpha.data_provisioning import ensure_current_symbol_ready
@@ -263,6 +265,118 @@ def test_partial_failure_reports_failed(monkeypatch):
     assert result.outcome is ProvisioningOutcome.FAILED
     assert not result.is_ready
     assert result.errors
+    conn.close()
+
+
+def test_nullable_remediation_steps_fall_back_without_crashing(monkeypatch):
+    readiness = _readiness(
+        actions=(),
+        ready=False,
+        errors=("missing canonical data",),
+    )
+    artifact = readiness.artifacts[0]
+    object.__setattr__(artifact, "remediation_steps", None)
+    object.__setattr__(artifact, "remediation", "vnalpha data status FPT")
+    calls: list[dict] = []
+    _patch_service(monkeypatch, readiness, calls)
+
+    conn = _fresh_conn()
+    result = ensure_current_symbol_ready(conn, "FPT", "2025-06-30")
+
+    assert result.outcome is ProvisioningOutcome.FAILED
+    assert result.remediation == ("vnalpha data status FPT",)
+    conn.close()
+
+
+def test_remediation_filters_empty_and_duplicate_commands(monkeypatch):
+    step = RemediationStep(
+        action=RemediationAction.SYNC_OHLCV,
+        artifact="canonical_ohlcv",
+        command_surface="CLI",
+        command="vnalpha data sync-ohlcv --symbols FPT",
+        description="Sync FPT bars.",
+        required=True,
+    )
+    empty_step = RemediationStep(
+        action=RemediationAction.BUILD_CANONICAL,
+        artifact="canonical_ohlcv",
+        command_surface="CLI",
+        command="",
+        description="No usable command.",
+        required=True,
+    )
+    readiness = _readiness(
+        actions=(),
+        ready=False,
+        errors=("missing canonical data",),
+    )
+    artifact = readiness.artifacts[0]
+    object.__setattr__(artifact, "remediation_steps", (step, empty_step, step))
+    object.__setattr__(artifact, "remediation", "ignored fallback")
+    calls: list[dict] = []
+    _patch_service(monkeypatch, readiness, calls)
+
+    conn = _fresh_conn()
+    result = ensure_current_symbol_ready(conn, "FPT", "2025-06-30")
+
+    assert result.remediation == ("vnalpha data sync-ohlcv --symbols FPT",)
+    conn.close()
+
+
+@pytest.mark.parametrize(
+    "malformed_step",
+    [None, "not-a-step", {"command": "untrusted mapping"}, object()],
+)
+def test_malformed_remediation_steps_fall_back_without_crashing(
+    monkeypatch, malformed_step
+):
+    readiness = _readiness(
+        actions=(),
+        ready=False,
+        errors=("missing canonical data",),
+    )
+    artifact = readiness.artifacts[0]
+    object.__setattr__(artifact, "remediation_steps", (malformed_step,))
+    object.__setattr__(artifact, "remediation", "vnalpha data status FPT")
+    calls: list[dict] = []
+    _patch_service(monkeypatch, readiness, calls)
+
+    conn = _fresh_conn()
+    result = ensure_current_symbol_ready(conn, "FPT", "2025-06-30")
+
+    assert result.outcome is ProvisioningOutcome.FAILED
+    assert result.remediation == ("vnalpha data status FPT",)
+    conn.close()
+
+
+def test_remediation_rejects_oversized_commands_and_bounds_total_payload(
+    monkeypatch,
+):
+    oversized = RemediationStep(
+        action=RemediationAction.SYNC_OHLCV,
+        artifact="canonical_ohlcv",
+        command_surface="CLI",
+        command="x" * 1_000_000,
+        description="Malformed oversized provider command.",
+        required=True,
+    )
+    readiness = _readiness(
+        actions=(),
+        ready=False,
+        errors=("missing canonical data",),
+    )
+    artifact = readiness.artifacts[0]
+    object.__setattr__(artifact, "remediation_steps", (oversized,))
+    object.__setattr__(artifact, "remediation", "y" * 1_000_000)
+    calls: list[dict] = []
+    _patch_service(monkeypatch, readiness, calls)
+
+    conn = _fresh_conn()
+    result = ensure_current_symbol_ready(conn, "FPT", "2025-06-30")
+
+    assert result.outcome is ProvisioningOutcome.FAILED
+    assert result.remediation == ()
+    assert sum(len(item) for item in result.remediation) <= 2_048
     conn.close()
 
 

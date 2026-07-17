@@ -50,6 +50,9 @@ _ACTION_LABELS: dict[str, str] = {
     "FEATURES_BUILT": "build_features",
     "SCORED": "score_symbol",
 }
+_MAX_REMEDIATION_ITEMS = 8
+_MAX_REMEDIATION_ITEM_CHARS = 512
+_MAX_REMEDIATION_TOTAL_CHARS = 2_048
 
 
 class ProvisioningOutcome(str, Enum):
@@ -283,13 +286,37 @@ def _actions_from_readiness(
 
 def _remediation_from_readiness(readiness: ReadinessResult) -> tuple[str, ...]:
     remediation: list[str] = []
+
+    def append_bounded(value: str) -> bool:
+        if len(value) > _MAX_REMEDIATION_ITEM_CHARS:
+            return False
+        if (
+            sum(len(item) for item in remediation) + len(value)
+            > _MAX_REMEDIATION_TOTAL_CHARS
+        ):
+            return False
+        if value not in remediation:
+            remediation.append(value)
+        return True
+
     for artifact in readiness.artifacts:
-        for step in artifact.remediation_steps:
-            if step.command and step.command not in remediation:
-                remediation.append(step.command)
-        if not artifact.remediation_steps and artifact.remediation:
-            if artifact.remediation not in remediation:
-                remediation.append(artifact.remediation)
+        if len(remediation) >= _MAX_REMEDIATION_ITEMS:
+            break
+        artifact_has_command = False
+        raw_steps = getattr(artifact, "remediation_steps", None)
+        steps = raw_steps if isinstance(raw_steps, (list, tuple)) else ()
+        for step in steps:
+            raw_command = getattr(step, "command", None)
+            command = raw_command.strip() if isinstance(raw_command, str) else ""
+            if not command:
+                continue
+            artifact_has_command = append_bounded(command) or artifact_has_command
+            if len(remediation) >= _MAX_REMEDIATION_ITEMS:
+                break
+        raw_fallback = getattr(artifact, "remediation", None)
+        fallback = raw_fallback.strip() if isinstance(raw_fallback, str) else ""
+        if not artifact_has_command and fallback:
+            append_bounded(fallback)
     return tuple(remediation)
 
 

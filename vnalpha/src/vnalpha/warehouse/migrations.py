@@ -34,22 +34,27 @@ logger = get_logger("warehouse.migrations")
 def run_migrations(
     conn: Optional[duckdb.DuckDBPyConnection] = None,
     path: Optional[Path] = None,
+    *,
+    emit_observability: bool = True,
 ) -> None:
     """Create all tables if they don't exist.
 
     Args:
         conn: Use this connection directly (for testing with in-memory).
         path: Create/open a DuckDB file at this path.
+        emit_observability: Emit migration logs and audit events when true.
     """
     if conn is None:
         conn = get_connection(path=path)
-    logger.info("Running warehouse migrations...")
-    try:
-        from vnalpha.observability.domain import log_migration_start
+    conn.execute("SET TimeZone = 'Asia/Ho_Chi_Minh'")
+    if emit_observability:
+        logger.info("Running warehouse migrations...")
+        try:
+            from vnalpha.observability.domain import log_migration_start
 
-        log_migration_start("warehouse")
-    except Exception:  # noqa: BLE001
-        pass
+            log_migration_start("warehouse")
+        except Exception:  # noqa: BLE001
+            pass
     for ddl in ALL_DDL:
         conn.execute(ddl)
     for ddl in ALL_DDL_CORPORATE_ACTIONS:
@@ -84,6 +89,7 @@ def run_migrations(
     _migrate_symbol_master_lifecycle_columns(conn)
     _migrate_symbol_classification_history_columns(conn)
     _migrate_feature_snapshot_columns(conn)
+    _migrate_ohlcv_price_basis_columns(conn)
     _seed_benchmark_definitions(conn)
     _backfill_legacy_relative_strength(conn)
     _migrate_rejected_symbol_columns(conn)
@@ -92,13 +98,14 @@ def run_migrations(
     _migrate_outcome_evaluation_run_columns(conn)
     _migrate_chat_message_visibility_columns(conn)
     _migrate_assistant_prompt_columns(conn)
-    logger.info("Warehouse migrations complete.")
-    try:
-        from vnalpha.observability.domain import log_migration_success
+    if emit_observability:
+        logger.info("Warehouse migrations complete.")
+        try:
+            from vnalpha.observability.domain import log_migration_success
 
-        log_migration_success("warehouse")
-    except Exception:  # noqa: BLE001
-        pass
+            log_migration_success("warehouse")
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:
@@ -135,6 +142,56 @@ def _migrate_symbol_memory_columns(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         "ALTER TABLE memory_claim ADD COLUMN IF NOT EXISTS source_published_at DATE"
     )
+
+
+def _migrate_ohlcv_price_basis_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    conn.execute(
+        "ALTER TABLE market_ohlcv_raw ADD COLUMN IF NOT EXISTS price_basis VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE canonical_ohlcv ADD COLUMN IF NOT EXISTS price_basis VARCHAR"
+    )
+    conn.execute(
+        "ALTER TABLE market_ohlcv_raw ALTER COLUMN price_basis "
+        "SET DEFAULT 'RAW_UNADJUSTED'"
+    )
+    conn.execute(
+        "ALTER TABLE canonical_ohlcv ALTER COLUMN price_basis "
+        "SET DEFAULT 'RAW_UNADJUSTED'"
+    )
+    raw_provider_column = _first_existing_column(
+        conn, "market_ohlcv_raw", ("provider", "source")
+    )
+    if raw_provider_column is not None:
+        conn.execute(
+            "UPDATE market_ohlcv_raw SET price_basis = 'RAW_UNADJUSTED' "
+            f"WHERE price_basis IS NULL AND UPPER(COALESCE({raw_provider_column}, '')) "
+            "!= 'FIINQUANTX'"
+        )
+    canonical_provider_column = _first_existing_column(
+        conn, "canonical_ohlcv", ("selected_provider", "source")
+    )
+    if canonical_provider_column is not None:
+        conn.execute(
+            "UPDATE canonical_ohlcv SET price_basis = 'RAW_UNADJUSTED' "
+            "WHERE price_basis IS NULL AND "
+            f"UPPER(COALESCE({canonical_provider_column}, '')) != 'FIINQUANTX'"
+        )
+
+
+def _first_existing_column(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    candidates: tuple[str, ...],
+) -> str | None:
+    columns = {
+        str(row[0])
+        for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+            [table_name],
+        ).fetchall()
+    }
+    return next((candidate for candidate in candidates if candidate in columns), None)
 
 
 def _migrate_symbol_classification_history_columns(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import duckdb
@@ -40,6 +40,8 @@ def _insert_raw_bar(
     quality_status: str = "pass",
     fetched_at: str = "2026-01-06 00:00:00",
     timestamp: str = "2026-01-05",
+    interval: str = "1D",
+    price_basis: str | None = "RAW_UNADJUSTED",
 ) -> str:
     """Insert one deterministic raw observation for canonical promotion."""
 
@@ -48,19 +50,21 @@ def _insert_raw_bar(
         """
         INSERT INTO market_ohlcv_raw
             (ingestion_run_id, symbol, time, interval, open, high, low, close,
-             volume, provider, quality_status, fetched_at)
-        VALUES (?, ?, ?, '1D', ?, ?, ?, ?, ?, ?, ?, ?)
+             volume, provider, price_basis, quality_status, fetched_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             run_id,
             symbol,
             timestamp,
+            interval,
             open,
             high,
             low,
             close,
             volume,
             provider,
+            price_basis,
             quality_status,
             fetched_at,
         ],
@@ -87,6 +91,210 @@ def test_invalid_close_is_quarantined_before_canonical_promotion(
     assert rejection_count == (1,)
     assert result["upserted"] == 0
     assert result["rejected"] == 1
+
+
+def test_canonical_promotion_collapses_same_date_different_time_of_day(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    """Two providers reporting the same trading date at different times of
+    day must collapse into exactly one canonical bar, not two.
+
+    Regression: raw providers occasionally disagree on the time-of-day
+    component for the same daily bar (e.g. "2026-01-05 00:00:00" from one
+    provider vs "2026-01-05 07:00:00" from another). Ranking/grouping
+    candidates by the exact raw timestamp treated these as two distinct bars,
+    so both got upserted into canonical_ohlcv. That broke relative-strength
+    alignment (an exact-timestamp reindex against the benchmark's own
+    canonical bars never lined up) and silently starved scoring.
+    """
+
+    _insert_raw_bar(
+        conn,
+        symbol="FPT",
+        close=10.0,
+        timestamp="2026-01-05",
+        provider="alpha",
+        fetched_at="2026-01-06 10:00:00",
+    )
+    _insert_raw_bar(
+        conn,
+        symbol="FPT",
+        close=10.0,
+        timestamp="2026-01-05 07:00:00",
+        provider="beta",
+        fetched_at="2026-01-06 11:00:00",
+    )
+
+    result = build_canonical_ohlcv(conn, symbol="FPT")
+
+    rows = conn.execute(
+        "SELECT time FROM canonical_ohlcv WHERE symbol = 'FPT'"
+    ).fetchall()
+    assert rows == [(datetime(2026, 1, 5, 0, 0),)]
+    assert result["upserted"] == 1
+    assert result["rejected"] == 0
+
+
+def test_canonical_promotion_removes_stray_pre_normalization_rows(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    """A leftover non-midnight canonical row for an already-covered date is
+    cleaned up by the next build, rather than persisting as a duplicate bar
+    forever alongside the correct midnight row.
+    """
+
+    conn.execute(
+        """
+        INSERT INTO canonical_ohlcv
+        (symbol, time, interval, open, high, low, close, volume,
+         selected_provider, quality_status)
+        VALUES ('FPT', '2026-01-05 07:00:00', '1D', 10, 11, 9, 10.5, 1000,
+                'fixture', 'pass')
+        """
+    )
+    _insert_raw_bar(conn, symbol="FPT", close=10.5, timestamp="2026-01-05")
+
+    build_canonical_ohlcv(conn, symbol="FPT")
+
+    rows = conn.execute(
+        "SELECT time FROM canonical_ohlcv WHERE symbol = 'FPT'"
+    ).fetchall()
+    assert rows == [(datetime(2026, 1, 5, 0, 0),)]
+
+
+@pytest.mark.parametrize("quality_status", [None, "WARN", "SKIPPED", "UNKNOWN"])
+def test_unverified_provider_quality_is_quarantined(
+    conn: duckdb.DuckDBPyConnection, quality_status: str | None
+) -> None:
+    _insert_raw_bar(
+        conn, symbol="UNVERIFIED", close=10.0, quality_status=quality_status
+    )
+
+    result = build_canonical_ohlcv(conn, symbol="UNVERIFIED")
+
+    assert result == {"upserted": 0, "rejected": 1}
+    assert conn.execute(
+        "SELECT COUNT(*) FROM canonical_ohlcv WHERE symbol = 'UNVERIFIED'"
+    ).fetchone() == (0,)
+
+
+@pytest.mark.parametrize("quality_status", ["FAIL", "FAILED", "ERROR", "INVALID"])
+def test_explicit_failed_provider_quality_is_quarantined(
+    conn: duckdb.DuckDBPyConnection, quality_status: str
+) -> None:
+    _insert_raw_bar(
+        conn,
+        symbol="BAD",
+        close=10.0,
+        quality_status=quality_status,
+    )
+
+    result = build_canonical_ohlcv(conn, symbol="BAD")
+
+    assert result == {"upserted": 0, "rejected": 1}
+    assert conn.execute(
+        "SELECT COUNT(*) FROM canonical_ohlcv WHERE symbol = 'BAD'"
+    ).fetchone() == (0,)
+
+
+@pytest.mark.parametrize("price_basis", [None, "ADJUSTED"])
+def test_fiinquantx_legacy_non_raw_basis_cannot_become_canonical(
+    conn: duckdb.DuckDBPyConnection, price_basis: str | None
+) -> None:
+    _insert_raw_bar(
+        conn,
+        symbol="FPT",
+        close=10.0,
+        provider="FIINQUANTX",
+        price_basis=price_basis,
+    )
+
+    result = build_canonical_ohlcv(conn, symbol="FPT")
+
+    assert result == {"upserted": 0, "rejected": 1}
+
+
+def test_verified_raw_basis_outranks_newer_legacy_adjusted_candidate(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    _insert_raw_bar(
+        conn,
+        symbol="FPT",
+        close=99.0,
+        provider="FIINQUANTX",
+        price_basis="ADJUSTED",
+        fetched_at="2026-01-07 00:00:00",
+    )
+    _insert_raw_bar(
+        conn,
+        symbol="FPT",
+        close=10.0,
+        provider="FIINQUANTX",
+        price_basis="RAW_UNADJUSTED",
+        fetched_at="2026-01-06 00:00:00",
+    )
+
+    result = build_canonical_ohlcv(conn, symbol="FPT")
+
+    assert result == {"upserted": 1, "rejected": 0}
+    assert conn.execute(
+        "SELECT close, price_basis FROM canonical_ohlcv WHERE symbol = 'FPT'"
+    ).fetchone() == (10.0, "RAW_UNADJUSTED")
+
+
+def test_success_quality_outranks_newer_failed_candidate(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    _insert_raw_bar(
+        conn,
+        symbol="FPT",
+        close=99.0,
+        quality_status="FAIL",
+        fetched_at="2026-01-07 00:00:00",
+    )
+    _insert_raw_bar(
+        conn,
+        symbol="FPT",
+        close=10.0,
+        quality_status="SUCCESS",
+        fetched_at="2026-01-06 00:00:00",
+    )
+
+    result = build_canonical_ohlcv(conn, symbol="FPT")
+
+    assert result == {"upserted": 1, "rejected": 0}
+    assert conn.execute(
+        "SELECT close, quality_status FROM canonical_ohlcv WHERE symbol = 'FPT'"
+    ).fetchone() == (10.0, "pass")
+
+
+def test_intraday_canonical_promotion_preserves_distinct_timestamps(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    _insert_raw_bar(
+        conn,
+        symbol="FPT",
+        close=10.0,
+        timestamp="2026-01-05 09:00:00",
+        interval="1H",
+    )
+    _insert_raw_bar(
+        conn,
+        symbol="FPT",
+        close=10.5,
+        timestamp="2026-01-05 10:00:00",
+        interval="1H",
+    )
+
+    result = build_canonical_ohlcv(conn, symbol="FPT", interval="1H")
+
+    assert result == {"upserted": 2, "rejected": 0}
+    assert conn.execute(
+        "SELECT time FROM canonical_ohlcv WHERE symbol = 'FPT' ORDER BY time"
+    ).fetchall() == [
+        (datetime(2026, 1, 5, 9, 0),),
+        (datetime(2026, 1, 5, 10, 0),),
+    ]
 
 
 def test_migrations_create_provider_and_run_keyed_quarantine_table(
@@ -330,6 +538,90 @@ def test_features_receive_only_validated_canonical_history(
     assert len(history) == 20
     assert (history["close"] > 0).all()
     assert result == {"built": 1, "skipped": 0}
+
+
+def test_load_canonical_ohlcv_includes_target_date_bar_with_time_component(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    """A canonical bar timestamped later than midnight on target_date must
+    still be included, not silently excluded by a bare-timestamp comparison.
+
+    Regression: canonical_ohlcv.time can carry a non-midnight time-of-day
+    component (e.g. exchange-close timestamps recorded as "target_date 07:00").
+    Comparing that timestamp against a bare "YYYY-MM-DD" end_date string with
+    plain "<=" truncates end_date to midnight, which excludes the target date's
+    own bar and makes build_features() always see the prior day as the latest
+    bar — permanently marking every snapshot STALE_DATE and starving scoring.
+    """
+
+    conn.execute(
+        """
+        INSERT INTO canonical_ohlcv
+        (symbol, time, interval, open, high, low, close, volume,
+         selected_provider, quality_status)
+        VALUES ('FPT', '2026-01-21 07:00:00', '1D', 10, 11, 9, 10.5, 1000,
+                'fixture', 'pass')
+        """
+    )
+
+    history = load_canonical_ohlcv(conn, "FPT", "2026-01-21")
+
+    assert len(history) == 1
+    assert str(history.index[-1].date()) == "2026-01-21"
+
+
+def test_build_features_uses_target_date_bar_with_time_component(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    """build_features() must select the target date's own bar as as_of_bar_date
+    when that bar's timestamp carries a non-midnight time-of-day component.
+
+    Regression: filtering features_df by "index <= target_date" (a bare
+    "YYYY-MM-DD" string) truncates target_date to midnight for the pandas
+    comparison, excluding the target date's own bar whenever its timestamp is
+    later than midnight (e.g. "target_date 07:00", as real ingested bars are
+    stored). That permanently misidentified the latest bar as one day stale,
+    marking every feature snapshot STALE_DATE and starving scoring (0 symbols
+    scored) even immediately after a successful sync.
+    """
+
+    start = date(2025, 9, 1)
+    for day_offset in range(140):
+        close = 10.0 + day_offset * 0.1
+        timestamp = f"{(start + timedelta(days=day_offset)).isoformat()} 07:00:00"
+        _insert_raw_bar(
+            conn,
+            symbol="FPT",
+            close=close,
+            open=close,
+            high=close + 1.0,
+            low=close - 1.0,
+            timestamp=timestamp,
+            fetched_at="2026-02-01 00:00:00",
+        )
+        _insert_raw_bar(
+            conn,
+            symbol="VNINDEX",
+            close=close,
+            open=close,
+            high=close + 1.0,
+            low=close - 1.0,
+            timestamp=timestamp,
+            fetched_at="2026-02-01 00:00:00",
+        )
+    target_date = (start + timedelta(days=139)).isoformat()
+
+    build_canonical_ohlcv(conn, symbol="FPT")
+    build_canonical_ohlcv(conn, symbol="VNINDEX")
+    result = build_features(conn, target_date, universe=["FPT"])
+
+    assert result == {"built": 1, "skipped": 0}
+    as_of_bar_date = conn.execute(
+        "SELECT as_of_bar_date, feature_data_status FROM feature_snapshot "
+        "WHERE symbol = 'FPT' AND date = ?",
+        [target_date],
+    ).fetchone()
+    assert as_of_bar_date == (date.fromisoformat(target_date), "EXACT_DATE")
 
 
 def test_canonical_build_emits_correlated_start_and_terminal_audit_events(

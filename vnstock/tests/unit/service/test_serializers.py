@@ -186,8 +186,38 @@ class TestRedactionInEnvelope:
                 },
             }
         )
+        result.quality_report = {"VNALPHA_LLM_API_KEY": "quality-secret"}
         ctx = RequestContext(dataset="equity.ohlcv")
         import json
 
         envelope_str = json.dumps(serialize_data_result(result, ctx))
         assert "super-secret-key" not in envelope_str
+
+    def test_prefixed_and_deep_credentials_are_not_serialized(self):
+        nested: dict = {"password": "deep-secret"}
+        for depth in range(12):
+            nested = {f"level_{depth}": nested}
+        result = _make_result(
+            diagnostics={
+                "runtime_path": "plugin_runtime",
+                "provider_diagnostics": {
+                    "FIINQUANT_PASSWORD": "provider-secret",
+                    "VNALPHA_LLM_API_KEY": "live-key",
+                    "message": "password=inline-secret",
+                    "messages": ["VNALPHA_LLM_API_KEY=list-secret"],
+                    "tuple_messages": ("password=tuple-secret",),
+                    "nested": nested,
+                },
+            }
+        )
+        ctx = RequestContext(dataset="equity.ohlcv")
+
+        envelope = str(serialize_data_result(result, ctx))
+
+        assert "provider-secret" not in envelope
+        assert "live-key" not in envelope
+        assert "deep-secret" not in envelope
+        assert "quality-secret" not in envelope
+        assert "inline-secret" not in envelope
+        assert "list-secret" not in envelope
+        assert "tuple-secret" not in envelope

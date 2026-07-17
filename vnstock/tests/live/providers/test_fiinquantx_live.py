@@ -15,10 +15,7 @@ _APPROVED = fiinquantx_license_approval().approved
 @skip_if_provider_excluded("FIINQUANTX")
 @pytest.mark.skipif(
     not _APPROVED,
-    reason=(
-        "Set VNSTOCK_FIINQUANTX_LICENSED=true and configure a reviewed "
-        "VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF."
-    ),
+    reason="Set VNSTOCK_FIINQUANTX_LICENSED=true.",
 )
 class TestFiinQuantXLive:
     def test_bounded_equity_ohlcv_has_canonical_schema(self) -> None:

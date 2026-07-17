@@ -8,6 +8,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_context_command_output_rendered_into_stream():
     from vnalpha.commands.models import CommandResult, ResultPanel
+    from vnalpha.tui.result_presentation import ResultPresentation
     from vnalpha.tui.widgets.output_stream import OutputStream
 
     output = MagicMock(spec=OutputStream)
@@ -37,12 +38,10 @@ async def test_context_command_output_rendered_into_stream():
         new_callable=AsyncMock,
     ) as mock_thread:
         mock_thread.return_value = command_result
-        with patch(
-            "vnalpha.tui.routing.command_path.CommandPath.result_to_markup",
-            return_value="[green]/context status[/green]",
-        ):
-            await router.route("/context status")
+        await router.route("/context status")
 
-    output.show_command_result.assert_called_once_with(
-        "/context status", "[green]/context status[/green]"
-    )
+    output.show_command_result.assert_called_once()
+    command, presentation = output.show_command_result.call_args.args
+    assert command == "/context status"
+    assert isinstance(presentation, ResultPresentation)
+    assert "Workspace Health" in presentation.plain_text

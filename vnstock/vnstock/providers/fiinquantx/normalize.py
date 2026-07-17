@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import pandas as pd
 
 from vnstock.providers.fiinquantx.exceptions import FiinQuantXSchemaError
@@ -74,16 +76,22 @@ def normalize_ohlcv(frame: pd.DataFrame, dataset: str) -> pd.DataFrame:
     return normalized
 
 
-def normalize_membership(members: list[str], entity_id: str) -> pd.DataFrame:
-    if not isinstance(members, list):
-        raise FiinQuantXSchemaError("reference.membership_snapshot")
+def normalize_membership(members: Iterable[str], entity_id: str) -> pd.DataFrame:
     normalized_members = list(
         dict.fromkeys(str(member).strip().upper() for member in members if member)
     )
+    observed_at = pd.Timestamp.now(tz="UTC")
+    row_count = len(normalized_members)
     return pd.DataFrame(
         {
-            "entity_id": entity_id.upper(),
-            "member_symbol": normalized_members,
-            "observed_at": pd.Timestamp.now(tz="UTC").tz_localize(None),
+            "entity_id": pd.Series(
+                [entity_id.upper()] * row_count,
+                dtype="string",
+            ),
+            "member_symbol": pd.Series(normalized_members, dtype="string"),
+            "observed_at": pd.Series(
+                [observed_at] * row_count,
+                dtype="datetime64[ns, UTC]",
+            ),
         }
     )

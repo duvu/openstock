@@ -21,7 +21,7 @@
 | Approved SDK version | `UNRESOLVED` |
 | Approved Python/OS runtime | `UNRESOLVED` |
 
-Do not set runtime approval variables while the decision reference is
+Do not enable runtime approval booleans while the decision reference is
 `UNRESOLVED`, `PENDING`, `TBD`, a placeholder or a free-form sentence.
 
 ## Usage-scope matrix
@@ -50,17 +50,15 @@ is `UNRESOLVED`.
 
 ## Runtime activation record
 
-After review, record only a non-secret internal decision identifier in runtime
-configuration:
+After review, enable the runtime acknowledgement in local configuration:
 
 ```text
 VNSTOCK_FIINQUANTX_LICENSED=true
-VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF=<decision-id>
 ```
 
-The provider remains disabled unless both values are valid. Diagnostics expose
-only whether a reference is configured and a short SHA-256 fingerprint; they do
-not expose the decision identifier itself.
+The provider remains disabled unless the boolean is true and the exact SDK and
+credentials are configured. The external commercial record is not copied into
+runtime diagnostics.
 
 ## Persistence activation record
 
@@ -68,12 +66,11 @@ Warehouse-bound persistence requires a separately reviewed scope:
 
 ```text
 VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true
-VNALPHA_FIINQUANTX_PERSISTENCE_APPROVAL_REF=<decision-id>
 ```
 
-This reference must point to a decision that explicitly permits the actual
-storage target and use. A runtime-use approval does not automatically permit
-DuckDB, Postgres, files, bulk export, derived analytics or model training.
+The operator must verify that the external decision explicitly permits the
+actual storage target and use. Runtime-use approval does not automatically
+permit DuckDB, Postgres, files, bulk export, derived analytics or model training.
 
 ## Evidence checklist
 
@@ -91,7 +88,6 @@ DuckDB, Postgres, files, bulk export, derived analytics or model training.
 When a decision expires, is revoked or its scope changes:
 
 1. set both acknowledgement booleans to `false`;
-2. remove the approval references from runtime configuration;
-3. stop the optional provider image/service;
-4. apply the approved retention/deletion policy to persisted data;
-5. record the revocation in issue #105 and the external decision system.
+2. stop the optional provider image/service;
+3. apply the approved retention/deletion policy to persisted data;
+4. record the revocation in issue #105 and the external decision system.

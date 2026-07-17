@@ -7,8 +7,10 @@ classified as `fetch_data` but the planner refused them and required a manual
 command. Users could not rely on one consistent chat contract for
 `request → provision → persist → analyze → answer`.
 
-Issue #163 makes bounded current-symbol data provisioning a first-class, visible
-application step shared by natural-language chat and slash commands.
+Issue #163 made bounded current-symbol data provisioning a first-class, visible
+application step shared by natural-language chat and slash commands. Follow-on
+issue #175 owns fail-closed legacy remediation parsing, while #162 owns the
+integrated acceptance path.
 
 ## What Changes
 

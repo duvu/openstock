@@ -30,6 +30,9 @@ _LLM_ENV = (
     "VNALPHA_MODEL_REASONING",
     "VNALPHA_MODEL_LONG_CONTEXT",
     "VNALPHA_LLM_API_KEY",
+    "VNALPHA_LLM_TIMEOUT",
+    "VNALPHA_LLM_MAX_OUTPUT_TOKENS",
+    "VNALPHA_LLM_MAX_RETRIES",
     "OPENAI_API_KEY",
 )
 
@@ -60,6 +63,60 @@ def test_missing_config_is_typed_before_any_probe(monkeypatch) -> None:
     assert result.remediation
 
 
+def test_malformed_numeric_config_is_typed_before_any_probe(monkeypatch) -> None:
+    _configure(monkeypatch)
+    monkeypatch.setenv("VNALPHA_LLM_TIMEOUT", "not-an-integer")
+
+    def _probe():
+        raise AssertionError("probe must not run with malformed configuration")
+
+    result = run_llm_preflight(probe=_probe)
+
+    assert result.code is LLMPreflightCode.MISSING_CONFIG
+    assert "VNALPHA_LLM_TIMEOUT" in result.detail
+
+
+def test_malformed_endpoint_port_is_typed_before_auth(monkeypatch) -> None:
+    _configure(monkeypatch, api_key=False)
+    monkeypatch.setenv("VNALPHA_LLM_ENDPOINT", "http://gateway.test:not-a-port")
+
+    result = run_llm_preflight(probe=lambda: None)
+
+    assert result.code is LLMPreflightCode.MISSING_CONFIG
+    assert "VNALPHA_LLM_ENDPOINT" in result.detail
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://gateway.example.test/v1/chat/completions",
+        "https://user:password@gateway.example.test/v1/chat/completions",
+    ],
+)
+def test_credential_transport_rejects_insecure_or_userinfo_endpoint(
+    monkeypatch, endpoint
+) -> None:
+    _configure(monkeypatch)
+    monkeypatch.setenv("VNALPHA_LLM_ENDPOINT", endpoint)
+
+    result = run_llm_preflight(probe=lambda: None)
+
+    assert result.code is LLMPreflightCode.MISSING_CONFIG
+
+
+def test_loopback_http_endpoint_remains_available(monkeypatch) -> None:
+    _configure(monkeypatch)
+    monkeypatch.setenv(
+        "VNALPHA_LLM_ENDPOINT", "http://127.0.0.1:7071/v1/chat/completions"
+    )
+
+    result = run_llm_preflight(
+        probe=lambda: {"model_id": "verified-model", "profile": "default"}
+    )
+
+    assert result.code is LLMPreflightCode.READY
+
+
 def test_missing_api_key_reports_auth_not_configured(monkeypatch) -> None:
     _configure(monkeypatch, api_key=False)
 
@@ -84,6 +141,96 @@ def test_ready_records_route_identity(monkeypatch) -> None:
     assert result.model == "verified-model"
 
 
+def test_explicit_key_is_passed_to_default_client_without_env_mutation(
+    monkeypatch,
+) -> None:
+    from vnalpha.assistant import gateway
+
+    _configure(monkeypatch)
+    monkeypatch.setenv("VNALPHA_LLM_API_KEY", "environment-key")
+    observed: dict[str, object] = {}
+
+    class _Client:
+        def __init__(self, config, **kwargs) -> None:
+            observed["config"] = config
+            observed.update(kwargs)
+
+        def chat(self, messages, response_schema=None, **kwargs):
+            return '{"ok": true}', {
+                "model_route": {"model_id": "verified-model"},
+                "structured_output_mode": "json_schema",
+                "structured_output_downgraded": False,
+            }
+
+    monkeypatch.setattr(gateway, "LLMGatewayClient", _Client)
+
+    result = run_llm_preflight(api_key="explicit-key")
+
+    assert result.code is LLMPreflightCode.READY
+    assert observed["api_key"] == "explicit-key"
+    assert gateway.os.environ["VNALPHA_LLM_API_KEY"] == "environment-key"
+
+
+@pytest.mark.parametrize(
+    ("content", "mode", "downgraded", "expected"),
+    [
+        ("not-json", "json_schema", False, LLMPreflightCode.PROBE_FAILED),
+        ('{"ok": false}', "json_schema", False, LLMPreflightCode.PROBE_FAILED),
+        (
+            '{"ok": true}',
+            "json_object",
+            True,
+            LLMPreflightCode.UNSUPPORTED_STRUCTURED_OUTPUT,
+        ),
+    ],
+)
+def test_default_probe_requires_verified_strict_schema_response(
+    monkeypatch, content, mode, downgraded, expected
+) -> None:
+    from vnalpha.assistant import gateway
+
+    _configure(monkeypatch)
+
+    class _Client:
+        def __init__(self, config, **kwargs) -> None:
+            pass
+
+        def chat(self, messages, response_schema=None, **kwargs):
+            return content, {
+                "model_route": {"model_id": "verified-model"},
+                "structured_output_mode": mode,
+                "structured_output_downgraded": downgraded,
+            }
+
+    monkeypatch.setattr(gateway, "LLMGatewayClient", _Client)
+
+    assert run_llm_preflight().code is expected
+
+
+def test_llm_error_log_contains_metadata_only(monkeypatch) -> None:
+    from vnalpha.assistant import gateway
+
+    captured: dict[str, object] = {}
+
+    class _Logger:
+        def error(self, event: str, **fields) -> None:
+            captured["event"] = event
+            captured.update(fields)
+
+    monkeypatch.setattr("structlog.get_logger", lambda _name: _Logger())
+
+    gateway._log_llm_error(
+        "preflight",
+        LLMResponseError("LLM HTTP 401: Authorization: Bearer synthetic-sentinel"),
+        cause=RuntimeError("private cause body"),
+    )
+
+    assert captured["error_type"] == "LLMResponseError"
+    assert captured["cause_type"] == "RuntimeError"
+    assert "synthetic-sentinel" not in repr(captured)
+    assert "private cause body" not in repr(captured)
+
+
 def test_unreachable_gateway_is_typed(monkeypatch) -> None:
     _configure(monkeypatch)
 
@@ -104,6 +251,21 @@ def test_auth_failure_is_typed_from_http_401(monkeypatch) -> None:
     result = run_llm_preflight(probe=_probe)
 
     assert result.code is LLMPreflightCode.AUTH_FAILED
+
+
+def test_response_error_detail_does_not_expose_raw_gateway_body(monkeypatch) -> None:
+    _configure(monkeypatch)
+
+    def _probe():
+        raise LLMResponseError(
+            "LLM HTTP 401: Authorization: Bearer raw-response-secret"
+        )
+
+    result = run_llm_preflight(probe=_probe)
+
+    assert result.code is LLMPreflightCode.AUTH_FAILED
+    assert "raw-response-secret" not in result.detail
+    assert "Authorization" not in result.detail
 
 
 def test_missing_model_is_typed_from_http_404(monkeypatch) -> None:
@@ -171,6 +333,20 @@ def test_generic_gateway_error_is_probe_failed(monkeypatch) -> None:
     result = run_llm_preflight(probe=_probe)
 
     assert result.code is LLMPreflightCode.PROBE_FAILED
+
+
+def test_unexpected_probe_exception_is_sanitized(monkeypatch) -> None:
+    _configure(monkeypatch)
+
+    def _probe():
+        raise RuntimeError("Authorization: Bearer super-secret-key")
+
+    result = run_llm_preflight(probe=_probe)
+
+    assert result.code is LLMPreflightCode.PROBE_FAILED
+    assert "RuntimeError" in result.detail
+    assert "super-secret-key" not in result.detail
+    assert "Authorization" not in result.detail
 
 
 def test_status_dict_is_redaction_safe(monkeypatch) -> None:

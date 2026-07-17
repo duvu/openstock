@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+from vnstock.core.contracts.equity import QUOTE_CONTRACT
 from vnstock.core.quality.registry import (
     _REGISTRY,
     get_validator,
@@ -20,6 +21,9 @@ class TestRegistryDefaults:
 
     def test_intraday_registered(self):
         assert "intraday_trades" in _REGISTRY
+
+    def test_quote_contract_references_registered_validator(self):
+        assert get_validator(QUOTE_CONTRACT.validator or "") is not None
 
     def test_get_validator_known_type(self):
         v = get_validator("ohlcv")

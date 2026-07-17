@@ -7,14 +7,9 @@ from typing import TYPE_CHECKING, Optional
 
 from vnalpha.core.dates import resolve_date
 from vnalpha.tui.responsive_layout import ResponsiveLayoutController
-from vnalpha.tui.todo_source import (
-    CompositeTodoSource,
-    FallbackTodoSource,
-    WorkspaceTodoSource,
-)
 
 if TYPE_CHECKING:
-    from vnalpha.tui.widgets.todo_panel import TodoPanel
+    from vnalpha.tui.clipboard import ClipboardPort
     from vnalpha.workspace_context.models import WorkspaceResumeSummary, WorkspaceState
 
 
@@ -44,14 +39,15 @@ def _emit_audit_event(event_name: str, detail: str) -> None:
 try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
-    from textual.containers import Horizontal, Vertical
+    from textual.containers import Vertical
     from textual.events import Resize
     from textual.widgets import Static
 
+    from vnalpha.tui.clipboard import TextualClipboardPort
     from vnalpha.tui.widgets.composer_input import ComposerInput
+    from vnalpha.tui.widgets.debug_log_drawer import DebugLogDrawer
     from vnalpha.tui.widgets.output_stream import OutputStream
     from vnalpha.tui.widgets.status_bar import StatusBar
-    from vnalpha.tui.widgets.todo_panel import TodoPanel
 
     _TEXTUAL_AVAILABLE = True
 except ImportError:
@@ -61,8 +57,6 @@ except ImportError:
 if _TEXTUAL_AVAILABLE:
 
     class VnAlphaApp(App):
-        """vnalpha research-discovery TUI with an optional responsive TODO rail."""
-
         # Focus the composer input on launch so the first keystrokes (e.g. "/")
         # reach the Input and trigger slash-command suggestion rendering instead
         # of being swallowed by the focusable output log.
@@ -81,7 +75,7 @@ if _TEXTUAL_AVAILABLE:
         #main-body {
             height: 1fr;
             width: 100%;
-            layout: horizontal;
+            layout: vertical;
             min-height: 0;
             overflow: hidden;
         }
@@ -116,10 +110,9 @@ if _TEXTUAL_AVAILABLE:
         BINDINGS = [
             Binding("q", "quit", "Quit"),
             Binding("ctrl+l", "clear_stream", "Clear output", show=False),
-            Binding("ctrl+t", "toggle_todo_panel", "TODOs", show=False),
             Binding("ctrl+o", "open_artifact_detail", "Artifact detail", show=False),
             Binding("ctrl+b", "artifact_back", "Artifact back", show=False),
-            Binding("ctrl+y", "copy_artifact_id", "Artifact id", show=False),
+            Binding("ctrl+y", "copy_result", "Copy result", show=False),
             Binding("ctrl+s", "save_artifact_note", "Artifact note", show=False),
             Binding(
                 "ctrl+r",
@@ -129,12 +122,41 @@ if _TEXTUAL_AVAILABLE:
             ),
             Binding("escape", "cancel_pending_plan", "Cancel plan", show=False),
             Binding("f12", "toggle_log_viewer", "Log Viewer", show=False),
+            Binding(
+                "pageup",
+                "transcript_page_up",
+                "Transcript page up",
+                show=False,
+                priority=True,
+            ),
+            Binding(
+                "pagedown",
+                "transcript_page_down",
+                "Transcript page down",
+                show=False,
+                priority=True,
+            ),
+            Binding(
+                "home",
+                "transcript_home",
+                "Transcript start",
+                show=False,
+                priority=True,
+            ),
+            Binding(
+                "end",
+                "transcript_end",
+                "Transcript end",
+                show=False,
+                priority=True,
+            ),
         ]
 
         def __init__(
             self,
             date: Optional[str] = None,
             logging_warning: str | None = None,
+            clipboard: ClipboardPort | None = None,
             **kwargs,
         ):
             _load_dotenv()
@@ -143,20 +165,17 @@ if _TEXTUAL_AVAILABLE:
             self._router = None
             self._workspace: WorkspaceState | None = None
             self._layout_controller = ResponsiveLayoutController()
-            self._todo_preference: bool | None = None
-            self._last_todo_visible: bool | None = None
             self._logging_warning = logging_warning
-            self._todo_source = CompositeTodoSource(
-                [WorkspaceTodoSource(), FallbackTodoSource()]
-            )
+            self._clipboard = clipboard or TextualClipboardPort(self.copy_to_clipboard)
+            self._debug_drawer_open = False
 
         def compose(self) -> ComposeResult:
             """Yield status, responsive main body, composer, and footer hint."""
             yield StatusBar(id="status-bar")
-            with Horizontal(id="main-body"):
+            with Vertical(id="main-body"):
                 with Vertical(id="output-column"):
                     yield OutputStream(id="output-stream")
-                yield TodoPanel(source=self._todo_source, id="todo-panel")
+                yield DebugLogDrawer(id="debug-log-drawer")
             yield ComposerInput(id="composer-input")
             yield Static(self._footer_hint_text(), id="footer-hint")
 
@@ -178,7 +197,6 @@ if _TEXTUAL_AVAILABLE:
                 self._router.close()
 
         def on_resize(self, event: Resize) -> None:
-            """Recompute TODO panel visibility when terminal size changes."""
             del event
             self._apply_responsive_layout()
             self._ensure_composer_focus()
@@ -193,6 +211,9 @@ if _TEXTUAL_AVAILABLE:
 
         def action_cancel_pending_plan(self) -> None:
             """Cancel pending plan via the router's ChatController."""
+            if self._debug_drawer_open:
+                self.action_toggle_log_viewer()
+                return
             if self._router is not None:
                 try:
                     self._router._handle_cancel()
@@ -208,18 +229,21 @@ if _TEXTUAL_AVAILABLE:
                     pass
 
         def action_toggle_log_viewer(self) -> None:
-            """Push the LogScreen overlay so users can view live logs."""
             try:
-                from vnalpha.tui.screens.log_viewer import LogScreen
-
-                self.push_screen(LogScreen())
+                self._debug_drawer_open = not self._debug_drawer_open
+                self._apply_responsive_layout()
+                self._ensure_composer_focus()
+                _emit_audit_event(
+                    "TUI_DEBUG_LOG_DRAWER_TOGGLED",
+                    f"visible={self._debug_drawer_open}",
+                )
             except Exception:
                 pass
 
         def action_clear_stream(self) -> None:
             """Clear the visible OutputStream."""
             try:
-                self.query_one("#output-stream", OutputStream).clear_visible()
+                self.query_one("#output-stream", OutputStream).clear_transcript()
             except Exception:
                 pass
 
@@ -241,41 +265,43 @@ if _TEXTUAL_AVAILABLE:
             except Exception:
                 pass
 
-        def action_copy_artifact_id(self) -> None:
-            try:
-                output = self.query_one("#output-stream", OutputStream)
-                artifact_id = output.current_artifact_id()
-                if artifact_id:
-                    output.show_assistant_message(
-                        f"Artifact ID: {artifact_id}", style="dim"
-                    )
-            except Exception:
-                pass
+        def action_copy_result(self) -> None:
+            if self._router is not None:
+                self._router.copy_target("result")
+
+        def action_transcript_page_up(self) -> None:
+            if self._debug_drawer_open:
+                self.query_one("#debug-log-drawer", DebugLogDrawer).page_up()
+            else:
+                self.query_one("#output-stream", OutputStream).page_up()
+            self._ensure_composer_focus()
+
+        def action_transcript_page_down(self) -> None:
+            if self._debug_drawer_open:
+                self.query_one("#debug-log-drawer", DebugLogDrawer).page_down()
+            else:
+                self.query_one("#output-stream", OutputStream).page_down()
+            self._ensure_composer_focus()
+
+        def action_transcript_home(self) -> None:
+            if self._debug_drawer_open:
+                self.query_one("#debug-log-drawer", DebugLogDrawer).home()
+            else:
+                self.query_one("#output-stream", OutputStream).home()
+            self._ensure_composer_focus()
+
+        def action_transcript_end(self) -> None:
+            if self._debug_drawer_open:
+                self.query_one("#debug-log-drawer", DebugLogDrawer).end()
+            else:
+                self.query_one("#output-stream", OutputStream).end()
+            self._ensure_composer_focus()
 
         def action_save_artifact_note(self) -> None:
             self._prefill_from_artifact("note")
 
         def action_route_artifact_to_assistant(self) -> None:
             self._prefill_from_artifact("assistant")
-
-        def action_toggle_todo_panel(self) -> None:
-            """Toggle the TODO side rail on wide terminals only."""
-            can_show = self._layout_controller.should_show_todo(
-                self._current_width(), None
-            )
-            if not can_show:
-                self._apply_responsive_layout()
-                self._ensure_composer_focus()
-                return
-            self._todo_preference = not self._layout_controller.should_show_todo(
-                self._current_width(), self._todo_preference
-            )
-            self._apply_responsive_layout()
-            self._ensure_composer_focus()
-            _emit_audit_event(
-                "TUI_TODO_PANEL_TOGGLED",
-                f"visible={self._todo_preference is not False}",
-            )
 
         def show_detail(self, symbol: str) -> None:
             """Render detail for ``symbol`` into the output stream."""
@@ -290,6 +316,7 @@ if _TEXTUAL_AVAILABLE:
 
             output = self.query_one("#output-stream", OutputStream)
             status_bar = self.query_one("#status-bar", StatusBar)
+            log_drawer = self.query_one("#debug-log-drawer", DebugLogDrawer)
 
             def _on_busy(busy: bool) -> None:
                 try:
@@ -306,6 +333,8 @@ if _TEXTUAL_AVAILABLE:
                 workspace=self._workspace,
                 on_workspace_change=self._on_workspace_change,
                 ui_dispatcher=self.call_from_thread,
+                clipboard=self._clipboard,
+                log_text_provider=log_drawer.filtered_plain_text,
             )
 
         def _start_workspace_lifecycle(self) -> None:
@@ -321,7 +350,6 @@ if _TEXTUAL_AVAILABLE:
 
             self._workspace = workspace
             self._render_workspace_resume(resume_summary_for(workspace))
-            self._refresh_todo_panel()
 
         def _render_workspace_resume(self, summary: "WorkspaceResumeSummary") -> None:
             from vnalpha.tui.workspace_presentation import render_workspace_resume
@@ -350,49 +378,39 @@ if _TEXTUAL_AVAILABLE:
                 else "ws=loading"
             )
             if self._current_width() < 100:
-                return f"{workspace_hint} · Enter submit · /help · Esc cancel"
-            if self._layout_controller.should_show_todo(
-                self._current_width(), self._todo_preference
-            ):
+                return f"{workspace_hint} · Enter submit · F12 logs · /help"
+            if self._current_width() < 120:
+                return f"{workspace_hint} · Enter · PgUp/Dn · Ctrl+Y · F12 logs · /help"
+            if self._current_width() < 140:
                 return (
-                    f"{workspace_hint} · Enter submit · ↑/↓ history · Ctrl+L clear · "
-                    "Ctrl+T TODOs · /help · Esc cancel"
+                    f"{workspace_hint} · Enter submit · PgUp/Dn scroll · "
+                    "Ctrl+Y result · F12 logs · /help"
                 )
             return (
-                f"{workspace_hint} · Enter submit · ↑/↓ history · Ctrl+L clear · "
-                "TODOs hidden · /help · Esc cancel"
+                f"{workspace_hint} · Enter submit · ↑/↓ history · PgUp/Dn scroll · "
+                "Ctrl+L clear · Ctrl+Y result · F12 logs · /help"
             )
 
         def _apply_responsive_layout(self) -> None:
-            panel = self.query_one("#todo-panel", TodoPanel)
             composer = self.query_one("#composer-input", ComposerInput)
             footer = self.query_one("#footer-hint", Static)
-            show_panel = self._layout_controller.should_show_todo(
-                self._current_width(), self._todo_preference
-            )
+            drawer = self.query_one("#debug-log-drawer", DebugLogDrawer)
+            output = self.query_one("#output-stream", OutputStream)
+            stick_to_end = output.is_at_end()
             composer.set_suggestion_limit(
                 self._layout_controller.suggestion_limit(self._current_height())
             )
             footer.display = self._layout_controller.should_show_footer(
                 self._current_height()
             )
-            panel.display = show_panel
-            if show_panel:
-                panel.styles.width = self._layout_controller.todo_width(
-                    self._current_width()
-                )
-                panel.refresh_items()
-            if self._last_todo_visible != show_panel:
-                self._emit_todo_visibility(
-                    "TUI_TODO_PANEL_VISIBLE" if show_panel else "TUI_TODO_PANEL_HIDDEN"
-                )
+            drawer.display = self._debug_drawer_open
+            drawer.styles.height = (
+                self._layout_controller.debug_drawer_height(self._current_height())
+                if self._debug_drawer_open
+                else 0
+            )
+            self.call_after_refresh(output.reflow, stick_to_end=stick_to_end)
             self._refresh_footer_hint()
-
-        def _refresh_todo_panel(self) -> None:
-            try:
-                self.query_one("#todo-panel", TodoPanel).refresh_items()
-            except Exception:
-                pass
 
         def _refresh_footer_hint(self) -> None:
             try:
@@ -423,10 +441,6 @@ if _TEXTUAL_AVAILABLE:
             except Exception:
                 pass
 
-        def _emit_todo_visibility(self, event_name: str) -> None:
-            self._last_todo_visible = event_name == "TUI_TODO_PANEL_VISIBLE"
-            _emit_audit_event(event_name, f"width={self._current_width()}")
-
 else:
 
     class VnAlphaApp:  # type: ignore[no-redef]
@@ -440,9 +454,10 @@ else:
             self,
             date: Optional[str] = None,
             logging_warning: str | None = None,
+            clipboard: ClipboardPort | None = None,
             **kwargs,
         ):
-            del logging_warning
+            del logging_warning, clipboard
             self.target_date: str = resolve_date(date)
 
         def run(self) -> None:

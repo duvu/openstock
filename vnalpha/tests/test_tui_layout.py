@@ -108,7 +108,6 @@ def test_legacy_screens_remain_importable():
     from vnalpha.tui.screens.assistant import AssistantScreen
     from vnalpha.tui.screens.command import CommandScreen
     from vnalpha.tui.screens.home import HomeScreen
-    from vnalpha.tui.screens.log_viewer import LogScreen
     from vnalpha.tui.screens.outcomes import OutcomeScreen
     from vnalpha.tui.screens.quality import QualityScreen
     from vnalpha.tui.screens.rejected import RejectedScreen
@@ -122,6 +121,5 @@ def test_legacy_screens_remain_importable():
         RejectedScreen,
         QualityScreen,
         OutcomeScreen,
-        LogScreen,
     ):
         assert cls is not None

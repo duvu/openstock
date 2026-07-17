@@ -13,6 +13,7 @@ from rich.table import Table
 from rich.text import Text
 
 from vnalpha.commands.models import CommandResult, status_color
+from vnalpha.core.text_safety import is_sensitive_key, sanitize_text
 
 
 def result_to_markup(result: CommandResult) -> RenderableType:
@@ -27,18 +28,18 @@ def result_to_markup(result: CommandResult) -> RenderableType:
 
     color = status_color(result.status)
 
-    parts.append(Text.from_markup(f"[{color}]{result.title}[/{color}]"))
+    parts.append(Text(sanitize_text(result.title), style=color))
 
     if result.summary:
-        parts.append(Text.from_markup(result.summary))
+        parts.append(Text(sanitize_text(result.summary)))
 
     metadata_panel = _workflow_metadata_panel(result)
     if metadata_panel is not None:
-        parts.append(Text.from_markup("\n[bold]Workflow status[/bold]"))
+        parts.append(Text("\nWorkflow status", style="bold"))
         parts.append(metadata_panel)
 
     for rt in result.tables:
-        parts.append(Text.from_markup(f"\n[bold]{rt.title}[/bold]"))
+        parts.append(Text(f"\n{sanitize_text(rt.title)}", style="bold"))
         tbl = Table(
             box=None,
             show_header=True,
@@ -47,13 +48,33 @@ def result_to_markup(result: CommandResult) -> RenderableType:
             padding=(0, 1),
         )
         for col in rt.columns:
-            tbl.add_column(col.title, no_wrap=False)
+            tbl.add_column(
+                sanitize_text(col.title),
+                no_wrap=False,
+                overflow="fold",
+            )
         for row in rt.rows:
-            tbl.add_row(*(str(c) if c is not None else "—" for c in row))
+            cells = []
+            for index, value in enumerate(row):
+                column = rt.columns[index] if index < len(rt.columns) else None
+                sensitive = column is not None and (
+                    is_sensitive_key(column.name) or is_sensitive_key(column.title)
+                )
+                text = (
+                    "[REDACTED]"
+                    if sensitive and value is not None
+                    else _value_text(value)
+                    if value is not None
+                    else "—"
+                )
+                if index < len(rt.columns) and rt.columns[index].name == "usage":
+                    text = text.replace("|", "| ")
+                cells.append(text)
+            tbl.add_row(*cells)
         parts.append(tbl)
 
     for rp in result.panels:
-        parts.append(Text.from_markup(f"\n[bold]{rp.title}[/bold]"))
+        parts.append(Text(f"\n{sanitize_text(rp.title)}", style="bold"))
         if isinstance(rp.content, dict):
             lines = "\n".join(_mapping_lines(rp.content))
             parts.append(Text(lines))
@@ -62,18 +83,22 @@ def result_to_markup(result: CommandResult) -> RenderableType:
 
     if result.artifacts:
         artifact_lines = "\n".join(
-            f"  artifact_id: {artifact.name}" for artifact in result.artifacts
+            f"  artifact_id: {sanitize_text(artifact.name)}"
+            for artifact in result.artifacts
         )
-        parts.append(Text.from_markup("\n[bold]Artifacts[/bold]"))
+        parts.append(Text("\nArtifacts", style="bold"))
         parts.append(Text(artifact_lines))
 
     for w in result.warnings:
-        parts.append(Text.from_markup(f"[yellow]⚠ {w}[/yellow]"))
+        parts.append(Text(f"⚠ {sanitize_text(w)}", style="yellow"))
 
     if result.error:
         parts.append(
-            Text.from_markup(
-                f"[red]Error ({result.error.error_type}): {result.error.message}[/red]"
+            Text(
+                "Error "
+                f"({sanitize_text(result.error.error_type)}): "
+                f"{sanitize_text(result.error.message)}",
+                style="red",
             )
         )
 
@@ -104,7 +129,8 @@ def _workflow_metadata_panel(result: CommandResult) -> Text | None:
 
 def _mapping_lines(content: Mapping[str, object]) -> list[str]:
     return [
-        f"  {key}: {_value_text(value)}"
+        f"  {sanitize_text(key)}: "
+        f"{'[REDACTED]' if is_sensitive_key(key) else _value_text(value)}"
         for key, value in content.items()
         if value is not None
     ]
@@ -112,7 +138,11 @@ def _mapping_lines(content: Mapping[str, object]) -> list[str]:
 
 def _value_text(value: object) -> str:
     if isinstance(value, Mapping):
-        return "; ".join(f"{key}={_value_text(item)}" for key, item in value.items())
+        return "; ".join(
+            f"{sanitize_text(key)}="
+            f"{'[REDACTED]' if is_sensitive_key(key) else _value_text(item)}"
+            for key, item in value.items()
+        )
     if isinstance(value, Sequence) and not isinstance(value, str):
         return ", ".join(_value_text(item) for item in value) or "—"
-    return str(value)
+    return sanitize_text(value)

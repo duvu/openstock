@@ -59,6 +59,7 @@ class TestExceptionHierarchy:
         assert isinstance(err, VnstockPlatformError)
         assert "VCI" in str(err)
         assert "equity.ohlcv" in str(err)
+        assert "timeout" not in str(err)
         assert err.cause is cause
 
     def test_provider_fetch_error_without_cause(self):

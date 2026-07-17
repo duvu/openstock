@@ -5,16 +5,79 @@
 ```text
 OpenSpec authored: yes
 Detailed documentation inventory: complete
-Licensed SDK runtime verification: partial; bounded OHLCV and membership verified
+Licensed SDK runtime verification: Gate A live evidence passed for the current remediation
 Commercial/license decision: runtime acknowledgement enforced; agreement review pending
 Runtime implementation: four experimental, explicit-only datasets enabled
-Offline runtime validation: passed for provider, contract and service slices
-Licensed live validation: passed for bounded equity OHLCV and index membership
+Offline runtime validation: passed for raw-request, safe-lineage, membership-persistence, contract and service slices
+Licensed live validation: current bounded Gate A provider, persistence and localhost smoke passed
 Strict OpenSpec validation after implementation: passed
-Phase gates: G0A passed; G0B-G7 pending
+Phase gates: G0A and the implemented Gate A subset passed; full G0B and G3-G7 remain pending
 ```
 
-## Runtime implementation evidence
+## Current Gate A acceptance evidence (2026-07-17)
+
+Environment: local Linux host; Python 3.11 service container bound only to
+`127.0.0.1:6900`; FiinQuantX `0.1.64`; existing credentials supplied at
+runtime without recording their values. The exact implementation commit is the
+PR head containing this ledger; required CI and merge-SHA evidence remain PR
+checks rather than being inferred here.
+
+The approved policy for this acceptance is boolean-only acknowledgement:
+`VNSTOCK_FIINQUANTX_LICENSED=true` and
+`VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true`. Both retired
+approval-reference environment inputs, their values and fingerprints are
+absent. All other provider, persistence and fail-closed gates remain enforced.
+
+| Check | Result | Safe evidence |
+|---|---|---|
+| localhost service deployment | passed | health passed after build and again after restart; host publish is loopback-only |
+| base image without proprietary SDK | passed | `vnstock` imports; FiinQuantX distribution is absent; five documented capabilities are unsupported |
+| licensed image/runtime | passed | exact distribution `fiinquantx==0.1.64`; four implemented capabilities available only with SDK, credentials and boolean acknowledgement |
+| equity and index OHLCV | passed | bounded FPT and VNINDEX requests returned two canonical rows each with `FIINQUANTX`, `RAW_UNADJUSTED`, `PASS` and `plugin_runtime` lineage |
+| index and sector membership | passed | VN30 returned 30 canonical members and `BANKS_L2` returned 28; the SDK iterable wrapper is normalized without retaining vendor objects |
+| stable reference universe | passed | strict VCI symbol reference returned and persisted 1,745 STOCK symbols with exchange; Fiin company reference remained disabled |
+| explicit-source no fallback | passed | unsupported Fiin company-info request returned typed HTTP 422 and did not route to VCI |
+| clean persistence and canonical build | passed | fresh warehouse persisted FPT and VNINDEX raw-unadjusted rows, built canonical rows and retained safe provider/basis/quality lineage; retired reference/fingerprint diagnostics were absent |
+| assistant route and natural-language acceptance | passed | ya-router `thiendu` on `127.0.0.1:7071` passed structured preflight; a real Vietnamese FPT analysis completed with groundedness/policy PASS, correlated evidence and no licensed-row disclosure |
+| reuse and deterministic degraded mode | passed | follow-up NL and `/analyze` reused persisted data without new ingestion; unavailable LLM route failed preflight while deterministic analysis remained available |
+| restart durability | passed | service restart preserved warehouse, audit and validated-memory state; bounded Fiin and strict VCI probes passed again |
+| offline regression and style | passed | vnstock: 1,384 passed, 1 skipped, 145 deselected using `not live and not integration`; Ruff check and format passed across 367 files |
+
+No credentials, session material, model prose or raw licensed rows are stored
+in this ledger. Counts, statuses, schema names and hashes are the only live
+payload evidence retained. The full G0B probe matrix (including quotas and
+disabled Gate B/C datasets) is not implied by this bounded Gate A acceptance.
+
+## Earlier remediation evidence (2026-07-16)
+
+That earlier offline environment had no FiinQuantX distribution, licensed credentials,
+runtime approval, persistence approval, or commercial decision. The following
+results are offline evidence only:
+
+- exact SDK call tests verify bounded OHLCV requests set `adjusted=False` and
+  `lasted=False`, and publish `basis=RAW_UNADJUSTED`;
+- PluginRuntime tests verify allowlisted SDK/contract/source-method/snapshot
+  lineage and exclude credential-like attrs;
+- vnalpha tests verify source approval before run creation, typed membership
+  endpoints, atomic current-snapshot/member persistence, valid `EMPTY`,
+  fail-closed entity validation, CLI status, and boolean-only approvals;
+- raw and canonical warehouse rows carry an explicit price basis; legacy
+  FiinQuantX rows without verified basis, adjusted rows, and upstream quality
+  failures are quarantined instead of colliding with raw-unadjusted evidence;
+- research evidence and grounded answers disclose raw-unadjusted basis and
+  overlapping corporate-action ranges rather than implying adjusted history;
+- the installed-host verifier fails closed when either approval boolean, the
+  separately approved reference provider, or any Gate A capability is absent;
+- base-package tests continue to run without the proprietary SDK.
+
+At that earlier checkpoint, live equity/index bars, timestamp/timezone/price/volume/value semantics,
+incomplete-bar behavior, valid-empty behavior, membership semantics, exact SDK
+installation, entitlement, quotas, commercial permission, and a fresh-host
+smoke are `not run` for this remediation. Historical live evidence below does
+not certify the changed `adjusted=False` request or the new vnalpha membership
+persistence path.
+
+## Historical runtime implementation evidence
 
 Implementation commit: `0bd6a5d316bc9dea9eed7c3fda98209609a5bff7`.
 
@@ -363,10 +426,10 @@ Required:
 |---|---|---|---|
 | G0A documentation inventory | OpenSpec branch after PR #103 review | passed | `source-review.md`, rewritten proposal/design/tasks/spec |
 | G0B licensed runtime/commercial verification | pending | not run | pending |
-| G1 optional provider foundation | pending | not run | pending |
-| G2 reference and historical market | pending | not run | pending |
+| G1 optional provider foundation | uncommitted tree based on `1de8636faed167b7fb0c7b038153eaeeb83f09ce` | partial | Lazy exact-version plugin, approval, capability, error-mapping and forbidden-surface tests pass offline; licensed runtime remains not run |
+| G2 reference and historical market | uncommitted tree based on `1de8636faed167b7fb0c7b038153eaeeb83f09ce` | partial | Gate A bounded equity/index OHLCV and current membership contracts, UTC timestamps, strict service validation, persistence and canonical-basis tests pass offline; licensed probes remain not run; Gate B/C remain disabled |
 | G3 flow/ownership/market structure/valuation | pending | not run | pending |
 | G4 period-aware fundamentals | pending | not run | pending |
 | G5 namespaced vendor analytics | pending | not run | pending |
 | G6 streaming architecture | pending | deferred to separate accepted change or not run |
-| G7 full offline/package/live/OpenSpec | pending | not run | pending |
+| G7 full offline/package/live/OpenSpec | uncommitted tree based on `1de8636faed167b7fb0c7b038153eaeeb83f09ce` | partial | `PYTHONPATH=. uv run pytest -q -m 'not integration'`: 1371 passed, 53 live skips, 93 deselected; Debian package 59/59; strict OpenSpec valid; licensed/live and exact-candidate host evidence remain not run |

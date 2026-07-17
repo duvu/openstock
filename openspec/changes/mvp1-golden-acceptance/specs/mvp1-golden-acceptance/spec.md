@@ -25,6 +25,10 @@ a fake LLM. Only the network-fetch boundary and the LLM gateway are faked.
 
 ### Requirement: Fresh reuse, explicit refresh and shared contract
 
+The golden conversation SHALL prove that fresh follow-up work reuses persisted
+evidence, explicit refresh remains bounded and disclosed, and slash commands
+and natural language use the same readiness operation.
+
 #### Scenario: Follow-up reuses without new provider fetches
 - **GIVEN** a first analysis already provisioned
 - **WHEN** a follow-up question is asked
@@ -40,6 +44,9 @@ a fake LLM. Only the network-fetch boundary and the LLM gateway are faked.
 - **THEN** it reuses the same persisted evidence with no new fetch.
 
 ### Requirement: Failure fails closed and preserves state
+
+The golden conversation SHALL prove that provisioning failure is typed,
+actionable and atomic, without promoting partial analysis evidence or memory.
 
 #### Scenario: Service-unavailable fails closed
 - **GIVEN** a service-unavailable provisioning fixture

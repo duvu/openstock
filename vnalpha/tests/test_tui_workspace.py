@@ -126,10 +126,11 @@ async def test_9_4_exactly_one_input_widget(mock_get_connection):
 
 @skip_if_no_textual
 @pytest.mark.asyncio
-async def test_9_4b_narrow_terminal_hides_optional_panel(
+async def test_9_4b_workspace_mounts_without_persistent_right_rail(
     mock_get_connection, monkeypatch: pytest.MonkeyPatch, tmp_path
 ):
     from vnalpha.tui.app import VnAlphaApp
+    from vnalpha.tui.widgets.debug_log_drawer import DebugLogDrawer
     from vnalpha.tui.widgets.output_stream import OutputStream
     from vnalpha.tui.widgets.todo_panel import TodoPanel
 
@@ -137,7 +138,8 @@ async def test_9_4b_narrow_terminal_hides_optional_panel(
     app = VnAlphaApp(date="2024-01-10")
     async with app.run_test(headless=True, size=(90, 30)) as pilot:
         assert pilot.app.query_one("#output-stream", OutputStream) is not None
-        assert pilot.app.query_one("#todo-panel", TodoPanel).display is False
+        assert len(pilot.app.query(TodoPanel)) == 0
+        assert pilot.app.query_one(DebugLogDrawer).display is False
 
 
 # ---------------------------------------------------------------------------
@@ -254,8 +256,10 @@ def test_9_10b_no_execution_controls_in_bindings() -> None:
     assert {
         "open_artifact_detail",
         "artifact_back",
+        "copy_result",
         "save_artifact_note",
     } <= action_names
+    assert "copy_artifact_id" not in action_names
     for action_name in action_names:
         for term in forbidden_terms:
             assert term not in action_name
@@ -348,7 +352,6 @@ async def test_9_13_router_plain_text_routes_to_chat():
 
 @pytest.mark.asyncio
 async def test_9_14_router_clear_calls_output_stream():
-    """/clear routes to output_stream.clear_visible() (9.14)."""
     from vnalpha.tui.widgets.output_stream import OutputStream
 
     output = MagicMock(spec=OutputStream)
@@ -359,7 +362,7 @@ async def test_9_14_router_clear_calls_output_stream():
             router = TuiInputRouter(output_stream=output, target_date=None)
 
     await router.route("/clear")
-    output.clear_visible.assert_called_once()
+    output.clear_transcript.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -380,18 +383,25 @@ async def test_9_15_command_output_rendered_into_stream():
 
             router = TuiInputRouter(output_stream=output, target_date=None)
 
+    from vnalpha.commands.models import CommandResult, CommandStatus
+    from vnalpha.tui.result_presentation import ResultPresentation
+
     router._command_executor = MagicMock()
     router._chat_controller = MagicMock()
 
-    with patch("asyncio.to_thread", new_callable=AsyncMock) as mock_thread:
-        mock_thread.return_value = "some result"
-        with patch(
-            "vnalpha.tui.input_router.TuiInputRouter._result_to_markup",
-            return_value="[bold]result[/bold]",
-        ):
-            await router.route("/score")
+    with patch(
+        "vnalpha.tui.routing.command_path.anyio.to_thread.run_sync",
+        new_callable=AsyncMock,
+        return_value=CommandResult(
+            status=CommandStatus.SUCCESS,
+            title="Score result",
+            summary="Grounded score.",
+        ),
+    ):
+        await router.route("/score")
 
     output.show_command_result.assert_called_once()
+    assert isinstance(output.show_command_result.call_args.args[1], ResultPresentation)
 
 
 # ---------------------------------------------------------------------------

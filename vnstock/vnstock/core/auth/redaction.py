@@ -52,9 +52,17 @@ _SENSITIVE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"Bearer\s+[A-Za-z0-9\._\-]+", re.IGNORECASE),
     # Basic auth base64
     re.compile(r"Basic\s+[A-Za-z0-9+/=]+", re.IGNORECASE),
+    re.compile(
+        r"(\b(?:[a-z0-9]+_)*(?:api_?key|access_?key|access_?token|auth_?token|"
+        r"client_?secret|private_?key|refresh_?token|session_?token|token|password|"
+        r"passwd|secret|authorization|cookie|credentials?)\s*[:=]\s*)"
+        r"[^\s,;}\]]+",
+        re.IGNORECASE,
+    ),
 ]
 
 _REDACTED = "[REDACTED]"
+_MAX_REDACTION_DEPTH = 10
 
 
 def redact(value: str) -> str:
@@ -69,12 +77,20 @@ def redact(value: str) -> str:
         Sanitized string with sensitive patterns replaced.
     """
     result = value
-    for pattern in _SENSITIVE_PATTERNS:
-        result = pattern.sub(_REDACTED, result)
+    for index, pattern in enumerate(_SENSITIVE_PATTERNS):
+        replacement = (
+            r"\1[REDACTED]" if index == len(_SENSITIVE_PATTERNS) - 1 else _REDACTED
+        )
+        result = pattern.sub(replacement, result)
     return result
 
 
-def redact_dict(data: dict[str, Any], *, deep: bool = True) -> dict[str, Any]:
+def redact_dict(
+    data: dict[str, Any],
+    *,
+    deep: bool = True,
+    _depth: int = 0,
+) -> dict[str, Any]:
     """Return a copy of *data* with sensitive field values redacted.
 
     Keys matching :data:`_SENSITIVE_KEYS` (case-insensitive) have their values
@@ -87,27 +103,39 @@ def redact_dict(data: dict[str, Any], *, deep: bool = True) -> dict[str, Any]:
     Returns:
         New dict with sensitive values replaced.
     """
+    if _depth > _MAX_REDACTION_DEPTH:
+        return {"redacted": _REDACTED}
     result: dict[str, Any] = {}
     for k, v in data.items():
-        if k.lower() in _SENSITIVE_KEYS:
+        if is_sensitive_key(k):
             result[k] = _REDACTED
         elif deep and isinstance(v, dict):
-            result[k] = redact_dict(v, deep=deep)
-        elif deep and isinstance(v, list):
-            result[k] = _redact_list(v)
+            result[k] = redact_dict(v, deep=deep, _depth=_depth + 1)
+        elif deep and isinstance(v, (list, tuple)):
+            result[k] = _redact_list(list(v), _depth=_depth + 1)
+        elif isinstance(v, str):
+            result[k] = redact(v)
+        elif deep and _depth >= _MAX_REDACTION_DEPTH:
+            result[k] = _REDACTED
         else:
             result[k] = v
     return result
 
 
-def _redact_list(items: list[Any]) -> list[Any]:
+def _redact_list(items: list[Any], *, _depth: int = 0) -> list[Any]:
     """Recursively redact sensitive values in a list."""
+    if _depth > _MAX_REDACTION_DEPTH:
+        return [_REDACTED]
     sanitized = []
     for item in items:
         if isinstance(item, dict):
-            sanitized.append(redact_dict(item))
-        elif isinstance(item, list):
-            sanitized.append(_redact_list(item))
+            sanitized.append(redact_dict(item, _depth=_depth + 1))
+        elif isinstance(item, (list, tuple)):
+            sanitized.append(_redact_list(list(item), _depth=_depth + 1))
+        elif isinstance(item, str):
+            sanitized.append(redact(item))
+        elif _depth >= _MAX_REDACTION_DEPTH:
+            sanitized.append(_REDACTED)
         else:
             sanitized.append(item)
     return sanitized
@@ -122,4 +150,7 @@ def is_sensitive_key(key: str) -> bool:
     Returns:
         ``True`` if the key is in the sensitive keys set.
     """
-    return key.lower() in _SENSITIVE_KEYS
+    normalized = key.strip().lower().replace("-", "_").replace(".", "_")
+    return normalized in _SENSITIVE_KEYS or any(
+        normalized.endswith(f"_{sensitive}") for sensitive in _SENSITIVE_KEYS
+    )

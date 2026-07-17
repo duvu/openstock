@@ -98,8 +98,6 @@ class ProviderFetchError(VnstockPlatformError):
         self.dataset = dataset
         self.cause = cause
         msg = f"Provider '{provider_name}' failed to fetch dataset '{dataset}'."
-        if cause:
-            msg += f" Cause: {cause}"
         super().__init__(msg)
 
 

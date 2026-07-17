@@ -28,10 +28,12 @@ _TRUSTED_EVIDENCE_SOURCE_KINDS = frozenset(
     {
         "candidate_score",
         "feature_snapshot",
+        "canonical_ohlcv",
         "research_market_regime_snapshot",
         "research_symbol_level_snapshot",
         "research_setup_analysis",
         "research_automation",
+        "symbol_identity",
     }
 )
 _UNTRUSTED_SOURCE_TOKENS = frozenset({"assistant", "chat", "llm", "model"})

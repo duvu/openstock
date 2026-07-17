@@ -224,6 +224,28 @@ class TestAuthDiagnosticsInDataResult:
         if "safe_field" in diag.get("provider_diagnostics", {}):
             assert diag["provider_diagnostics"]["safe_field"] == "ok"
 
+    def test_build_diagnostics_redacts_prefixed_and_nested_credentials(self):
+        from unittest.mock import MagicMock
+
+        from vnstock.core.runtime.plugin_runtime import PluginRuntime
+
+        runtime = PluginRuntime.__new__(PluginRuntime)
+        runtime._router = MagicMock()
+        runtime.runtime_path = "test"
+        diag = runtime._build_diagnostics(
+            routing_decision=None,
+            provider_diagnostics={
+                "FIINQUANT_PASSWORD": "provider-secret",
+                "nested": {"VNALPHA_LLM_API_KEY": "live-key"},
+            },
+            latency_ms=None,
+            contract_errors=[],
+            provider_name="FIINQUANTX",
+        )
+
+        assert "provider-secret" not in str(diag)
+        assert "live-key" not in str(diag)
+
     def test_existing_quality_metadata_preserved(self, sample_df):
         """Auth diagnostics addition does not remove quality metadata."""
         from vnstock.core.auth.diagnostics import AuthDiagnostics

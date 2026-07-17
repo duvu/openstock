@@ -32,12 +32,19 @@ from vnalpha.symbol_memory.adapters import (
     CandidateScoreSnapshot,
     FeatureSnapshot,
     candidate_score_evidence,
+    canonical_ohlcv_basis_evidence,
     feature_snapshot_evidence,
+    symbol_identity_evidence,
 )
 from vnalpha.symbol_memory.compaction import SymbolMemoryCompactionService
+from vnalpha.symbol_memory.context_snapshots import (
+    load_canonical_ohlcv_basis,
+    load_symbol_identity,
+)
 from vnalpha.symbol_memory.ingestion import (
     MemoryEvidence,
     MemoryIngestionError,
+    MemoryIngestionResult,
     SymbolMemoryIngestionService,
 )
 from vnalpha.symbol_memory.paths import normalize_symbol
@@ -122,7 +129,39 @@ def project_analysis_evidence(
             symbol, None, (), ("Analysis as-of date was not projectable.",)
         )
 
-    evidences = _build_evidences(conn, symbol, as_of_date, correlation_id)
+    requested_raw = analysis.get("requested_date")
+    requested_date = (
+        requested_raw.strip()
+        if isinstance(requested_raw, str) and requested_raw.strip()
+        else as_of_date.isoformat()
+    )
+    evidences = _build_evidences(
+        conn,
+        symbol,
+        as_of_date,
+        requested_date,
+        correlation_id,
+    )
+    predicates = {evidence.predicate for evidence in evidences}
+    missing_required = [
+        label
+        for predicate, label in (
+            ("security_identity", "point-in-time security identity"),
+            ("canonical_ohlcv_basis", "verified canonical OHLCV basis"),
+        )
+        if predicate not in predicates
+    ]
+    if missing_required:
+        return EvidenceProjectionResult(
+            symbol,
+            as_of_date.isoformat(),
+            (),
+            (
+                "Required minimal evidence was unavailable: "
+                + ", ".join(missing_required)
+                + ".",
+            ),
+        )
     if not evidences:
         return EvidenceProjectionResult(symbol, as_of_date.isoformat(), (), ())
 
@@ -130,38 +169,38 @@ def project_analysis_evidence(
     ingestion = SymbolMemoryIngestionService(repository)
     compaction = SymbolMemoryCompactionService(repository, memory_root)
 
-    projected: list[ProjectedClaim] = []
-    warnings: list[str] = []
-    for evidence in evidences:
-        try:
-            result, _ = compaction.mutate_and_compact(
-                symbol,
-                lambda evidence=evidence: ingestion.ingest_evidence(evidence),
-            )
-        except (MemoryIngestionError, ValueError, duckdb.Error) as exc:
-            logger.warning(
-                "Evidence projection failed for symbol=%s predicate=%s: %s",
-                symbol,
-                evidence.predicate,
-                exc,
-            )
-            warnings.append(
-                f"Could not project {evidence.predicate} evidence for {symbol}."
-            )
-            continue
-        projected.append(
-            ProjectedClaim(
-                claim_type=evidence.claim_type,
-                predicate=evidence.predicate,
-                source_ref=evidence.source_ref,
-                created=result.created,
-            )
+    def ingest_all() -> list[MemoryIngestionResult]:
+        return [ingestion.ingest_evidence(evidence) for evidence in evidences]
+
+    try:
+        results, _ = compaction.mutate_and_compact(symbol, ingest_all)
+    except (MemoryIngestionError, OSError, ValueError, duckdb.Error) as exc:
+        logger.warning(
+            "Evidence projection failed for symbol=%s: %s",
+            symbol,
+            exc,
         )
+        return EvidenceProjectionResult(
+            symbol,
+            as_of_date.isoformat(),
+            (),
+            (f"Could not project validated evidence for {symbol}.",),
+        )
+
+    projected = [
+        ProjectedClaim(
+            claim_type=evidence.claim_type,
+            predicate=evidence.predicate,
+            source_ref=evidence.source_ref,
+            created=result.created,
+        )
+        for evidence, result in zip(evidences, results, strict=True)
+    ]
     return EvidenceProjectionResult(
         symbol,
         as_of_date.isoformat(),
         tuple(projected),
-        tuple(warnings),
+        (),
     )
 
 
@@ -180,11 +219,39 @@ def _build_evidences(
     conn: duckdb.DuckDBPyConnection,
     symbol: str,
     as_of_date: DateType,
+    requested_date: str,
     correlation_id: str,
 ) -> list[MemoryEvidence]:
     """Read persisted rows and build grounded evidence for the allowlist."""
     observed_at = datetime.now(UTC)
     evidences: list[MemoryEvidence] = []
+
+    identity = load_symbol_identity(conn, symbol, as_of_date)
+    if identity is not None:
+        evidences.append(
+            symbol_identity_evidence(
+                identity,
+                correlation_id=correlation_id,
+                observed_at=observed_at,
+                as_of_date=as_of_date,
+            )
+        )
+
+    basis = load_canonical_ohlcv_basis(
+        conn,
+        symbol,
+        requested_date,
+        as_of_date,
+    )
+    if basis is not None:
+        evidences.append(
+            canonical_ohlcv_basis_evidence(
+                basis,
+                correlation_id=correlation_id,
+                observed_at=observed_at,
+                as_of_date=as_of_date,
+            )
+        )
 
     candidate = _read_candidate_score(conn, symbol, as_of_date)
     if candidate is not None:
@@ -250,6 +317,8 @@ def _read_feature_status(
 
 
 def _coerce_date(value: object) -> DateType:
+    if isinstance(value, datetime):
+        return value.date()
     if isinstance(value, DateType):
         return value
     if isinstance(value, str):

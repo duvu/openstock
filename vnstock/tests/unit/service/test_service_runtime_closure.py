@@ -416,6 +416,83 @@ class TestServiceCallsPluginRuntime:
         call_kwargs = fake_rt.fetch.call_args.kwargs
         assert call_kwargs.get("return_result") is True
 
+    def test_fiinquantx_query_cannot_disable_strict_validation(
+        self, closure_service_url
+    ):
+        url, fake_rt = closure_service_url
+        fake_rt.fetch.reset_mock()
+
+        status, _ = _fetch(
+            f"{url}/v1/equity/ohlcv?symbol=VNM&source=FIINQUANTX"
+            "&validate=false&quality_mode=warn"
+        )
+
+        assert status == 200
+        call_kwargs = fake_rt.fetch.call_args.kwargs
+        assert call_kwargs["validate"] is True
+        assert call_kwargs["quality_mode"] == "strict"
+
+    def test_invalid_fiinquantx_frame_returns_contract_error(self):
+        class InvalidProvider(FakeProviderPlugin):
+            def fetch(self, dataset, params):
+                return pd.DataFrame(
+                    {
+                        "symbol": ["VNM"],
+                        "time": ["not-a-timestamp"],
+                        "open": [10.0],
+                        "high": [8.0],
+                        "low": [9.0],
+                        "close": [11.0],
+                        "volume": [-1.0],
+                    }
+                )
+
+        registry = PluginRegistry()
+        registry.register(InvalidProvider("FIINQUANTX"))
+        runtime_dependency.override_runtime(PluginRuntime(registry=registry))
+        port = _get_free_port()
+        stop = threading.Event()
+        run_server("127.0.0.1", port, _stop_event=stop)
+        time.sleep(0.15)
+        try:
+            status, body = _fetch(
+                f"http://127.0.0.1:{port}/v1/equity/ohlcv"
+                "?symbol=VNM&source=FIINQUANTX&validate=false"
+            )
+        finally:
+            stop.set()
+            runtime_dependency.override_runtime(_make_fake_runtime_mock())
+
+        assert status == 422
+        assert body["error"] == "contract_validation_failed"
+
+    def test_valid_empty_fiinquantx_frame_returns_success(self):
+        from vnstock.providers.fiinquantx.normalize import normalize_ohlcv
+
+        class EmptyProvider(FakeProviderPlugin):
+            def fetch(self, dataset, params):
+                return normalize_ohlcv(pd.DataFrame(), dataset)
+
+        registry = PluginRegistry()
+        registry.register(EmptyProvider("FIINQUANTX"))
+        runtime_dependency.override_runtime(PluginRuntime(registry=registry))
+        port = _get_free_port()
+        stop = threading.Event()
+        run_server("127.0.0.1", port, _stop_event=stop)
+        time.sleep(0.15)
+        try:
+            status, body = _fetch(
+                f"http://127.0.0.1:{port}/v1/equity/ohlcv"
+                "?symbol=VNM&source=FIINQUANTX&validate=false"
+            )
+        finally:
+            stop.set()
+            runtime_dependency.override_runtime(_make_fake_runtime_mock())
+
+        assert status == 200
+        assert body["data"] == []
+        assert body["meta"]["quality_status"] == "PASS"
+
     def test_legacy_vnstock_not_called_for_data_endpoints(self, closure_service_url):
         """Data endpoints must not instantiate legacy Vnstock.
         Uses the shared fixture server so it doesn't disturb the runtime state.

@@ -119,7 +119,11 @@ async def test_operational_commands_bypass_research_executor(
 
     bridge.execute.assert_called_once_with(command)
     router._command_executor.execute.assert_not_called()
-    output.show_command_result.assert_called_once_with(command, "operation completed")
+    output.show_command_result.assert_called_once()
+    rendered_command, presentation = output.show_command_result.call_args.args
+    assert rendered_command == command
+    assert presentation.kind == "operational"
+    assert presentation.plain_text.endswith("operation completed")
 
 
 @pytest.mark.asyncio

@@ -34,8 +34,9 @@ def test_daily_sync_uses_watermark_overlap_and_rebuilds_each_symbol(conn) -> Non
     upsert_symbol(conn, "FPT")
     conn.execute(
         """
-        INSERT INTO canonical_ohlcv (symbol, time, interval, close)
-        VALUES ('FPT', '2026-09-01', '1D', 100.0)
+            INSERT INTO canonical_ohlcv
+                (symbol, time, interval, close, quality_status)
+            VALUES ('FPT', '2026-09-01', '1D', 100.0, 'pass')
         """
     )
     batch = OHLCVBatchResult(

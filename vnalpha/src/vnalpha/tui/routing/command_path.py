@@ -49,7 +49,12 @@ class CommandPath:
                 result_status = getattr(result.status, "value", result.status)
                 if result_status in {"FAILED", "VALIDATION_ERROR"}:
                     lifecycle.mark_failed(result.summary)
-            router._output.show_command_result(raw, self.result_to_markup(result))
+            from vnalpha.tui.result_presentation import command_result_presentation
+
+            router._output.show_command_result(
+                raw,
+                command_result_presentation(raw, result),
+            )
             router._output.register_command_result(raw, result)
             workspace_changed = router._refresh_workspace_after_context_command(
                 raw, result.status
@@ -67,11 +72,14 @@ class CommandPath:
                 router._output.append_activity(
                     raw,
                     detail=_workflow_detail(result),
-                    kind="done",
+                    kind=_workflow_activity_kind(result.status),
                 )
         except Exception as exc:
-            router._output.show_error(str(exc), source="command")
-            router._set_status_error(str(exc))
+            public_message = (
+                "Command failed unexpectedly. Inspect the debug logs for details."
+            )
+            router._output.show_error(public_message, source="command")
+            router._set_status_error(public_message)
             events.capture_render_error(exc)
 
     async def route_operational(self, router: TuiInputRouter, raw: str) -> None:
@@ -89,10 +97,15 @@ class CommandPath:
             router._set_status_warning("Unsupported operational command")
             return
         with command_lifecycle("tui operational command", raw):
-            markup = await anyio.to_thread.run_sync(
+            output_text = await anyio.to_thread.run_sync(
                 router._operational_bridge.execute, raw
             )
-        router._output.show_command_result(raw, markup)
+        from vnalpha.tui.result_presentation import operational_result_presentation
+
+        router._output.show_command_result(
+            raw,
+            operational_result_presentation(raw, output_text),
+        )
         router._set_status_ready()
 
     def result_to_markup(self, result: CommandResult | None) -> str:
@@ -123,3 +136,12 @@ def _workflow_detail(result: CommandResult) -> str:
     if isinstance(artifact_id, str) and artifact_id:
         return artifact_id
     return result.summary or result.title
+
+
+def _workflow_activity_kind(status: object) -> str:
+    value = getattr(status, "value", status)
+    if value == "SUCCESS":
+        return "done"
+    if value in {"FAILED", "VALIDATION_ERROR"}:
+        return "error"
+    return "warning"

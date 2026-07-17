@@ -4,6 +4,7 @@ import httpx
 import pytest
 import respx
 
+import vnalpha.clients.vnstock.client as client_module
 from vnalpha.clients.vnstock.client import VnstockClient
 from vnalpha.clients.vnstock.errors import VnstockHTTPError
 from vnalpha.clients.vnstock.schemas import (
@@ -59,6 +60,9 @@ def test_get_symbols(respx_mock):
     assert isinstance(result, SymbolsResponse)
     assert len(result.data) == 2
     assert result.meta.provider == "kbs"
+    request = respx_mock.calls.last.request
+    assert request.url.params["validate"] == "true"
+    assert request.url.params["quality_mode"] == "strict"
 
 
 @respx.mock(base_url=MOCK_BASE)
@@ -70,6 +74,9 @@ def test_get_equity_ohlcv(respx_mock):
     result = client.get_equity_ohlcv("FPT", start="2024-01-01")
     assert isinstance(result, OHLCVResponse)
     assert result.data[0]["symbol"] == "FPT"
+    request = respx_mock.calls.last.request
+    assert request.url.params["validate"] == "true"
+    assert request.url.params["quality_mode"] == "strict"
 
 
 @respx.mock(base_url=MOCK_BASE)
@@ -118,3 +125,23 @@ def test_no_provider_specific_logic():
     assert "from vnstock.providers" not in src
     assert "from vnstock.explorer" not in src
     assert "PluginRegistry" not in src
+
+
+@respx.mock(base_url=MOCK_BASE)
+def test_get_forwards_active_correlation_id(respx_mock, monkeypatch):
+    monkeypatch.setattr(
+        client_module,
+        "get_correlation_id",
+        lambda: "corr-173-warehouse",
+        raising=False,
+    )
+    route = respx_mock.get("/healthz").mock(
+        return_value=httpx.Response(200, json={"status": "ok"})
+    )
+
+    client = VnstockClient(base_url=MOCK_BASE)
+    client.health_check()
+
+    assert route.calls.last.request.headers["X-Correlation-ID"] == (
+        "corr-173-warehouse"
+    )

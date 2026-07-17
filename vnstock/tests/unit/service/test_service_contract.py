@@ -176,9 +176,10 @@ def test_extract_data_params_rejects_credential_like_keys(key):
 def test_request_logging_does_not_include_query_values(monkeypatch):
     from vnstock.service.server import VnstockHandler
 
-    messages: list[str] = []
+    records: list[tuple[str, dict]] = []
     monkeypatch.setattr(
-        "vnstock.service.server.logger.debug", lambda message: messages.append(message)
+        "vnstock.service.server.logger.debug",
+        lambda message, **kwargs: records.append((message, kwargs)),
     )
     VnstockHandler.log_message(
         object(),
@@ -188,7 +189,10 @@ def test_request_logging_does_not_include_query_values(monkeypatch):
         "-",
     )
 
-    assert messages == ["[service] request completed"]
+    assert records == [
+        ("[service] request completed", {"extra": {"correlation_id": ""}})
+    ]
+    assert "not-logged" not in repr(records)
 
 
 # ---------------------------------------------------------------------------

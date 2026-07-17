@@ -60,7 +60,7 @@ INDEX_MEMBERSHIP_SNAPSHOT_CONTRACT = DatasetContract(
     dtype_rules={
         "entity_id": "string",
         "member_symbol": "string",
-        "observed_at": "datetime64[ns]",
+        "observed_at": "datetime64[ns, UTC]",
     },
     time_column="observed_at",
     symbol_column="member_symbol",
@@ -74,7 +74,7 @@ SECTOR_MEMBERSHIP_SNAPSHOT_CONTRACT = DatasetContract(
     dtype_rules={
         "entity_id": "string",
         "member_symbol": "string",
-        "observed_at": "datetime64[ns]",
+        "observed_at": "datetime64[ns, UTC]",
     },
     time_column="observed_at",
     symbol_column="member_symbol",

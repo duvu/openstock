@@ -15,12 +15,12 @@ from vnstock.providers.fiinquantx.exceptions import (
     FiinQuantXLicenseNotAcknowledgedError,
     FiinQuantXNotInstalledError,
 )
+from vnstock.providers.fiinquantx.normalize import normalize_membership
 from vnstock.providers.fiinquantx.plugin import FiinQuantXProviderPlugin
 
 
 def _approve_runtime(monkeypatch) -> None:
     monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", "LEGAL-2026-001")
 
 
 def test_default_registry_constructs_without_fiinquantx() -> None:
@@ -148,8 +148,21 @@ def test_fiinquantx_normalizes_current_membership_snapshot(monkeypatch) -> None:
 
     assert list(result.columns) == ["entity_id", "member_symbol", "observed_at"]
     assert result["member_symbol"].tolist() == ["VCB", "VIC"]
-    assert pd.api.types.is_datetime64_any_dtype(result["observed_at"])
+    assert isinstance(result["observed_at"].dtype, pd.DatetimeTZDtype)
+    assert str(result["observed_at"].dt.tz) == "UTC"
     assert result.attrs["snapshot_semantics"] == "observed_current_membership"
+    assert result.attrs["source_method"] == "TickerList"
+    assert result.attrs["source_query"] == "VN30"
+
+
+def test_fiinquantx_normalizes_empty_membership_with_contract_dtypes() -> None:
+    result = normalize_membership([], "VN30")
+
+    assert result.empty
+    assert str(result["entity_id"].dtype) == "string"
+    assert str(result["member_symbol"].dtype) == "string"
+    assert isinstance(result["observed_at"].dtype, pd.DatetimeTZDtype)
+    assert str(result["observed_at"].dt.tz) == "UTC"
 
 
 def test_membership_snapshot_contracts_are_registered() -> None:
@@ -162,6 +175,8 @@ def test_membership_snapshot_contracts_are_registered() -> None:
         "observed_at",
     ]
     assert sector_contract.required_columns == index_contract.required_columns
+    assert index_contract.dtype_rules["observed_at"] == "datetime64[ns, UTC]"
+    assert sector_contract.dtype_rules["observed_at"] == "datetime64[ns, UTC]"
 
 
 def test_fiinquantx_rejects_unbounded_history_before_session_login(monkeypatch) -> None:
@@ -199,7 +214,6 @@ def test_fiinquantx_requires_license_acknowledgement_before_login(monkeypatch) -
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
     monkeypatch.delenv("VNSTOCK_FIINQUANTX_LICENSED", raising=False)
-    monkeypatch.delenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", raising=False)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -209,39 +223,14 @@ def test_fiinquantx_requires_license_acknowledgement_before_login(monkeypatch) -
         FiinQuantXProviderPlugin().fetch("equity.ohlcv", {"symbol": "VCB"})
 
 
-def test_boolean_acknowledgement_alone_cannot_create_session(monkeypatch) -> None:
-    class FakeFiinSession:
-        def __init__(self, **_kwargs) -> None:
-            raise AssertionError("session factory must not be called")
-
-    module = ModuleType("FiinQuantX")
-    module.FiinSession = FakeFiinSession
-    monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
-    monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
+def test_boolean_acknowledgement_enables_runtime(monkeypatch) -> None:
     monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
-    monkeypatch.delenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", raising=False)
-    monkeypatch.setattr(
-        "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
-        lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
-    )
 
     approval = fiinquantx_license_approval()
 
     assert approval.acknowledged is True
-    assert approval.approved is False
-    assert approval.reference_fingerprint is None
-    with pytest.raises(FiinQuantXLicenseNotAcknowledgedError):
-        FiinQuantXProviderPlugin().fetch("equity.ohlcv", {"symbol": "VCB"})
-
-
-@pytest.mark.parametrize("reference", ["pending", "TBD", "bad reference", "x"])
-def test_placeholder_or_malformed_license_reference_is_rejected(
-    monkeypatch, reference
-) -> None:
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSE_APPROVAL_REF", reference)
-
-    assert fiinquantx_license_approval().approved is False
+    assert approval.approved is True
+    assert approval.diagnostics() == {"acknowledged": True, "approved": True}
 
 
 def test_fiinquantx_capabilities_require_credentials(monkeypatch) -> None:
@@ -260,7 +249,7 @@ def test_fiinquantx_capabilities_require_credentials(monkeypatch) -> None:
     assert capabilities["equity.ohlcv"]["status"] == "unsupported"
 
 
-def test_fiinquantx_diagnostics_redact_approval_reference(monkeypatch) -> None:
+def test_fiinquantx_diagnostics_publish_boolean_activation(monkeypatch) -> None:
     module = ModuleType("FiinQuantX")
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
@@ -273,9 +262,9 @@ def test_fiinquantx_diagnostics_redact_approval_reference(monkeypatch) -> None:
     diagnostics = FiinQuantXProviderPlugin().diagnostics()
 
     assert diagnostics["licensed_runtime_approved"] is True
-    assert diagnostics["license_approval_reference_configured"] is True
-    assert diagnostics["license_approval_reference_fingerprint"]
-    assert "LEGAL-2026-001" not in str(diagnostics)
+    assert diagnostics["licensed_runtime_acknowledged"] is True
+    assert all("approval_reference" not in key for key in diagnostics)
+    assert all("approval_fingerprint" not in key for key in diagnostics)
 
 
 @pytest.mark.parametrize(

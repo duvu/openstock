@@ -55,6 +55,17 @@ class LLMTimeoutError(LLMGatewayError):
 class LLMResponseError(LLMGatewayError):
     """Raised when the LLM returns an HTTP or parse error."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        error_kind: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.error_kind = error_kind
+
 
 class LLMConfigError(LLMGatewayError):
     """Raised when the LLM gateway is misconfigured (e.g. missing API key)."""

@@ -947,6 +947,37 @@ live test persistence: disabled
 synthetic fixtures: allowed after review
 ```
 
+### 18.1 Boolean-only local activation
+
+The local deployment uses two explicit boolean acknowledgements and does not
+accept or persist approval-reference identifiers:
+
+```text
+VNSTOCK_FIINQUANTX_LICENSED=true
+  enables bounded FiinQuantX runtime use when the exact SDK and local
+  credentials are configured
+
+VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true
+  enables bounded DuckDB persistence for the configured local deployment
+```
+
+Both values default to `false` and fail closed when absent, malformed, or
+false. Credentials remain local-only. Removing approval-reference identifiers
+does not enable raw payload archives, public or multi-user exposure, bulk
+export, model training, streaming, or any broker/account/trading surface.
+
+The provider, vnalpha source policy, Compose deployment, installed-host
+verifier, tests, documentation, and OpenSpec artifacts SHALL NOT read, require,
+emit, fingerprint, or persist retired approval-reference configuration.
+
+Safe runtime and warehouse lineage may record the boolean activation states,
+provider, SDK/contract version, source method, price basis, correlation, and
+ingestion run. It SHALL NOT contain an approval-reference value or fingerprint.
+Gate A otherwise remains unchanged: all four datasets, PluginRuntime-only
+routing, raw-unadjusted basis, explicit-source no-fallback behavior, bounded
+licensed probes, canonical persistence, and clean-host E2E acceptance are still
+required.
+
 ## 19. Routing behavior
 
 ### Explicit source

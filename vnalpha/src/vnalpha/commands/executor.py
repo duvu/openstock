@@ -98,6 +98,7 @@ class CommandExecutor:
                 parsed,
                 conn=self._conn,
                 registry=self._registry,
+                surface=self._surface,
                 session_id=session_scope_id or session_id,
                 tool_executor=tool_executor,
             )

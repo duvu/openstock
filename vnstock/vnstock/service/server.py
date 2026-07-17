@@ -32,13 +32,28 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import uuid
+from contextvars import ContextVar
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 logger = logging.getLogger(__name__)
+
+_CORRELATION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_REQUEST_CORRELATION_ID: ContextVar[str] = ContextVar(
+    "vnstock_request_correlation_id", default=""
+)
+
+
+def _resolve_correlation_id(value: str | None) -> str:
+    candidate = (value or "").strip()
+    if _CORRELATION_ID_PATTERN.fullmatch(candidate):
+        return candidate
+    return uuid.uuid4().hex
+
 
 # ---------------------------------------------------------------------------
 # Forbidden route prefixes (case-insensitive)
@@ -94,9 +109,15 @@ class VnstockHandler(BaseHTTPRequestHandler):
     _auth_manager: Any = None
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
-        logger.debug("[service] request completed")
+        logger.debug(
+            "[service] request completed",
+            extra={"correlation_id": _REQUEST_CORRELATION_ID.get()},
+        )
 
     def do_GET(self) -> None:
+        correlation_id = _resolve_correlation_id(self.headers.get("X-Correlation-ID"))
+        self._correlation_id = correlation_id
+        _REQUEST_CORRELATION_ID.set(correlation_id)
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         query = parse_qs(parsed.query, keep_blank_values=True)
@@ -301,6 +322,9 @@ class VnstockHandler(BaseHTTPRequestHandler):
         validate_str = runtime_params.get("validate", "false").lower()
         validate = validate_str in ("1", "true", "yes")
         quality_mode: str = runtime_params.get("quality_mode", "warn")
+        if (source or "").strip().upper() == "FIINQUANTX":
+            validate = True
+            quality_mode = "strict"
 
         try:
             params = extract_data_params(query)
@@ -403,12 +427,12 @@ class VnstockHandler(BaseHTTPRequestHandler):
                 },
             )
             return
-        except Exception as exc:
+        except Exception:
             self._send_json(
                 500,
                 {
                     "error": "internal_error",
-                    "message": str(exc)[:200],
+                    "message": "Unexpected internal service failure.",
                     "dataset": dataset,
                     "request_id": request_id,
                 },
@@ -433,6 +457,10 @@ class VnstockHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header(
+            "X-Correlation-ID",
+            getattr(self, "_correlation_id", None) or _resolve_correlation_id(None),
+        )
         self.end_headers()
         self.wfile.write(body)
 

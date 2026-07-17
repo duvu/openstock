@@ -263,6 +263,19 @@ def _static_catalog() -> list[UiCommand]:
             examples=("/clear", "/clear --forget"),
         ),
         UiCommand(
+            name="copy",
+            description="Copy redacted TUI content through the terminal clipboard.",
+            usage="/copy result|output|logs|artifact-id",
+            category="Application",
+            examples=(
+                "/copy result",
+                "/copy output",
+                "/copy logs",
+                "/copy artifact-id",
+            ),
+            key_binding="ctrl+y",
+        ),
+        UiCommand(
             name="new",
             description="Start a new chat session (alias: /chat new).",
             usage="/new",

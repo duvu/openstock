@@ -15,11 +15,45 @@
 #
 # Install: sudo install -m 0755 packaging/scripts/openstock-mvp1-start /usr/bin/
 set -uo pipefail
+umask 077
+
+OPENSTOCK_ENV_FILE="${OPENSTOCK_ENV_FILE:-/etc/openstock/openstock.env}"
+VNALPHA_ENV_FILE="${VNALPHA_ENV_FILE:-/etc/vnalpha/vnalpha.env}"
+if [ -e "$OPENSTOCK_ENV_FILE" ] && [ ! -r "$OPENSTOCK_ENV_FILE" ]; then
+  echo "openstock-mvp1-start: cannot read $OPENSTOCK_ENV_FILE" >&2
+  exit 1
+fi
+if [ -e "$VNALPHA_ENV_FILE" ] && [ ! -r "$VNALPHA_ENV_FILE" ]; then
+  echo "openstock-mvp1-start: cannot read $VNALPHA_ENV_FILE; add the operator to the openstock group" >&2
+  exit 1
+fi
+if [ -f "$OPENSTOCK_ENV_FILE" ]; then
+  set -a
+  . "$OPENSTOCK_ENV_FILE"
+  set +a
+fi
+if [ -f "$VNALPHA_ENV_FILE" ]; then
+  set -a
+  . "$VNALPHA_ENV_FILE"
+  set +a
+fi
 
 RUN_ID="mvp1start_$(date -u +%Y%m%dT%H%M%S)_$$"
 LOG_ROOT="${VNALPHA_LOG_ROOT:-${HOME}/.local/state/openstock/logs}"
+if [ -L "$LOG_ROOT" ]; then
+  echo "openstock-mvp1-start: refusing symlink log root: $LOG_ROOT" >&2
+  exit 1
+fi
 LOG_DIR="${LOG_ROOT}/runs/${RUN_ID}"
-mkdir -p "${LOG_DIR}" 2>/dev/null || true
+mkdir -p "${LOG_ROOT}/runs" 2>/dev/null || {
+  echo "openstock-mvp1-start: cannot create log root" >&2
+  exit 1
+}
+mkdir "${LOG_DIR}" 2>/dev/null || {
+  echo "openstock-mvp1-start: refusing existing or unwritable run log directory" >&2
+  exit 1
+}
+chmod 0700 "${LOG_DIR}" 2>/dev/null || true
 
 _json_escape() {
   local s="$1"
@@ -41,14 +75,6 @@ log_jsonl() {
     "${status}" >> "${LOG_DIR}/commands.jsonl" 2>/dev/null || true
 }
 
-# --- source env if available (never overrides an already-set variable) ---
-if [ -f /etc/openstock/openstock.env ]; then
-  # shellcheck source=/dev/null
-  set -a
-  . /etc/openstock/openstock.env
-  set +a
-fi
-
 # --- config ---
 VNSTOCK_SERVICE_BASE="${VNSTOCK_SERVICE_URL:-http://127.0.0.1:6900}"
 VNSTOCK_HEALTHZ_URL="${VNSTOCK_SERVICE_BASE}/healthz"
@@ -56,6 +82,7 @@ WAREHOUSE_DIR="${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}"
 KNOWLEDGE_ROOT="${VNALPHA_KNOWLEDGE_ROOT:-/var/lib/openstock/knowledge}"
 DEMO_DATE="${VNALPHA_DEMO_DATE:-today}"
 HEALTH_WAIT_SECONDS="${OPENSTOCK_HEALTH_WAIT_SECONDS:-60}"
+OPENSTOCK_HOME="${OPENSTOCK_HOME:-/opt/openstock}"
 
 NO_LAUNCH=false
 SKIP_PREFLIGHT=false
@@ -83,7 +110,34 @@ done
 
 info()  { echo "[INFO] $*"; log_jsonl "MVP1_START_STEP" "$*" "OK"; }
 step()  { echo "[STEP] $*"; log_jsonl "MVP1_START_STEP" "$*" "STARTED"; }
-die()   { echo "[FAIL] $*" >&2; log_jsonl "MVP1_START_FAILED" "$*" "FAILED"; exit 1; }
+warn()  { echo "[WARN] $*"; log_jsonl "MVP1_START_WARNING" "$*" "WARN"; }
+die() {
+  local message="$1" exit_code="${2:-1}"
+  echo "[FAIL] ${message}" >&2
+  log_jsonl "MVP1_START_FAILED" "${message}" "FAILED"
+  exit "${exit_code}"
+}
+
+_redact_stream() {
+  local line secret
+  while IFS= read -r line || [ -n "$line" ]; do
+    for secret in "${VNALPHA_LLM_API_KEY:-}" "${FIINQUANT_USERNAME:-}" "${FIINQUANT_PASSWORD:-}"; do
+      [ -n "$secret" ] || continue
+      line="${line//"$secret"/[REDACTED]}"
+    done
+    printf '%s\n' "$line"
+  done
+}
+
+_run_logged() {
+  local log_path="$1" exit_code
+  shift
+  : >"$log_path"
+  chmod 0600 "$log_path" 2>/dev/null || true
+  "$@" 2>&1 | _redact_stream >"$log_path"
+  exit_code="${PIPESTATUS[0]}"
+  return "$exit_code"
+}
 
 log_jsonl "MVP1_START_STARTED" "openstock-mvp1-start started" "STARTED"
 echo "openstock-mvp1-start — MVP1 chat vertical-slice startup"
@@ -106,10 +160,14 @@ done
 # --- 2. start or verify vnstock-service ---
 step "Ensuring vnstock-service is available"
 _compose=()
+_compose_project=()
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   _compose=(docker compose)
 elif command -v docker-compose >/dev/null 2>&1; then
   _compose=(docker-compose)
+fi
+if [ "${#_compose[@]}" -gt 0 ]; then
+  _compose_project=("${_compose[@]}" --project-directory "$OPENSTOCK_HOME")
 fi
 
 _healthy() {
@@ -122,8 +180,17 @@ _healthy() {
 if _healthy; then
   info "vnstock-service already healthy at ${VNSTOCK_HEALTHZ_URL}"
 elif [ "${#_compose[@]}" -gt 0 ]; then
-  info "starting vnstock-service via '${_compose[*]} up -d vnstock-service'"
-  "${_compose[@]}" up -d vnstock-service >/dev/null 2>&1 || die "failed to start vnstock-service via compose"
+  if [ ! -f "${OPENSTOCK_HOME}/compose.yaml" ] && \
+     [ ! -f "${OPENSTOCK_HOME}/compose.yml" ] && \
+     [ ! -f "${OPENSTOCK_HOME}/docker-compose.yaml" ] && \
+     [ ! -f "${OPENSTOCK_HOME}/docker-compose.yml" ]; then
+    die "compose project not found under ${OPENSTOCK_HOME}; restore the installed OpenStock deployment assets"
+  fi
+  info "starting vnstock-service via '${_compose_project[*]} up -d vnstock-service'"
+  compose_log="${LOG_DIR}/compose-up.log"
+  _run_logged "$compose_log" "${_compose_project[@]}" up -d vnstock-service
+  compose_rc=$?
+  [ "$compose_rc" -eq 0 ] || die "failed to start vnstock-service via compose; inspect ${compose_log}" "$compose_rc"
   # Wait (bounded) for health.
   waited=0
   until _healthy; do
@@ -139,10 +206,16 @@ fi
 # --- 3. initialize/migrate the warehouse (idempotent) ---
 step "Ensuring warehouse migrations are applied"
 if command -v vnalpha >/dev/null 2>&1; then
-  vnalpha init >/dev/null 2>&1 || die "vnalpha init failed — inspect logs in ${LOG_DIR}"
+  init_log="${LOG_DIR}/vnalpha-init.log"
+  _run_logged "$init_log" vnalpha init
+  init_rc=$?
+  [ "$init_rc" -eq 0 ] || die "vnalpha init failed; inspect ${init_log}" "$init_rc"
   info "warehouse migrations applied (vnalpha init is idempotent)"
 elif [ "${#_compose[@]}" -gt 0 ]; then
-  "${_compose[@]}" --profile job run --rm vnalpha-worker init >/dev/null 2>&1 || die "worker warehouse init failed"
+  worker_init_log="${LOG_DIR}/vnalpha-worker-init.log"
+  _run_logged "$worker_init_log" "${_compose_project[@]}" --profile job run --rm vnalpha-worker init
+  worker_init_rc=$?
+  [ "$worker_init_rc" -eq 0 ] || die "worker warehouse init failed; inspect ${worker_init_log}" "$worker_init_rc"
   info "warehouse migrations applied via vnalpha-worker"
 else
   die "no vnalpha CLI or docker compose available to migrate the warehouse"
@@ -150,7 +223,7 @@ fi
 
 # --- 4. run the read-only MVP1 preflight ---
 if "$SKIP_PREFLIGHT"; then
-  info "skipping preflight (--skip-preflight)"
+  warn "preflight explicitly skipped (--skip-preflight); readiness is unverified"
 else
   step "Running MVP1 preflight (openstock-verify --mvp1)"
   _verify=""
@@ -159,13 +232,16 @@ else
     if [ -n "$cand" ] && [ -f "$cand" ]; then _verify="$cand"; break; fi
   done
   if [ -n "$_verify" ]; then
-    if bash "$_verify" --mvp1; then
+    preflight_log="${LOG_DIR}/mvp1-preflight.log"
+    _run_logged "$preflight_log" bash "$_verify" --mvp1
+    preflight_rc=$?
+    if [ "$preflight_rc" -eq 0 ]; then
       info "MVP1 preflight PASS"
     else
-      die "MVP1 preflight reported blockers — resolve them and re-run"
+      die "MVP1 preflight reported blockers; inspect ${preflight_log}" "$preflight_rc"
     fi
   else
-    info "openstock-verify not found; skipping preflight"
+    die "openstock-verify not found; install the packaging verifier or rerun with the explicit --skip-preflight bypass"
   fi
 fi
 

@@ -97,7 +97,17 @@ class RunContext:
     def _init_run_dir(self) -> None:
         """Create the run directory and write initial files."""
         try:
-            self.run_dir.mkdir(parents=True, exist_ok=True)
+            runs_root = self.log_root / "runs"
+            self.log_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if self.log_root.is_symlink():
+                raise OSError("log root must not be a symlink")
+            self.log_root.chmod(0o700)
+            runs_root.mkdir(exist_ok=True, mode=0o700)
+            if runs_root.is_symlink():
+                raise OSError("runs root must not be a symlink")
+            runs_root.chmod(0o700)
+            self.run_dir.mkdir(exist_ok=False, mode=0o700)
+            self.run_dir.chmod(0o700)
             self._write_latest_pointer()
             self._write_environment_json()
             self._write_readme()
@@ -115,7 +125,7 @@ class RunContext:
             latest_link.symlink_to(self.run_dir)
         except (OSError, NotImplementedError):
             try:
-                latest_txt.write_text(self.run_id + "\n", encoding="utf-8")
+                _secure_write_text(latest_txt, self.run_id + "\n")
             except OSError:
                 pass
 
@@ -131,9 +141,9 @@ class RunContext:
         }
         env.update(_collect_git_info())
         try:
-            (self.run_dir / "environment.json").write_text(
+            _secure_write_text(
+                self.run_dir / "environment.json",
                 json.dumps(env, indent=2, default=str),
-                encoding="utf-8",
             )
         except OSError:
             pass
@@ -145,7 +155,7 @@ class RunContext:
             started_at=self.started_at,
         )
         try:
-            (self.run_dir / "README.md").write_text(readme, encoding="utf-8")
+            _secure_write_text(self.run_dir / "README.md", readme)
         except OSError:
             pass
 
@@ -169,6 +179,18 @@ class RunContext:
     @property
     def commands_path(self) -> Path:
         return self.run_dir / "commands.jsonl"
+
+
+def _secure_write_text(path: Path, content: str) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8", closefd=False) as handle:
+            handle.write(content)
+    finally:
+        os.close(descriptor)
 
 
 def make_run_context(

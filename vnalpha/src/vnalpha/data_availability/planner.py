@@ -232,9 +232,7 @@ def plan_data_availability(
     return EnsureDataPlan(snapshot=snapshot, actions=tuple(actions))
 
 
-def _canonical_is_stale(
-    latest_bar_date: str | None, target_date: str
-) -> bool:
+def _canonical_is_stale(latest_bar_date: str | None, target_date: str) -> bool:
     """Return True when canonical history exists but predates *target_date*.
 
     Triggers a bounded incremental OHLCV sync when the caller requests analysis

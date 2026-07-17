@@ -191,6 +191,48 @@ def sync_corporate_actions_cmd(
         )
 
 
+@app.command("membership")
+def sync_membership_cmd(
+    membership_type: str = typer.Option(..., "--type", help="index or sector"),
+    entity_id: str = typer.Option(..., "--entity", help="Index or sector identifier"),
+    source: Optional[str] = typer.Option(None, "--source"),
+):
+    from vnalpha.ingestion.sync_membership import (
+        MembershipSyncStatus,
+        sync_membership,
+        validate_membership_request,
+    )
+    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.migrations import run_migrations
+
+    set_correlation_id()
+    with command_lifecycle("sync membership"):
+        try:
+            validate_membership_request(membership_type, entity_id, source)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+        conn = get_connection()
+        run_migrations(conn=conn)
+        try:
+            result = sync_membership(
+                conn,
+                membership_type=membership_type,
+                entity_id=entity_id,
+                source=source,
+            )
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+        typer.echo(
+            f"Membership sync {result.status.value}: {result.member_count} members "
+            f"for {result.membership_type}:{result.entity_id}"
+        )
+        if result.status is MembershipSyncStatus.FAILED:
+            typer.echo(result.error or "Membership sync failed.", err=True)
+            raise typer.Exit(code=1)
+
+
 def _execute(
     conn, request: DataProvisioningRequest, *, exit_on_failure: bool = True
 ) -> DataProvisioningResult:

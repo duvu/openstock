@@ -21,6 +21,9 @@ WAREHOUSE_DIR=/var/lib/openstock/warehouse
 
 case "$1" in
   configure)
+    if ! getent group openstock >/dev/null 2>&1; then
+      groupadd --system openstock
+    fi
     # ------------------------------------------------------------------
     # 1. Create venv
     # ------------------------------------------------------------------
@@ -73,8 +76,8 @@ case "$1" in
     chmod 0755 /usr/bin/vnalpha || true
     chmod 0755 /usr/bin/vnalpha-poc || true
 
-    # Config file must be readable by all users who will run the TUI
-    chmod 0644 /etc/vnalpha/vnalpha.env || true
+    chown root:openstock /etc/vnalpha/vnalpha.env || true
+    chmod 0640 /etc/vnalpha/vnalpha.env || true
 
     echo "vnalpha: installation complete."
     ;;

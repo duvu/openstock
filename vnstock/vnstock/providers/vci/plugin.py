@@ -158,7 +158,8 @@ class VCIProviderPlugin:
         from vnstock.explorer.vci.listing import Listing
 
         lst = Listing(show_log=params.get("show_log", False))
-        df = lst.all_symbols(show_log=params.get("show_log", False))
+        df = lst.symbols_by_exchange(show_log=params.get("show_log", False))
+        df = df.loc[df["type"] == "STOCK"].reset_index(drop=True)
         df.attrs.setdefault("provider", self.name)
         df.attrs.setdefault("dataset", "reference.symbols")
         return df
