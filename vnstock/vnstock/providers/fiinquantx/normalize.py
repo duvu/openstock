@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import re
 
 import pandas as pd
 
@@ -18,6 +19,69 @@ _CANONICAL_OHLCV_COLUMNS = (
     "volume",
     "value",
 )
+_FIELD_ALIASES = {
+    "ticker": (
+        "ticker",
+        "symbol",
+        "stock",
+        "code",
+        "symbolcode",
+        "maticker",
+    ),
+    "timestamp": (
+        "timestamp",
+        "time",
+        "datetime",
+        "tradingdate",
+        "trading_date",
+        "date",
+    ),
+    "open": ("open", "openprice", "open_price", "o"),
+    "high": ("high", "highprice", "high_price", "h"),
+    "low": ("low", "lowprice", "low_price", "l"),
+    "close": ("close", "closeprice", "close_price", "c"),
+    "volume": ("volume", "vol", "volumeaccumulated", "v"),
+    "value": ("value", "valueamount", "tradevalue", "matchedvalue", "val"),
+}
+
+
+def _normalize_field_name(name: object) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(name).strip().lower())
+
+
+def _canonicalize_ohlcv_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    normalized_column_names = {_normalize_field_name(col): col for col in frame.columns}
+    rename_map: dict[str, str] = {}
+    for canonical, aliases in _FIELD_ALIASES.items():
+        for alias in aliases:
+            normalized_alias = _normalize_field_name(alias)
+            source = normalized_column_names.get(normalized_alias)
+            if source is not None:
+                rename_map[source] = canonical
+                break
+    if rename_map:
+        frame = frame.rename(columns=rename_map)
+    return frame
+
+
+def _normalize_timestamp(series: pd.Series) -> pd.Series:
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return series.dt.tz_convert(None)
+    if pd.api.types.is_numeric_dtype(series):
+        numeric = pd.to_numeric(series, errors="raise")
+        if numeric.empty:
+            return pd.to_datetime([], unit="s", utc=True).tz_convert(None)
+        max_value = abs(int(numeric.max()))
+        if max_value >= 10**15:
+            unit = "ns"
+        elif max_value >= 10**12:
+            unit = "ms"
+        elif max_value >= 10**10:
+            unit = "s"
+        else:
+            unit = "ms"
+        return pd.to_datetime(numeric, unit=unit, utc=True).dt.tz_convert(None)
+    return pd.to_datetime(series, errors="raise", utc=True).dt.tz_convert(None)
 
 
 def _empty_ohlcv() -> pd.DataFrame:
@@ -40,15 +104,14 @@ def normalize_ohlcv(frame: pd.DataFrame, dataset: str) -> pd.DataFrame:
         raise FiinQuantXSchemaError(dataset)
     if frame.empty and not set(_OHLCV_COLUMNS).issubset(frame.columns):
         return _empty_ohlcv()
+    frame = _canonicalize_ohlcv_columns(frame)
     missing = [column for column in _OHLCV_COLUMNS if column not in frame.columns]
     if missing:
         raise FiinQuantXSchemaError(dataset)
     normalized = frame.copy().rename(columns={"ticker": "symbol", "timestamp": "time"})
     try:
         normalized["symbol"] = normalized["symbol"].astype("string").str.upper()
-        normalized["time"] = pd.to_datetime(
-            normalized["time"], errors="raise", utc=True
-        ).dt.tz_convert(None)
+        normalized["time"] = _normalize_timestamp(normalized["time"])
         for column in _NUMERIC_COLUMNS:
             if column in normalized.columns:
                 normalized[column] = pd.to_numeric(normalized[column], errors="raise")

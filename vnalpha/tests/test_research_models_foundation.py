@@ -14,6 +14,7 @@ from vnalpha.research_models.models import (
     SetupAnalysis,
     SetupEvidenceSnapshot,
     ShortlistCandidate,
+    ShortlistDecisionReport,
     SymbolLevelSnapshot,
 )
 from vnalpha.research_models.repositories import ResearchModelsRepository
@@ -92,6 +93,33 @@ def _models() -> tuple[object, ...]:
             risk_context="Gap risk remains.",
             **common,
         ),
+        ShortlistDecisionReport(
+            shortlist_decision_report_id="decision-report-001",
+            shortlist_run_id="run-001",
+            requested_limit=5,
+            requested_min_score=0.0,
+            considered_count=1,
+            shortlisted_count=1,
+            truncated_to_limit=False,
+            artifact_refs=("daily_watchlist:2026-07-10",),
+            missing_data=("eligible_watchlist_candidates",),
+            validation_signature="sha256:placeholder",
+            validation_checks={
+                "score_order": {"passed": True, "details": "scores are ordered."},
+                "rank_contiguity": {"passed": True, "details": "ranks are contiguous."},
+                "duplicate_symbol_exclusion": {
+                    "passed": True,
+                    "details": "no duplicate symbols.",
+                    "symbols": [],
+                },
+            },
+            scoring_policy={
+                "version": "shortlist-v1",
+                "top": 5,
+                "min_score": 0.0,
+            },
+            **common,
+        ),
         ResearchScenarioPlan(
             scenario_plan_id="scenario-001",
             symbol="FPT",
@@ -155,6 +183,7 @@ def test_research_models_migrations_are_additive_and_idempotent() -> None:
         "research_symbol_level_snapshot",
         "research_setup_analysis",
         "research_shortlist_candidate",
+        "research_shortlist_decision_report",
         "research_scenario_plan",
         "research_setup_evidence_snapshot",
         "research_answer_audit",
@@ -183,9 +212,20 @@ def test_repositories_round_trip_all_research_models() -> None:
 
 def test_validators_require_lineage_caveats_and_research_only_metadata() -> None:
     repository = ResearchModelsRepository(duckdb.connect(":memory:"))
-    invalid_lineage = replace(_models()[0], lineage={})
-    invalid_scenario = replace(_models()[5], caveats=())
-    execution_metadata = replace(_models()[2], lineage={"order": "submit"})
+    (
+        market_regime,
+        sector_strength,
+        symbol_level,
+        setup_analysis,
+        candidate,
+        report,
+        scenario,
+        setup_evidence,
+        audit,
+    ) = _models()
+    invalid_lineage = replace(market_regime, lineage={})
+    invalid_scenario = replace(scenario, caveats=())
+    execution_metadata = replace(symbol_level, lineage={"order": "submit"})
 
     for model in (invalid_lineage, invalid_scenario, execution_metadata):
         with pytest.raises(ResearchModelValidationError):

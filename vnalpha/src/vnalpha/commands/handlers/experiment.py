@@ -18,7 +18,7 @@ def handle_experiment(parsed: ParsedCommand, conn=None, **_kwargs) -> CommandRes
         )
     if not parsed.positional:
         raise CommandValidationError(
-            "Experiment subcommand is required: indicator or event-study."
+            "Experiment subcommand is required: indicator, event-study, or dataset-extension."
         )
     service = ResearchWorkflowService(conn)
     subcommand = parsed.positional[0].lower()
@@ -26,6 +26,8 @@ def handle_experiment(parsed: ParsedCommand, conn=None, **_kwargs) -> CommandRes
         return _indicator(parsed, service)
     if subcommand == "event-study":
         return _event_study(parsed, ResearchStudyService(conn))
+    if subcommand == "dataset-extension":
+        return _dataset_extension(parsed, service)
     if subcommand == "backtest":
         raise CommandValidationError(
             "The /experiment backtest alias is disabled because OpenStock does not "
@@ -34,7 +36,7 @@ def handle_experiment(parsed: ParsedCommand, conn=None, **_kwargs) -> CommandRes
             "'rs_20d_vs_vnindex > 0'."
         )
     raise CommandValidationError(
-        "Unsupported /experiment subcommand. Supported: indicator, event-study."
+        "Unsupported /experiment subcommand. Supported: indicator, event-study, dataset-extension."
     )
 
 
@@ -93,6 +95,51 @@ def _event_study(parsed: ParsedCommand, service: ResearchStudyService) -> Comman
         raise CommandValidationError(str(exc)) from exc
     return _result(
         "/experiment event-study", outcome.artifact, "Offline research event study"
+    )
+
+
+def _dataset_extension(
+    parsed: ParsedCommand, service: ResearchWorkflowService
+) -> CommandResult:
+    allowed = {"consumer"}
+    if parsed.filters:
+        raise CommandValidationError(
+            "/experiment dataset-extension requires positional provider, dataset, and extension."
+        )
+    unknown_options = set(parsed.options) - allowed
+    if unknown_options:
+        raise CommandValidationError(
+            "/experiment dataset-extension allows only --consumer."
+        )
+    consumer_name = parsed.options.get("consumer")
+    if consumer_name is None:
+        raise CommandValidationError(
+            "/experiment dataset-extension requires --consumer to name the requesting consumer."
+        )
+    if consumer_name is True:
+        raise CommandValidationError("--consumer requires a value.")
+    if len(parsed.positional) != 4:
+        raise CommandValidationError(
+            "/experiment dataset-extension requires <PROVIDER> <DATASET> <EXTENSION>."
+        )
+    _, provider_name, dataset_name, extension_name = parsed.positional
+    if not provider_name or not dataset_name or not extension_name:
+        raise CommandValidationError(
+            "/experiment dataset-extension requires non-empty PROVIDER, DATASET, and EXTENSION."
+        )
+    try:
+        outcome = service.dataset_extension(
+            provider_name=provider_name,
+            dataset_name=dataset_name,
+            extension_name=extension_name,
+            consumer_name=str(consumer_name),
+        )
+    except ValueError as exc:
+        raise CommandValidationError(str(exc)) from exc
+    return _result(
+        "/experiment dataset-extension",
+        outcome.artifact,
+        "Provider dataset extension experiment",
     )
 
 

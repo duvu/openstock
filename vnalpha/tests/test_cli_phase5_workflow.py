@@ -35,6 +35,12 @@ class TestCliHelpPages:
         assert result.exit_code == 0
         assert "--date" in result.output
 
+    def test_shortlist_help(self):
+        result = runner.invoke(app, ["shortlist", "--help"])
+        assert result.exit_code == 0
+        assert "--date" in result.output
+        assert "--limit" in result.output
+
     def test_tui_help(self):
         result = runner.invoke(app, ["tui", "--help"])
         assert result.exit_code == 0
@@ -54,6 +60,10 @@ class TestNoPlaceholderOutput:
 
     def test_watchlist_no_stub_output(self):
         result = runner.invoke(app, ["watchlist", "--help"])
+        assert "not yet implemented" not in result.output.lower()
+
+    def test_shortlist_no_stub_output(self):
+        result = runner.invoke(app, ["shortlist", "--help"])
         assert "not yet implemented" not in result.output.lower()
 
     def test_tui_no_stub_output(self):

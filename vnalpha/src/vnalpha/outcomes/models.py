@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final, List, Optional
@@ -9,6 +11,29 @@ from typing import Final, List, Optional
 FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION: Final = (
     "candidate-outcome-forward-return-v1"
 )
+OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION: Final = (
+    "outcome-evaluation-assumptions-v1"
+)
+OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD: Final = {
+    "market_friction": (
+        "No transaction costs, fees, slippage, or taxes are applied for held-out outcomes.",
+    ),
+    "eligibility": (
+        "Only symbols and watch dates that pass the production-compatible feature "
+        "pipeline are treated as eligible for held-out measurement.",
+    ),
+    "capacity": (
+        "Evaluations assume no liquidity or capital-capacity constraints on entry size.",
+    ),
+}
+OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON: Final = json.dumps(
+    OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD,
+    sort_keys=True,
+    separators=(",", ":"),
+)
+OUTCOME_EVALUATION_ASSUMPTIONS_HASH: Final = hashlib.sha256(
+    OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON.encode("utf-8")
+).hexdigest()
 
 
 class OutcomeStatus(str, Enum):

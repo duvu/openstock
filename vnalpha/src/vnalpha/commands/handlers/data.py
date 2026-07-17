@@ -13,6 +13,10 @@ from vnalpha.data_provisioning.service import (
     DataProvisioningValidationError,
     ProvisioningStatus,
 )
+from vnalpha.scoring.policy import (
+    BASELINE_SCORING_POLICY,
+    parse_scoring_policy_reference,
+)
 
 
 def handle_data(
@@ -57,11 +61,15 @@ def handle_data(
         artifact = parsed.positional[1]
         symbol = parsed.positional[2] if len(parsed.positional) == 3 else None
     scoring_policy = _option_value(parsed, "scoring-policy")
+    policy_auto = scoring_policy is None
     try:
         policy_id, policy_version = (
-            scoring_policy.rsplit("@", 1)
+            parse_scoring_policy_reference(scoring_policy)
             if scoring_policy
-            else ("openstock-candidate-score", "v1.0")
+            else (
+                BASELINE_SCORING_POLICY.policy_id,
+                BASELINE_SCORING_POLICY.version,
+            )
         )
     except ValueError as exc:
         raise CommandValidationError("--scoring-policy must use ID@version.") from exc
@@ -77,6 +85,7 @@ def handle_data(
         scoring_policy_id=policy_id,
         scoring_policy_version=policy_version,
         rebuild_policy=parsed.options.get("rebuild-policy") is True,
+        scoring_policy_auto=policy_auto,
     )
     provisioning_service = service or DataProvisioningService(conn)
     try:
@@ -154,7 +163,8 @@ def _payload(result) -> dict[str, str | dict[str, int] | list[str] | None]:
 def _usage() -> str:
     return (
         "Use /data download <symbols|ohlcv SYMBOL|index [SYMBOL]> "
-        "[--start YYYY-MM-DD] [--end YYYY-MM-DD] [--source PROVIDER] or "
+        "[--start YYYY-MM-DD] [--end YYYY-MM-DD] [--source PROVIDER] "
+        "[--scoring-policy ID@VERSION] or "
         "/data build <canonical SYMBOL|features SYMBOL --date DATE|score SYMBOL --date DATE|"
         "market-regime --date DATE|sector-strength --date DATE>, "
         "/data sync daily [--date DATE], /data gaps SYMBOL [--from DATE] [--to DATE], "

@@ -51,6 +51,9 @@ from vnalpha.outcomes.metrics import (
     max_gain_from_highs as calc_max_gain_from_highs,
 )
 from vnalpha.outcomes.models import (
+    OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION,
+    OUTCOME_EVALUATION_ASSUMPTIONS_HASH,
+    OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON,
     CandidateOutcomeRecord,
     OutcomeStatus,
 )
@@ -192,8 +195,17 @@ def _evaluate_single_candidate(
         rec.outcome_status = OutcomeStatus.MISSING_DATA.value
         return rec
 
-    entry_bars, future_bars = split_bars(symbol_bars, watchlist_date)
-    entry_date = entry_bars[-1]["time"]
+    _, future_bars = split_bars(symbol_bars, watchlist_date)
+    if not future_bars:
+        rec.price_basis = "UNKNOWN"
+        rec.benchmark_price_basis = "UNKNOWN"
+        rec.adjustment_methodology = "UNKNOWN"
+        rec.action_overlap_status = "NOT_EVALUATED"
+        rec.invalidation_reason = "NO_SYMBOL_BARS"
+        rec.outcome_status = OutcomeStatus.MISSING_DATA.value
+        return rec
+
+    entry_date = future_bars[0]["time"]
     end_date = (
         future_bars[min(horizon, len(future_bars)) - 1]["time"]
         if future_bars
@@ -234,7 +246,7 @@ def _evaluate_single_candidate(
     rec.exit_close = exit_close
 
     bench_entry = select_entry_close(benchmark_bars, watchlist_date)
-    bench_entry_bars, bench_future = split_bars(benchmark_bars, watchlist_date)
+    _, bench_future = split_bars(benchmark_bars, watchlist_date)
     bench_exit = select_exit_close(bench_future, horizon)
     rec.benchmark_entry_close = bench_entry
     rec.benchmark_exit_close = bench_exit
@@ -246,7 +258,7 @@ def _evaluate_single_candidate(
             benchmark_lineage = assess_observation_lineage(
                 conn,
                 BENCHMARK_SYMBOL,
-                bench_entry_bars[-1]["time"],
+                bench_future[0]["time"],
                 bench_future[horizon - 1]["time"],
             )
         except BasisValidationError as exc:
@@ -320,6 +332,9 @@ def evaluate_watchlist_date(
         evaluator_version=_EVALUATOR_VERSION,
         metric_policy_version=metric_policy,
         horizons=horizons,
+        assumptions_contract_version=OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION,
+        assumptions_payload_json=OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON,
+        assumptions_hash=OUTCOME_EVALUATION_ASSUMPTIONS_HASH,
         scoring_policy_id=candidates[0].get("scoring_policy_id"),
         scoring_policy_version=candidates[0].get("scoring_policy_version"),
         scoring_policy_hash=candidates[0].get("scoring_policy_hash"),

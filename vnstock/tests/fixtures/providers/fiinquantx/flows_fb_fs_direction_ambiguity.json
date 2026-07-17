@@ -1,0 +1,17 @@
+{
+  "fixture_reference": "DOC_INCONSISTENCY_REGRESSION",
+  "scenario": "hybrid_document_fields",
+  "rows": [
+    {
+      "record": "sample_a",
+      "fb": 10000,
+      "fs": 5000
+    },
+    {
+      "record": "sample_b",
+      "fb": -1000,
+      "fs": 1000
+    }
+  ],
+  "notes": "Direction and sign semantics are still ambiguous from docs; keep flow contracts disabled until verified."
+}

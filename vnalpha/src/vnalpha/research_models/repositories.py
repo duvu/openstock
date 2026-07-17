@@ -16,6 +16,7 @@ from vnalpha.research_models.models import (
     SetupAnalysis,
     SetupEvidenceSnapshot,
     ShortlistCandidate,
+    ShortlistDecisionReport,
     SymbolLevelSnapshot,
 )
 from vnalpha.research_models.validators import validate_research_model
@@ -60,6 +61,11 @@ _RECORD_SPECS = {
         "symbol",
         "shortlist_run_id",
     ),
+    ShortlistDecisionReport: _RecordSpec(
+        ShortlistDecisionReport,
+        "research_shortlist_decision_report",
+        "shortlist_decision_report_id",
+    ),
     ResearchScenarioPlan: _RecordSpec(
         ResearchScenarioPlan,
         "research_scenario_plan",
@@ -91,6 +97,11 @@ _TUPLE_FIELDS = {
         "why_restrained",
         "confirmation_conditions",
         "invalidation_conditions",
+        "caveats",
+    ),
+    ShortlistDecisionReport: (
+        "artifact_refs",
+        "missing_data",
         "caveats",
     ),
     ResearchScenarioPlan: (
@@ -232,6 +243,24 @@ class ResearchModelsRepository:
     ) -> list[ShortlistCandidate]:
         return cast(
             list[ShortlistCandidate], self.list(ShortlistCandidate, limit=limit)
+        )
+
+    def create_shortlist_decision_report(self, model: ShortlistDecisionReport) -> None:
+        self.create(model)
+
+    def get_shortlist_decision_report(
+        self, record_id: str
+    ) -> ShortlistDecisionReport | None:
+        return cast(
+            ShortlistDecisionReport | None, self.get(ShortlistDecisionReport, record_id)
+        )
+
+    def list_shortlist_decision_reports(
+        self, *, limit: int = 100
+    ) -> list[ShortlistDecisionReport]:
+        return cast(
+            list[ShortlistDecisionReport],
+            self.list(ShortlistDecisionReport, limit=limit),
         )
 
     def create_research_scenario_plan(self, model: ResearchScenarioPlan) -> None:

@@ -68,6 +68,37 @@ as stable typed errors without copying vendor response text.
 For the local service image, set `VNSTOCK_INSTALL_FIINQUANTX=true` at build
 time. The Docker Compose deployment publishes only `127.0.0.1:6900`.
 
+## Bounded explicit-source examples
+
+Use explicit `source=FIINQUANTX` only with bounded request windows and local
+credentials that are never passed in the request payload:
+
+```bash
+vnalpha sync ohlcv \
+  --symbols FPT \
+  --start 2026-01-01 \
+  --end 2026-01-31 \
+  --interval 1D \
+  --source FIINQUANTX
+```
+
+```bash
+curl -s "http://127.0.0.1:6900/v1/data?dataset=equity.ohlcv&symbol=FPT&start=2026-01-01&end=2026-01-31&interval=1D&source=FIINQUANTX" \
+  | jq '.dataset, .meta.provider, .meta.source_method, .result[0] | {dataset:.}'
+```
+
+Explicit-source failures are also bounded examples:
+
+```bash
+vnalpha sync company-info \
+  --symbol FPT \
+  --source FIINQUANTX \
+  --verbose
+```
+
+The command above fails as `unsupported_dataset_for_provider` and does not fall
+back to another source.
+
 ## Commercial and persistence decisions
 
 Use [`FIINQUANTX_LICENSE_DECISION.md`](FIINQUANTX_LICENSE_DECISION.md) to record

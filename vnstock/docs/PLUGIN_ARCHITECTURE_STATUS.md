@@ -11,7 +11,7 @@ This document records the stable architecture and accepted closure state of the 
 | Health- and auth-aware routing | Implemented |
 | `PluginRuntime` synchronous execution path | Implemented |
 | Auth-aware localhost data service | Implemented |
-| Commercial FiinQuantX provider | Partial/experimental; bounded explicit-only slice implemented, closure remains #105/#106 |
+| Commercial FiinQuantX provider | Partial/experimental; bounded explicit-only slice implemented, closure remains #193 |
 | Streaming/WebSocket provider runtime | Not implemented |
 
 ## Core contracts
@@ -78,7 +78,7 @@ Current FiinQuantX limitations:
 - no automatic selection as a general default provider;
 - no synchronous quote, company information, flow, fundamentals or broader contracts until separately verified and implemented;
 - no streaming/WebSocket/order-book subscription path;
-- commercial approval, session lifecycle and entitlement/quota closure remain in #105/#106.
+- commercial approval, session lifecycle and entitlement/quota closure remain in issue #193.
 
 ## Routing behavior
 

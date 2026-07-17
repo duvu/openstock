@@ -10,6 +10,9 @@ import duckdb
 
 from vnalpha.features.status import feature_eligibility_sql
 from vnalpha.outcomes.models import (
+    OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION,
+    OUTCOME_EVALUATION_ASSUMPTIONS_HASH,
+    OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON,
     CandidateOutcomeRecord,
     HypothesisOutcomeSummary,
     OutcomeStatus,
@@ -33,6 +36,9 @@ def create_evaluation_run(
     evaluator_version: Optional[str],
     metric_policy_version: Optional[str],
     horizons: List[int],
+    assumptions_contract_version: str = OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION,
+    assumptions_payload_json: str = OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON,
+    assumptions_hash: str = OUTCOME_EVALUATION_ASSUMPTIONS_HASH,
     price_basis: str = "UNKNOWN",
     adjustment_methodology: str = "UNKNOWN",
     adjustment_version: str = "UNKNOWN",
@@ -48,16 +54,21 @@ def create_evaluation_run(
         """
         INSERT INTO outcome_evaluation_run
             (evaluation_run_id, watchlist_date, started_at, status,
-             evaluator_version, metric_policy_version, horizons_json,
+             assumptions_contract_version, assumptions_payload_json,
+             assumptions_hash, evaluator_version, metric_policy_version,
+             horizons_json,
              price_basis, adjustment_methodology, adjustment_version,
              action_overlap_status, scoring_policy_id, scoring_policy_version,
              scoring_policy_hash, scoring_policy_status)
-        VALUES (?, ?, ?, 'RUNNING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'RUNNING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             run_id,
             watchlist_date,
             _now_utc(),
+            assumptions_contract_version,
+            assumptions_payload_json,
+            assumptions_hash,
             evaluator_version,
             metric_policy_version,
             str(horizons),
@@ -135,6 +146,8 @@ def get_evaluation_run(
         """
         SELECT evaluation_run_id, watchlist_date::VARCHAR, started_at::VARCHAR,
                finished_at::VARCHAR, status, evaluator_version, metric_policy_version,
+               assumptions_contract_version, assumptions_payload_json,
+               assumptions_hash,
                horizons_json, symbol_bar_count_json, benchmark_bar_count,
                evaluated, persisted, errors, error_json, price_basis,
                adjustment_methodology, adjustment_version, action_overlap_status,
@@ -155,6 +168,9 @@ def get_evaluation_run(
         "status",
         "evaluator_version",
         "metric_policy_version",
+        "assumptions_contract_version",
+        "assumptions_payload_json",
+        "assumptions_hash",
         "horizons_json",
         "symbol_bar_count_json",
         "benchmark_bar_count",

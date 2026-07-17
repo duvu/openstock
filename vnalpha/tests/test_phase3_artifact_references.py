@@ -10,6 +10,7 @@ from vnalpha.assistant.research_audit import (
     list_research_answer_audits,
     persist_research_answer_audit,
 )
+from vnalpha.research_models.repositories import ResearchModelsRepository
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.tools.research_intelligence import (
     deep_symbol_analysis,
@@ -58,6 +59,27 @@ def _watchlist_without_sector() -> duckdb.DuckDBPyConnection:
          risk_flags_json, lineage_json, scoring_policy_id,
          scoring_policy_version, scoring_policy_hash, scoring_policy_status)
         VALUES ('2026-07-10', 1, 'FPT', 0.8, 'WATCH_CANDIDATE',
+                'MOMENTUM_CONTINUATION', '[]', '{}', ?, ?, ?, ?)
+        """,
+        [
+            BASELINE_SCORING_POLICY.policy_id,
+            BASELINE_SCORING_POLICY.version,
+            BASELINE_SCORING_POLICY.payload_hash,
+            BASELINE_SCORING_POLICY.lifecycle_status.value,
+        ],
+    )
+    return conn
+
+
+def _watchlist_with_duplicate_symbol() -> duckdb.DuckDBPyConnection:
+    conn = _watchlist_without_sector()
+    conn.execute(
+        """
+        INSERT INTO daily_watchlist
+        (date, rank, symbol, score, candidate_class, setup_type,
+         risk_flags_json, lineage_json, scoring_policy_id,
+         scoring_policy_version, scoring_policy_hash, scoring_policy_status)
+        VALUES ('2026-07-10', 2, 'FPT', 0.6, 'WATCH_CANDIDATE',
                 'MOMENTUM_CONTINUATION', '[]', '{}', ?, ?, ?, ?)
         """,
         [
@@ -176,6 +198,83 @@ def test_filtered_shortlist_preserves_persisted_watchlist_reference() -> None:
     assert "daily_watchlist:2026-07-10" in data["artifact_refs"]
     assert "daily_watchlist" not in data["missing_data"]
     assert "eligible_watchlist_candidates" in data["missing_data"]
+
+
+def test_shortlist_persists_candidates_as_append_only_runs() -> None:
+    conn = _watchlist_without_sector()
+    repository = ResearchModelsRepository(conn)
+    assert repository.list_shortlist_candidates(limit=10) == []
+    assert repository.list_shortlist_decision_reports(limit=10) == []
+
+    first = generate_shortlist(conn, "2026-07-10")
+    second = generate_shortlist(conn, "2026-07-10")
+
+    records = repository.list_shortlist_candidates(limit=20)
+    reports = repository.list_shortlist_decision_reports(limit=20)
+    assert len(records) == 2
+    assert len(reports) == 2
+    assert first.data is not None
+    assert second.data is not None
+    first_run_id = str(first.data.get("shortlist_run_id"))
+    second_run_id = str(second.data.get("shortlist_run_id"))
+    run_ids = {record.shortlist_run_id for record in records}
+    report_run_ids = {report.shortlist_run_id for report in reports}
+    assert run_ids == {first_run_id, second_run_id}
+    assert len(run_ids) == len(records)
+    assert report_run_ids == {first_run_id, second_run_id}
+    for record in records:
+        assert record.as_of_date.isoformat() == "2026-07-10"
+        assert record.symbol == "FPT"
+        assert record.rank >= 1
+        assert record.shortlist_score > 0
+        assert record.correlation_id
+        assert record.setup_type == "MOMENTUM_CONTINUATION"
+    for report in reports:
+        assert report.validation_signature
+        assert report.shortlist_decision_report_id
+        assert report.validation_checks["score_order"]["passed"] is True
+        assert report.validation_checks["rank_contiguity"]["passed"] is True
+
+
+def test_shortlist_persists_decision_report_even_when_no_candidates_selected() -> None:
+    conn = _watchlist_without_sector()
+    repository = ResearchModelsRepository(conn)
+
+    output = generate_shortlist(conn, "2026-07-10", min_score=0.95)
+    data = output.data
+    assert isinstance(data, dict)
+    assert data["shortlist_candidate_count"] == 0
+
+    reports = repository.list_shortlist_decision_reports(limit=10)
+    assert len(reports) == 1
+    report = reports[0]
+    assert report.shortlisted_count == 0
+    assert report.validation_signature == data["validation_signature"]
+    assert report.validation_checks["duplicate_symbol_exclusion"]["passed"] is True
+    assert report.shortlist_decision_report_id == data["shortlist_decision_report_id"]
+
+
+def test_shortlist_duplicate_symbols_fail_exclusion_validation() -> None:
+    conn = _watchlist_with_duplicate_symbol()
+    repository = ResearchModelsRepository(conn)
+    output = generate_shortlist(conn, "2026-07-10")
+    shortlist = output.data.get("shortlist")
+    assert isinstance(shortlist, list)
+    assert len(shortlist) == 1
+    assert shortlist[0]["rank"] == 1
+    assert shortlist[0]["symbol"] == "FPT"
+
+    report_data = output.data.get("validation_checks") if output.data else None
+    assert isinstance(report_data, dict)
+    assert report_data["duplicate_symbol_exclusion"]["passed"] is False
+    assert report_data["duplicate_symbol_exclusion"]["symbols"] == ["FPT"]
+
+    reports = repository.list_shortlist_decision_reports(limit=10)
+    assert len(reports) == 1
+    assert reports[0].validation_checks["duplicate_symbol_exclusion"]["passed"] is False
+    assert reports[0].validation_checks["duplicate_symbol_exclusion"]["symbols"] == [
+        "FPT"
+    ]
 
 
 def test_shortlist_refs_remain_integral_through_research_answer_audit() -> None:

@@ -5,6 +5,25 @@ import duckdb
 from vnalpha.warehouse.migrations import run_migrations
 
 
+def _create_legacy_research_experiment_table(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    conn.execute(
+        "CREATE TABLE research_experiment ("
+        "artifact_id VARCHAR PRIMARY KEY,"
+        "definition VARCHAR NOT NULL,"
+        "universe VARCHAR,"
+        "start_date DATE,"
+        "end_date DATE,"
+        "horizon_sessions INTEGER CHECK (horizon_sessions IS NULL OR horizon_sessions > 0),"
+        "definition_json VARCHAR NOT NULL,"
+        "created_at_ts TIMESTAMPTZ NOT NULL,"
+        "updated_at_ts TIMESTAMPTZ NOT NULL,"
+        "CHECK (json_valid(definition_json))"
+        ")"
+    )
+
+
 def _create_legacy_research_artifact_table(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         "CREATE TABLE research_artifact ("
@@ -321,3 +340,116 @@ def test_run_migrations_adds_missing_lineage_path_column() -> None:
         "FROM research_artifact ORDER BY artifact_id"
     ).fetchall()
     assert rows == [("ra-1", "", "RUN")]
+
+
+def test_run_migrations_adds_dataset_extension_columns_to_legacy_research_experiment() -> (
+    None
+):
+    conn = duckdb.connect(":memory:")
+    _create_legacy_research_experiment_table(conn)
+
+    columns = (
+        "artifact_id",
+        "definition",
+        "universe",
+        "start_date",
+        "end_date",
+        "horizon_sessions",
+        "definition_json",
+        "created_at_ts",
+        "updated_at_ts",
+    )
+    insert_sql = (
+        "INSERT INTO research_experiment ("
+        f"{','.join(columns)}) "
+        f"VALUES ({','.join(['?'] * len(columns))})"
+    )
+    for record_values in (
+        {
+            "artifact_id": "re-1",
+            "definition": "relative strength 20",
+            "universe": "VN30",
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-02",
+            "horizon_sessions": 20,
+            "definition_json": '{"foo": 1}',
+            "created_at_ts": "2026-01-01 00:00:00",
+            "updated_at_ts": "2026-01-01 00:00:00",
+        },
+        {
+            "artifact_id": "re-2",
+            "definition": "relative strength 5",
+            "universe": "VN30",
+            "start_date": "2026-02-01",
+            "end_date": "2026-02-05",
+            "horizon_sessions": 5,
+            "definition_json": '{"bar": 2}',
+            "created_at_ts": "2026-02-01 00:00:00",
+            "updated_at_ts": "2026-02-01 00:00:00",
+        },
+    ):
+        conn.execute(
+            insert_sql,
+            tuple(record_values[column] for column in columns),
+        )
+
+    run_migrations(conn=conn)
+
+    columns = {
+        row[0]
+        for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'main' AND table_name = 'research_experiment'"
+        ).fetchall()
+    }
+    for column_name in (
+        "provider_name",
+        "dataset_name",
+        "extension_name",
+        "consumer_name",
+        "dataset_version",
+        "entitlement_json",
+        "missingness_json",
+        "transformation",
+        "experiment_hash",
+        "capability_status",
+        "capability_payload",
+    ):
+        assert column_name in columns
+
+    rows = conn.execute(
+        "SELECT artifact_id, provider_name, dataset_name, extension_name, "
+        "consumer_name, dataset_version, entitlement_json, missingness_json, "
+        "transformation, experiment_hash, capability_status, capability_payload "
+        "FROM research_experiment ORDER BY artifact_id"
+    ).fetchall()
+    assert rows == [
+        (
+            "re-1",
+            None,
+            None,
+            None,
+            None,
+            None,
+            "{}",
+            "{}",
+            None,
+            None,
+            "unsupported",
+            "{}",
+        ),
+        (
+            "re-2",
+            None,
+            None,
+            None,
+            None,
+            None,
+            "{}",
+            "{}",
+            None,
+            None,
+            "unsupported",
+            "{}",
+        ),
+    ]

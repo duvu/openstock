@@ -56,6 +56,7 @@ class DataProvisioningRequest:
     scoring_policy_id: str = "openstock-candidate-score"
     scoring_policy_version: str = "v1.0"
     rebuild_policy: bool = False
+    scoring_policy_auto: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +257,7 @@ class DataProvisioningService:
             requested_date=request.requested_date or request.date,
             scoring_policy_id=request.scoring_policy_id,
             scoring_policy_version=request.scoring_policy_version,
+            scoring_policy_auto=request.scoring_policy_auto,
             rebuild_policy=request.rebuild_policy,
         )
 
@@ -374,6 +376,7 @@ class DataProvisioningService:
                         min_score=request.min_score,
                         scoring_policy_id=request.scoring_policy_id,
                         scoring_policy_version=request.scoring_policy_version,
+                        scoring_policy_auto=request.scoring_policy_auto,
                         rebuild_policy=request.rebuild_policy,
                     )
                 )

@@ -13,6 +13,11 @@ from vnalpha.data_provisioning.service import (
     ProvisioningStatus,
 )
 from vnalpha.observability.commands import command_lifecycle
+from vnalpha.scoring.policy import (
+    BASELINE_SCORING_POLICY,
+    parse_scoring_policy_reference,
+)
+from vnalpha.warehouse.migrations import run_migrations
 
 app = typer.Typer(help="Explicit bounded data downloads and derived-data builds.")
 download_app = typer.Typer(help="Download approved raw market data.")
@@ -94,7 +99,6 @@ def status_corporate_actions(
 ) -> None:
     from vnalpha.ingestion.corporate_actions import corporate_action_status
     from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
 
     conn = get_connection()
     run_migrations(conn=conn)
@@ -138,15 +142,23 @@ def build_features(
 def build_score(
     symbol: str = typer.Argument(..., help="Symbol to score."),
     date: str = typer.Option(..., "--date", help="As-of date (YYYY-MM-DD)."),
-    scoring_policy: str = typer.Option(
-        "openstock-candidate-score@v1.0",
+    scoring_policy: str | None = typer.Option(
+        None,
         "--scoring-policy",
         help="Immutable scoring policy ID and version.",
     ),
     rebuild_policy: bool = typer.Option(False, "--rebuild-policy"),
 ) -> None:
+    policy_auto = scoring_policy is None
     try:
-        policy_id, policy_version = scoring_policy.rsplit("@", 1)
+        policy_id, policy_version = (
+            parse_scoring_policy_reference(scoring_policy)
+            if scoring_policy is not None
+            else (
+                BASELINE_SCORING_POLICY.policy_id,
+                BASELINE_SCORING_POLICY.version,
+            )
+        )
     except ValueError as exc:
         raise typer.BadParameter(
             "Use ID@version.", param_hint="--scoring-policy"
@@ -159,6 +171,7 @@ def build_score(
             date=date,
             scoring_policy_id=policy_id,
             scoring_policy_version=policy_version,
+            scoring_policy_auto=policy_auto,
             rebuild_policy=rebuild_policy,
         )
     )
@@ -236,7 +249,6 @@ def _run_corporate_actions(
 ) -> None:
     from vnalpha.ingestion.corporate_actions import sync_corporate_actions
     from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
 
     normalized_symbol = symbol.strip().upper()
     if not normalized_symbol:
@@ -267,7 +279,6 @@ def _run(request: DataProvisioningRequest) -> None:
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1) from exc
         from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
 
         conn = get_connection()
         run_migrations(conn=conn)

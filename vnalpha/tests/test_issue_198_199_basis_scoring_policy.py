@@ -188,6 +188,9 @@ def test_legacy_migration_adds_policy_and_basis_lineage_columns(
         "outcome_evaluation_run": {
             "price_basis",
             "adjustment_methodology",
+            "assumptions_contract_version",
+            "assumptions_payload_json",
+            "assumptions_hash",
         },
     }
     for table, required in expected.items():
@@ -328,7 +331,7 @@ def test_evaluator_rejects_mixed_basis_across_observation_window(
     ).fetchone()
     assert row is not None
     assert row[:4] == ("INVALID", "UNKNOWN", "UNKNOWN", "INVALID")
-    assert "mixed price basis" in row[4]
+    assert "unknown price basis" in row[4]
 
 
 def test_score_cli_discloses_selected_policy_identity(
@@ -419,3 +422,69 @@ def test_outcome_cli_discloses_basis_and_action_status(
     assert "RAW_UNADJUSTED" in result.output
     assert "NONE" in result.output
     assert "CLEAR" in result.output
+
+
+def test_data_build_score_forwards_scoring_policy_and_rebuild_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from vnalpha.cli_app import data as data_cli
+    from vnalpha.data_provisioning.service import (
+        DataProvisioningRequest,
+        DataProvisioningResult,
+        ProvisioningStatus,
+    )
+    from vnalpha.warehouse import connection
+
+    received: list[DataProvisioningRequest] = []
+
+    class FakeService:
+        def __init__(self, _conn) -> None:
+            self._conn = _conn
+
+        @staticmethod
+        def validate_request(_request: DataProvisioningRequest) -> None:
+            return None
+
+        def execute(self, request: DataProvisioningRequest) -> DataProvisioningResult:
+            received.append(request)
+            return DataProvisioningResult(
+                status=ProvisioningStatus.SUCCESS,
+                operation="build",
+                artifact="score",
+                correlation_id="data-score-test",
+                counts={"scored": 1, "saved": 1},
+                resolved_date="2026-07-01",
+                lineage={
+                    "scoring_policy_id": "openstock-candidate-score",
+                    "scoring_policy_version": "v1.0",
+                    "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
+                    "scoring_policy_status": "EXPERIMENTAL",
+                },
+            )
+
+    monkeypatch.setattr(connection, "get_connection", lambda: None)
+    monkeypatch.setattr(data_cli, "run_migrations", lambda conn: None)
+    monkeypatch.setattr(data_cli, "DataProvisioningService", FakeService)
+
+    result = CliRunner().invoke(
+        data_cli.app,
+        [
+            "build",
+            "score",
+            "FPT",
+            "--date",
+            "2026-07-01",
+            "--scoring-policy",
+            "openstock-candidate-score@v1.0",
+            "--rebuild-policy",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert len(received) == 1
+    request = received[0]
+    assert request.scoring_policy_id == "openstock-candidate-score"
+    assert request.scoring_policy_version == "v1.0"
+    assert request.rebuild_policy is True
+    assert "scoring_policy_id" in result.output
+    assert BASELINE_SCORING_POLICY.payload_hash in result.output

@@ -75,15 +75,17 @@ def _current_metadata(meta: CommandMeta) -> CommandMeta:
         return meta
     return replace(
         meta,
-        description="Run indicator experiments or deterministic offline event studies.",
+        description="Run indicator experiments, dataset-extension checks, or deterministic offline event studies.",
         usage=(
             "/experiment indicator <description> [--universe VN30] "
             "[--start YYYY-MM-DD] [--end YYYY-MM-DD] | "
             "/experiment event-study <ALLOWLISTED_CONDITION> [--horizon N] "
-            "[--start YYYY-MM-DD] [--end YYYY-MM-DD]"
+            "| /experiment dataset-extension <PROVIDER> <DATASET> <EXTENSION> "
+            "--consumer <CONSUMER>"
         ),
         examples=[
             "/experiment indicator relative strength 20 sessions vs VNINDEX --universe VN30",
             "/experiment event-study rs_20d_vs_vnindex > 0 --horizon 10",
+            "/experiment dataset-extension FNIQUANTX ohlcv openapi --consumer VNALPHA",
         ],
     )

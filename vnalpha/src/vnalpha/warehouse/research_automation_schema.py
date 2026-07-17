@@ -62,6 +62,17 @@ RESEARCH_EXPERIMENT_DDL: Final = """
 CREATE TABLE IF NOT EXISTS research_experiment (
     artifact_id VARCHAR PRIMARY KEY,
     definition VARCHAR NOT NULL,
+    provider_name VARCHAR,
+    dataset_name VARCHAR,
+    extension_name VARCHAR,
+    consumer_name VARCHAR,
+    dataset_version VARCHAR,
+    entitlement_json VARCHAR DEFAULT '{}',
+    missingness_json VARCHAR DEFAULT '{}',
+    transformation VARCHAR,
+    experiment_hash VARCHAR,
+    capability_status VARCHAR,
+    capability_payload VARCHAR,
     universe VARCHAR,
     start_date DATE,
     end_date DATE,
@@ -69,7 +80,10 @@ CREATE TABLE IF NOT EXISTS research_experiment (
     definition_json VARCHAR NOT NULL,
     created_at_ts TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
     updated_at_ts TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
-    CHECK (json_valid(definition_json))
+    CHECK (json_valid(definition_json)),
+    CHECK (json_valid(capability_payload)),
+    CHECK (entitlement_json IS NULL OR json_valid(entitlement_json)),
+    CHECK (missingness_json IS NULL OR json_valid(missingness_json))
 )
 """
 

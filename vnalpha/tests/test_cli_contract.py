@@ -30,6 +30,7 @@ class TestCliModuleCompatibility:
         for command_name in (
             "sync",
             "build",
+            "shortlist",
             "outcome",
             "eval",
             "logs",

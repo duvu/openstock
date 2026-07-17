@@ -43,6 +43,7 @@ def score_universe(
     scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
     rebuild_policy: bool = False,
     project_memory: bool = True,
+    scoring_policy_auto: bool = False,
 ) -> int:
     """Score all symbols for a given date using feature_snapshot.
 
@@ -111,7 +112,11 @@ def score_universe(
     ]
 
     policy = resolve_scoring_policy(
-        scoring_policy_id, scoring_policy_version, as_of_date=date
+        scoring_policy_id,
+        scoring_policy_version,
+        as_of_date=date,
+        conn=conn,
+        use_active_default=scoring_policy_auto,
     )
     _guard_policy_replay(
         conn,
@@ -259,6 +264,7 @@ def save_watchlist(
     scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
     allow_policy_rebuild: bool = False,
     manage_transaction: bool = True,
+    scoring_policy_auto: bool = False,
 ) -> int:
     """Derive and save daily_watchlist FROM persisted candidate_score rows.
 
@@ -275,7 +281,11 @@ def save_watchlist(
     ][:top_n]
 
     policy = resolve_scoring_policy(
-        scoring_policy_id, scoring_policy_version, as_of_date=date
+        scoring_policy_id,
+        scoring_policy_version,
+        as_of_date=date,
+        conn=conn,
+        use_active_default=scoring_policy_auto,
     )
     identities = {
         (
@@ -369,6 +379,7 @@ def generate_watchlist(
     scoring_policy_id: str = BASELINE_SCORING_POLICY.policy_id,
     scoring_policy_version: str = BASELINE_SCORING_POLICY.version,
     rebuild_policy: bool = False,
+    scoring_policy_auto: bool = False,
 ) -> dict:
     """Full pipeline: compute scores → persist → derive watchlist from persisted data.
 
@@ -376,7 +387,11 @@ def generate_watchlist(
         dict with "scored" count (all symbols scored) and "saved" count (watchlist entries).
     """
     policy = resolve_scoring_policy(
-        scoring_policy_id, scoring_policy_version, as_of_date=date
+        scoring_policy_id,
+        scoring_policy_version,
+        as_of_date=date,
+        conn=conn,
+        use_active_default=scoring_policy_auto,
     )
     requested_symbols = sorted(set(universe or ()))
     requested_count = len(requested_symbols) if universe is not None else 0
@@ -396,6 +411,7 @@ def generate_watchlist(
             scoring_policy_version=scoring_policy_version,
             rebuild_policy=rebuild_policy,
             project_memory=False,
+            scoring_policy_auto=scoring_policy_auto,
         )
         saved = save_watchlist(
             conn,
@@ -406,6 +422,7 @@ def generate_watchlist(
             scoring_policy_version=policy.version,
             allow_policy_rebuild=rebuild_policy,
             manage_transaction=False,
+            scoring_policy_auto=scoring_policy_auto,
         )
         conn.execute("COMMIT")
     except Exception as exc:

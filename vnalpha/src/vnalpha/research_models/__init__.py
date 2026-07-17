@@ -7,6 +7,7 @@ from vnalpha.research_models.models import (
     SetupAnalysis,
     SetupEvidenceSnapshot,
     ShortlistCandidate,
+    ShortlistDecisionReport,
     SymbolLevelSnapshot,
 )
 from vnalpha.research_models.repositories import ResearchModelsRepository
@@ -26,6 +27,7 @@ __all__ = [
     "SetupAnalysis",
     "SetupEvidenceSnapshot",
     "ShortlistCandidate",
+    "ShortlistDecisionReport",
     "SymbolLevelSnapshot",
     "validate_research_model",
 ]

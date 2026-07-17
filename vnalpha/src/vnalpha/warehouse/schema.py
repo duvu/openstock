@@ -308,6 +308,42 @@ CREATE TABLE IF NOT EXISTS daily_watchlist (
 )
 """
 
+SCORING_POLICY_DECISION_DDL = """
+CREATE TABLE IF NOT EXISTS scoring_policy_decision (
+    decision_id             VARCHAR PRIMARY KEY,
+    scoring_policy_id       VARCHAR NOT NULL,
+    scoring_policy_version  VARCHAR NOT NULL,
+    scoring_policy_hash     VARCHAR NOT NULL,
+    decision_status         VARCHAR NOT NULL,
+    effective_date          DATE NOT NULL,
+    decision_cutoff_date    DATE,
+    reviewer                VARCHAR NOT NULL,
+    rationale               VARCHAR NOT NULL,
+    evidence_json           VARCHAR NOT NULL,
+    limitations_json        VARCHAR NOT NULL,
+    reviewed_at             TIMESTAMPTZ NOT NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT current_timestamp
+)
+"""
+
+SCORING_POLICY_ACTIVE_POINTER_DDL = """
+CREATE TABLE IF NOT EXISTS scoring_policy_active_pointer (
+    policy_context    VARCHAR NOT NULL PRIMARY KEY,
+    decision_id       VARCHAR NOT NULL,
+    assigned_by       VARCHAR,
+    assigned_at       TIMESTAMPTZ NOT NULL DEFAULT current_timestamp
+)
+"""
+
+SCORING_POLICY_ACTIVE_POINTER_AUDIT_DDL = """
+CREATE TABLE IF NOT EXISTS scoring_policy_active_pointer_audit (
+    policy_context    VARCHAR NOT NULL,
+    decision_id       VARCHAR NOT NULL,
+    assigned_by       VARCHAR,
+    assigned_at       TIMESTAMPTZ NOT NULL
+)
+"""
+
 REJECTED_SYMBOL_DDL = """
 CREATE TABLE IF NOT EXISTS rejected_symbol (
     symbol           VARCHAR NOT NULL,
@@ -356,6 +392,9 @@ ALL_DDL = [
     RELATIVE_STRENGTH_SNAPSHOT_DDL,
     CANDIDATE_SCORE_DDL,
     DAILY_WATCHLIST_DDL,
+    SCORING_POLICY_DECISION_DDL,
+    SCORING_POLICY_ACTIVE_POINTER_DDL,
+    SCORING_POLICY_ACTIVE_POINTER_AUDIT_DDL,
     REJECTED_SYMBOL_DDL,
     OHLCV_QUARANTINE_DDL,
 ]
@@ -620,17 +659,26 @@ CREATE TABLE IF NOT EXISTS outcome_evaluation_run (
     started_at            TIMESTAMPTZ NOT NULL,
     finished_at           TIMESTAMPTZ,
     status                VARCHAR NOT NULL,
+    assumptions_contract_version VARCHAR,
+    assumptions_payload_json VARCHAR,
+    assumptions_hash VARCHAR,
     evaluator_version     VARCHAR,
     metric_policy_version VARCHAR,
     price_basis          VARCHAR,
     adjustment_methodology VARCHAR,
+    adjustment_version    VARCHAR,
+    action_overlap_status VARCHAR,
     horizons_json         VARCHAR,
     symbol_bar_count_json VARCHAR,
     benchmark_bar_count   INTEGER,
     evaluated             INTEGER,
     persisted             INTEGER,
     errors                INTEGER,
-    error_json            VARCHAR
+    error_json            VARCHAR,
+    scoring_policy_id     VARCHAR,
+    scoring_policy_version VARCHAR,
+    scoring_policy_hash   VARCHAR,
+    scoring_policy_status  VARCHAR
 )
 """
 

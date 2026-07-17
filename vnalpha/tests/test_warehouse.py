@@ -78,8 +78,12 @@ def test_all_tables_created(conn):
         "research_symbol_level_snapshot",
         "research_setup_analysis",
         "research_shortlist_candidate",
+        "research_shortlist_decision_report",
         "research_scenario_plan",
         "research_setup_evidence_snapshot",
+        "scoring_policy_active_pointer",
+        "scoring_policy_active_pointer_audit",
+        "scoring_policy_decision",
         "memory_event",
         "memory_claim",
         "memory_document",
@@ -167,7 +171,7 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 58
+    assert len(tables) == 62
 
 
 def test_get_watchlist_empty(conn):

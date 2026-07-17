@@ -154,6 +154,7 @@ def _artifact_prefix(artifact_type: ResearchArtifactType) -> str:
         ResearchArtifactType.HYPOTHESIS_TEST: "hypothesis",
         ResearchArtifactType.PATTERN_SCAN: "pattern",
         ResearchArtifactType.OFFLINE_EVENT_STUDY: "event-study",
+        ResearchArtifactType.DATASET_EXTENSION_EXPERIMENT: "dataset-extension",
         ResearchArtifactType.FEATURE: "feature",
     }[artifact_type]
 

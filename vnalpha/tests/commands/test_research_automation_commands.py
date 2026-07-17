@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterator
 from datetime import date, timedelta
@@ -8,6 +9,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from vnalpha.clients.vnstock.client import VnstockClient
 from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.models import CommandStatus
 from vnalpha.commands.parser import parse
@@ -87,6 +89,11 @@ def _execute(text: str, conn: duckdb.DuckDBPyConnection):
     return build_default_registry().execute(
         parse(text), conn=conn, session_id="session-123"
     )
+
+
+def _stable_experiment_hash(payload: dict[str, object]) -> str:
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def test_feature_create_persists_definition_and_reproducibility_artifacts(
@@ -251,6 +258,165 @@ def test_research_workflows_persist_validated_research_only_artifacts(
     assert "research-only" in summary
     audit = init_run_context(surface="test").audit_path.read_text(encoding="utf-8")
     assert event_type in audit
+
+
+def test_dataset_extension_command_persists_supported_capability(
+    monkeypatch: pytest.MonkeyPatch, research_connection: duckdb.DuckDBPyConnection
+) -> None:
+    def _capabilities(_self) -> dict:
+        return {
+            "capabilities": {
+                "FIINQUANTX": {
+                    "ohlcv": {
+                        "extensions": {
+                            "openapi": {
+                                "status": "supported",
+                                "dataset_version": "v1",
+                                "entitlement": {"tier": "pro"},
+                                "missingness": {"openapi": 0},
+                                "transformation": "normalize",
+                            },
+                        },
+                    },
+                }
+            }
+        }
+
+    monkeypatch.setattr(VnstockClient, "get_provider_capabilities", _capabilities)
+
+    result = _execute(
+        "/experiment dataset-extension fiinquantx ohlcv openapi --consumer VNALPHA",
+        research_connection,
+    )
+
+    assert result.status is CommandStatus.SUCCESS
+    artifact = research_connection.execute(
+        "SELECT artifact_type, status FROM research_artifact "
+        "ORDER BY created_at_ts DESC LIMIT 1"
+    ).fetchone()
+    assert artifact == ("dataset_extension_experiment", "succeeded")
+
+    experiment = research_connection.execute(
+        "SELECT provider_name, dataset_name, extension_name, consumer_name, "
+        "dataset_version, entitlement_json, missingness_json, transformation, "
+        "capability_status, capability_payload, experiment_hash "
+        "FROM research_experiment ORDER BY created_at_ts DESC LIMIT 1"
+    ).fetchone()
+    expected_hash = _stable_experiment_hash(
+        {
+            "provider": "FIINQUANTX",
+            "dataset": "ohlcv",
+            "extension": "openapi",
+            "consumer": "VNALPHA",
+            "capability_status": "supported",
+            "capability_payload": {
+                "dataset_version": "v1",
+                "entitlement": {"tier": "pro"},
+                "missingness": {"openapi": 0},
+                "status": "supported",
+                "transformation": "normalize",
+            },
+            "dataset_version": "v1",
+            "entitlement": {"tier": "pro"},
+            "missingness": {"openapi": 0},
+            "transformation": "normalize",
+        }
+    )
+    expected_payload = {
+        "status": "supported",
+        "dataset_version": "v1",
+        "entitlement": {"tier": "pro"},
+        "missingness": {"openapi": 0},
+        "transformation": "normalize",
+    }
+    assert experiment is not None
+    assert experiment[0] == "FIINQUANTX"
+    assert experiment[1] == "ohlcv"
+    assert experiment[2] == "openapi"
+    assert experiment[3] == "VNALPHA"
+    assert experiment[4] == "v1"
+    assert experiment[5] == json.dumps({"tier": "pro"})
+    assert experiment[6] == json.dumps({"openapi": 0})
+    assert experiment[7] == "normalize"
+    assert experiment[8] == "supported"
+    assert json.loads(experiment[9]) == expected_payload
+    assert experiment[10] == expected_hash
+    assert all("unsupported" not in warning.lower() for warning in result.warnings)
+
+
+def test_dataset_extension_command_reports_unsupported_capability_as_partial(
+    monkeypatch: pytest.MonkeyPatch, research_connection: duckdb.DuckDBPyConnection
+) -> None:
+    def _capabilities(_self) -> dict:
+        return {
+            "capabilities": {
+                "FIINQUANTX": {
+                    "ohlcv": {
+                        "extensions": {
+                            "openapi": {"status": "unsupported"},
+                        },
+                    },
+                }
+            }
+        }
+
+    monkeypatch.setattr(VnstockClient, "get_provider_capabilities", _capabilities)
+
+    result = _execute(
+        "/experiment dataset-extension fiinquantx ohlcv openapi --consumer VNALPHA",
+        research_connection,
+    )
+
+    assert result.status is CommandStatus.PARTIAL
+    artifact = research_connection.execute(
+        "SELECT artifact_type, status FROM research_artifact "
+        "ORDER BY created_at_ts DESC LIMIT 1"
+    ).fetchone()
+    assert artifact == ("dataset_extension_experiment", "rejected")
+
+    experiment = research_connection.execute(
+        "SELECT provider_name, dataset_name, extension_name, consumer_name, "
+        "dataset_version, entitlement_json, missingness_json, transformation, "
+        "capability_status, capability_payload "
+        "FROM research_experiment ORDER BY created_at_ts DESC LIMIT 1"
+    ).fetchone()
+    assert experiment == (
+        "FIINQUANTX",
+        "ohlcv",
+        "openapi",
+        "VNALPHA",
+        None,
+        json.dumps({}),
+        json.dumps({}),
+        None,
+        "unsupported",
+        json.dumps({"status": "unsupported"}),
+    )
+
+
+def test_dataset_extension_command_requires_consumer_option(
+    monkeypatch: pytest.MonkeyPatch, research_connection: duckdb.DuckDBPyConnection
+) -> None:
+    def _capabilities(_self) -> dict:
+        return {
+            "capabilities": {
+                "FIINQUANTX": {
+                    "ohlcv": {
+                        "extensions": {
+                            "openapi": {"status": "supported"},
+                        },
+                    },
+                }
+            }
+        }
+
+    monkeypatch.setattr(VnstockClient, "get_provider_capabilities", _capabilities)
+
+    with pytest.raises(CommandValidationError):
+        _execute(
+            "/experiment dataset-extension fiinquantx ohlcv openapi",
+            research_connection,
+        )
 
 
 def test_pattern_scan_persists_candidate_table(

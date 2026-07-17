@@ -14,6 +14,7 @@ from vnstock.providers.fiinquantx.bridge import (
 )
 from vnstock.providers.fiinquantx.exceptions import (
     FiinQuantXInvalidRequestError,
+    FiinQuantXSchemaError,
     FiinQuantXNotInstalledError,
     FiinQuantXProviderError,
     FiinQuantXVersionError,
@@ -33,6 +34,21 @@ if TYPE_CHECKING:
 
 _MAX_ROWS = 10_000
 _MAX_RANGE_DAYS = 3_660
+
+
+def _materialize_fiinquantx_payload(raw: object, dataset: str) -> pd.DataFrame:
+    if isinstance(raw, pd.DataFrame):
+        return raw
+    if hasattr(raw, "get_data"):
+        raw = raw.get_data()
+    if isinstance(raw, pd.DataFrame):
+        return raw
+    if isinstance(raw, (list, tuple)) and raw:
+        try:
+            return pd.DataFrame(raw)
+        except ValueError as exc:
+            raise FiinQuantXSchemaError(dataset) from exc
+    raise FiinQuantXSchemaError(dataset)
 
 
 def _parse_iso_date(value: object, field: str) -> date | None:
@@ -163,7 +179,7 @@ class FiinQuantXProviderPlugin:
                     else:
                         request["period"] = params.get("count_back", 100)
                     event = session.Fetch_Trading_Data(**request)
-                    raw = event.get_data()
+                    raw = _materialize_fiinquantx_payload(event, dataset)
                 else:
                     raw = session.TickerList(ticker=symbol)
         except FiinQuantXProviderError:

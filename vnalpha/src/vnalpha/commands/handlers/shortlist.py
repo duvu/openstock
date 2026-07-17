@@ -65,6 +65,37 @@ def handle_shortlist(
         data.get("methodology") if isinstance(data.get("methodology"), dict) else {}
     )
     warnings = list(output.warnings or [])
+    shortlist_report_id = data.get("shortlist_decision_report_id")
+
+    shortlist_artifacts: list[ResultArtifact] = [
+        ResultArtifact(
+            name=f"shortlist.generate:{data.get('as_of_date') or date or 'latest'}",
+            data=data,
+        )
+    ]
+    if shortlist_report_id:
+        shortlist_artifacts.append(
+            ResultArtifact(
+                name=f"shortlist.decision_report:{shortlist_report_id}",
+                data={
+                    "shortlist_decision_report_id": shortlist_report_id,
+                    "validation_signature": data.get("validation_signature"),
+                    "validation_checks": data.get("validation_checks"),
+                },
+            )
+        )
+
+    metadata = {
+        "research_view": "shortlist",
+        "artifact_id": f"shortlist.generate:{data.get('as_of_date') or date or 'latest'}",
+        "subject": "SHORTLIST",
+        "as_of_date": data.get("as_of_date"),
+        "workflow_status": "partial" if warnings else "complete",
+        "missing_data": list(data.get("missing_data") or []),
+        "artifact_refs": list(data.get("artifact_refs") or []),
+        "shortlist_decision_report_id": shortlist_report_id,
+        "validation_signature": data.get("validation_signature"),
+    }
 
     candidates, filter_applied = _filter_candidates(
         candidates, setup_filter=setup_filter, sector_filter=sector_filter
@@ -81,6 +112,7 @@ def handle_shortlist(
             title=f"/shortlist — {date}",
             summary=scope,
             warnings=warnings,
+            metadata=metadata,
         )
 
     rows = [
@@ -135,21 +167,8 @@ def handle_shortlist(
         summary=output.summary,
         tables=[table],
         panels=[ResultPanel(title="Shortlist methodology", content=panel_lines)],
-        artifacts=[
-            ResultArtifact(
-                name=f"shortlist.generate:{data.get('as_of_date') or date or 'latest'}",
-                data=data,
-            )
-        ],
-        metadata={
-            "research_view": "shortlist",
-            "artifact_id": f"shortlist.generate:{data.get('as_of_date') or date or 'latest'}",
-            "subject": "SHORTLIST",
-            "as_of_date": data.get("as_of_date"),
-            "workflow_status": "partial" if warnings else "complete",
-            "missing_data": list(data.get("missing_data") or []),
-            "artifact_refs": list(data.get("artifact_refs") or []),
-        },
+        artifacts=shortlist_artifacts,
+        metadata=metadata,
         warnings=warnings,
     )
 

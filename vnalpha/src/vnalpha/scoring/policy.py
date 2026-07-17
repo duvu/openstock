@@ -16,6 +16,9 @@ class PolicyLifecycleStatus(str, Enum):
     RETIRED = "RETIRED"
 
 
+DEFAULT_SCORING_POLICY_CONTEXT = "global"
+
+
 def _freeze(value: Any) -> Any:
     if isinstance(value, dict):
         return MappingProxyType(
@@ -159,9 +162,27 @@ def resolve_scoring_policy(
     version: str = BASELINE_SCORING_POLICY.version,
     *,
     as_of_date: date | str | None = None,
+    conn: object | None = None,
+    use_active_default: bool = False,
+    policy_context: str = DEFAULT_SCORING_POLICY_CONTEXT,
 ) -> ScoringPolicy:
+    selected_id = policy_id
+    selected_version = version
+    if (
+        use_active_default
+        and conn is not None
+        and _is_default_selector(policy_id, version)
+    ):
+        active = _active_policy_from_decision(
+            conn,
+            as_of_date=as_of_date,
+            policy_context=policy_context,
+        )
+        if active is not None:
+            selected_id, selected_version = active
+
     try:
-        policy = _POLICIES[(policy_id, version)]
+        policy = _POLICIES[(selected_id, selected_version)]
     except KeyError as exc:
         raise ValueError(f"Unknown scoring policy {policy_id}@{version}") from exc
     if as_of_date is not None:
@@ -174,9 +195,74 @@ def resolve_scoring_policy(
     return policy
 
 
+def _is_default_selector(policy_id: str, version: str) -> bool:
+    return (
+        policy_id == BASELINE_SCORING_POLICY.policy_id
+        and version == BASELINE_SCORING_POLICY.version
+    )
+
+
+def _active_policy_from_decision(
+    conn: object,
+    *,
+    as_of_date: date | str | None,
+    policy_context: str,
+) -> tuple[str, str] | None:
+    from datetime import date as _date
+
+    try:
+        from vnalpha.scoring.policy_decision_repository import (
+            get_active_scoring_policy_decision,
+        )
+    except Exception:
+        return None
+
+    try:
+        decision = get_active_scoring_policy_decision(
+            conn,
+            policy_context=policy_context,
+        )
+    except Exception:
+        return None
+    if decision is None:
+        return None
+
+    resolved_date = (
+        as_of_date
+        if as_of_date is None or isinstance(as_of_date, date)
+        else _date.fromisoformat(as_of_date)
+    )
+    if resolved_date is not None:
+        if resolved_date < decision.effective_date:
+            return None
+        if (
+            decision.decision_cutoff_date is not None
+            and resolved_date > decision.decision_cutoff_date
+        ):
+            return None
+
+    return decision.policy_id, decision.policy_version
+
+
+def parse_scoring_policy_reference(
+    value: str,
+) -> tuple[str, str]:
+    normalized = value.strip()
+    if "@" not in normalized:
+        raise ValueError("scoring policy must be ID@VERSION")
+    parts = normalized.split("@")
+    if len(parts) != 2:
+        raise ValueError("scoring policy must be ID@VERSION")
+    policy_id, version = parts
+    if not policy_id or not version:
+        raise ValueError("scoring policy must be ID@VERSION")
+    return policy_id, version
+
+
 __all__ = [
     "BASELINE_SCORING_POLICY",
     "PolicyLifecycleStatus",
     "ScoringPolicy",
+    "parse_scoring_policy_reference",
     "resolve_scoring_policy",
 ]

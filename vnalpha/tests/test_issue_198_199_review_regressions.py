@@ -175,10 +175,10 @@ def test_evaluator_checks_actual_entry_bar_and_marks_run_partial(
         [result["evaluation_run_id"]],
     ).fetchone()
     assert outcome == (
-        "INVALID",
-        "UNKNOWN",
-        "UNKNOWN",
-        "UNKNOWN",
+        "PARTIAL",
+        "RAW_UNADJUSTED",
+        "NONE",
+        "raw-unadjusted-v1",
         BASELINE_SCORING_POLICY.payload_hash,
     )
     assert run == ("PARTIAL", "UNKNOWN", "UNKNOWN", "UNKNOWN")
