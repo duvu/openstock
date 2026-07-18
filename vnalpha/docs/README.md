@@ -14,7 +14,7 @@ vnalpha          = independent research workspace and evidence engine
 The live delivery queue is maintained only in:
 
 - [root ROADMAP.md](../../ROADMAP.md);
-- GitHub issue [#90 — OpenStock unified product roadmap](https://github.com/duvu/openstock/issues/90).
+- GitHub issue [#209](https://github.com/duvu/openstock/issues/209).
 
 Documents such as `07-implementation-roadmap.md` and `10-roadmap-phases.md` preserve earlier design history. They are non-authoritative and must not be used to infer current priority, dependency or completion status.
 

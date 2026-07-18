@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import json
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -59,7 +60,7 @@ ASSISTANT_MODEL_DEFAULT = ""
 ASSISTANT_ENDPOINT_DEFAULT = ""
 ASSISTANT_TIMEOUT_DEFAULT = 30
 ASSISTANT_MAX_OUTPUT_TOKENS_DEFAULT = 16000
-ASSISTANT_MAX_RETRIES_DEFAULT = 2
+ASSISTANT_MAX_RETRIES_DEFAULT = 0
 ASSISTANT_STORE_RAW_DEFAULT = False
 _SCHEMA_UNSUPPORTED_MARKERS = (
     "json_schema",
@@ -68,6 +69,7 @@ _SCHEMA_UNSUPPORTED_MARKERS = (
     "structured_output",
     "unsupported schema",
 )
+RETRY_AFTER_MAX_SECONDS = 300
 
 
 def _integer_env(name: str, default: int) -> int:
@@ -106,6 +108,38 @@ def _schema_format_unsupported(status_code: int, response_text: str) -> bool:
         return False
     lowered = response_text.lower()
     return any(marker in lowered for marker in _SCHEMA_UNSUPPORTED_MARKERS)
+
+
+def _parse_gateway_error_type(payload_text: str) -> str | None:
+    try:
+        payload = json.loads(payload_text)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error")
+    if isinstance(error, dict):
+        raw = error.get("type")
+    else:
+        raw = payload.get("type")
+    if isinstance(raw, str):
+        return raw.strip() or None
+    return None
+
+
+def _parse_retry_after(raw: str | None) -> int | None:
+    if not raw:
+        return None
+    raw = raw.strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return None
+    if value <= 0:
+        return None
+    return min(value, RETRY_AFTER_MAX_SECONDS)
 
 
 @dataclass
@@ -263,7 +297,11 @@ class LLMGatewayClient:
         model_profile: ModelProfile | str | None = None,
         route_metadata: Mapping[str, Any] | None = None,
     ) -> tuple[str, dict]:
-        from vnalpha.assistant.errors import LLMConfigError, LLMGatewayError
+        from vnalpha.assistant.errors import (
+            LLMConfigError,
+            LLMGatewayError,
+            LLMResponseError,
+        )
 
         api_key = (
             self._api_key
@@ -328,6 +366,19 @@ class LLMGatewayClient:
         if strict_schema and last_error is not None and not compatible_fallbacks:
             from vnalpha.assistant.errors import LLMNoCompatibleFallbackError
 
+            if isinstance(last_error, LLMResponseError):
+                if last_error.error_kind == "structured_output_unsupported":
+                    compatibility_error = LLMNoCompatibleFallbackError(
+                        stage=stage,
+                        primary_model=primary.model_id,
+                        required_capability=ModelCapability.JSON_SCHEMA.value,
+                        primary_error=last_error,
+                    )
+                    _log_llm_error(
+                        stage, compatibility_error, cause=last_error
+                    )
+                    raise compatibility_error from last_error
+                raise last_error
             compatibility_error = LLMNoCompatibleFallbackError(
                 stage=stage,
                 primary_model=primary.model_id,
@@ -461,11 +512,17 @@ class LLMGatewayClient:
                         and _schema_format_unsupported(status_code, exc.response.text)
                         else "http_error"
                     ),
+                    error_type=_parse_gateway_error_type(exc.response.text),
+                    retry_after_seconds=_parse_retry_after(
+                        exc.response.headers.get("retry-after")
+                    ),
                 )
                 fallbackable = (
                     status_code in {400, 404, 408, 409, 429} or status_code >= 500
                 )
-                retryable = status_code in {408, 409, 429} or status_code >= 500
+                retryable = status_code in {408, 429} or status_code >= 500
+                if status_code == 503:
+                    retryable = False
                 if retryable and retry_attempt < self._config.max_retries:
                     retry_attempt += 1
                     continue

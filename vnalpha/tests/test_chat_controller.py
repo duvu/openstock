@@ -527,3 +527,88 @@ def test_command_result_validation_error_rendered(in_memory_conn):
 
     styles = [s for s, _ in messages]
     assert "yellow" in styles
+
+
+def test_chat_controller_migrations_run_once_for_multiple_persistence_calls(in_memory_conn):
+    from vnalpha.assistant.models import AssistantAnswer, AssistantPlan, RefusalMessage
+    from vnalpha.chat.controller import ChatController
+    from vnalpha.warehouse.chat_repo import create_chat_session
+
+    sid = create_chat_session(in_memory_conn)
+    messages = []
+    ctrl = ChatController(
+        connection_factory=_make_conn_factory(in_memory_conn),
+        on_message=lambda s, t: messages.append((s, t)),
+        on_assistant_answer=lambda a: None,
+    )
+    ctrl._chat_session_id = sid
+
+    mock_answer = AssistantAnswer(
+        summary="ok",
+        basis="",
+        risks_caveats="",
+        tool_trace_summary="",
+    )
+    mock_plan = AssistantPlan(intent="scan_candidates", steps=[])
+    mock_refusal = RefusalMessage(reason="not available", policy_category="UNAVAILABLE_TOOL")
+
+    with patch("vnalpha.assistant.app.AssistantApp") as mock_app:
+        app_instance = mock_app.return_value
+        app_instance.ask.return_value = (mock_answer, mock_plan)
+        app_instance.prepare.return_value = (mock_refusal, mock_plan)
+        app_instance.execute_prepared.return_value = (mock_answer, mock_plan)
+
+        with patch("vnalpha.warehouse.migrations.run_migrations") as mock_migrations:
+            ctrl._persist_message("user", "first", "plain_text")
+            ctrl._persist_message("assistant", "second", "plain_text")
+            ctrl._run_ask("what is up?")
+            ctrl._run_ask("another question")
+            assert mock_migrations.call_count == 1
+
+
+def test_chat_controller_migrations_run_once_for_trace_events(in_memory_conn):
+    from types import SimpleNamespace
+
+    from vnalpha.chat.controller import ChatController
+    from vnalpha.warehouse.chat_repo import create_chat_session
+
+    sid = create_chat_session(in_memory_conn)
+    ctrl = ChatController(
+        connection_factory=_make_conn_factory(in_memory_conn),
+        on_message=lambda s, t: None,
+        on_assistant_answer=lambda a: None,
+    )
+    ctrl._chat_session_id = sid
+
+    trace_event = SimpleNamespace(
+        tool_name="watchlist.scan",
+        status="SUCCESS",
+        duration_ms=12.5,
+        tool_trace_id="trace-1",
+    )
+
+    with patch("vnalpha.warehouse.chat_repo.append_trace_event") as append_trace:
+        with patch("vnalpha.warehouse.migrations.run_migrations") as mock_migrations:
+            ctrl._on_trace(trace_event)
+            ctrl._on_trace(trace_event)
+            ctrl._on_trace(trace_event)
+            assert mock_migrations.call_count == 1
+            assert append_trace.call_count == 3
+
+
+def test_chat_controller_migrations_run_once_for_failure_paths(in_memory_conn):
+    from vnalpha.chat.errors import ChatErrorKind
+    from vnalpha.chat.controller import ChatController
+    from vnalpha.warehouse.chat_repo import create_chat_session
+
+    sid = create_chat_session(in_memory_conn)
+    ctrl = ChatController(
+        connection_factory=_make_conn_factory(in_memory_conn),
+        on_message=lambda s, t: None,
+        on_assistant_answer=lambda a: None,
+    )
+    ctrl._chat_session_id = sid
+
+    with patch("vnalpha.warehouse.migrations.run_migrations") as mock_migrations:
+        ctrl._persist_error_message("temporary assistant failure", ChatErrorKind.RUNTIME)
+        assert mock_migrations.call_count == 1

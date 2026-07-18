@@ -445,17 +445,17 @@ def generate_watchlist(
         log_watchlist_success(date, scored=scored, saved=saved)
     except Exception:  # noqa: BLE001
         pass
-    persisted_scores = get_candidate_scores(conn, date)
-    requested_set = set(requested_symbols)
-    for scored_result in persisted_scores:
-        if universe is None or str(scored_result["symbol"]) in requested_set:
-            _project_candidate_score_to_memory(
-                conn,
-                str(scored_result["symbol"]),
-                scored_result["date"],
-                scored_result,
-                memory_root=None,
-            )
+    if universe is not None:
+        requested_set = set(requested_symbols)
+        for scored_result in get_candidate_scores(conn, date):
+            if str(scored_result["symbol"]) in requested_set:
+                _project_candidate_score_to_memory(
+                    conn,
+                    str(scored_result["symbol"]),
+                    scored_result["date"],
+                    scored_result,
+                    memory_root=None,
+                )
     missing_count = max(0, requested_count - scored) if universe is not None else 0
     return {
         "scored": scored,

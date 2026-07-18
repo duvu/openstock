@@ -61,10 +61,14 @@ class LLMResponseError(LLMGatewayError):
         *,
         status_code: int | None = None,
         error_kind: str | None = None,
+        error_type: str | None = None,
+        retry_after_seconds: int | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.error_kind = error_kind
+        self.error_type = error_type
+        self.retry_after_seconds = retry_after_seconds
 
 
 class LLMConfigError(LLMGatewayError):

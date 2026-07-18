@@ -229,3 +229,55 @@ def test_generate_watchlist(tmp_path):
     assert len(wl) >= 1
     assert wl[0]["symbol"] == "FPT"
     conn.close()
+
+
+def test_generate_watchlist_does_not_project_full_universe_memory():
+    from vnalpha.scoring.generate_watchlist import generate_watchlist
+    from vnalpha.warehouse.connection import in_memory_connection
+    from vnalpha.warehouse.migrations import run_migrations
+
+    conn = in_memory_connection()
+    run_migrations(conn=conn)
+
+    feature_cols = [
+        "symbol",
+        "date",
+        *STRONG_FEATURES.keys(),
+        "as_of_bar_date",
+        "feature_data_status",
+        "feature_profile",
+        "neutral_completeness",
+        "relative_strength_completeness",
+    ]
+    evidence = ["2024-01-02", "EXACT_DATE", "STANDARD_120", "COMPLETE", "COMPLETE"]
+    rows = [
+        ["FPT", "2024-01-02", *STRONG_FEATURES.values(), *evidence],
+        ["VNM", "2024-01-02", *WEAK_FEATURES.values(), *evidence],
+    ]
+
+    for row in rows:
+        placeholders = ", ".join(["?"] * len(row))
+        conn.execute(
+            f"INSERT INTO feature_snapshot ({', '.join(feature_cols)}) VALUES ({placeholders})",
+            row,
+        )
+
+    generate_watchlist(conn, date="2024-01-02", min_score=0.0)
+
+    memory_claim_count = conn.execute("SELECT COUNT(*) FROM memory_claim").fetchone()[0]
+    assert memory_claim_count == 0
+
+    generate_watchlist(conn, date="2024-01-02", universe=["FPT"], min_score=0.0)
+    assert (
+        conn.execute(
+            "SELECT COUNT(*) FROM memory_claim WHERE symbol = 'FPT'"
+        ).fetchone()[0]
+        == 1
+    )
+    assert (
+        conn.execute(
+            "SELECT COUNT(*) FROM memory_claim WHERE symbol = 'VNM'"
+        ).fetchone()[0]
+        == 0
+    )
+    conn.close()

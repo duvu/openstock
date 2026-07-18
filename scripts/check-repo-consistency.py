@@ -9,6 +9,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_WAREHOUSE = "/var/lib/openstock/warehouse/warehouse.duckdb"
+LIVE_ROADMAP_ISSUE_ID = 209
+CURRENT_ROADMAP_DOCS = (
+    "README.md",
+    "ROADMAP.md",
+    "vnalpha/docs/02-system-architecture.md",
+    "vnalpha/docs/03-data-pipeline.md",
+    "vnalpha/docs/05-backtest-and-outcome.md",
+    "vnalpha/docs/README.md",
+)
 
 
 class ConsistencyError(RuntimeError):
@@ -36,16 +45,97 @@ def _forbid(errors: list[str], path: str, *needles: str) -> None:
             errors.append(f"{path}: contains stale or unsafe contract {needle!r}")
 
 
+def _extract_issue_id(value: str) -> int | None:
+    match = re.search(r"/issues/(\d+)", value)
+    if match is not None:
+        return int(match.group(1))
+    match = re.search(r"#(\d+)", value)
+    if match is not None:
+        return int(match.group(1))
+    return None
+
+
+def _parse_issue_ids(text: str) -> tuple[int, ...]:
+    return tuple(int(value) for value in re.findall(r"\d+", text))
+
+
+def _iter_active_change_blocks(
+    registry: str,
+) -> tuple[tuple[str, str], ...]:
+    # match only active change names such as `  validate-daily-equity-ranking:`
+    entries = tuple(re.finditer(r"(?m)^  ([a-z0-9][a-z0-9-]+):$", registry))
+    if not entries:
+        return ()
+    blocks: list[tuple[str, str]] = []
+    for index, match in enumerate(entries):
+        start = match.end() + 1
+        end = entries[index + 1].start() if index + 1 < len(entries) else len(registry)
+        name = match.group(1)
+        blocks.append((name, registry[start:end]))
+    return tuple(blocks)
+
+
 def _check_active_changes(errors: list[str]) -> None:
     registry_path = "openspec/active-changes.yaml"
     registry = _read(registry_path)
-    names = re.findall(r"^  ([a-z0-9][a-z0-9-]+):$", registry, re.MULTILINE)
+    blocks = _iter_active_change_blocks(registry)
+    names = tuple(name for name, _ in blocks)
+    roadmap_source = re.search(r"^  roadmap_source:\s*(.+)$", registry, re.MULTILINE)
+    if roadmap_source is None:
+        errors.append(f"{registry_path}: missing roadmap_source")
+    else:
+        issue_id = _extract_issue_id(roadmap_source.group(1).strip())
+        if issue_id != LIVE_ROADMAP_ISSUE_ID:
+            errors.append(
+                f"{registry_path}: roadmap_source must reference issue #{LIVE_ROADMAP_ISSUE_ID}"
+            )
+
+    issue_to_changes: dict[int, list[str]] = {}
+    for name, entry_text in blocks:
+        # Skip the compatibility section name if someone removes it in the future.
+        if name == "feature-completeness-profiles":
+            continue
+
+        status_match = re.search(r"^    status:\s*(\S+)", entry_text, re.MULTILINE)
+        roadmap_state_match = re.search(
+            r"^    roadmap_state:\s*(\S+)", entry_text, re.MULTILINE
+        )
+        issues_match = re.search(r"^    github_issues:\s*\[(.*?)\]", entry_text, re.MULTILINE)
+
+        if status_match is None:
+            errors.append(f"{registry_path}: active entry {name!r} missing status")
+        if roadmap_state_match is None:
+            errors.append(
+                f"{registry_path}: active entry {name!r} missing roadmap_state"
+            )
+        if issues_match is None:
+            errors.append(
+                f"{registry_path}: active entry {name!r} missing github_issues list"
+            )
+            continue
+
+        for issue_id in _parse_issue_ids(issues_match.group(1)):
+            issue_to_changes.setdefault(issue_id, []).append(name)
+
+    duplicated_issue_lines = [
+        f"{issue} referenced by {', '.join(names)}"
+        for issue, names in issue_to_changes.items()
+        if len(names) > 1
+    ]
+    for duplicate in duplicated_issue_lines:
+        errors.append(
+            f"{registry_path}: duplicate live github issue owner across active entries: {duplicate}"
+        )
+
     for name in names:
         change_dir = ROOT / "openspec" / "changes" / name
         if not change_dir.is_dir():
             errors.append(
                 f"{registry_path}: active entry {name!r} has no matching directory"
             )
+
+    if len(blocks) == 0:
+        errors.append(f"{registry_path}: no active change entries could be parsed")
 
     marker = "  feature-completeness-profiles:"
     if marker in registry:
@@ -67,6 +157,23 @@ def _check_active_changes(errors: list[str]) -> None:
         if not (change_root / "validation.md").is_file():
             errors.append(
                 "feature-completeness-profiles requires validation.md while active"
+            )
+
+
+def _check_live_roadmap_contract(errors: list[str]) -> None:
+    for path in CURRENT_ROADMAP_DOCS:
+        text = _read(path)
+        if str(LIVE_ROADMAP_ISSUE_ID) not in text:
+            errors.append(
+                f"{path}: missing canonical live roadmap reference #{LIVE_ROADMAP_ISSUE_ID}"
+            )
+        if "#90" in text or "issues/90" in text:
+            errors.append(
+                f"{path}: contains stale live-roadmap reference to issue #90"
+            )
+        if "#162" in text or "issues/162" in text:
+            errors.append(
+                f"{path}: contains stale live-roadmap reference to issue #162"
             )
 
 
@@ -191,6 +298,7 @@ def check() -> tuple[str, ...]:
 
     _check_active_changes(errors)
     _check_ci_gate_contract(errors)
+    _check_live_roadmap_contract(errors)
     return tuple(errors)
 
 
