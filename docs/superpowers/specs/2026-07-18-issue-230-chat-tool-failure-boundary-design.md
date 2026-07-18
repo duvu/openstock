@@ -33,11 +33,15 @@ the complete public error at 4,096 characters. It sanitizes the structured
 reason, remediation and correlation fields independently before composition,
 so no raw head/tail crop can orphan a credential marker while the bounded
 remediation and correlation suffix stays visible. This removes terminal
-controls, prevents truncation from reactivating links/styles, and redacts
+controls, prevents truncation or cross-field composition from reactivating
+links/styles, and redacts
 quoted inline credentials, URI user-info, Basic credentials, JWT-like tokens
 and PEM private-key bodies. Standalone Basic values are validated as encoded
-`user:password`, Bearer values use the complete token grammar, and benign
-research prose or host/port endpoints remain unchanged.
+`user:password`, including credentials cut at the bounded scan edge. Bearer
+credential candidates accept the complete token alphabet without treating
+long alphabetic research terms as standalone credentials. Parsed database
+host/port endpoints, including IPv6, query parameters and sentence punctuation,
+remain unchanged, while driver-qualified cropped DSN credentials are redacted.
 
 Only `ActionableToolExecutionError` receives a `[TOOL FAILED]` presentation and
 transcript type `tool_failed`. Known assistant input and plan validation receive
@@ -52,8 +56,10 @@ but their error summaries are sanitized and bounded before persistence.
 File-backed exception records apply their declared content mode recursively to
 message, stacktrace, context, likely cause and suggested next step, and preserve
 legacy bearer key/value redaction when using the shared sanitizer. Metadata mode
-retains no string content, and redacted nested context accepts JSON-valid key
-types while using the canonical sensitive-key vocabulary.
+retains no content in exception-record content fields without changing the
+established semantics of structural identifiers in other consumers. Redacted
+nested context accepts JSON-valid key types while using canonical sensitive-key
+prefix and suffix forms.
 
 ## Scope
 

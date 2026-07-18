@@ -115,15 +115,14 @@ def _redact_value(value: object, mode: str) -> object:
 def redact_str(s: str, mode: str | None = None) -> str:
     """Project string content according to the selected mode.
 
-    Metadata mode contains no string content, redacted mode removes recognized
-    credentials, and full mode returns *s* unchanged.
+    Metadata and redacted modes remove recognized credentials, while full mode
+    returns *s* unchanged. Callers that omit content in metadata mode must do so
+    at their structured record boundary.
     """
     if mode is None:
         mode = get_content_mode()
     if mode == "full":
         return s
-    if mode == "metadata":
-        return ""
     try:
         parsed = json.loads(s)
     except json.JSONDecodeError:

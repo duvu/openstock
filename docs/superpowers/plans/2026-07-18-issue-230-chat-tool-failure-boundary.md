@@ -221,7 +221,18 @@ endpoints while retaining cropped DSN credential defense. Unify nested
 sensitive-key classification, accept JSON-valid non-string context keys, and
 make metadata-mode exception records truly content-free.
 
-- [ ] **Step 9: Recommit and repeat exact-SHA review/publication gates**
+- [x] **Step 9: Correct sixth exact-commit composition and compatibility findings**
+
+Make independently sanitized public fields safe to compose so incomplete Rich
+fragments cannot join across reason/remediation boundaries. Recover and redact
+valid Basic credentials cut at the bounded scan edge, preserve alphabetic
+Bearer research prose, parse database host/port endpoints including IPv6,
+queries and sentence punctuation, and recognize driver-qualified cropped DSNs.
+Match canonical sensitive keys in prefix/suffix forms. Scope metadata-only
+content suppression to exception records so required closed-loop identifiers
+retain their established semantics.
+
+- [ ] **Step 10: Recommit and repeat exact-SHA review/publication gates**
 
 Run focused and full validation, five independent review lanes, the runtime
 debugging audit, exact-commit GitHub Actions and PR/issue reconciliation on the

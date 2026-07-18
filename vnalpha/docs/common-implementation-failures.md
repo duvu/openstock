@@ -232,6 +232,30 @@ standalone Basic payloads as decoded `user:password`, and cover the full Bearer
 while preserving ordinary host/port endpoints. Pair every positive credential
 fixture with negative prose, title, URL and renderer regressions.
 
+## 24. Safe fragments become unsafe after cropping or composition
+
+A bounded scan can cut a long credential into a fragment that no longer passes
+protocol validation even though its visible prefix survives. Separately escaped
+fields can also form valid Rich markup only after a reason, remediation or
+correlation value is joined to its neighbors.
+
+**Prevent it:** make end-of-scan credential handling conservative, and verify
+the final composed renderer input rather than only each field. Test credential
+markers on both sides of every scan boundary and adversarial incomplete markup
+across every field boundary.
+
+## 25. A content-mode primitive erases structural metadata
+
+A string redaction helper cannot infer whether its caller is passing message
+content or a required event type, status or correlation ID. Making metadata mode
+blank every string can crash typed models and destroy truthful audit identity far
+outside the record that motivated the change.
+
+**Prevent it:** apply content omission at a typed record boundary where field
+semantics are known. Run non-default content modes through real consumers and
+assert that content is omitted only where required while IDs, hashes, types and
+statuses remain usable.
+
 # Mandatory checklist
 
 ## Before coding
@@ -248,6 +272,8 @@ fixture with negative prose, title, URL and renderer regressions.
 - [ ] Confirm bounded behavior and the read-only research boundary.
 - [ ] Write the negative and backward-compatibility test matrix.
 - [ ] Pair credential positives with benign prose, endpoint, and renderer negatives.
+- [ ] Exercise credentials and markup across scan and structured-field boundaries.
+- [ ] Run every changed content mode through real consumers and preserve structural metadata.
 - [ ] Isolate offline tests from ambient localhost services and vendor state.
 
 ## During implementation
@@ -262,6 +288,7 @@ fixture with negative prose, title, URL and renderer regressions.
 - [ ] Derive nested sensitive-key checks from the canonical vocabulary and accept JSON-valid key types.
 - [ ] Redact structured fields before any crop can orphan their credential marker or delimiter.
 - [ ] Apply bounding and escaping in an order that leaves the final rendered value safe.
+- [ ] Verify independently safe fields remain safe after final composition.
 - [ ] Render only explicitly public structured failures; keep arbitrary nested exceptions generic.
 - [ ] Make remediation typed, ordered, executable, and root-cause-specific.
 - [ ] Preserve legacy defaults unless explicitly changed.

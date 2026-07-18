@@ -49,11 +49,10 @@ def capture_exception(
             function = frame.f_code.co_name
             tb_obj = tb_obj.tb_next
 
-        # Redact stacktrace in non-full modes
-        safe_tb = redact_str(tb_str, mode)
-        safe_msg = redact_str(str(exc), mode)
-
         status = redaction_status(mode)
+        metadata_only = status == "metadata"
+        safe_tb = "" if metadata_only else redact_str(tb_str, mode)
+        safe_msg = "" if metadata_only else redact_str(str(exc), mode)
         record: dict = {
             "event_id": uuid4().hex,
             "run_id": ctx.run_id,
@@ -68,8 +67,10 @@ def capture_exception(
             "function": function,
             "stacktrace": safe_tb,
             "stacktrace_hash": tb_hash,
-            "likely_cause": redact_str(likely_cause, mode),
-            "suggested_next_step": redact_str(suggested_next, mode),
+            "likely_cause": "" if metadata_only else redact_str(likely_cause, mode),
+            "suggested_next_step": (
+                "" if metadata_only else redact_str(suggested_next, mode)
+            ),
             "redaction_status": status,
         }
         if context and status != "metadata":

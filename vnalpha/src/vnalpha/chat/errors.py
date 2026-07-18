@@ -70,7 +70,7 @@ def sanitize_public_error(
         return ""
     raw = message[:_PUBLIC_ERROR_SCAN_CHARS]
     sanitized = " ".join(sanitize_text(raw).split())
-    escaped = escape(sanitized)
+    escaped = _escape_fragment(sanitized)
     if len(escaped) <= max_chars:
         return escaped
     return _escape_prefix(sanitized, max_chars - 1).rstrip() + "…"
@@ -110,11 +110,16 @@ def _escape_prefix(text: str, budget: int) -> str:
     low, high = 0, len(text)
     while low < high:
         midpoint = (low + high + 1) // 2
-        if len(escape(text[:midpoint])) <= budget:
+        if len(_escape_fragment(text[:midpoint])) <= budget:
             low = midpoint
         else:
             high = midpoint - 1
-    return escape(text[:low])
+    return _escape_fragment(text[:low])
+
+
+def _escape_fragment(text: str) -> str:
+    escaped = escape(text + "]")
+    return escaped[:-1]
 
 
 # ---------------------------------------------------------------------------

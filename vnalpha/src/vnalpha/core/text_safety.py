@@ -5,6 +5,7 @@ import binascii
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
+from urllib.parse import urlsplit
 
 _TERMINAL_CONTROLS = re.compile(
     r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))|[\x00-\x08\x0b-\x1f\x7f-\x9f]"
@@ -43,13 +44,14 @@ _STANDALONE_BASIC_AUTHORIZATION = re.compile(
     r"(?P<token>[A-Za-z0-9+/]+={0,2})(?![A-Za-z0-9+/=])"
 )
 _STANDALONE_BEARER_AUTHORIZATION = re.compile(
-    r"(?i)\b(bearer\s+)[A-Za-z0-9._~+/-]+={0,}"
+    r"(?i)\b(?P<prefix>bearer\s+)"
+    r"(?P<token>[A-Za-z0-9._~+/-]+={0,})"
 )
-_URI_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]{1,31}://)[^/\s@]+@")
+_URI = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]{1,31}://)(?P<body>[^\s]+)")
 _TRUNCATED_URI_USERINFO = re.compile(
-    r"(?i)\b((?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|"
-    r"redis(?:s)?|amqp(?:s)?|mssql|sqlserver|oracle)://)"
-    r"[^:/\s@]+:(?!\d{1,5}\Z)[^/\s@]+\Z"
+    r"(?i)\b(?P<scheme>(?:postgres(?:ql)?|mysql|mariadb|mongodb|"
+    r"redis(?:s)?|amqp(?:s)?|mssql|sqlserver|oracle)"
+    r"(?:\+[a-z0-9._-]+)*://)(?P<authority>[^/\s@]+)\Z"
 )
 _JWT = re.compile(
     r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
@@ -97,20 +99,67 @@ _MAX_ERROR_SUMMARY_SCAN_CHARS = _MAX_ERROR_SUMMARY_CHARS * 2
 
 def _redact_standalone_basic(match: re.Match[str]) -> str:
     token = match.group("token")
-    padded = token + ("=" * (-len(token) % 4))
-    try:
-        decoded = base64.b64decode(padded, validate=True)
-    except (binascii.Error, ValueError):
-        return match.group(0)
-    if b":" not in decoded:
+    candidates = [token]
+    if match.end() == len(match.string):
+        candidates.extend(token[:-trim] for trim in range(1, 4) if len(token) > trim)
+    for candidate in candidates:
+        if len(candidate) % 4 == 1:
+            continue
+        padded = candidate + ("=" * (-len(candidate) % 4))
+        try:
+            decoded = base64.b64decode(padded, validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        if b":" in decoded:
+            return f"{match.group('prefix')}[REDACTED]"
+    return match.group(0)
+
+
+def _redact_standalone_bearer(match: re.Match[str]) -> str:
+    token = match.group("token")
+    prose_token = token.removesuffix(".")
+    has_following_text = match.end() < len(match.string)
+    has_sentence_period = prose_token != token
+    if (
+        prose_token.isalpha()
+        and len(prose_token) > 4
+        and (has_following_text or has_sentence_period)
+    ):
         return match.group(0)
     return f"{match.group('prefix')}[REDACTED]"
+
+
+def _redact_uri_userinfo(match: re.Match[str]) -> str:
+    candidate = match.group(0)
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return candidate
+    if parsed.username is None or "@" not in parsed.netloc:
+        return candidate
+    host = parsed.netloc.rsplit("@", 1)[1]
+    suffix = match.group("body")[len(parsed.netloc) :]
+    return f"{match.group('scheme')}[REDACTED]@{host}{suffix}"
+
+
+def _redact_truncated_uri_userinfo(match: re.Match[str]) -> str:
+    candidate = match.group(0)
+    endpoint = candidate.rstrip(".,;!?")
+    parsed = urlsplit(endpoint)
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    if parsed.hostname and port is not None:
+        return candidate
+    return f"{match.group('scheme')}[REDACTED]"
 
 
 def is_sensitive_key(key: object) -> bool:
     normalized = str(key).strip().lower().replace("-", "_").replace(".", "_")
     return normalized in _SENSITIVE_KEYS or any(
-        normalized.endswith(f"_{sensitive}") for sensitive in _SENSITIVE_KEYS
+        normalized.startswith(f"{sensitive}_") or normalized.endswith(f"_{sensitive}")
+        for sensitive in _SENSITIVE_KEYS
     )
 
 
@@ -125,9 +174,9 @@ def sanitize_text(value: object, *, strip_rich: bool = True) -> str:
     text = _QUOTED_AUTHORIZATION_SINGLE.sub(r"\1'[REDACTED]'", text)
     text = _AUTHORIZATION.sub(r"\1[REDACTED]", text)
     text = _STANDALONE_BASIC_AUTHORIZATION.sub(_redact_standalone_basic, text)
-    text = _STANDALONE_BEARER_AUTHORIZATION.sub(r"\1[REDACTED]", text)
-    text = _URI_USERINFO.sub(r"\1[REDACTED]@", text)
-    text = _TRUNCATED_URI_USERINFO.sub(r"\1[REDACTED]", text)
+    text = _STANDALONE_BEARER_AUTHORIZATION.sub(_redact_standalone_bearer, text)
+    text = _URI.sub(_redact_uri_userinfo, text)
+    text = _TRUNCATED_URI_USERINFO.sub(_redact_truncated_uri_userinfo, text)
     text = _JWT.sub("[REDACTED]", text)
     text = _TRUNCATED_JWT.sub("[REDACTED]", text)
     return _INLINE_UNQUOTED_SECRET.sub(r"\1[REDACTED]", text)

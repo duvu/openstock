@@ -83,10 +83,15 @@ credential forms before persistence.
 Affected tool-trace and assistant-session audit error summaries SHALL also be
 sanitized and length-bounded while retaining truthful failure status and error
 type. Shared sanitization SHALL preserve benign research prose and ordinary
-host/port endpoints. File-backed exception records labeled `metadata` SHALL
+host/port endpoints, including database driver qualifiers, IPv6, query strings
+and sentence punctuation. Bounded scanning SHALL NOT expose a credential prefix
+when its token crosses the scan boundary. Independently sanitized public fields
+SHALL remain markup-safe after composition. File-backed exception records labeled `metadata` SHALL
 contain no message, stacktrace, cause, remediation or arbitrary-context content;
 records labeled `redacted` SHALL recursively sanitize every persisted context
-field without dropping the record for JSON-valid key types.
+field, including common sensitive-key prefix and suffix forms, without dropping
+the record for JSON-valid key types. Metadata handling at that exception-record
+boundary SHALL NOT erase structural identifiers required by other consumers.
 
 #### Scenario: Current-symbol provisioning fails
 - **GIVEN** `data.ensure_current_symbol` raises an explicitly public structured
@@ -127,6 +132,18 @@ field without dropping the record for JSON-valid key types.
 - **WHEN** it crosses the shared text-safety boundary
 - **THEN** the benign content remains unchanged rather than being classified as
   a standalone credential or cropped URI user information.
+
+#### Scenario: Sanitized fields are composed
+- **GIVEN** separate public reason and remediation fields contain incomplete
+  Rich fragments
+- **WHEN** the sanitized fields are composed into one actionable failure
+- **THEN** the final value contains no active markup and remains length-bounded.
+
+#### Scenario: Credential crosses the bounded scan edge
+- **GIVEN** a protocol-valid Basic credential begins inside the retained public
+  prefix and continues beyond the bounded scan window
+- **WHEN** public and audit-summary projections sanitize the value
+- **THEN** no credential token prefix survives either projection.
 
 #### Scenario: Metadata-only exception capture
 - **GIVEN** an exception record with message, stacktrace, cause, remediation and
