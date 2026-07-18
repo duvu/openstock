@@ -212,7 +212,16 @@ context, likely cause and suggested next step before a record can claim it is
 redacted. Add regressions over public, database-summary, free-text observability
 and complete serialized-error projections.
 
-- [ ] **Step 8: Recommit and repeat exact-SHA review/publication gates**
+- [x] **Step 8: Correct fifth exact-commit protocol and content-mode findings**
+
+Split standalone Basic and Bearer parsing by protocol grammar, including short
+Basic credentials and the complete Bearer token alphabet, without rewriting
+ordinary `Basic analysis` prose. Preserve benign HTTP(S) and database host/port
+endpoints while retaining cropped DSN credential defense. Unify nested
+sensitive-key classification, accept JSON-valid non-string context keys, and
+make metadata-mode exception records truly content-free.
+
+- [ ] **Step 9: Recommit and repeat exact-SHA review/publication gates**
 
 Run focused and full validation, five independent review lanes, the runtime
 debugging audit, exact-commit GitHub Actions and PR/issue reconciliation on the

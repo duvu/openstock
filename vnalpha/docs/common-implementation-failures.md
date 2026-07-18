@@ -218,6 +218,20 @@ content-bearing field before persistence. Preserve legacy credential-form
 coverage when consolidating sanitizers, and test the complete serialized record
 rather than a selected pair of fields.
 
+## 23. A credential regex ignores protocol grammar and benign consumers
+
+A broad standalone-auth regex can both miss valid short or dotted tokens and
+rewrite ordinary research text such as `Basic analysis`. A cropped-URI heuristic
+can likewise mistake `http://localhost:6900` for truncated user information.
+Because the shared sanitizer also serves normal CLI/TUI output, either mistake
+becomes a product-wide compatibility defect.
+
+**Prevent it:** model Basic and Bearer token grammars separately, validate
+standalone Basic payloads as decoded `user:password`, and cover the full Bearer
+`b64token` alphabet. Restrict incomplete-URI heuristics to relevant DSN schemes
+while preserving ordinary host/port endpoints. Pair every positive credential
+fixture with negative prose, title, URL and renderer regressions.
+
 # Mandatory checklist
 
 ## Before coding
@@ -233,6 +247,7 @@ rather than a selected pair of fields.
 - [ ] Enumerate mode-specific dispatchers and approval services before mocking any boundary.
 - [ ] Confirm bounded behavior and the read-only research boundary.
 - [ ] Write the negative and backward-compatibility test matrix.
+- [ ] Pair credential positives with benign prose, endpoint, and renderer negatives.
 - [ ] Isolate offline tests from ambient localhost services and vendor state.
 
 ## During implementation
@@ -244,6 +259,7 @@ rather than a selected pair of fields.
 - [ ] Reuse one service and one correlation ID across surfaces.
 - [ ] Sanitize public errors, database summaries, and file-backed error logs through one credential boundary.
 - [ ] Apply the declared redaction mode to every content-bearing field in each persisted record.
+- [ ] Derive nested sensitive-key checks from the canonical vocabulary and accept JSON-valid key types.
 - [ ] Redact structured fields before any crop can orphan their credential marker or delimiter.
 - [ ] Apply bounding and escaping in an order that leaves the final rendered value safe.
 - [ ] Render only explicitly public structured failures; keep arbitrary nested exceptions generic.

@@ -78,7 +78,10 @@ def test_public_error_truncation_cannot_reactivate_rich_markup() -> None:
             "Authorization=Basic equals-auth-private-230",
             "equals-auth-private-230",
         ),
-        ("Basic c3RhbmRhbG9uZS1wcml2YXRlLTIzMA==", "cml2YXRlLTIzMA"),
+        (
+            "Basic dXNlcjpzdGFuZGFsb25lLXByaXZhdGUtMjMw",
+            "zdGFuZGFsb25lLXByaXZhdGUtMjMw",
+        ),
         (
             'Authorization: Basic "quoted auth private 230"',
             "quoted auth private 230",
@@ -86,6 +89,9 @@ def test_public_error_truncation_cannot_reactivate_rich_markup() -> None:
         ("bearer=legacy-private-230", "legacy-private-230"),
         ("Bearer: legacy-colon-private-230", "legacy-colon-private-230"),
         ("Bearer standalone-private-230", "standalone-private-230"),
+        ("Basic YTo=", "YTo="),
+        ("Bearer abc", "abc"),
+        ("Bearer abcdefgh.rfc-tail-private-230~", "rfc-tail-private-230"),
         (
             'password="correct horse battery staple"',
             "horse battery staple",
@@ -107,6 +113,22 @@ def test_error_projections_redact_common_credential_forms(
     for sanitized in sanitized_values:
         assert private_fragment not in sanitized
         assert "[REDACTED]" in sanitized
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Basic analysis is available.",
+        "Use basic overview for this research note.",
+        "Service unavailable at http://localhost:6900",
+        "See https://example.com:443",
+        "Database unavailable at postgresql://localhost:5432",
+    ],
+)
+def test_error_projections_preserve_benign_prose_and_endpoints(message: str) -> None:
+    assert sanitize_public_error(message) == message
+    assert sanitize_error_summary(message) == message
+    assert redact_str(message, mode="redacted") == message
 
 
 def _boundary_crossing_credentials() -> tuple[str, ...]:
@@ -179,7 +201,7 @@ def test_captured_error_record_contains_no_common_credential_payload(tmp_path) -
         capture_exception(
             exc,
             context={
-                "detail": "Basic c3RhbmRhbG9uZS1wcml2YXRlLTIzMA==",
+                "detail": "Basic dXNlcjpzdGFuZGFsb25lLXByaXZhdGUtMjMw",
                 "legacy": "bearer=record-private-230",
             },
             run_ctx=run_context,
@@ -192,7 +214,79 @@ def test_captured_error_record_contains_no_common_credential_payload(tmp_path) -
     persisted = json.dumps(record, sort_keys=True)
     assert record["redaction_status"] == "redacted"
     assert not any(fragment in persisted for fragment in _PRIVATE_FRAGMENTS)
-    assert "cml2YXRlLTIzMA" not in persisted
+    assert "zdGFuZGFsb25lLXByaXZhdGUtMjMw" not in persisted
     assert "quoted auth private 230" not in persisted
     assert "suggested-next-private-230" not in persisted
     assert "record-private-230" not in persisted
+
+
+def test_captured_error_accepts_non_string_context_keys(tmp_path) -> None:
+    run_context = SimpleNamespace(
+        run_id="issue-230-non-string-context",
+        surface="test",
+        errors_path=tmp_path / "errors.jsonl",
+    )
+
+    try:
+        raise RuntimeError("Basic YTo=")
+    except RuntimeError as exc:
+        capture_exception(
+            exc,
+            context={
+                1: "Bearer abc",
+                "credential": "credential-private-230",
+                "nested": [
+                    {2: "bearer=private-230"},
+                    {"cookie": "cookie-private-230"},
+                    {"auth": "auth-private-230"},
+                ],
+            },
+            run_ctx=run_context,
+            mode="redacted",
+        )
+
+    record = json.loads(run_context.errors_path.read_text().strip())
+    persisted = json.dumps(record, sort_keys=True)
+    assert record["redaction_status"] == "redacted"
+    assert "YTo=" not in persisted
+    assert "Bearer abc" not in persisted
+    assert "private-230" not in persisted
+    assert "credential-private-230" not in persisted
+    assert "cookie-private-230" not in persisted
+    assert "auth-private-230" not in persisted
+
+
+def test_metadata_error_record_contains_no_content_fields(tmp_path) -> None:
+    run_context = SimpleNamespace(
+        run_id="issue-230-metadata",
+        surface="test",
+        errors_path=tmp_path / "errors.jsonl",
+    )
+    private_fragments = (
+        "message-private-230",
+        "context-private-230",
+        "cause-private-230",
+        "next-private-230",
+    )
+
+    try:
+        raise RuntimeError(private_fragments[0])
+    except RuntimeError as exc:
+        capture_exception(
+            exc,
+            context={"run_id": private_fragments[1]},
+            run_ctx=run_context,
+            likely_cause=private_fragments[2],
+            suggested_next=private_fragments[3],
+            mode="metadata",
+        )
+
+    record = json.loads(run_context.errors_path.read_text().strip())
+    persisted = json.dumps(record, sort_keys=True)
+    assert record["redaction_status"] == "metadata"
+    assert not any(fragment in persisted for fragment in private_fragments)
+    assert record["error_message"] == ""
+    assert record["stacktrace"] == ""
+    assert record["likely_cause"] == ""
+    assert record["suggested_next_step"] == ""
+    assert "context" not in record

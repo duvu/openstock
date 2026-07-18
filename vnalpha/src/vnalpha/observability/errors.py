@@ -53,6 +53,7 @@ def capture_exception(
         safe_tb = redact_str(tb_str, mode)
         safe_msg = redact_str(str(exc), mode)
 
+        status = redaction_status(mode)
         record: dict = {
             "event_id": uuid4().hex,
             "run_id": ctx.run_id,
@@ -69,9 +70,9 @@ def capture_exception(
             "stacktrace_hash": tb_hash,
             "likely_cause": redact_str(likely_cause, mode),
             "suggested_next_step": redact_str(suggested_next, mode),
-            "redaction_status": redaction_status(mode),
+            "redaction_status": status,
         }
-        if context:
+        if context and status != "metadata":
             record["context"] = redact_dict(context, mode)
         append_jsonl(ctx.errors_path, record)
     except Exception:  # noqa: BLE001

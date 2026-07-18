@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 
-from vnalpha.core.text_safety import sanitize_text
+from vnalpha.core.text_safety import is_sensitive_key, sanitize_text
 
 # ---------------------------------------------------------------------------
 # Sensitive key patterns (case-insensitive substring match)
@@ -72,9 +72,9 @@ def get_content_mode() -> str:
     return "redacted"
 
 
-def _is_sensitive_key(key: str) -> bool:
-    low = key.lower()
-    return any(pat in low for pat in SENSITIVE_PATTERNS)
+def _is_sensitive_key(key: object) -> bool:
+    low = str(key).lower()
+    return is_sensitive_key(key) or any(pat in low for pat in SENSITIVE_PATTERNS)
 
 
 def redact_dict(d: dict, mode: str | None = None) -> dict:
@@ -113,15 +113,17 @@ def _redact_value(value: object, mode: str) -> object:
 
 
 def redact_str(s: str, mode: str | None = None) -> str:
-    """Regex-replace secret-looking patterns in *s*.
+    """Project string content according to the selected mode.
 
-    In metadata or redacted mode, replaces «key=value» pairs where the key
-    matches a sensitive pattern.  In full mode returns *s* unchanged.
+    Metadata mode contains no string content, redacted mode removes recognized
+    credentials, and full mode returns *s* unchanged.
     """
     if mode is None:
         mode = get_content_mode()
     if mode == "full":
         return s
+    if mode == "metadata":
+        return ""
     try:
         parsed = json.loads(s)
     except json.JSONDecodeError:

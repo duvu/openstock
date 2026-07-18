@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -14,7 +16,7 @@ _RICH_TAGS = re.compile(
 _SECRET_FIELD = (
     r"(?:api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token|"
     r"client[_-]?secret|private[_-]?key|refresh[_-]?token|session[_-]?token|"
-    r"token|password|passwd|secret|authorization|bearer|cookie|credentials?)"
+    r"token|password|passwd|secret|authorization|bearer|auth|cookie|credentials?)"
 )
 _INLINE_DOUBLE_SECRET = re.compile(
     rf'(?i)(?P<prefix>["\']?{_SECRET_FIELD}["\']?\s*[=:]\s*)'
@@ -36,18 +38,18 @@ _AUTHORIZATION = re.compile(
     r"(?i)([\"']?authorization[\"']?\s*[:=]\s*[\"']?"
     r"(?:bearer|basic)\s+)[^\"'\s,;}]+"
 )
-_STANDALONE_QUOTED_AUTHORIZATION_DOUBLE = re.compile(
-    r'(?i)\b((?:bearer|basic)\s+)"(?:\\.|[^"\\])*(?:"|\Z)'
+_STANDALONE_BASIC_AUTHORIZATION = re.compile(
+    r"(?i)\b(?P<prefix>basic\s+)"
+    r"(?P<token>[A-Za-z0-9+/]+={0,2})(?![A-Za-z0-9+/=])"
 )
-_STANDALONE_QUOTED_AUTHORIZATION_SINGLE = re.compile(
-    r"(?i)\b((?:bearer|basic)\s+)'(?:\\.|[^'\\])*(?:'|\Z)"
-)
-_STANDALONE_AUTHORIZATION = re.compile(
-    r"(?i)\b((?:bearer|basic)\s+)[A-Za-z0-9+/=_-]{8,}"
+_STANDALONE_BEARER_AUTHORIZATION = re.compile(
+    r"(?i)\b(bearer\s+)[A-Za-z0-9._~+/-]+={0,}"
 )
 _URI_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]{1,31}://)[^/\s@]+@")
 _TRUNCATED_URI_USERINFO = re.compile(
-    r"(?i)\b([a-z][a-z0-9+.-]{1,31}://)[^:/\s@]+:[^/\s@]+\Z"
+    r"(?i)\b((?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|"
+    r"redis(?:s)?|amqp(?:s)?|mssql|sqlserver|oracle)://)"
+    r"[^:/\s@]+:(?!\d{1,5}\Z)[^/\s@]+\Z"
 )
 _JWT = re.compile(
     r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
@@ -81,6 +83,7 @@ _SENSITIVE_KEYS = frozenset(
         "secret",
         "authorization",
         "authorization_header",
+        "auth",
         "cookie",
         "credential",
         "credentials",
@@ -90,6 +93,18 @@ _SENSITIVE_KEYS = frozenset(
 )
 _MAX_ERROR_SUMMARY_CHARS = 4_096
 _MAX_ERROR_SUMMARY_SCAN_CHARS = _MAX_ERROR_SUMMARY_CHARS * 2
+
+
+def _redact_standalone_basic(match: re.Match[str]) -> str:
+    token = match.group("token")
+    padded = token + ("=" * (-len(token) % 4))
+    try:
+        decoded = base64.b64decode(padded, validate=True)
+    except (binascii.Error, ValueError):
+        return match.group(0)
+    if b":" not in decoded:
+        return match.group(0)
+    return f"{match.group('prefix')}[REDACTED]"
 
 
 def is_sensitive_key(key: object) -> bool:
@@ -109,9 +124,8 @@ def sanitize_text(value: object, *, strip_rich: bool = True) -> str:
     text = _QUOTED_AUTHORIZATION_DOUBLE.sub(r'\1"[REDACTED]"', text)
     text = _QUOTED_AUTHORIZATION_SINGLE.sub(r"\1'[REDACTED]'", text)
     text = _AUTHORIZATION.sub(r"\1[REDACTED]", text)
-    text = _STANDALONE_QUOTED_AUTHORIZATION_DOUBLE.sub(r'\1"[REDACTED]"', text)
-    text = _STANDALONE_QUOTED_AUTHORIZATION_SINGLE.sub(r"\1'[REDACTED]'", text)
-    text = _STANDALONE_AUTHORIZATION.sub(r"\1[REDACTED]", text)
+    text = _STANDALONE_BASIC_AUTHORIZATION.sub(_redact_standalone_basic, text)
+    text = _STANDALONE_BEARER_AUTHORIZATION.sub(r"\1[REDACTED]", text)
     text = _URI_USERINFO.sub(r"\1[REDACTED]@", text)
     text = _TRUNCATED_URI_USERINFO.sub(r"\1[REDACTED]", text)
     text = _JWT.sub("[REDACTED]", text)

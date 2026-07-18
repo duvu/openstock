@@ -82,7 +82,11 @@ credential forms before persistence.
 
 Affected tool-trace and assistant-session audit error summaries SHALL also be
 sanitized and length-bounded while retaining truthful failure status and error
-type.
+type. Shared sanitization SHALL preserve benign research prose and ordinary
+host/port endpoints. File-backed exception records labeled `metadata` SHALL
+contain no message, stacktrace, cause, remediation or arbitrary-context content;
+records labeled `redacted` SHALL recursively sanitize every persisted context
+field without dropping the record for JSON-valid key types.
 
 #### Scenario: Current-symbol provisioning fails
 - **GIVEN** `data.ensure_current_symbol` raises an explicitly public structured
@@ -117,6 +121,19 @@ type.
 - **WHEN** it reaches the chat boundary
 - **THEN** one sanitized, bounded `validation_error` message is rendered and
   persisted.
+
+#### Scenario: Shared sanitizer receives benign output
+- **GIVEN** normal CLI/TUI research prose or an HTTP(S)/database host and port
+- **WHEN** it crosses the shared text-safety boundary
+- **THEN** the benign content remains unchanged rather than being classified as
+  a standalone credential or cropped URI user information.
+
+#### Scenario: Metadata-only exception capture
+- **GIVEN** an exception record with message, stacktrace, cause, remediation and
+  nested arbitrary context
+- **WHEN** file-backed observability uses metadata content mode
+- **THEN** required structural fields remain while all content-bearing fields
+  are empty or absent and `redaction_status` is `metadata`.
 
 #### Scenario: Unexpected execution fails
 - **GIVEN** prepared natural-language preparation or execution raises an

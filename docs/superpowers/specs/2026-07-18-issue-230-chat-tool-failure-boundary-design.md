@@ -35,7 +35,9 @@ so no raw head/tail crop can orphan a credential marker while the bounded
 remediation and correlation suffix stays visible. This removes terminal
 controls, prevents truncation from reactivating links/styles, and redacts
 quoted inline credentials, URI user-info, Basic credentials, JWT-like tokens
-and PEM private-key bodies.
+and PEM private-key bodies. Standalone Basic values are validated as encoded
+`user:password`, Bearer values use the complete token grammar, and benign
+research prose or host/port endpoints remain unchanged.
 
 Only `ActionableToolExecutionError` receives a `[TOOL FAILED]` presentation and
 transcript type `tool_failed`. Known assistant input and plan validation receive
@@ -49,7 +51,9 @@ tool execution. Tool and assistant lifecycle rows remain diagnostically useful,
 but their error summaries are sanitized and bounded before persistence.
 File-backed exception records apply their declared content mode recursively to
 message, stacktrace, context, likely cause and suggested next step, and preserve
-legacy bearer key/value redaction when using the shared sanitizer.
+legacy bearer key/value redaction when using the shared sanitizer. Metadata mode
+retains no string content, and redacted nested context accepts JSON-valid key
+types while using the canonical sensitive-key vocabulary.
 
 ## Scope
 
