@@ -158,6 +158,134 @@ in-process wire fake for response behavior or an explicitly unreachable local
 endpoint for fail-closed behavior. Never let the ambient default service URL
 decide an offline test's expected status.
 
+## 19. Exception conversion destroys public/private provenance
+
+A lower layer may wrap both expected domain failures and arbitrary runtime
+exceptions in the same broad error type. If a presentation boundary later
+treats that type as public, provider internals, credentials, paths, or opaque
+debug data can escape despite regex redaction. Direct boundary tests miss the
+defect when they inject an exception after the unsafe conversion already
+happened.
+
+**Prevent it:** carry an explicit structured public-failure type containing only
+allowlisted reason, remediation, correlation and evidence fields. Keep ordinary
+tool errors and arbitrary exceptions on the generic presentation path, even if
+an internal compatibility wrapper converts them to a private assistant error
+type. Test from the real
+nested producer through conversion, persistence and rendering, including every
+approval and legacy branch. Treat text sanitization as defense in depth, not as
+the trust decision.
+
+## 20. A later transform undoes an earlier safety transform
+
+Escaping markup before length truncation can still be unsafe: a slice may drop
+the escape prefix while retaining the tag opener, turning inert text back into
+an active Rich link or style. Similar ordering mistakes can split redaction
+markers, encoded delimiters, or structured tokens.
+
+**Prevent it:** define safety over the final rendered and persisted value.
+Sanitize independently allowlisted fields before composing them; for opaque
+text, retain a bounded prefix and treat an incomplete credential at that
+boundary as sensitive instead of splicing an unredacted tail back in. Escape
+each retained sanitized field atomically, then assert the final character limit
+and parse the result with the real renderer. Route database summaries, JSONL
+errors and other stored projections through the same credential boundary.
+Include adversarial fixtures whose truncation boundary lands inside an escape
+sequence, quoted multi-word credential, URI user-info, Basic token, JWT or PEM
+body, not just short markup examples.
+
+## 21. A path test mocks away the dispatcher it is meant to verify
+
+A post-approval regression can appear green while replacing the approval
+dispatcher with a no-op. The test then proves only the shared exception
+presenter, not whether a safe data plan is incorrectly sent to a sandbox-only
+approval service before execution.
+
+**Prevent it:** exercise each mode-specific dispatcher through its real public
+entry point. Mock only external providers or deterministic failure sources, not
+the branch that selects safe-plan versus sandbox approval semantics. Assert the
+provider/tool was reached and that lifecycle state left `PREPARED` truthfully.
+
+## 22. A redaction label overstates the fields actually redacted
+
+Redacting an exception message and stacktrace is insufficient when the same
+record stores raw context, likely cause, or suggested next step while declaring
+`redaction_status='redacted'`. Replacing a legacy sanitizer can also silently
+drop established credential spellings such as `bearer=...`.
+
+**Prevent it:** apply the selected content mode recursively to every
+content-bearing field before persistence. Preserve legacy credential-form
+coverage when consolidating sanitizers, and test the complete serialized record
+rather than a selected pair of fields.
+
+## 23. A credential regex ignores protocol grammar and benign consumers
+
+A broad standalone-auth regex can both miss valid short or dotted tokens and
+rewrite ordinary research text such as `Basic analysis`. A cropped-URI heuristic
+can likewise mistake `http://localhost:6900` for truncated user information.
+Because the shared sanitizer also serves normal CLI/TUI output, either mistake
+becomes a product-wide compatibility defect.
+
+**Prevent it:** model Basic and Bearer token grammars separately, validate
+standalone Basic payloads as decoded `user:password`, and cover the full Bearer
+`b64token` alphabet. Restrict incomplete-URI heuristics to credential-bearing
+HTTP(S) and DSN schemes, distinguish parsed host/port and bracketed-IPv6
+endpoints, and fail closed when an `@` remains inside a malformed authority.
+Pair every positive credential fixture with negative prose, title, URL and
+renderer regressions.
+
+## 24. Safe fragments become unsafe after cropping or composition
+
+A bounded scan can cut a long credential into a fragment that no longer passes
+protocol validation even though its visible prefix survives. Separately escaped
+fields can also form valid Rich markup only after a reason, remediation or
+correlation value is joined to its neighbors.
+
+**Prevent it:** make end-of-scan credential handling conservative, and verify
+the final composed renderer input rather than only each field. Test credential
+markers and first protocol delimiters on both sides of every scan boundary, and
+test adversarial incomplete markup across every field boundary.
+
+## 25. A content-mode primitive erases structural metadata
+
+A string redaction helper cannot infer whether its caller is passing message
+content or a required event type, status or correlation ID. Making metadata mode
+blank every string can crash typed models and destroy truthful audit identity far
+outside the record that motivated the change.
+
+**Prevent it:** apply content omission at a typed record boundary where field
+semantics are known. Run non-default content modes through real consumers and
+assert that content is omitted only where required while IDs, hashes, types and
+statuses remain usable.
+
+## 26. Sensitive-key expansion leaks or erases unrelated structured values
+
+Delimiter-only normalization misses common JSON spellings such as
+`authHeader`, while applying every sensitive word as a prefix can classify
+ordinary operational fields such as `token_budgets` or `auth_status` as
+credentials. A second legacy substring matcher can silently override a correct
+canonical decision. The same helpers often serve exception records, command
+renderers, logs and clipboards, so either direction invalidates multiple
+surfaces.
+
+**Prevent it:** normalize common key casing before matching, keep exact and
+suffix compatibility, and require a credential-bearing affix for prefix
+matching. Make every consumer delegate to the canonical classifier. Pair nested
+credential positives with real structured-consumer negatives, including
+operational status and budget fields.
+
+## 27. Structured redaction treats map keys as harmless metadata
+
+Replacing a sensitive field's value does not make a record safe when the key
+itself contains `password=...`, an authorization token, terminal controls or
+markup. A record can therefore claim `redacted` while its serialized key names
+still carry the original secret.
+
+**Prevent it:** sanitize JSON-valid key names before persistence as well as
+classifying their values, preserve safe non-string keys where the boundary
+allows them, and assert over the complete serialized record with controlled
+secrets in both keys and values.
+
 # Mandatory checklist
 
 ## Before coding
@@ -169,8 +297,13 @@ decide an offline test's expected status.
 - [ ] Define typed request, result, status, issue, and evidence contracts.
 - [ ] Define required/optional/not-requested semantics.
 - [ ] Define the complete failure and audit boundary.
+- [ ] Preserve expected/actionable versus unexpected exception provenance across every wrapper.
+- [ ] Enumerate mode-specific dispatchers and approval services before mocking any boundary.
 - [ ] Confirm bounded behavior and the read-only research boundary.
 - [ ] Write the negative and backward-compatibility test matrix.
+- [ ] Pair credential positives with benign prose, endpoint, and renderer negatives.
+- [ ] Exercise credentials and markup across scan and structured-field boundaries.
+- [ ] Run every changed content mode through real consumers and preserve structural metadata.
 - [ ] Isolate offline tests from ambient localhost services and vendor state.
 
 ## During implementation
@@ -180,7 +313,13 @@ decide an offline test's expected status.
 - [ ] Do not equate row existence with readiness.
 - [ ] Do not default non-throwing work to success.
 - [ ] Reuse one service and one correlation ID across surfaces.
-- [ ] Sanitize public errors and audit summaries.
+- [ ] Sanitize public errors, database summaries, and file-backed error logs through one credential boundary.
+- [ ] Apply the declared redaction mode to every content-bearing field in each persisted record.
+- [ ] Derive nested sensitive-key checks from the canonical vocabulary and accept JSON-valid key types.
+- [ ] Redact structured fields before any crop can orphan their credential marker or delimiter.
+- [ ] Apply bounding and escaping in an order that leaves the final rendered value safe.
+- [ ] Verify independently safe fields remain safe after final composition.
+- [ ] Render only explicitly public structured failures; keep arbitrary nested exceptions generic.
 - [ ] Make remediation typed, ordered, executable, and root-cause-specific.
 - [ ] Preserve legacy defaults unless explicitly changed.
 - [ ] Reload and revalidate persisted output after builders run.
@@ -192,6 +331,8 @@ decide an offline test's expected status.
 - [ ] Exercise empty, partial, failed, and legacy-row cases.
 - [ ] Give every review finding an explicit disposition.
 - [ ] Review test expectations for semantic correctness.
+- [ ] Parse bounded public text with the real renderer and assert no active markup.
+- [ ] Exercise real safe-plan and sandbox post-approval dispatch without mocking the selector.
 - [ ] Run and report required full validation gates honestly.
 - [ ] Check CI on the exact commit; skipped is not passed.
 - [ ] Update OpenSpec evidence.

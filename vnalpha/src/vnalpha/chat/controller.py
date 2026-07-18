@@ -5,13 +5,21 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Callable, Literal
 
+from vnalpha.assistant.errors import (
+    ActionableToolExecutionError,
+    AssistantInputValidationError,
+    PlanValidationError,
+)
 from vnalpha.assistant.tool_policy import is_approval_required_plan, is_safe_plan
 from vnalpha.chat.errors import (
+    MAX_PUBLIC_ERROR_CHARS,
     ChatErrorKind,
     error_to_message_type,
+    format_actionable_tool_failure,
     format_refusal,
     format_runtime_error,
-    format_tool_failure,
+    format_validation_error,
+    sanitize_public_error,
 )
 from vnalpha.chat.events import (
     AssistantStage,
@@ -370,17 +378,6 @@ class ChatController:
                                 tool_name=event.tool_name,
                                 elapsed_ms=elapsed,
                             )
-                            failure_text = format_tool_failure(
-                                event.tool_name,
-                                f"failed after {elapsed}ms"
-                                if elapsed is not None
-                                else "failed",
-                            )
-                            self._persist_error_message(
-                                failure_text,
-                                ChatErrorKind.TOOL_FAILED,
-                                role="error",
-                            )
 
                     self._on_trace = _staged_on_trace
                     try:
@@ -430,6 +427,10 @@ class ChatController:
 
             return None
 
+        except ActionableToolExecutionError as exc:
+            return self._present_actionable_tool_failure(exc)
+        except (AssistantInputValidationError, PlanValidationError) as exc:
+            return self._present_validation_failure(exc)
         except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
@@ -470,9 +471,14 @@ class ChatController:
                 set_correlation_id(originating_correlation_id)
             self._persist_message("user", "Approved.", "plan_approval")
             try:
-                self._approve_prepared_turn(prepared)
+                if is_approval_required_plan(prepared.plan):
+                    self._approve_prepared_turn(prepared)
                 answer, _plan = self._execute_prepared_turn(prepared)
                 self._render_prepared_answer(answer)
+            except ActionableToolExecutionError as exc:
+                self._present_actionable_tool_failure(exc)
+            except (AssistantInputValidationError, PlanValidationError) as exc:
+                self._present_validation_failure(exc)
             except Exception:
                 error_text = format_runtime_error(
                     "Assistant request failed. Check logs and retry."
@@ -535,6 +541,10 @@ class ChatController:
                 self._persist_error_message(
                     refusal_text, ChatErrorKind.REFUSAL, role="assistant"
                 )
+        except ActionableToolExecutionError as exc:
+            self._present_actionable_tool_failure(exc)
+        except (AssistantInputValidationError, PlanValidationError) as exc:
+            self._present_validation_failure(exc)
         except Exception:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
@@ -920,6 +930,10 @@ class ChatController:
             answer, _plan = self._execute_prepared_turn(prepared)
             self._render_prepared_answer(answer)
             return None
+        except ActionableToolExecutionError as exc:
+            return self._present_actionable_tool_failure(exc)
+        except (AssistantInputValidationError, PlanValidationError) as exc:
+            return self._present_validation_failure(exc)
         except Exception:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
@@ -927,6 +941,27 @@ class ChatController:
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             return error_text
+
+    def _present_actionable_tool_failure(
+        self, exc: ActionableToolExecutionError
+    ) -> str:
+        error_text = format_actionable_tool_failure(exc.failure)
+        self._on_message("red", error_text)
+        self._persist_error_message(error_text, ChatErrorKind.TOOL_FAILED)
+        return error_text
+
+    def _present_validation_failure(
+        self, exc: AssistantInputValidationError | PlanValidationError
+    ) -> str:
+        prefix_chars = len("[WARNING] ")
+        error_text = format_validation_error(
+            sanitize_public_error(
+                str(exc), max_chars=MAX_PUBLIC_ERROR_CHARS - prefix_chars
+            )
+        )
+        self._on_message("yellow", error_text)
+        self._persist_error_message(error_text, ChatErrorKind.VALIDATION)
+        return error_text
 
     def _render_prepared_answer(self, answer) -> None:
         from vnalpha.assistant.models import AssistantAnswer, RefusalMessage

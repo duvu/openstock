@@ -15,13 +15,17 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from vnalpha.tools.executor import TraceEvent
 
-from vnalpha.assistant.errors import RefusalError, ToolExecutionError
+from vnalpha.assistant.errors import (
+    ActionableToolExecutionError,
+    RefusalError,
+    ToolExecutionError,
+)
 from vnalpha.assistant.models import AssistantPlan, ToolPlanStep
 from vnalpha.assistant.tool_policy import assert_safe_tool
 from vnalpha.core.logging import get_logger
 from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
 from vnalpha.data_availability.deep_readiness_models import ContextRequirement
-from vnalpha.tools.errors import ToolError
+from vnalpha.tools.errors import ActionableToolError, ToolError
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import TOOL_PERMISSIONS, build_local_tool_registry
 
@@ -249,7 +253,9 @@ class AssistantExecutor:
             return output
         except ToolExecutionError:
             raise
+        except ActionableToolError as exc:
+            raise ActionableToolExecutionError(exc.failure) from exc
         except ToolError as exc:
             raise ToolExecutionError(str(exc)) from exc
         except Exception as exc:
-            raise ToolExecutionError(f"Step '{step.tool_name}' failed: {exc}") from exc
+            raise ToolExecutionError(str(exc)) from exc

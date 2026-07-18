@@ -1,4 +1,4 @@
-# Tasks: chat data provisioning contract (issues #163 and #175)
+# Tasks: chat data provisioning contract (issues #163, #175, #228 and #230)
 
 - [x] 1. Add `force_refresh` to the data-availability ensure engine and legacy wrapper.
 - [x] 2. Add `ensure_current_symbol_ready` typed operation and `CurrentSymbolReadyResult`.
@@ -13,3 +13,10 @@
 - [x] 11. Update `docs/data-provisioning-commands.md`.
 - [x] 12. Record merged CI evidence for PR #168 and current focused regressions in `validation.md`.
 - [x] 13. Parse nullable, malformed, duplicate, empty, and oversized remediation payloads without crashing or emitting unbounded CLI/TUI content.
+- [x] 14. Add failing chat-boundary regressions for assistant tool failures, known validation, unexpected fallback, sanitization/bounds, `tool_failed` persistence and no duplicate generic message.
+- [x] 15. Map typed prepared-chat failures to their bounded public presentations without changing issue #228 stage/tool/correlation lifecycle behavior.
+- [x] 16. Run the focused chat/provisioning/lifecycle surface, strict OpenSpec validation and required repository gates; record exact outcomes in `validation.md`.
+- [x] 17. Preserve explicit public-failure provenance so arbitrary nested tool exceptions and ordinary tool errors remain generic and cannot leak internal detail.
+- [x] 18. Add red/green approval, legacy, real-executor and Rich-markup regressions; reuse typed presentation without duplicating semantic failure rows.
+- [x] 19. Add red/green legacy post-approval, real safe-plan approval dispatch, truncation- and composition-safe Rich escaping, protocol-valid quoted/short/scan-boundary credential redaction across public, database-summary and every file-backed error field, benign Bearer prose plus parsed IPv4/IPv6/query/punctuation endpoint compatibility, driver-qualified cropped-DSN coverage, canonical nested-key prefix/suffix handling, exception-scoped metadata-only persistence and assistant error-contract regressions; correct every reproduced defect and isolate affected tests from ambient localhost/default-warehouse state.
+- [ ] 20. Recommit the corrected candidate and repeat full gates, exact-SHA review/runtime audit, GitHub Actions and PR/issue reconciliation.

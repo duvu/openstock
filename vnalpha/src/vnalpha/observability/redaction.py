@@ -10,32 +10,8 @@ from __future__ import annotations
 
 import json
 import os
-import re
 
-# ---------------------------------------------------------------------------
-# Sensitive key patterns (case-insensitive substring match)
-# ---------------------------------------------------------------------------
-
-SENSITIVE_PATTERNS: tuple[str, ...] = (
-    "password",
-    "token",
-    "secret",
-    "api_key",
-    "apikey",
-    "authorization",
-    "bearer",
-    "private_key",
-    "access_key",
-    "passwd",
-)
-
-# Regex to match secret-like values in free-text strings
-_SECRET_VALUE_RE = re.compile(
-    r"(password|token|secret|api[_-]?key|apikey|authorization|bearer"
-    r"|private[_-]?key|access[_-]?key|passwd)"
-    r"\s*[=:]\s*\S+",
-    re.IGNORECASE,
-)
+from vnalpha.core.text_safety import is_sensitive_key, sanitize_text
 
 _REDACTED_PLACEHOLDER = "[REDACTED]"
 _REDACTED_STATUS = "redacted"
@@ -79,9 +55,8 @@ def get_content_mode() -> str:
     return "redacted"
 
 
-def _is_sensitive_key(key: str) -> bool:
-    low = key.lower()
-    return any(pat in low for pat in SENSITIVE_PATTERNS)
+def _is_sensitive_key(key: object) -> bool:
+    return is_sensitive_key(key)
 
 
 def redact_dict(d: dict, mode: str | None = None) -> dict:
@@ -100,10 +75,14 @@ def redact_dict(d: dict, mode: str | None = None) -> dict:
     # redacted (default)
     result: dict = {}
     for k, v in d.items():
-        if _is_sensitive_key(k):
-            result[k] = _REDACTED_PLACEHOLDER
+        safe_key_text = sanitize_text(k)
+        safe_key = (
+            k if not isinstance(k, str) and safe_key_text == str(k) else safe_key_text
+        )
+        if _is_sensitive_key(k) or _REDACTED_PLACEHOLDER in safe_key_text:
+            result[safe_key] = _REDACTED_PLACEHOLDER
         else:
-            result[k] = _redact_value(v, mode)
+            result[safe_key] = _redact_value(v, mode)
     return result
 
 
@@ -120,10 +99,11 @@ def _redact_value(value: object, mode: str) -> object:
 
 
 def redact_str(s: str, mode: str | None = None) -> str:
-    """Regex-replace secret-looking patterns in *s*.
+    """Project string content according to the selected mode.
 
-    In metadata or redacted mode, replaces «key=value» pairs where the key
-    matches a sensitive pattern.  In full mode returns *s* unchanged.
+    Metadata and redacted modes remove recognized credentials, while full mode
+    returns *s* unchanged. Callers that omit content in metadata mode must do so
+    at their structured record boundary.
     """
     if mode is None:
         mode = get_content_mode()
@@ -135,10 +115,7 @@ def redact_str(s: str, mode: str | None = None) -> str:
         parsed = None
     if isinstance(parsed, (dict, list)):
         return json.dumps(_redact_value(parsed, mode), sort_keys=True)
-    return _SECRET_VALUE_RE.sub(
-        lambda m: m.group(0).split("=")[0].split(":")[0] + "=[REDACTED]",
-        s,
-    )
+    return sanitize_text(s, strip_rich=False)
 
 
 def redaction_status(mode: str | None = None) -> str:

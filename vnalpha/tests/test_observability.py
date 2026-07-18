@@ -1182,8 +1182,10 @@ class TestCommandLifecycleWrapper:
 
 
 class TestCapturedSwallowedExceptions:
-    def test_slash_command_exception_captured(self, isolated_run_ctx):
+    def test_slash_command_exception_captured(self, isolated_run_ctx, tmp_path):
         from unittest.mock import patch
+
+        import duckdb
 
         from vnalpha.observability.jsonl import read_jsonl
 
@@ -1196,7 +1198,11 @@ class TestCapturedSwallowedExceptions:
             ):
                 from vnalpha.chat.controller import ChatController
 
-                ctrl = ChatController(on_message=lambda s, t: None)
+                warehouse_path = tmp_path / "slash-command.duckdb"
+                ctrl = ChatController(
+                    connection_factory=lambda: duckdb.connect(str(warehouse_path)),
+                    on_message=lambda s, t: None,
+                )
                 result = ctrl.handle_slash_command("/scan")
 
         assert result is not None

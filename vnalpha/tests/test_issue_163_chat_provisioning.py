@@ -219,7 +219,6 @@ def test_correlation_id_is_reused_when_supplied(monkeypatch):
         monkeypatch,
         _readiness(actions=("CACHE_HIT",), correlation_id="turn-123"),
         calls,
-        exercise_ensure=True,
     )
     conn = _fresh_conn()
     result = ensure_current_symbol_ready(
@@ -227,6 +226,7 @@ def test_correlation_id_is_reused_when_supplied(monkeypatch):
     )
     assert result.correlation_id == "turn-123"
     assert get_correlation_id() == "turn-123"
+    assert calls == [{"symbol": "FPT"}]
     conn.close()
 
 
