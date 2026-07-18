@@ -8,6 +8,9 @@ import pytest
 from vnalpha.data_availability.models import (
     DataArtifact,
     EnsureDataAction,
+    EnsureDataActionStatus,
+    EnsureDataResult,
+    EnsureDataStatus,
     EvidenceIssue,
     evidence_issue_artifact,
 )
@@ -16,6 +19,7 @@ from vnalpha.data_availability.planner import (
     plan_data_availability,
 )
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
+from vnalpha.data_availability.raw_evidence import get_raw_ohlcv_window_evidence
 from vnalpha.features.status import FEATURE_STATUS_CONTRACT_VERSION
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.migrations import run_migrations
@@ -195,6 +199,34 @@ def test_quality_issue_is_owned_by_canonical_ohlcv() -> None:
     )
 
 
+def test_raw_window_counts_distinct_trading_sessions() -> None:
+    conn = _fresh_conn()
+    _insert_raw(conn, "FPT")
+    _insert_raw(conn, "FPT")
+
+    evidence = get_raw_ohlcv_window_evidence(conn, "FPT", _DATE, _DATE)
+
+    assert evidence.row_count == 1
+
+
+def test_partial_raw_window_requires_provider_sync_before_canonical_build() -> None:
+    snapshot = _snapshot(canonical_bars=0, quality_status="unknown")
+
+    plan = plan_data_availability(
+        snapshot,
+        DataAvailabilityPolicy(
+            auto_sync=True,
+            min_required_bars=2,
+            require_benchmark_history=False,
+        ),
+    )
+
+    assert plan.actions == (
+        EnsureDataAction.OHLCV_SYNCED,
+        EnsureDataAction.CANONICAL_BUILT,
+    )
+
+
 @pytest.mark.parametrize(
     ("overrides", "expected"),
     [
@@ -256,6 +288,11 @@ def test_service_reloads_feature_evidence_before_scoring() -> None:
 
     assert score_calls == []
     assert EnsureDataAction.SCORED not in result.actions_taken
+    assert result.status is EnsureDataStatus.PARTIAL
+    assert _action_outcome_pair(result, EnsureDataAction.FEATURES_BUILT) == (
+        EnsureDataAction.FEATURES_BUILT,
+        EnsureDataActionStatus.FAILED,
+    )
     assert (
         EvidenceIssue.FEATURE_SNAPSHOT_MISSING
         in next(
@@ -264,6 +301,49 @@ def test_service_reloads_feature_evidence_before_scoring() -> None:
             if item.artifact is DataArtifact.FEATURE_SNAPSHOT
         ).issues
     )
+
+
+def _action_outcome_pair(
+    result: EnsureDataResult, action: EnsureDataAction
+) -> tuple[EnsureDataAction, EnsureDataActionStatus]:
+    outcome = next(item for item in result.action_outcomes if item.action is action)
+    return outcome.action, outcome.status
+
+
+def test_force_refresh_rescores_after_rebuilding_features() -> None:
+    from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
+
+    conn = _fresh_conn()
+    for symbol in ("FPT", "VNINDEX"):
+        _insert_symbol(conn, symbol)
+        _insert_canonical(conn, symbol, "pass")
+    _insert_raw(conn, "FPT")
+    _insert_feature(conn, "FPT")
+    _insert_score(conn, "FPT")
+    score_calls: list[str] = []
+
+    result = ensure_symbol_analysis_ready(
+        conn,
+        "FPT",
+        _DATE,
+        policy=DataAvailabilityPolicy(
+            auto_sync=True,
+            min_required_bars=1,
+            require_benchmark_history=False,
+        ),
+        force_refresh=True,
+        _sync_ohlcv_fn=lambda *_args, **_kwargs: {"inserted": 0},
+        _build_canonical_fn=lambda *_args, **_kwargs: {
+            "upserted": 0,
+            "rejected": 0,
+        },
+        _build_features_fn=lambda *_args, **_kwargs: {"built": 1, "skipped": 0},
+        _score_universe_fn=lambda *_args, **_kwargs: score_calls.append("score") or 1,
+    )
+
+    assert score_calls == ["score"]
+    assert EnsureDataAction.SCORED in result.actions_taken
+    assert result.status is EnsureDataStatus.READY
 
 
 def test_zero_scored_rows_is_a_typed_failed_action() -> None:

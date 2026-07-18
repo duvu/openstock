@@ -18,7 +18,8 @@ def get_raw_ohlcv_window_evidence(
     target_date: str,
 ) -> RawOHLCVWindowEvidence:
     query = (
-        "SELECT COUNT(*), MAX(CAST(time AS DATE))::VARCHAR "
+        "SELECT COUNT(DISTINCT CAST(time AS DATE)), "
+        "MAX(CAST(time AS DATE))::VARCHAR "
         "FROM market_ohlcv_raw "
         "WHERE symbol = ? AND interval = '1D' "
         "AND CAST(time AS DATE) >= ? AND CAST(time AS DATE) <= ? "

@@ -230,6 +230,19 @@ def test_correlation_id_is_reused_when_supplied(monkeypatch):
     conn.close()
 
 
+def test_unset_correlation_id_is_replaced(monkeypatch):
+    calls: list[dict] = []
+    _patch_service(monkeypatch, _readiness(actions=("CACHE_HIT",)), calls)
+    conn = _fresh_conn()
+
+    result = ensure_current_symbol_ready(
+        conn, "FPT", "2025-06-30", correlation_id="unset"
+    )
+
+    assert result.correlation_id not in {"", "unset"}
+    conn.close()
+
+
 # ===========================================================================
 # Explicit refresh — bounded incremental work, discloses actions
 # ===========================================================================

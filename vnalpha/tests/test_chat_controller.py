@@ -382,8 +382,7 @@ def test_handle_natural_language_refusal_emits_once():
     assert len(refusal_cards) == 1
 
 
-def test_handle_natural_language_posts_error_on_exception():
-    """handle_natural_language posts error message when ask() raises."""
+def test_handle_natural_language_sanitizes_unexpected_exception():
     from vnalpha.chat.controller import ChatController
 
     messages = []
@@ -392,11 +391,17 @@ def test_handle_natural_language_posts_error_on_exception():
         target_date="2026-07-07",
     )
 
-    with patch.object(ctrl, "_run_ask", side_effect=RuntimeError("LLM down")):
-        ctrl.handle_natural_language("What is happening?")
+    with patch.object(
+        ctrl,
+        "_run_ask",
+        side_effect=RuntimeError("provider internals must not leak"),
+    ):
+        result = ctrl.handle_natural_language("What is happening?")
 
     all_text = " ".join(t for _, t in messages)
-    assert "LLM down" in all_text or "Error" in all_text
+    assert result == "[ERROR] Assistant request failed. Check logs and retry."
+    assert result in all_text
+    assert "provider internals must not leak" not in all_text
 
 
 # ---------------------------------------------------------------------------

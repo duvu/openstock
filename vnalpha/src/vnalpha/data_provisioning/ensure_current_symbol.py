@@ -205,8 +205,7 @@ def ensure_current_symbol_ready(
 
 def _bind_correlation_id(correlation_id: str | None) -> str:
     if correlation_id:
-        set_correlation_id(parent=correlation_id)
-        return correlation_id
+        return set_correlation_id(parent=correlation_id)
     current = get_correlation_id()
     if current and current != "unset":
         return current

@@ -25,7 +25,7 @@ _CORRELATION_ID: ContextVar[str] = ContextVar("_obs_correlation_id", default="un
 
 
 def set_correlation_id(parent: str | None = None) -> str:
-    cid = parent if parent not in {None, ""} else uuid4().hex
+    cid = parent if parent not in {None, "", "unset"} else uuid4().hex
     _CORRELATION_ID.set(cid)
     return cid
 

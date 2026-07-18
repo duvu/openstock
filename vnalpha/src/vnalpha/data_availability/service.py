@@ -24,6 +24,7 @@ from vnalpha.data_availability.models import (
     EnsureDataActionStatus,
     EnsureDataResult,
     EnsureDataStatus,
+    EvidenceIssue,
 )
 from vnalpha.data_availability.observability import (
     log_ensure_cache_rejected,
@@ -35,6 +36,7 @@ from vnalpha.data_availability.planner import (
     plan_data_availability,
 )
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
+from vnalpha.data_availability.raw_evidence import get_raw_ohlcv_window_evidence
 from vnalpha.data_availability.results import (
     cache_hit_result,
     finalise_result,
@@ -127,7 +129,7 @@ def ensure_data_availability(
         snapshot = _snapshot(normalised_request)
         eligibility = evaluate_cache_eligibility(snapshot, request.policy)
         if eligibility.eligible and not normalised_request.force_refresh:
-            return cache_hit_result(result, snapshot)
+            return cache_hit_result(result, snapshot, request.policy)
         if normalised_request.force_refresh and eligibility.eligible:
             result.cache_rejection_reasons.append("force_refresh")
             log_ensure_cache_rejected(symbol, target_date, ("force_refresh",))
@@ -136,22 +138,21 @@ def ensure_data_availability(
             log_ensure_cache_rejected(symbol, target_date, eligibility.reasons)
 
         first_plan = plan_data_availability(snapshot, request.policy)
-        context = _action_context(normalised_request, snapshot, dependencies)
         _run_actions(
             tuple(
                 action
                 for action in first_plan.actions
                 if action is EnsureDataAction.SYMBOLS_SYNCED
             ),
-            context,
+            normalised_request,
+            dependencies,
             result,
         )
         snapshot = _snapshot(normalised_request)
         if not snapshot.symbol_known:
-            return missing_symbol_result(result, snapshot)
+            return missing_symbol_result(result, snapshot, request.policy)
 
         plan = plan_data_availability(snapshot, normalised_request.policy)
-        context = _action_context(normalised_request, snapshot, dependencies)
         provision_actions = tuple(
             action for action in plan.actions if action in _PROVISION_ACTIONS
         )
@@ -159,7 +160,7 @@ def ensure_data_availability(
             provision_actions = _augment_refresh_provision_actions(
                 provision_actions, snapshot, normalised_request.policy
             )
-        _run_actions(provision_actions, context, result)
+        _run_actions(provision_actions, normalised_request, dependencies, result)
         core_actions_completed = any(
             outcome.action in _PROVISION_ACTIONS
             and outcome.status is EnsureDataActionStatus.SUCCESS
@@ -180,18 +181,26 @@ def ensure_data_availability(
             feature_actions = (EnsureDataAction.FEATURES_BUILT,)
         _run_actions(
             feature_actions,
-            _action_context(normalised_request, snapshot, dependencies),
+            normalised_request,
+            dependencies,
             result,
         )
         snapshot = _snapshot(normalised_request)
         score_plan = plan_data_availability(snapshot, normalised_request.policy)
+        score_actions = tuple(
+            action for action in score_plan.actions if action is EnsureDataAction.SCORED
+        )
+        feature_refresh_completed = any(
+            outcome.action is EnsureDataAction.FEATURES_BUILT
+            and outcome.status is EnsureDataActionStatus.SUCCESS
+            for outcome in result.action_outcomes
+        )
+        if normalised_request.force_refresh and feature_refresh_completed:
+            score_actions = (EnsureDataAction.SCORED,)
         _run_actions(
-            tuple(
-                action
-                for action in score_plan.actions
-                if action is EnsureDataAction.SCORED
-            ),
-            _action_context(normalised_request, snapshot, dependencies),
+            score_actions,
+            normalised_request,
+            dependencies,
             result,
         )
         final_snapshot = _snapshot(normalised_request)
@@ -263,34 +272,30 @@ def _augment_refresh_provision_actions(
     return ordered
 
 
-def _augment_refresh_feature_actions(
-    planned: tuple[EnsureDataAction, ...],
-    snapshot: EnsureDataSnapshot,
-    policy: DataAvailabilityPolicy,
-) -> tuple[EnsureDataAction, ...]:
-    """Rebuild features and re-score during an explicit refresh when possible."""
-
-    if not policy.auto_sync:
-        return planned
-    if snapshot.canonical_bars >= policy.min_required_bars:
-        return (EnsureDataAction.FEATURES_BUILT, EnsureDataAction.SCORED)
-    return planned
-
-
 def _run_actions(
     actions: tuple[EnsureDataAction, ...],
-    context: ActionContext,
+    request: NormalizedEnsureRequest,
+    dependencies: EnsureDependencies,
     result: EnsureDataResult,
 ) -> None:
     failed: list[EnsureDataAction] = []
 
     def on_failure(action: EnsureDataAction, error: Exception) -> None:
         failed.append(action)
-        log_action_failure(action, context.symbol, error)
+        log_action_failure(action, request.symbol, error)
+
+    def run_and_verify(action: EnsureDataAction) -> None:
+        before = _snapshot(request)
+        execute_action(action, _action_context(request, before, dependencies))
+        after = _snapshot(request)
+        if not _action_postcondition_satisfied(action, request, after):
+            raise RuntimeError(
+                f"{action.value} postcondition was not satisfied after reload."
+            )
 
     completed, warnings = execute_planned_actions(
         actions,
-        lambda action: execute_action(action, context),
+        run_and_verify,
         on_failure,
     )
     result.actions_taken.extend(completed)
@@ -306,6 +311,84 @@ def _run_actions(
         for action in actions
     )
     result.warnings.extend(_legacy_warning(warning) for warning in warnings)
+
+
+def _action_postcondition_satisfied(
+    action: EnsureDataAction,
+    request: NormalizedEnsureRequest,
+    snapshot: EnsureDataSnapshot,
+) -> bool:
+    policy = request.policy
+    issues = set(evaluate_cache_eligibility(snapshot, policy).issues)
+    match action:
+        case EnsureDataAction.SYMBOLS_SYNCED:
+            return snapshot.symbol_known
+        case EnsureDataAction.OHLCV_SYNCED:
+            return _raw_window_ready(
+                snapshot.raw_ohlcv_bars,
+                snapshot.latest_raw_bar_date,
+                snapshot.target_date,
+                policy,
+            )
+        case EnsureDataAction.CANONICAL_BUILT:
+            return (
+                not issues.intersection(
+                    {
+                        EvidenceIssue.CANONICAL_HISTORY_INSUFFICIENT,
+                        EvidenceIssue.CANONICAL_GAPS_UNRESOLVED,
+                        EvidenceIssue.QUALITY_UNACCEPTABLE,
+                    }
+                )
+                and snapshot.latest_canonical_bar_date == snapshot.target_date
+            )
+        case EnsureDataAction.BENCHMARK_SYNCED:
+            evidence = get_raw_ohlcv_window_evidence(
+                request.conn,
+                policy.benchmark,
+                snapshot.lookback_start,
+                snapshot.target_date,
+            )
+            return _raw_window_ready(
+                evidence.row_count,
+                evidence.latest_bar_date,
+                snapshot.target_date,
+                policy,
+            )
+        case EnsureDataAction.BENCHMARK_CANONICAL_BUILT:
+            return (
+                EvidenceIssue.BENCHMARK_HISTORY_INSUFFICIENT not in issues
+                and snapshot.latest_benchmark_bar_date == snapshot.target_date
+            )
+        case EnsureDataAction.FEATURES_BUILT:
+            return not issues.intersection(
+                {
+                    EvidenceIssue.FEATURE_SNAPSHOT_MISSING,
+                    EvidenceIssue.FEATURE_SNAPSHOT_INVALID,
+                    EvidenceIssue.FEATURE_LINEAGE_INCOMPLETE,
+                }
+            )
+        case EnsureDataAction.SCORED:
+            return (
+                not issues.intersection(
+                    {
+                        EvidenceIssue.SCORE_MISSING,
+                        EvidenceIssue.SCORE_STALE,
+                        EvidenceIssue.LINEAGE_INCOMPLETE,
+                    }
+                )
+                and snapshot.candidate_score_as_of_date == snapshot.target_date
+            )
+        case EnsureDataAction.CACHE_HIT:
+            return True
+
+
+def _raw_window_ready(
+    row_count: int,
+    latest_bar_date: str | None,
+    target_date: str,
+    policy: DataAvailabilityPolicy,
+) -> bool:
+    return row_count >= policy.min_required_bars and latest_bar_date == target_date
 
 
 def _legacy_warning(warning: str) -> str:

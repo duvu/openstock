@@ -9,6 +9,11 @@ import duckdb
 from vnalpha.features.status import FEATURE_STATUS_CONTRACT_VERSION
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.migrations import run_migrations
+from vnalpha.warehouse.repositories import (
+    create_ingestion_run,
+    finish_ingestion_run,
+    insert_raw_ohlcv,
+)
 
 
 def _fresh_conn():
@@ -34,6 +39,30 @@ def _insert_canonical_bars(conn, symbol, dates, interval="1D"):
             """,
             [symbol, d, interval],
         )
+
+
+def _insert_raw_bars(conn, symbol, dates):
+    run_id = create_ingestion_run(conn, "test", f"/test/{symbol.lower()}")
+    insert_raw_ohlcv(
+        conn,
+        run_id,
+        symbol,
+        [
+            {
+                "time": value,
+                "interval": "1D",
+                "open": 100.0,
+                "high": 110.0,
+                "low": 90.0,
+                "close": 105.0,
+                "volume": 1_000_000.0,
+            }
+            for value in dates
+        ],
+        provider="test",
+        quality_status="pass",
+    )
+    finish_ingestion_run(conn, run_id, status="SUCCESS")
 
 
 def _insert_feature_snapshot(conn, symbol, date_str):
@@ -484,10 +513,13 @@ class TestFakeProviderFixtures:
             from datetime import date, timedelta
 
             base = date(2025, 6, 30)
+            dates = []
             for i in range(130):
                 d = base - timedelta(days=i)
                 if d.weekday() < 5:
-                    _insert_canonical_bars(conn, "HPG", [d.isoformat()])
+                    dates.append(d.isoformat())
+            _insert_raw_bars(conn, "HPG", dates)
+            _insert_canonical_bars(conn, "HPG", dates)
             return {"inserted": 130, "skipped": 0}
 
         def fake_build_canonical(conn, **kwargs):

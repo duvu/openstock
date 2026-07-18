@@ -15,7 +15,9 @@ import pytest
 
 from vnstock.providers.fiinquantx.normalize import normalize_ohlcv
 
-_FIXTURES = Path(__file__).parent.parent.parent / "fixtures" / "providers" / "fiinquantx"
+_FIXTURES = (
+    Path(__file__).parent.parent.parent / "fixtures" / "providers" / "fiinquantx"
+)
 
 pytestmark = pytest.mark.contract
 

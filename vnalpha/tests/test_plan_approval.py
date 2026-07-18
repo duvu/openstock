@@ -457,6 +457,46 @@ class TestPreparedSandboxApproval:
         assert approved_turns == [prepared]
         assert executed_turns == [prepared]
 
+    def test_approval_rebinds_the_prepared_turn_correlation(self) -> None:
+        from vnalpha.observability.context import (
+            get_correlation_id,
+            set_correlation_id,
+        )
+
+        ctrl, _messages = _make_controller(ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS)
+        plan = _make_plan(["sandbox.run_research_code"])
+        prepared = _make_prepared_turn(plan)
+        observed: list[str] = []
+
+        ctrl._prepare_turn = MagicMock(return_value=prepared)
+        ctrl._approve_prepared_turn = lambda _turn: observed.append(
+            get_correlation_id()
+        )
+        ctrl._execute_prepared_turn = lambda _turn: (
+            observed.append(get_correlation_id())
+            or (
+                AssistantAnswer(
+                    summary="Sandbox result",
+                    basis="sandbox",
+                    risks_caveats="",
+                    tool_trace_summary="",
+                ),
+                plan,
+            )
+        )
+
+        set_correlation_id("originating-turn")
+        ctrl.handle_natural_language("run sandbox analysis")
+        assert ctrl._pending_plan_turn_context == {
+            "prepared_turn_id": prepared.prepared_turn_id,
+            "correlation_id": "originating-turn",
+        }
+
+        set_correlation_id("approval-turn")
+        ctrl.approve_pending_plan()
+
+        assert observed == ["originating-turn", "originating-turn"]
+
 
 # ---------------------------------------------------------------------------
 # ChatController — cancel_pending_plan
@@ -589,6 +629,39 @@ class TestApprovePendingPlan:
         ctrl.approve_pending_plan()
 
         assert calls == [("show me watchlist", False, "# Workspace Context\nstate")]
+
+    def test_approve_rebinds_the_legacy_turn_correlation(self):
+        from vnalpha.observability.context import (
+            get_correlation_id,
+            set_correlation_id,
+        )
+
+        ctrl, _messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
+        plan = _make_plan(["watchlist.scan"])
+        answer = AssistantAnswer(
+            summary="Done",
+            basis="test",
+            risks_caveats="",
+            tool_trace_summary="",
+        )
+        observed: list[str] = []
+
+        ctrl._pending_plan = plan
+        ctrl._pending_plan_turn_context = {
+            "question": "show me watchlist",
+            "workspace_context": None,
+            "correlation_id": "originating-turn",
+        }
+
+        def fake_run_ask(question, *, no_execute=False, workspace_context=None):
+            observed.append(get_correlation_id())
+            return answer, plan
+
+        ctrl._run_ask = fake_run_ask
+        set_correlation_id("approval-turn")
+        ctrl.approve_pending_plan()
+
+        assert observed == ["originating-turn"]
 
 
 # ---------------------------------------------------------------------------

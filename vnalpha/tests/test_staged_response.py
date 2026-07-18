@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from vnalpha.chat.events import AssistantStage
+
 # ---------------------------------------------------------------------------
 # events module — unit tests
 # ---------------------------------------------------------------------------
@@ -12,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 def test_assistant_stage_has_all_seven_values():
     """AssistantStage enum must expose exactly the 7 documented lifecycle stages."""
-    from vnalpha.chat.events import AssistantStage
 
     expected = {
         "classifying",
@@ -332,6 +333,7 @@ def test_prepared_turn_runs_tools_before_synthesizing_and_final() -> None:
         assert controller._on_trace is not None
         controller._on_trace(TraceEvent("watchlist.scan", "RUNNING", None, "t1"))
         controller._on_trace(TraceEvent("watchlist.scan", "SUCCESS", 1.0, "t1"))
+        controller._emit_stage(AssistantStage.SYNTHESIZING)
         return answer, plan
 
     controller._execute_prepared_turn = execute

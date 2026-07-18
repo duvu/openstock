@@ -19,12 +19,14 @@ from vnalpha.data_availability.policy import DataAvailabilityPolicy
 
 
 def cache_hit_result(
-    result: EnsureDataResult, snapshot: EnsureDataSnapshot
+    result: EnsureDataResult,
+    snapshot: EnsureDataSnapshot,
+    policy: DataAvailabilityPolicy,
 ) -> EnsureDataResult:
     result.canonical_bars = snapshot.canonical_bars
     result.feature_snapshot_exists = snapshot.feature_snapshot_exists
     result.candidate_score_exists = True
-    _record_snapshot_evidence(result, snapshot)
+    _record_snapshot_evidence(result, snapshot, policy)
     result.actions_taken.append(EnsureDataAction.CACHE_HIT)
     result.action_outcomes.append(
         EnsureDataActionOutcome(
@@ -40,9 +42,11 @@ def cache_hit_result(
 
 
 def missing_symbol_result(
-    result: EnsureDataResult, snapshot: EnsureDataSnapshot
+    result: EnsureDataResult,
+    snapshot: EnsureDataSnapshot,
+    policy: DataAvailabilityPolicy,
 ) -> EnsureDataResult:
-    _record_snapshot_evidence(result, snapshot)
+    _record_snapshot_evidence(result, snapshot, policy)
     result.symbol_known = False
     result.errors.append(f"Symbol '{result.symbol}' not found in symbol_master.")
     result.status = EnsureDataStatus.FAILED
@@ -59,7 +63,7 @@ def finalise_result(
     result.canonical_bars = snapshot.canonical_bars
     result.feature_snapshot_exists = snapshot.feature_snapshot_exists
     result.candidate_score_exists = snapshot.candidate_score_exists
-    _record_snapshot_evidence(result, snapshot)
+    _record_snapshot_evidence(result, snapshot, policy)
     result.lineage_actions = [action.value for action in result.actions_taken]
     if snapshot.canonical_bars < policy.min_required_bars:
         result.freshness = "missing_canonical"
@@ -108,7 +112,9 @@ def finalise_result(
 
 
 def _record_snapshot_evidence(
-    result: EnsureDataResult, snapshot: EnsureDataSnapshot
+    result: EnsureDataResult,
+    snapshot: EnsureDataSnapshot,
+    policy: DataAvailabilityPolicy,
 ) -> None:
     result.symbol_known = snapshot.symbol_known
     result.benchmark_bars = snapshot.benchmark_bars
@@ -118,6 +124,7 @@ def _record_snapshot_evidence(
     result.artifact_evidence = snapshot.artifact_evidence
     result.core_evidence_evaluated = True
     result.extra["raw_window_ready"] = bool(
-        snapshot.raw_ohlcv_bars >= 1
+        snapshot.raw_ohlcv_bars >= policy.min_required_bars
         and snapshot.latest_raw_bar_date == snapshot.target_date
+        and snapshot.unresolved_true_gap_count == 0
     )
