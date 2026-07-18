@@ -47,11 +47,11 @@ _STANDALONE_BEARER_AUTHORIZATION = re.compile(
     r"(?i)\b(?P<prefix>bearer\s+)"
     r"(?P<token>[A-Za-z0-9._~+/-]+={0,})"
 )
-_URI = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]{1,31}://)(?P<body>[^\s]+)")
+_URI = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]{0,31}://)(?P<body>[^\s]+)")
 _TRUNCATED_URI_USERINFO = re.compile(
-    r"(?i)\b(?P<scheme>(?:postgres(?:ql)?|mysql|mariadb|mongodb|"
+    r"(?i)\b(?P<scheme>(?:https?|postgres(?:ql)?|mysql|mariadb|mongodb|"
     r"redis(?:s)?|amqp(?:s)?|mssql|sqlserver|oracle)"
-    r"(?:\+[a-z0-9._-]+)*://)(?P<authority>[^/\s@]+)\Z"
+    r"(?:\+[a-z0-9._-]+)*://)(?P<authority>[^/?#\s@]+)\Z"
 )
 _JWT = re.compile(
     r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
@@ -93,12 +93,33 @@ _SENSITIVE_KEYS = frozenset(
         "session_token",
     }
 )
+_SENSITIVE_KEY_PREFIXES = _SENSITIVE_KEYS - {"token", "session_id"}
+_BEARER_PROSE_TERMS = frozenset(
+    {
+        "bond",
+        "bonds",
+        "certificate",
+        "certificates",
+        "debt",
+        "instrument",
+        "instruments",
+        "note",
+        "notes",
+        "security",
+        "securities",
+        "share",
+        "shares",
+    }
+)
 _MAX_ERROR_SUMMARY_CHARS = 4_096
 _MAX_ERROR_SUMMARY_SCAN_CHARS = _MAX_ERROR_SUMMARY_CHARS * 2
+_URI_TRAILING_PUNCTUATION = ".,;!?)}'\""
 
 
-def _redact_standalone_basic(match: re.Match[str]) -> str:
+def _redact_standalone_basic(match: re.Match[str], *, scan_truncated: bool) -> str:
     token = match.group("token")
+    if scan_truncated and match.end() == len(match.string):
+        return f"{match.group('prefix')}[REDACTED]"
     candidates = [token]
     if match.end() == len(match.string):
         candidates.extend(token[:-trim] for trim in range(1, 4) if len(token) > trim)
@@ -116,15 +137,8 @@ def _redact_standalone_basic(match: re.Match[str]) -> str:
 
 
 def _redact_standalone_bearer(match: re.Match[str]) -> str:
-    token = match.group("token")
-    prose_token = token.removesuffix(".")
-    has_following_text = match.end() < len(match.string)
-    has_sentence_period = prose_token != token
-    if (
-        prose_token.isalpha()
-        and len(prose_token) > 4
-        and (has_following_text or has_sentence_period)
-    ):
+    token = match.group("token").removesuffix(".")
+    if token.lower() in _BEARER_PROSE_TERMS:
         return match.group(0)
     return f"{match.group('prefix')}[REDACTED]"
 
@@ -134,6 +148,15 @@ def _redact_uri_userinfo(match: re.Match[str]) -> str:
     try:
         parsed = urlsplit(candidate)
     except ValueError:
+        body = match.group("body")
+        authority_end = min(
+            (index for marker in "/?#" if (index := body.find(marker)) >= 0),
+            default=len(body),
+        )
+        authority = body[:authority_end]
+        if "@" in authority:
+            host = authority.rsplit("@", 1)[1]
+            return f"{match.group('scheme')}[REDACTED]@{host}{body[authority_end:]}"
         return candidate
     if parsed.username is None or "@" not in parsed.netloc:
         return candidate
@@ -144,8 +167,14 @@ def _redact_uri_userinfo(match: re.Match[str]) -> str:
 
 def _redact_truncated_uri_userinfo(match: re.Match[str]) -> str:
     candidate = match.group(0)
-    endpoint = candidate.rstrip(".,;!?")
-    parsed = urlsplit(endpoint)
+    endpoint = candidate.rstrip(_URI_TRAILING_PUNCTUATION)
+    authority = match.group("authority").rstrip(_URI_TRAILING_PUNCTUATION)
+    if ":" not in authority or (authority.startswith("[") and authority.endswith("]")):
+        return candidate
+    try:
+        parsed = urlsplit(endpoint)
+    except ValueError:
+        return f"{match.group('scheme')}[REDACTED]"
     try:
         port = parsed.port
     except ValueError:
@@ -156,14 +185,23 @@ def _redact_truncated_uri_userinfo(match: re.Match[str]) -> str:
 
 
 def is_sensitive_key(key: object) -> bool:
-    normalized = str(key).strip().lower().replace("-", "_").replace(".", "_")
-    return normalized in _SENSITIVE_KEYS or any(
-        normalized.startswith(f"{sensitive}_") or normalized.endswith(f"_{sensitive}")
-        for sensitive in _SENSITIVE_KEYS
+    camel_split = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", str(key).strip())
+    normalized = re.sub(
+        r"_+", "_", camel_split.lower().replace("-", "_").replace(".", "_")
+    )
+    return (
+        normalized in _SENSITIVE_KEYS
+        or any(
+            normalized.startswith(f"{sensitive}_")
+            for sensitive in _SENSITIVE_KEY_PREFIXES
+        )
+        or any(normalized.endswith(f"_{sensitive}") for sensitive in _SENSITIVE_KEYS)
     )
 
 
-def sanitize_text(value: object, *, strip_rich: bool = True) -> str:
+def sanitize_text(
+    value: object, *, strip_rich: bool = True, scan_truncated: bool = False
+) -> str:
     text = _TERMINAL_CONTROLS.sub("", str(value))
     if strip_rich:
         text = _RICH_TAGS.sub("", text)
@@ -173,7 +211,10 @@ def sanitize_text(value: object, *, strip_rich: bool = True) -> str:
     text = _QUOTED_AUTHORIZATION_DOUBLE.sub(r'\1"[REDACTED]"', text)
     text = _QUOTED_AUTHORIZATION_SINGLE.sub(r"\1'[REDACTED]'", text)
     text = _AUTHORIZATION.sub(r"\1[REDACTED]", text)
-    text = _STANDALONE_BASIC_AUTHORIZATION.sub(_redact_standalone_basic, text)
+    text = _STANDALONE_BASIC_AUTHORIZATION.sub(
+        lambda match: _redact_standalone_basic(match, scan_truncated=scan_truncated),
+        text,
+    )
     text = _STANDALONE_BEARER_AUTHORIZATION.sub(_redact_standalone_bearer, text)
     text = _URI.sub(_redact_uri_userinfo, text)
     text = _TRUNCATED_URI_USERINFO.sub(_redact_truncated_uri_userinfo, text)
@@ -183,8 +224,13 @@ def sanitize_text(value: object, *, strip_rich: bool = True) -> str:
 
 
 def sanitize_error_summary(value: object) -> str:
-    raw = str(value)[:_MAX_ERROR_SUMMARY_SCAN_CHARS]
-    sanitized = " ".join(sanitize_text(raw).split())
+    value_text = str(value)
+    raw = value_text[:_MAX_ERROR_SUMMARY_SCAN_CHARS]
+    sanitized = " ".join(
+        sanitize_text(
+            raw, scan_truncated=len(value_text) > _MAX_ERROR_SUMMARY_SCAN_CHARS
+        ).split()
+    )
     return sanitized[:_MAX_ERROR_SUMMARY_CHARS].rstrip()
 
 

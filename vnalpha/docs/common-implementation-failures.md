@@ -228,9 +228,11 @@ becomes a product-wide compatibility defect.
 
 **Prevent it:** model Basic and Bearer token grammars separately, validate
 standalone Basic payloads as decoded `user:password`, and cover the full Bearer
-`b64token` alphabet. Restrict incomplete-URI heuristics to relevant DSN schemes
-while preserving ordinary host/port endpoints. Pair every positive credential
-fixture with negative prose, title, URL and renderer regressions.
+`b64token` alphabet. Restrict incomplete-URI heuristics to credential-bearing
+HTTP(S) and DSN schemes, distinguish parsed host/port and bracketed-IPv6
+endpoints, and fail closed when an `@` remains inside a malformed authority.
+Pair every positive credential fixture with negative prose, title, URL and
+renderer regressions.
 
 ## 24. Safe fragments become unsafe after cropping or composition
 
@@ -255,6 +257,20 @@ outside the record that motivated the change.
 semantics are known. Run non-default content modes through real consumers and
 assert that content is omitted only where required while IDs, hashes, types and
 statuses remain usable.
+
+## 26. Sensitive-key expansion leaks or erases unrelated structured values
+
+Delimiter-only normalization misses common JSON spellings such as
+`authHeader`, while applying every sensitive word as a prefix can classify
+ordinary operational fields such as `token_budgets` as credentials. The same
+helper often serves exception records, command renderers, logs and clipboards,
+so either direction silently invalidates multiple surfaces.
+
+**Prevent it:** normalize common key casing before matching, keep exact and
+suffix compatibility, and allow prefix matching only for credential namespaces
+that do not collide with established metrics. Pair nested credential positives
+with real structured-consumer negatives, including operational status and
+budget fields.
 
 # Mandatory checklist
 

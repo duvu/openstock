@@ -69,7 +69,11 @@ def sanitize_public_error(
     if max_chars <= 0:
         return ""
     raw = message[:_PUBLIC_ERROR_SCAN_CHARS]
-    sanitized = " ".join(sanitize_text(raw).split())
+    sanitized = " ".join(
+        sanitize_text(
+            raw, scan_truncated=len(message) > _PUBLIC_ERROR_SCAN_CHARS
+        ).split()
+    )
     escaped = _escape_fragment(sanitized)
     if len(escaped) <= max_chars:
         return escaped

@@ -38,10 +38,14 @@ links/styles, and redacts
 quoted inline credentials, URI user-info, Basic credentials, JWT-like tokens
 and PEM private-key bodies. Standalone Basic values are validated as encoded
 `user:password`, including credentials cut at the bounded scan edge. Bearer
-credential candidates accept the complete token alphabet without treating
-long alphabetic research terms as standalone credentials. Parsed database
-host/port endpoints, including IPv6, query parameters and sentence punctuation,
-remain unchanged, while driver-qualified cropped DSN credentials are redacted.
+credential candidates accept the complete token alphabet; an explicit
+research-domain vocabulary preserves bearer bonds, shares, notes, instruments
+and securities while other candidates fail closed. Parsed HTTP(S) and database
+host/port endpoints, including driver qualifiers, IPv6, query parameters and
+sentence punctuation, remain unchanged. A no-`@` authority with a valid numeric
+port remains an endpoint because it has no syntactic credential evidence;
+invalid-port/cropped authorities and malformed authorities that still contain
+userinfo are redacted.
 
 Only `ActionableToolExecutionError` receives a `[TOOL FAILED]` presentation and
 transcript type `tool_failed`. Known assistant input and plan validation receive
@@ -58,8 +62,10 @@ message, stacktrace, context, likely cause and suggested next step, and preserve
 legacy bearer key/value redaction when using the shared sanitizer. Metadata mode
 retains no content in exception-record content fields without changing the
 established semantics of structural identifiers in other consumers. Redacted
-nested context accepts JSON-valid key types while using canonical sensitive-key
-prefix and suffix forms.
+nested context accepts JSON-valid key types while normalizing common camelCase
+and delimiter spellings for canonical sensitive-key prefix and suffix forms.
+Prefix matching excludes ambiguous `token_*` operational metrics such as the
+real memory-status budget fields.
 
 ## Scope
 

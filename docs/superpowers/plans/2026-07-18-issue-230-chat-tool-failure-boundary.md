@@ -232,7 +232,19 @@ Match canonical sensitive keys in prefix/suffix forms. Scope metadata-only
 content suppression to exception records so required closed-loop identifiers
 retain their established semantics.
 
-- [ ] **Step 10: Recommit and repeat exact-SHA review/publication gates**
+- [x] **Step 10: Correct seventh exact-commit scan and shared-consumer findings**
+
+Treat a Basic candidate ending at a known bounded-scan edge as incomplete and
+redact it even when the decoded colon lies beyond that edge. Preserve an
+explicit vocabulary of bearer financial instruments while redacting other
+standalone token candidates regardless of following punctuation or text.
+Fail closed for malformed URI authority userinfo and accept one-character URI
+schemes, while retaining valid numeric host/port and bracketed-IPv6 endpoints.
+Normalize camelCase nested credential keys but exclude ambiguous `token_*`
+operational metrics from prefix matching. Add real renderer and serialized
+exception-record compatibility coverage.
+
+- [ ] **Step 11: Recommit and repeat exact-SHA review/publication gates**
 
 Run focused and full validation, five independent review lanes, the runtime
 debugging audit, exact-commit GitHub Actions and PR/issue reconciliation on the
