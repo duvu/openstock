@@ -5,6 +5,11 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Callable, Literal
 
+from vnalpha.assistant.errors import (
+    AssistantInputValidationError,
+    PlanValidationError,
+    ToolExecutionError,
+)
 from vnalpha.assistant.tool_policy import is_approval_required_plan, is_safe_plan
 from vnalpha.chat.errors import (
     ChatErrorKind,
@@ -12,6 +17,8 @@ from vnalpha.chat.errors import (
     format_refusal,
     format_runtime_error,
     format_tool_failure,
+    format_validation_error,
+    sanitize_public_error,
 )
 from vnalpha.chat.events import (
     AssistantStage,
@@ -920,6 +927,16 @@ class ChatController:
             answer, _plan = self._execute_prepared_turn(prepared)
             self._render_prepared_answer(answer)
             return None
+        except ToolExecutionError as exc:
+            error_text = f"[TOOL FAILED] {sanitize_public_error(str(exc))}"
+            self._on_message("red", error_text)
+            self._persist_error_message(error_text, ChatErrorKind.TOOL_FAILED)
+            return error_text
+        except (AssistantInputValidationError, PlanValidationError) as exc:
+            error_text = format_validation_error(sanitize_public_error(str(exc)))
+            self._on_message("yellow", error_text)
+            self._persist_error_message(error_text, ChatErrorKind.VALIDATION)
+            return error_text
         except Exception:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."

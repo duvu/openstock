@@ -106,10 +106,10 @@ class TestErrorToMessageType:
 
         assert error_to_message_type(ChatErrorKind.REFUSAL) == "refusal"
 
-    def test_tool_failed_maps_to_tool_trace_event(self):
+    def test_tool_failed_maps_to_tool_failed(self):
         from vnalpha.chat.errors import ChatErrorKind, error_to_message_type
 
-        assert error_to_message_type(ChatErrorKind.TOOL_FAILED) == "tool_trace_event"
+        assert error_to_message_type(ChatErrorKind.TOOL_FAILED) == "tool_failed"
 
 
 # ---------------------------------------------------------------------------

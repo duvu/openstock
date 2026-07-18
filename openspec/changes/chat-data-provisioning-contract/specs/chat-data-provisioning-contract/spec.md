@@ -64,3 +64,34 @@ assistant plans.
 - **WHEN** eligibility is evaluated
 - **THEN** `data.ensure_current_symbol` is assistant- and autonomous-eligible
   while `data.fetch` is not.
+
+### Requirement: Actionable typed failures survive the chat boundary
+
+The prepared natural-language chat boundary SHALL render and persist a known
+assistant tool failure exactly once as `tool_failed`. Its public text SHALL be
+sanitized and length-bounded while retaining the available readiness reason,
+remediation and correlation ID. Known request and plan validation failures SHALL
+use validation presentation. Unexpected exceptions SHALL continue to use the
+generic retry presentation and SHALL NOT expose exception details.
+
+#### Scenario: Current-symbol provisioning fails
+- **GIVEN** `data.ensure_current_symbol` raises a typed tool failure containing a
+  readiness reason, remediation and correlation ID
+- **WHEN** prepared natural-language execution reaches the chat boundary
+- **THEN** one visible and persisted `tool_failed` message retains those public
+  details, contains no terminal controls or secrets, and no second generic error
+  is emitted.
+
+#### Scenario: Known validation fails
+- **GIVEN** prepared natural-language preparation raises a known request or plan
+  validation error
+- **WHEN** it reaches the chat boundary
+- **THEN** one sanitized, bounded `validation_error` message is rendered and
+  persisted.
+
+#### Scenario: Unexpected execution fails
+- **GIVEN** prepared natural-language preparation or execution raises an
+  unexpected exception
+- **WHEN** it reaches the chat boundary
+- **THEN** the existing generic retry message is rendered and persisted as a
+  runtime error without exposing the exception text.

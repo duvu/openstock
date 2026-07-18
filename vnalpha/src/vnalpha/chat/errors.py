@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Final
+
+from vnalpha.core.text_safety import sanitize_text
+
+MAX_PUBLIC_ERROR_CHARS: Final = 4_096
+_PUBLIC_ERROR_SUFFIX_CHARS: Final = MAX_PUBLIC_ERROR_CHARS * 3 // 4
 
 
 class ChatErrorKind(str, Enum):
@@ -51,6 +57,19 @@ def format_tool_failure(tool_name: str, error: str) -> str:
     return f"[TOOL FAILED] {tool_name}: {error}"
 
 
+def sanitize_public_error(message: str) -> str:
+    """Return safe bounded text while retaining its actionable suffix."""
+    sanitized = " ".join(sanitize_text(message).split())
+    if len(sanitized) <= MAX_PUBLIC_ERROR_CHARS:
+        return sanitized
+    prefix_chars = MAX_PUBLIC_ERROR_CHARS - _PUBLIC_ERROR_SUFFIX_CHARS - 1
+    return (
+        sanitized[:prefix_chars].rstrip()
+        + "…"
+        + sanitized[-_PUBLIC_ERROR_SUFFIX_CHARS:].lstrip()
+    )
+
+
 # ---------------------------------------------------------------------------
 # message_type mapping
 # ---------------------------------------------------------------------------
@@ -59,7 +78,7 @@ _KIND_TO_MESSAGE_TYPE: dict[ChatErrorKind, str] = {
     ChatErrorKind.VALIDATION: "validation_error",
     ChatErrorKind.RUNTIME: "error",
     ChatErrorKind.REFUSAL: "refusal",
-    ChatErrorKind.TOOL_FAILED: "tool_trace_event",
+    ChatErrorKind.TOOL_FAILED: "tool_failed",
 }
 
 
