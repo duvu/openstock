@@ -2,27 +2,40 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from shlex import quote
 
 from vnalpha.data_availability.deep_readiness_models import (
     RemediationAction,
     RemediationStep,
 )
+from vnalpha.data_availability.models import EvidenceIssue
 from vnalpha.data_availability.policy import DEFAULT_POLICY
 
 
-def remediation_steps(
-    artifact: str, symbol: str, resolved_date: str, lookback_start: str
-) -> tuple[RemediationStep, ...]:
-    safe_symbol = quote(symbol)
+@dataclass(frozen=True, slots=True)
+class RemediationRequest:
+    artifact: str
+    symbol: str
+    resolved_date: str
+    lookback_start: str
+    issues: tuple[EvidenceIssue, ...] = ()
+    raw_window_ready: bool = False
+
+
+def remediation_steps(request: RemediationRequest) -> tuple[RemediationStep, ...]:
+    artifact = request.artifact
+    safe_symbol = quote(request.symbol)
     steps = {
         "symbol_master": (_symbols_step(artifact),),
-        "canonical_ohlcv": _canonical_steps(
-            artifact, safe_symbol, lookback_start, resolved_date
+        "canonical_ohlcv": _canonical_steps(request, safe_symbol),
+        "benchmark_ohlcv": _benchmark_steps(
+            artifact, request.lookback_start, request.resolved_date
         ),
-        "benchmark_ohlcv": _benchmark_steps(artifact, lookback_start, resolved_date),
-        "feature_snapshot": (_features_step(artifact, safe_symbol, resolved_date),),
-        "candidate_score": (_score_step(artifact, safe_symbol, resolved_date),),
+        "feature_snapshot": (
+            _features_step(artifact, safe_symbol, request.resolved_date),
+        ),
+        "candidate_score": (_score_step(artifact, safe_symbol, request.resolved_date),),
     }
     return steps.get(artifact, ())
 
@@ -39,28 +52,35 @@ def _symbols_step(artifact: str) -> RemediationStep:
 
 
 def _canonical_steps(
-    artifact: str, symbol: str, lookback_start: str, resolved_date: str
-) -> tuple[RemediationStep, RemediationStep]:
+    request: RemediationRequest, symbol: str
+) -> tuple[RemediationStep, ...]:
+    build = RemediationStep(
+        action=RemediationAction.BUILD_CANONICAL,
+        artifact=request.artifact,
+        command_surface="cli",
+        command=f"vnalpha build canonical --symbol {symbol}",
+        description="Build and validate canonical OHLCV from persisted raw bars.",
+        required=True,
+    )
+    if (
+        request.raw_window_ready
+        and EvidenceIssue.CANONICAL_GAPS_UNRESOLVED not in request.issues
+    ):
+        return (build,)
     return (
         RemediationStep(
             action=RemediationAction.SYNC_OHLCV,
-            artifact=artifact,
+            artifact=request.artifact,
             command_surface="cli",
             command=(
                 "vnalpha sync ohlcv "
-                f"--symbols {symbol} --start {lookback_start} --end {resolved_date}"
+                f"--symbols {symbol} --start {request.lookback_start} "
+                f"--end {request.resolved_date}"
             ),
             description="Download the required symbol OHLCV window.",
             required=True,
         ),
-        RemediationStep(
-            action=RemediationAction.BUILD_CANONICAL,
-            artifact=artifact,
-            command_surface="cli",
-            command=f"vnalpha build canonical --symbol {symbol}",
-            description="Build canonical OHLCV from downloaded bars.",
-            required=True,
-        ),
+        build,
     )
 
 

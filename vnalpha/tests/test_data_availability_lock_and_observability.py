@@ -189,6 +189,7 @@ class TestObservabilityEvents:
 
         from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
         from vnalpha.data_availability.policy import DataAvailabilityPolicy
+        from vnalpha.features.status import FEATURE_STATUS_CONTRACT_VERSION
 
         events: list[str] = []
 
@@ -209,17 +210,37 @@ class TestObservabilityEvents:
                 """,
                 [symbol],
             )
+        feature_lineage = json.dumps(
+            {
+                "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
+                "benchmark_symbol": "VNINDEX",
+                "selected_provider": "test",
+                "ingestion_run_id": "test-run",
+            }
+        )
         conn.execute(
             """
             INSERT INTO feature_snapshot
             (symbol, date, close, as_of_bar_date, feature_data_status,
              feature_build_version, feature_generated_at, feature_profile,
              neutral_completeness, relative_strength_completeness,
-             required_bar_count, observed_bar_count, feature_completeness_rule_version)
+             required_bar_count, observed_bar_count, feature_completeness_rule_version,
+             lineage_json)
             VALUES ('FPT', '2025-06-30', 10.5, '2025-06-30', 'EXACT_DATE',
                     'test-v1', current_timestamp, 'STANDARD_120', 'COMPLETE',
-                    'COMPLETE', 120, 120, 'feature-completeness-v1')
-            """
+                    'COMPLETE', 120, 120, 'feature-completeness-v1', ?)
+            """,
+            [feature_lineage],
+        )
+        conn.executemany(
+            "INSERT INTO relative_strength_snapshot "
+            "(symbol, date, benchmark_symbol, horizon_sessions, relative_return, "
+            "source_bar_date, benchmark_bar_date, source_row_count, "
+            "benchmark_row_count, data_status, methodology_version, generated_at, "
+            "lineage_json) VALUES ('FPT', '2025-06-30', 'VNINDEX', ?, 0.1, "
+            "'2025-06-30', '2025-06-30', 120, 120, 'SUCCESS', 'test-v1', "
+            "current_timestamp, ?)",
+            [[horizon, feature_lineage] for horizon in (20, 60)],
         )
         lineage = {
             "as_of_bar_date": "2025-06-30",

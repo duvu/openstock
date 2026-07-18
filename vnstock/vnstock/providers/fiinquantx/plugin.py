@@ -14,9 +14,9 @@ from vnstock.providers.fiinquantx.bridge import (
 )
 from vnstock.providers.fiinquantx.exceptions import (
     FiinQuantXInvalidRequestError,
-    FiinQuantXSchemaError,
     FiinQuantXNotInstalledError,
     FiinQuantXProviderError,
+    FiinQuantXSchemaError,
     FiinQuantXVersionError,
     map_fiinquantx_exception,
 )

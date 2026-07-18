@@ -68,9 +68,14 @@ def test_prepare_classifies_current_prompt_only_and_execute_does_not_replan() ->
     prepared_for_execution = replace(
         prepared_for_execution, plan_hash=plan_hash(prepared_for_execution.plan)
     )
-    answer, _ = app.execute_prepared(prepared_for_execution)
+    synthesis_call_counts: list[int] = []
+    answer, _ = app.execute_prepared(
+        prepared_for_execution,
+        on_synthesizing=lambda: synthesis_call_counts.append(len(llm.calls)),
+    )
 
     assert answer.summary == "ok"
+    assert synthesis_call_counts == [1]
     assert len(llm.calls) == 2
     conn.close()
 

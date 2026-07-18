@@ -7,7 +7,7 @@ from enum import Enum
 
 import duckdb
 
-from vnalpha.data_availability.models import JsonValue
+from vnalpha.data_availability.models import EnsureDataActionOutcome, JsonValue
 
 
 class ReadinessArtifactStatus(str, Enum):
@@ -137,14 +137,21 @@ class ReadinessResult:
     warnings: tuple[str, ...]
     errors: tuple[str, ...]
     correlation_id: str
+    action_outcomes: tuple[EnsureDataActionOutcome, ...] = ()
 
     @property
     def is_ready(self) -> bool:
-        return not self.errors and all(
-            artifact.status
-            in {ReadinessArtifactStatus.READY, ReadinessArtifactStatus.PROVISIONED}
-            for artifact in self.artifacts
-            if artifact.blocking
+        return (
+            not self.errors
+            and not any(
+                outcome.status.value == "FAILED" for outcome in self.action_outcomes
+            )
+            and all(
+                artifact.status
+                in {ReadinessArtifactStatus.READY, ReadinessArtifactStatus.PROVISIONED}
+                for artifact in self.artifacts
+                if artifact.blocking
+            )
         )
 
     def to_panel_dict(self) -> dict[str, JsonValue]:
@@ -158,6 +165,10 @@ class ReadinessResult:
             "resolved_date": self.resolved_date,
             "correlation_id": self.correlation_id,
             "status": "READY" if self.is_ready else "FAILED",
+            "action_outcomes": [
+                {"action": outcome.action.value, "status": outcome.status.value}
+                for outcome in self.action_outcomes
+            ],
             "optional_missing_data": optional_missing_data,
             "artifacts": [
                 {

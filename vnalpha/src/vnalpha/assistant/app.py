@@ -310,6 +310,7 @@ class AssistantApp:
         prepared: PreparedAssistantTurn,
         *,
         on_trace_event: "Callable[[TraceEvent], None] | None" = None,
+        on_synthesizing: "Callable[[], None] | None" = None,
     ) -> tuple[AssistantAnswer | RefusalMessage, AssistantPlan]:
         """Execute the exact prepared plan without reclassification or replanning."""
 
@@ -372,6 +373,8 @@ class AssistantApp:
             )
             finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="FAILED")
             raise
+        if on_synthesizing is not None:
+            on_synthesizing()
         synthesis_trace_id = create_llm_trace(
             self._conn,
             assistant_session_id=prepared.assistant_session_id,

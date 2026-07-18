@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import json
+
 import duckdb
 
+from vnalpha.features.status import FEATURE_STATUS_CONTRACT_VERSION
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.migrations import run_migrations
+from vnalpha.warehouse.repositories import (
+    create_ingestion_run,
+    finish_ingestion_run,
+    insert_raw_ohlcv,
+)
 
 
 def _fresh_conn():
@@ -33,25 +41,68 @@ def _insert_canonical_bars(conn, symbol, dates, interval="1D"):
         )
 
 
+def _insert_raw_bars(conn, symbol, dates):
+    run_id = create_ingestion_run(conn, "test", f"/test/{symbol.lower()}")
+    insert_raw_ohlcv(
+        conn,
+        run_id,
+        symbol,
+        [
+            {
+                "time": value,
+                "interval": "1D",
+                "open": 100.0,
+                "high": 110.0,
+                "low": 90.0,
+                "close": 105.0,
+                "volume": 1_000_000.0,
+            }
+            for value in dates
+        ],
+        provider="test",
+        quality_status="pass",
+    )
+    finish_ingestion_run(conn, run_id, status="SUCCESS")
+
+
 def _insert_feature_snapshot(conn, symbol, date_str):
+    lineage = json.dumps(
+        {
+            "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
+            "benchmark_symbol": "VNINDEX",
+            "selected_provider": "test",
+            "ingestion_run_id": "test-run",
+        }
+    )
     conn.execute(
         """
         INSERT INTO feature_snapshot
         (symbol, date, close, ma20, as_of_bar_date, feature_data_status,
          feature_build_version, feature_generated_at, feature_profile,
          neutral_completeness, relative_strength_completeness,
-         required_bar_count, observed_bar_count, feature_completeness_rule_version)
+         required_bar_count, observed_bar_count, feature_completeness_rule_version,
+         lineage_json)
         VALUES (?, ?, 105.0, 100.0, ?, 'EXACT_DATE', 'dev', current_timestamp,
                 'STANDARD_120', 'COMPLETE', 'COMPLETE', 120, 120,
-                'feature-completeness-v1')
+                'feature-completeness-v1', ?)
         """,
-        [symbol, date_str, date_str],
+        [symbol, date_str, date_str, lineage],
+    )
+    conn.executemany(
+        "INSERT INTO relative_strength_snapshot "
+        "(symbol, date, benchmark_symbol, horizon_sessions, relative_return, "
+        "source_bar_date, benchmark_bar_date, source_row_count, "
+        "benchmark_row_count, data_status, methodology_version, generated_at, "
+        "lineage_json) VALUES (?, ?, 'VNINDEX', ?, 0.1, ?, ?, 120, 120, "
+        "'SUCCESS', 'test-v1', current_timestamp, ?)",
+        [
+            [symbol, date_str, horizon, date_str, date_str, lineage]
+            for horizon in (20, 60)
+        ],
     )
 
 
 def _insert_candidate_score(conn, symbol, date_str, as_of_bar_date=None):
-    import json
-
     lineage = {
         "as_of_bar_date": as_of_bar_date or date_str,
         "scoring_version": "test-v1",
@@ -462,10 +513,13 @@ class TestFakeProviderFixtures:
             from datetime import date, timedelta
 
             base = date(2025, 6, 30)
+            dates = []
             for i in range(130):
                 d = base - timedelta(days=i)
                 if d.weekday() < 5:
-                    _insert_canonical_bars(conn, "HPG", [d.isoformat()])
+                    dates.append(d.isoformat())
+            _insert_raw_bars(conn, "HPG", dates)
+            _insert_canonical_bars(conn, "HPG", dates)
             return {"inserted": 130, "skipped": 0}
 
         def fake_build_canonical(conn, **kwargs):

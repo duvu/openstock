@@ -42,8 +42,6 @@ def test_planning_is_side_effect_free_when_snapshot_has_missing_data() -> None:
         EnsureDataAction.CANONICAL_BUILT,
         EnsureDataAction.BENCHMARK_SYNCED,
         EnsureDataAction.BENCHMARK_CANONICAL_BUILT,
-        EnsureDataAction.FEATURES_BUILT,
-        EnsureDataAction.SCORED,
     )
 
 
@@ -62,6 +60,7 @@ def test_planning_includes_only_missing_actions() -> None:
         benchmark_bars=120,
         feature_snapshot_exists=True,
         candidate_score_exists=False,
+        quality_status="pass",
     )
 
     plan = plan_data_availability(snapshot, DataAvailabilityPolicy())
@@ -101,8 +100,6 @@ def test_planning_triggers_incremental_sync_when_canonical_is_stale() -> None:
         EnsureDataAction.CANONICAL_BUILT,
         EnsureDataAction.BENCHMARK_SYNCED,
         EnsureDataAction.BENCHMARK_CANONICAL_BUILT,
-        EnsureDataAction.FEATURES_BUILT,
-        EnsureDataAction.SCORED,
     )
 
 
@@ -124,6 +121,7 @@ def test_planning_reuses_fresh_canonical_when_bar_date_matches_target() -> None:
         candidate_score_exists=False,
         latest_canonical_bar_date="2026-07-08",
         latest_benchmark_bar_date="2026-07-08",
+        quality_status="pass",
     )
 
     plan = plan_data_availability(snapshot, DataAvailabilityPolicy())

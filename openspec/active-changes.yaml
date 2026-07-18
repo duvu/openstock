@@ -75,7 +75,7 @@ changes:
 
   chat-data-provisioning-contract:
     status: ready
-    github_issues: [163, 175]
+    github_issues: [163, 175, 228]
     roadmap_state: review_required
     summary: >-
       Make bounded current-symbol data provisioning one explicit, idempotent,
@@ -234,7 +234,7 @@ changes:
 
   deep-symbol-analysis-engine:
     status: partial
-    github_issues: [75, 76, 77, 92, 95, 99]
+    github_issues: [75, 76, 77, 92, 95, 99, 227]
     roadmap_state: review_required
     summary: >-
       Warehouse-grounded deep symbol analysis with deterministic readiness for

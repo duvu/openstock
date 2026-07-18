@@ -121,6 +121,7 @@ class DeepAnalysisReadinessService:
             ),
             errors=errors,
             correlation_id=current_correlation_id,
+            action_outcomes=tuple(result.action_outcomes),
         )
         audit_readiness(readiness)
         return readiness

@@ -11,6 +11,7 @@ import pytest
 from vnalpha.data_availability.models import EnsureDataAction
 from vnalpha.data_availability.planner import EnsureDataSnapshot
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
+from vnalpha.features.status import FEATURE_STATUS_CONTRACT_VERSION
 from vnalpha.warehouse.migrations import run_migrations
 
 _REQUIRED_LINEAGE = (
@@ -138,6 +139,14 @@ def test_cache_policy_can_disable_benchmark_requirement() -> None:
 
 def _seed_complete_evidence(conn: duckdb.DuckDBPyConnection) -> None:
     date = "2026-07-10"
+    feature_lineage = json.dumps(
+        {
+            "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
+            "benchmark_symbol": "VNINDEX",
+            "selected_provider": "test",
+            "ingestion_run_id": "run-1",
+        }
+    )
     conn.execute(
         "INSERT INTO symbol_master (symbol, is_active) VALUES ('FPT', TRUE), "
         "('VNINDEX', TRUE)"
@@ -159,12 +168,22 @@ def _seed_complete_evidence(conn: duckdb.DuckDBPyConnection) -> None:
          source_row_count, benchmark_row_count, feature_data_status,
          feature_build_version, feature_generated_at, feature_profile,
          neutral_completeness, relative_strength_completeness,
-         required_bar_count, observed_bar_count, feature_completeness_rule_version)
+         required_bar_count, observed_bar_count, feature_completeness_rule_version,
+         lineage_json)
         VALUES ('FPT', ?, 10.5, ?, ?, 120, 120, 'EXACT_DATE', 'test-v1', current_timestamp,
                 'STANDARD_120', 'COMPLETE', 'COMPLETE', 120, 120,
-                'feature-completeness-v1')
+                'feature-completeness-v1', ?)
         """,
-        [date, date, date],
+        [date, date, date, feature_lineage],
+    )
+    conn.executemany(
+        "INSERT INTO relative_strength_snapshot "
+        "(symbol, date, benchmark_symbol, horizon_sessions, relative_return, "
+        "source_bar_date, benchmark_bar_date, source_row_count, "
+        "benchmark_row_count, data_status, methodology_version, generated_at, "
+        "lineage_json) VALUES ('FPT', ?, 'VNINDEX', ?, 0.1, ?, ?, 120, 120, "
+        "'SUCCESS', 'test-v1', current_timestamp, ?)",
+        [[date, horizon, date, date, feature_lineage] for horizon in (20, 60)],
     )
     lineage = {
         "as_of_bar_date": date,

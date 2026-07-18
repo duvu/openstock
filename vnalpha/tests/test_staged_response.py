@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from vnalpha.chat.events import AssistantStage
+
 # ---------------------------------------------------------------------------
 # events module — unit tests
 # ---------------------------------------------------------------------------
@@ -12,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 def test_assistant_stage_has_all_seven_values():
     """AssistantStage enum must expose exactly the 7 documented lifecycle stages."""
-    from vnalpha.chat.events import AssistantStage
 
     expected = {
         "classifying",
@@ -280,3 +281,123 @@ def test_handle_natural_language_emits_planning_and_synthesizing():
     assert "⋯ classifying..." in stage_texts
     assert "⋯ planning..." in stage_texts
     assert "⋯ synthesizing..." in stage_texts
+
+
+def test_prepared_turn_runs_tools_before_synthesizing_and_final() -> None:
+    from types import SimpleNamespace
+
+    from vnalpha.assistant.models import AssistantAnswer, AssistantPlan, ToolPlanStep
+    from vnalpha.chat.controller import ChatController
+    from vnalpha.tools.executor import TraceEvent
+
+    timeline: list[str] = []
+    plan = AssistantPlan(
+        intent="lookup",
+        steps=[
+            ToolPlanStep(
+                step_id="s1",
+                tool_name="watchlist.scan",
+                arguments={},
+                purpose="scan",
+                required_permission="READ_DATA",
+            )
+        ],
+    )
+    answer = AssistantAnswer(
+        summary="Prepared result.",
+        basis="Persisted data",
+        risks_caveats="",
+        tool_trace_summary="",
+    )
+
+    def on_message(_style: str, text: str) -> None:
+        for stage in ("classifying", "planning", "synthesizing"):
+            if stage in text:
+                timeline.append(stage)
+                return
+        if "Prepared result." in text:
+            if "final" not in timeline:
+                timeline.append("final")
+
+    def on_trace(event: TraceEvent) -> None:
+        timeline.append(event.status)
+
+    controller = ChatController(
+        on_message=on_message,
+        on_trace=on_trace,
+        connection_factory=lambda: MagicMock(),
+    )
+    controller._prepare_turn = MagicMock(return_value=SimpleNamespace(plan=plan))
+
+    def execute(_prepared: object):
+        assert controller._on_trace is not None
+        controller._on_trace(TraceEvent("watchlist.scan", "RUNNING", None, "t1"))
+        controller._on_trace(TraceEvent("watchlist.scan", "SUCCESS", 1.0, "t1"))
+        controller._emit_stage(AssistantStage.SYNTHESIZING)
+        return answer, plan
+
+    controller._execute_prepared_turn = execute
+
+    controller.handle_natural_language("Show candidates")
+
+    assert timeline == [
+        "classifying",
+        "planning",
+        "RUNNING",
+        "SUCCESS",
+        "synthesizing",
+        "final",
+    ]
+
+
+def test_failed_prepared_turn_omits_success_and_synthesizing() -> None:
+    from types import SimpleNamespace
+
+    from vnalpha.assistant.models import AssistantPlan, ToolPlanStep
+    from vnalpha.chat.controller import ChatController
+    from vnalpha.tools.executor import TraceEvent
+
+    timeline: list[str] = []
+    plan = AssistantPlan(
+        intent="deep_analyze_symbol",
+        steps=[
+            ToolPlanStep(
+                step_id="s1",
+                tool_name="data.ensure_current_symbol",
+                arguments={"symbol": "FPT"},
+                purpose="provision",
+                required_permission="WRITE_DATA",
+            )
+        ],
+    )
+
+    def on_message(_style: str, text: str) -> None:
+        for stage in ("classifying", "planning", "synthesizing"):
+            if stage in text:
+                timeline.append(stage)
+
+    def on_trace(event: TraceEvent) -> None:
+        timeline.append(event.status)
+
+    controller = ChatController(
+        on_message=on_message,
+        on_trace=on_trace,
+        connection_factory=lambda: MagicMock(),
+    )
+    controller._prepare_turn = MagicMock(return_value=SimpleNamespace(plan=plan))
+
+    def execute(_prepared: object):
+        assert controller._on_trace is not None
+        controller._on_trace(
+            TraceEvent("data.ensure_current_symbol", "RUNNING", None, "t1")
+        )
+        controller._on_trace(
+            TraceEvent("data.ensure_current_symbol", "FAILED", 1.0, "t1")
+        )
+        raise RuntimeError("readiness was not achieved")
+
+    controller._execute_prepared_turn = execute
+
+    controller.handle_natural_language("Analyze FPT")
+
+    assert timeline == ["classifying", "planning", "RUNNING", "FAILED"]

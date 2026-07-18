@@ -46,9 +46,9 @@ def ensure_current_symbol(
     )
 
     summary = _summary(result)
-    warnings = list(result.warnings)
     if not result.is_ready:
-        warnings = [*warnings, *result.errors]
+        raise ToolExecutionError(_failure_message(result, summary))
+    warnings = list(result.warnings)
     return ToolOutput(
         data=result.to_trace_dict(),
         summary=summary,
@@ -67,6 +67,14 @@ def _summary(result) -> str:
     if result.errors:
         return result.errors[0]
     return f"{result.symbol}: provisioning did not complete."
+
+
+def _failure_message(result, summary: str) -> str:
+    details = [summary]
+    if result.remediation:
+        details.append("Remediation: " + " -> ".join(result.remediation))
+    details.append(f"correlation_id={result.correlation_id}")
+    return ". ".join(details)
 
 
 __all__ = ["ensure_current_symbol"]

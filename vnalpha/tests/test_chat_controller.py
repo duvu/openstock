@@ -382,8 +382,7 @@ def test_handle_natural_language_refusal_emits_once():
     assert len(refusal_cards) == 1
 
 
-def test_handle_natural_language_posts_error_on_exception():
-    """handle_natural_language posts error message when ask() raises."""
+def test_handle_natural_language_sanitizes_unexpected_exception():
     from vnalpha.chat.controller import ChatController
 
     messages = []
@@ -392,11 +391,17 @@ def test_handle_natural_language_posts_error_on_exception():
         target_date="2026-07-07",
     )
 
-    with patch.object(ctrl, "_run_ask", side_effect=RuntimeError("LLM down")):
-        ctrl.handle_natural_language("What is happening?")
+    with patch.object(
+        ctrl,
+        "_run_ask",
+        side_effect=RuntimeError("provider internals must not leak"),
+    ):
+        result = ctrl.handle_natural_language("What is happening?")
 
     all_text = " ".join(t for _, t in messages)
-    assert "LLM down" in all_text or "Error" in all_text
+    assert result == "[ERROR] Assistant request failed. Check logs and retry."
+    assert result in all_text
+    assert "provider internals must not leak" not in all_text
 
 
 # ---------------------------------------------------------------------------
@@ -529,7 +534,9 @@ def test_command_result_validation_error_rendered(in_memory_conn):
     assert "yellow" in styles
 
 
-def test_chat_controller_migrations_run_once_for_multiple_persistence_calls(in_memory_conn):
+def test_chat_controller_migrations_run_once_for_multiple_persistence_calls(
+    in_memory_conn,
+):
     from vnalpha.assistant.models import AssistantAnswer, AssistantPlan, RefusalMessage
     from vnalpha.chat.controller import ChatController
     from vnalpha.warehouse.chat_repo import create_chat_session
@@ -550,7 +557,9 @@ def test_chat_controller_migrations_run_once_for_multiple_persistence_calls(in_m
         tool_trace_summary="",
     )
     mock_plan = AssistantPlan(intent="scan_candidates", steps=[])
-    mock_refusal = RefusalMessage(reason="not available", policy_category="UNAVAILABLE_TOOL")
+    mock_refusal = RefusalMessage(
+        reason="not available", policy_category="UNAVAILABLE_TOOL"
+    )
 
     with patch("vnalpha.assistant.app.AssistantApp") as mock_app:
         app_instance = mock_app.return_value
@@ -597,8 +606,8 @@ def test_chat_controller_migrations_run_once_for_trace_events(in_memory_conn):
 
 
 def test_chat_controller_migrations_run_once_for_failure_paths(in_memory_conn):
-    from vnalpha.chat.errors import ChatErrorKind
     from vnalpha.chat.controller import ChatController
+    from vnalpha.chat.errors import ChatErrorKind
     from vnalpha.warehouse.chat_repo import create_chat_session
 
     sid = create_chat_session(in_memory_conn)
@@ -610,5 +619,7 @@ def test_chat_controller_migrations_run_once_for_failure_paths(in_memory_conn):
     ctrl._chat_session_id = sid
 
     with patch("vnalpha.warehouse.migrations.run_migrations") as mock_migrations:
-        ctrl._persist_error_message("temporary assistant failure", ChatErrorKind.RUNTIME)
+        ctrl._persist_error_message(
+            "temporary assistant failure", ChatErrorKind.RUNTIME
+        )
         assert mock_migrations.call_count == 1

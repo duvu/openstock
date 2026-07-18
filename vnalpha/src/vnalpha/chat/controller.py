@@ -23,6 +23,7 @@ from vnalpha.chat.modes import ExecutionMode, format_plan_preview
 from vnalpha.chat.safety import is_tool_approval_pending_eligible
 from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
+from vnalpha.observability.context import get_correlation_id, set_correlation_id
 from vnalpha.warehouse import migrations as _chat_schema_migrations
 
 if TYPE_CHECKING:
@@ -133,8 +134,17 @@ class ChatController:
         return "natural_language"
 
     def handle_turn(
-        self, raw: str, *, workspace_context: str | None = None
+        self,
+        raw: str,
+        *,
+        workspace_context: str | None = None,
+        correlation_id: str | None = None,
     ) -> str | None:
+        from vnalpha.observability.context import set_correlation_id
+
+        set_correlation_id(
+            parent=correlation_id
+        ) if correlation_id else set_correlation_id()
         try:
             kind = self.classify_input(raw)
             if kind == "slash_command":
@@ -147,7 +157,9 @@ class ChatController:
                     raw, workspace_context=workspace_context
                 )
         except Exception as exc:
-            error_text = format_runtime_error(str(exc))
+            error_text = format_runtime_error(
+                "Assistant request failed. Check logs and retry."
+            )
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             try:
@@ -180,7 +192,8 @@ class ChatController:
                 self._pending_prepared_turn = result.pending_prepared_turn
                 self._pending_plan = result.pending_prepared_turn.plan
                 self._pending_plan_turn_context = {
-                    "prepared_turn_id": result.pending_prepared_turn.prepared_turn_id
+                    "prepared_turn_id": result.pending_prepared_turn.prepared_turn_id,
+                    "correlation_id": set_correlation_id(get_correlation_id()),
                 }
             research_session_id = None
             metadata = getattr(result, "metadata", None)
@@ -220,7 +233,9 @@ class ChatController:
                 )
             return None
         except Exception as exc:
-            error_text = format_runtime_error(str(exc))
+            error_text = format_runtime_error(
+                "Assistant request failed. Check logs and retry."
+            )
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             try:
@@ -320,6 +335,7 @@ class ChatController:
                 self._pending_plan_turn_context = {
                     "question": question,
                     "workspace_context": workspace_context,
+                    "correlation_id": set_correlation_id(get_correlation_id()),
                 }
                 preview_text = format_plan_preview(plan)
                 self._on_message("dim", preview_text)
@@ -415,7 +431,9 @@ class ChatController:
             return None
 
         except Exception as exc:
-            error_text = format_runtime_error(str(exc))
+            error_text = format_runtime_error(
+                "Assistant request failed. Check logs and retry."
+            )
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             try:
@@ -443,16 +461,22 @@ class ChatController:
     def approve_pending_plan(self) -> None:
         if self._pending_prepared_turn is not None:
             prepared = self._pending_prepared_turn
+            ctx = self._pending_plan_turn_context or {}
+            originating_correlation_id = ctx.get("correlation_id")
             self._pending_prepared_turn = None
             self._pending_plan = None
             self._pending_plan_turn_context = None
+            if isinstance(originating_correlation_id, str):
+                set_correlation_id(originating_correlation_id)
             self._persist_message("user", "Approved.", "plan_approval")
             try:
                 self._approve_prepared_turn(prepared)
                 answer, _plan = self._execute_prepared_turn(prepared)
                 self._render_prepared_answer(answer)
-            except Exception as exc:
-                error_text = format_runtime_error(str(exc))
+            except Exception:
+                error_text = format_runtime_error(
+                    "Assistant request failed. Check logs and retry."
+                )
                 self._on_message("red", error_text)
                 self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             return
@@ -472,6 +496,9 @@ class ChatController:
         ctx = self._pending_plan_turn_context or {}
         question = ctx.get("question", "")
         workspace_context = ctx.get("workspace_context")
+        originating_correlation_id = ctx.get("correlation_id")
+        if isinstance(originating_correlation_id, str):
+            set_correlation_id(originating_correlation_id)
         self._persist_message("user", "Approved.", "plan_approval")
         try:
             from vnalpha.observability.audit import log_audit
@@ -508,8 +535,10 @@ class ChatController:
                 self._persist_error_message(
                     refusal_text, ChatErrorKind.REFUSAL, role="assistant"
                 )
-        except Exception as exc:
-            error_text = format_runtime_error(str(exc))
+        except Exception:
+            error_text = format_runtime_error(
+                "Assistant request failed. Check logs and retry."
+            )
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
 
@@ -521,6 +550,7 @@ class ChatController:
             self._pending_plan_turn_context = None
             try:
                 from vnalpha.assistant.app import AssistantApp
+
                 conn = self._connection_factory()
                 try:
                     self._ensure_chat_schema_ready()
@@ -772,6 +802,7 @@ class ChatController:
         workspace_context: str | None = None,
     ):
         from vnalpha.assistant.app import AssistantApp
+
         self._ensure_chat_schema_ready()
 
         conn = self._connection_factory()
@@ -795,6 +826,7 @@ class ChatController:
     ) -> "PreparedAssistantTurn | tuple[RefusalMessage, AssistantPlan]":
         from vnalpha.assistant.app import AssistantApp
         from vnalpha.assistant.models import AssistantRequest
+
         self._ensure_chat_schema_ready()
 
         conn = self._connection_factory()
@@ -813,18 +845,22 @@ class ChatController:
 
     def _execute_prepared_turn(self, prepared: "PreparedAssistantTurn"):
         from vnalpha.assistant.app import AssistantApp
+
         self._ensure_chat_schema_ready()
 
         conn = self._connection_factory()
         try:
             return AssistantApp(conn, surface=self._surface).execute_prepared(
-                prepared, on_trace_event=self._on_trace
+                prepared,
+                on_trace_event=self._on_trace,
+                on_synthesizing=lambda: self._emit_stage(AssistantStage.SYNTHESIZING),
             )
         finally:
             conn.close()
 
     def _approve_prepared_turn(self, prepared: "PreparedAssistantTurn") -> None:
         from vnalpha.sandbox.execution_service import SandboxExecutionService
+
         self._ensure_chat_schema_ready()
 
         conn = self._connection_factory()
@@ -874,18 +910,20 @@ class ChatController:
                 self._pending_prepared_turn = prepared
                 self._pending_plan = plan
                 self._pending_plan_turn_context = {
-                    "prepared_turn_id": prepared.prepared_turn_id
+                    "prepared_turn_id": prepared.prepared_turn_id,
+                    "correlation_id": set_correlation_id(get_correlation_id()),
                 }
                 preview_text = format_plan_preview(plan)
                 self._on_message("dim", preview_text)
                 self._persist_message("assistant", preview_text, "plan_preview")
                 return None
-            self._emit_stage(AssistantStage.SYNTHESIZING)
             answer, _plan = self._execute_prepared_turn(prepared)
             self._render_prepared_answer(answer)
             return None
-        except Exception as exc:
-            error_text = format_runtime_error(str(exc))
+        except Exception:
+            error_text = format_runtime_error(
+                "Assistant request failed. Check logs and retry."
+            )
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             return error_text

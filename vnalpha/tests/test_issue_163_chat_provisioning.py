@@ -27,6 +27,7 @@ from vnalpha.data_availability.deep_readiness_models import (
 from vnalpha.data_provisioning import ensure_current_symbol as ecs_module
 from vnalpha.data_provisioning import ensure_current_symbol_ready
 from vnalpha.data_provisioning.ensure_current_symbol import ProvisioningOutcome
+from vnalpha.features.status import FEATURE_STATUS_CONTRACT_VERSION
 from vnalpha.warehouse.migrations import run_migrations
 
 # ---------------------------------------------------------------------------
@@ -64,14 +65,19 @@ def _readiness(
     )
 
 
-def _patch_service(monkeypatch, readiness: ReadinessResult, calls: list[dict]):
+def _patch_service(
+    monkeypatch,
+    readiness: ReadinessResult,
+    calls: list[dict],
+    *,
+    exercise_ensure: bool = False,
+):
     class _StubService:
         def __init__(self, *, ensure=None):
             self._ensure = ensure
 
         def ensure_ready(self, request):
-            # Exercise the injected ensure closure so force_refresh threads through.
-            if self._ensure is not None:
+            if exercise_ensure and self._ensure is not None:
                 try:
                     self._ensure(request.conn, request.symbol, request.requested_date)
                 except Exception:  # noqa: BLE001
@@ -115,18 +121,39 @@ def _insert_canonical_bars(conn, symbol, dates, interval="1D") -> None:
 
 
 def _insert_feature_snapshot(conn, symbol, date_str) -> None:
+    lineage = json.dumps(
+        {
+            "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
+            "benchmark_symbol": "VNINDEX",
+            "selected_provider": "test",
+            "ingestion_run_id": "test-run",
+        }
+    )
     conn.execute(
         """
         INSERT INTO feature_snapshot
         (symbol, date, close, ma20, as_of_bar_date, feature_data_status,
          feature_build_version, feature_generated_at, feature_profile,
          neutral_completeness, relative_strength_completeness,
-         required_bar_count, observed_bar_count, feature_completeness_rule_version)
+         required_bar_count, observed_bar_count, feature_completeness_rule_version,
+         lineage_json)
         VALUES (?, ?, 105.0, 100.0, ?, 'EXACT_DATE', 'dev', current_timestamp,
                 'STANDARD_120', 'COMPLETE', 'COMPLETE', 120, 120,
-                'feature-completeness-v1')
+                'feature-completeness-v1', ?)
         """,
-        [symbol, date_str, date_str],
+        [symbol, date_str, date_str, lineage],
+    )
+    conn.executemany(
+        "INSERT INTO relative_strength_snapshot "
+        "(symbol, date, benchmark_symbol, horizon_sessions, relative_return, "
+        "source_bar_date, benchmark_bar_date, source_row_count, "
+        "benchmark_row_count, data_status, methodology_version, generated_at, "
+        "lineage_json) VALUES (?, ?, 'VNINDEX', ?, 0.1, ?, ?, 120, 120, "
+        "'SUCCESS', 'test-v1', current_timestamp, ?)",
+        [
+            [symbol, date_str, horizon, date_str, date_str, lineage]
+            for horizon in (20, 60)
+        ],
     )
 
 
@@ -185,17 +212,34 @@ def test_reuse_fresh_data_returns_reused(monkeypatch):
 
 
 def test_correlation_id_is_reused_when_supplied(monkeypatch):
+    from vnalpha.observability.context import get_correlation_id
+
     calls: list[dict] = []
     _patch_service(
         monkeypatch,
         _readiness(actions=("CACHE_HIT",), correlation_id="turn-123"),
         calls,
+        exercise_ensure=True,
     )
     conn = _fresh_conn()
     result = ensure_current_symbol_ready(
         conn, "FPT", "2025-06-30", correlation_id="turn-123"
     )
     assert result.correlation_id == "turn-123"
+    assert get_correlation_id() == "turn-123"
+    conn.close()
+
+
+def test_unset_correlation_id_is_replaced(monkeypatch):
+    calls: list[dict] = []
+    _patch_service(monkeypatch, _readiness(actions=("CACHE_HIT",)), calls)
+    conn = _fresh_conn()
+
+    result = ensure_current_symbol_ready(
+        conn, "FPT", "2025-06-30", correlation_id="unset"
+    )
+
+    assert result.correlation_id not in {"", "unset"}
     conn.close()
 
 
@@ -233,6 +277,7 @@ def test_explicit_refresh_forces_bounded_work(monkeypatch):
             )
         ),
         calls,
+        exercise_ensure=True,
     )
     conn = _fresh_conn()
     result = ensure_current_symbol_ready(conn, "FPT", "2025-06-30", refresh=True)
@@ -495,7 +540,10 @@ def test_executor_fails_closed_when_provisioning_not_ready(monkeypatch):
     session_id = create_assistant_session(
         conn, surface="test", user_prompt="analyze FPT"
     )
-    executor = AssistantExecutor(conn, assistant_session_id=session_id)
+    events = []
+    executor = AssistantExecutor(
+        conn, assistant_session_id=session_id, on_trace_event=events.append
+    )
     plan = AssistantPlan(
         intent="deep_analyze_symbol",
         steps=[
@@ -527,4 +575,10 @@ def test_executor_fails_closed_when_provisioning_not_ready(monkeypatch):
         ).fetchall()
     ]
     assert "analysis.deep_symbol" not in tools
+    assert [event.status for event in events] == ["RUNNING", "FAILED"]
+    rows = conn.execute(
+        "SELECT tool_name, status FROM tool_trace WHERE assistant_session_id = ?",
+        [session_id],
+    ).fetchall()
+    assert rows == [("data.ensure_current_symbol", "FAILED")]
     conn.close()

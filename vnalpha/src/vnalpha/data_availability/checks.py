@@ -12,6 +12,10 @@ import duckdb
 
 from vnalpha.data_availability.dates import normalize_explicit_date
 from vnalpha.data_availability.models import ArtifactEvidence, DataArtifact
+from vnalpha.features.status import (
+    parse_feature_eligibility,
+    parse_feature_snapshot_eligibility,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,20 +105,7 @@ def get_feature_snapshot_status(
     symbol: str,
     target_date: str,
 ) -> bool:
-    """Return True if a feature_snapshot row exists for (symbol, date)."""
-    row = conn.execute(
-        """
-        SELECT 1 FROM feature_snapshot
-        WHERE symbol = ? AND date = ? AND as_of_bar_date = ?
-          AND feature_data_status = 'EXACT_DATE'
-          AND feature_profile IN ('STANDARD_120', 'FULL_252')
-          AND neutral_completeness = 'COMPLETE'
-          AND relative_strength_completeness = 'COMPLETE'
-        LIMIT 1
-        """,
-        [symbol, target_date, target_date],
-    ).fetchone()
-    return row is not None
+    return get_feature_snapshot_evidence(conn, symbol, target_date).available
 
 
 def get_candidate_score_status(
@@ -344,23 +335,27 @@ def get_feature_snapshot_evidence(
         relative_strength_completeness,
     ) = row
     lineage = _decode_lineage(lineage_raw)
-    available = (
+    profile_acceptable = (
         _date_text(as_of_bar_date) == target_date
-        and str(status) == "EXACT_DATE"
+        and parse_feature_eligibility(str(status) if status else None).eligible
         and str(feature_profile) in {"STANDARD_120", "FULL_252"}
         and str(neutral_completeness) == "COMPLETE"
         and str(relative_strength_completeness) == "COMPLETE"
     )
+    lineage_acceptable = parse_feature_snapshot_eligibility(
+        str(status) if status else None, lineage_raw
+    ).eligible
+    available = profile_acceptable and lineage_acceptable
     return ArtifactEvidence(
         artifact=DataArtifact.FEATURE_SNAPSHOT,
         available=available,
         row_count=int(source_row_count) if source_row_count is not None else None,
         observed_as_of_date=_date_text(as_of_bar_date),
         freshness=_freshness(True, as_of_bar_date, target_date),
-        quality_status=(
-            str(status) if available and status else "INCOMPLETE_FEATURE_PROFILE"
-        ),
-        lineage_status="complete" if lineage else "unknown",
+        quality_status="EXACT_DATE"
+        if profile_acceptable
+        else "INCOMPLETE_FEATURE_PROFILE",
+        lineage_status="complete" if lineage_acceptable else "incomplete",
         lineage_fields=_lineage_fields(lineage),
         provider=_lineage_value(lineage, "selected_provider", "provider"),
         ingestion_run_id=_lineage_value(lineage, "ingestion_run_id"),
@@ -385,7 +380,7 @@ def get_candidate_score_artifact_evidence(
         row_count=1 if evidence.exists else 0,
         observed_as_of_date=evidence.as_of_bar_date,
         freshness=_freshness(evidence.exists, evidence.as_of_bar_date, target_date),
-        quality_status=evidence.quality_status or "unknown",
+        quality_status="not_applicable",
         lineage_status="complete" if evidence.lineage_fields else "unknown",
         lineage_fields=evidence.lineage_fields,
         provider=evidence.provider,

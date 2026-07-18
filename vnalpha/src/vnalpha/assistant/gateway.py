@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
 import re
-import json
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -366,18 +366,10 @@ class LLMGatewayClient:
         if strict_schema and last_error is not None and not compatible_fallbacks:
             from vnalpha.assistant.errors import LLMNoCompatibleFallbackError
 
-            if isinstance(last_error, LLMResponseError):
-                if last_error.error_kind == "structured_output_unsupported":
-                    compatibility_error = LLMNoCompatibleFallbackError(
-                        stage=stage,
-                        primary_model=primary.model_id,
-                        required_capability=ModelCapability.JSON_SCHEMA.value,
-                        primary_error=last_error,
-                    )
-                    _log_llm_error(
-                        stage, compatibility_error, cause=last_error
-                    )
-                    raise compatibility_error from last_error
+            if isinstance(last_error, LLMResponseError) and not (
+                last_error.error_kind == "structured_output_unsupported"
+                or last_error.status_code == 404
+            ):
                 raise last_error
             compatibility_error = LLMNoCompatibleFallbackError(
                 stage=stage,
