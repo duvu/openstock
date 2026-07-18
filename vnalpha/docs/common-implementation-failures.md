@@ -194,6 +194,30 @@ Include adversarial fixtures whose truncation boundary lands inside an escape
 sequence, quoted multi-word credential, URI user-info, Basic token, JWT or PEM
 body, not just short markup examples.
 
+## 21. A path test mocks away the dispatcher it is meant to verify
+
+A post-approval regression can appear green while replacing the approval
+dispatcher with a no-op. The test then proves only the shared exception
+presenter, not whether a safe data plan is incorrectly sent to a sandbox-only
+approval service before execution.
+
+**Prevent it:** exercise each mode-specific dispatcher through its real public
+entry point. Mock only external providers or deterministic failure sources, not
+the branch that selects safe-plan versus sandbox approval semantics. Assert the
+provider/tool was reached and that lifecycle state left `PREPARED` truthfully.
+
+## 22. A redaction label overstates the fields actually redacted
+
+Redacting an exception message and stacktrace is insufficient when the same
+record stores raw context, likely cause, or suggested next step while declaring
+`redaction_status='redacted'`. Replacing a legacy sanitizer can also silently
+drop established credential spellings such as `bearer=...`.
+
+**Prevent it:** apply the selected content mode recursively to every
+content-bearing field before persistence. Preserve legacy credential-form
+coverage when consolidating sanitizers, and test the complete serialized record
+rather than a selected pair of fields.
+
 # Mandatory checklist
 
 ## Before coding
@@ -206,6 +230,7 @@ body, not just short markup examples.
 - [ ] Define required/optional/not-requested semantics.
 - [ ] Define the complete failure and audit boundary.
 - [ ] Preserve expected/actionable versus unexpected exception provenance across every wrapper.
+- [ ] Enumerate mode-specific dispatchers and approval services before mocking any boundary.
 - [ ] Confirm bounded behavior and the read-only research boundary.
 - [ ] Write the negative and backward-compatibility test matrix.
 - [ ] Isolate offline tests from ambient localhost services and vendor state.
@@ -218,6 +243,7 @@ body, not just short markup examples.
 - [ ] Do not default non-throwing work to success.
 - [ ] Reuse one service and one correlation ID across surfaces.
 - [ ] Sanitize public errors, database summaries, and file-backed error logs through one credential boundary.
+- [ ] Apply the declared redaction mode to every content-bearing field in each persisted record.
 - [ ] Redact structured fields before any crop can orphan their credential marker or delimiter.
 - [ ] Apply bounding and escaping in an order that leaves the final rendered value safe.
 - [ ] Render only explicitly public structured failures; keep arbitrary nested exceptions generic.
@@ -233,6 +259,7 @@ body, not just short markup examples.
 - [ ] Give every review finding an explicit disposition.
 - [ ] Review test expectations for semantic correctness.
 - [ ] Parse bounded public text with the real renderer and assert no active markup.
+- [ ] Exercise real safe-plan and sandbox post-approval dispatch without mocking the selector.
 - [ ] Run and report required full validation gates honestly.
 - [ ] Check CI on the exact commit; skipped is not passed.
 - [ ] Update OpenSpec evidence.

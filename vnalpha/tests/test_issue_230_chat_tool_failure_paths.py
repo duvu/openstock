@@ -136,7 +136,6 @@ def test_approved_prepared_failures_keep_typed_presentation(
     # When
     with (
         patch.object(controller, "_prepare_turn", return_value=prepared),
-        patch.object(controller, "_approve_prepared_turn"),
         patch.object(controller, "_execute_prepared_turn", side_effect=failure),
     ):
         controller.handle_natural_language("Phân tích FPT")

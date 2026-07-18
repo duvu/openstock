@@ -471,7 +471,8 @@ class ChatController:
                 set_correlation_id(originating_correlation_id)
             self._persist_message("user", "Approved.", "plan_approval")
             try:
-                self._approve_prepared_turn(prepared)
+                if is_approval_required_plan(prepared.plan):
+                    self._approve_prepared_turn(prepared)
                 answer, _plan = self._execute_prepared_turn(prepared)
                 self._render_prepared_answer(answer)
             except ActionableToolExecutionError as exc:

@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from vnalpha.observability.context import get_correlation_id, get_run_context
 from vnalpha.observability.jsonl import append_jsonl
-from vnalpha.observability.redaction import redact_str, redaction_status
+from vnalpha.observability.redaction import redact_dict, redact_str, redaction_status
 
 
 def _now_iso() -> str:
@@ -67,12 +67,12 @@ def capture_exception(
             "function": function,
             "stacktrace": safe_tb,
             "stacktrace_hash": tb_hash,
-            "likely_cause": likely_cause,
-            "suggested_next_step": suggested_next,
+            "likely_cause": redact_str(likely_cause, mode),
+            "suggested_next_step": redact_str(suggested_next, mode),
             "redaction_status": redaction_status(mode),
         }
         if context:
-            record["context"] = context
+            record["context"] = redact_dict(context, mode)
         append_jsonl(ctx.errors_path, record)
     except Exception:  # noqa: BLE001
         try:

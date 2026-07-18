@@ -14,7 +14,7 @@ _RICH_TAGS = re.compile(
 _SECRET_FIELD = (
     r"(?:api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token|"
     r"client[_-]?secret|private[_-]?key|refresh[_-]?token|session[_-]?token|"
-    r"token|password|passwd|secret|authorization|cookie|credentials?)"
+    r"token|password|passwd|secret|authorization|bearer|cookie|credentials?)"
 )
 _INLINE_DOUBLE_SECRET = re.compile(
     rf'(?i)(?P<prefix>["\']?{_SECRET_FIELD}["\']?\s*[=:]\s*)'
@@ -24,9 +24,26 @@ _INLINE_SINGLE_SECRET = re.compile(
     rf"(?i)(?P<prefix>[\"']?{_SECRET_FIELD}[\"']?\s*[=:]\s*)"
     r"'(?:\\.|[^'\\])*(?:'|\Z)"
 )
+_QUOTED_AUTHORIZATION_DOUBLE = re.compile(
+    r'(?i)(["\']?authorization["\']?\s*[:=]\s*["\']?'
+    r'(?:bearer|basic)\s+)"(?:\\.|[^"\\])*(?:"|\Z)'
+)
+_QUOTED_AUTHORIZATION_SINGLE = re.compile(
+    r"(?i)([\"']?authorization[\"']?\s*[:=]\s*[\"']?"
+    r"(?:bearer|basic)\s+)'(?:\\.|[^'\\])*(?:'|\Z)"
+)
 _AUTHORIZATION = re.compile(
     r"(?i)([\"']?authorization[\"']?\s*[:=]\s*[\"']?"
     r"(?:bearer|basic)\s+)[^\"'\s,;}]+"
+)
+_STANDALONE_QUOTED_AUTHORIZATION_DOUBLE = re.compile(
+    r'(?i)\b((?:bearer|basic)\s+)"(?:\\.|[^"\\])*(?:"|\Z)'
+)
+_STANDALONE_QUOTED_AUTHORIZATION_SINGLE = re.compile(
+    r"(?i)\b((?:bearer|basic)\s+)'(?:\\.|[^'\\])*(?:'|\Z)"
+)
+_STANDALONE_AUTHORIZATION = re.compile(
+    r"(?i)\b((?:bearer|basic)\s+)[A-Za-z0-9+/=_-]{8,}"
 )
 _URI_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]{1,31}://)[^/\s@]+@")
 _TRUNCATED_URI_USERINFO = re.compile(
@@ -89,7 +106,12 @@ def sanitize_text(value: object, *, strip_rich: bool = True) -> str:
     text = _PEM_PRIVATE_KEY.sub("[REDACTED]", text)
     text = _INLINE_DOUBLE_SECRET.sub(r'\g<prefix>"[REDACTED]"', text)
     text = _INLINE_SINGLE_SECRET.sub(r"\g<prefix>'[REDACTED]'", text)
+    text = _QUOTED_AUTHORIZATION_DOUBLE.sub(r'\1"[REDACTED]"', text)
+    text = _QUOTED_AUTHORIZATION_SINGLE.sub(r"\1'[REDACTED]'", text)
     text = _AUTHORIZATION.sub(r"\1[REDACTED]", text)
+    text = _STANDALONE_QUOTED_AUTHORIZATION_DOUBLE.sub(r'\1"[REDACTED]"', text)
+    text = _STANDALONE_QUOTED_AUTHORIZATION_SINGLE.sub(r"\1'[REDACTED]'", text)
+    text = _STANDALONE_AUTHORIZATION.sub(r"\1[REDACTED]", text)
     text = _URI_USERINFO.sub(r"\1[REDACTED]@", text)
     text = _TRUNCATED_URI_USERINFO.sub(r"\1[REDACTED]", text)
     text = _JWT.sub("[REDACTED]", text)

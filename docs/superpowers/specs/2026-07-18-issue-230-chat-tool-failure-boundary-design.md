@@ -19,6 +19,9 @@ other execution failure on the generic path.
 
 The same typed presentation helper owns immediate prepared execution,
 post-approval prepared execution, and the compatibility/legacy assistant path.
+Post-approval dispatch sends only sandbox approval-required plans through the
+sandbox approval service; safe prepared data plans execute directly after the
+user approval is persisted.
 Tool trace callbacks continue to own `RUNNING`/`SUCCESS`/`FAILED` events; trace
 failure events do not create a second semantic chat error.
 
@@ -44,6 +47,9 @@ The controller emits exactly one presentation for a typed failure. It does not
 add a generic fallback afterward and does not synthesize an answer after failed
 tool execution. Tool and assistant lifecycle rows remain diagnostically useful,
 but their error summaries are sanitized and bounded before persistence.
+File-backed exception records apply their declared content mode recursively to
+message, stacktrace, context, likely cause and suggested next step, and preserve
+legacy bearer key/value redaction when using the shared sanitizer.
 
 ## Scope
 
@@ -61,7 +67,8 @@ compatibility branch, and an arbitrary exception originating inside the real
 assistant executor/tool trace. They prove public reason/remediation/correlation,
 redaction, markup neutralization, bounds, persisted message types, validation
 mapping, generic fallback, legacy post-approval parity, the established private
-assistant error contract, and absence of duplicate generic output. Existing
+assistant error contract, real safe-plan approval dispatch, complete-record
+observability redaction, and absence of duplicate generic output. Existing
 issue #163/#228, stage, routing, trace and R4 tests prove the surrounding
 lifecycle remains unchanged; manual QA drives the same controller/repository
 path and inspects visible output plus transcript rows.

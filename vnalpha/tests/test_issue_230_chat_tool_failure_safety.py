@@ -78,6 +78,14 @@ def test_public_error_truncation_cannot_reactivate_rich_markup() -> None:
             "Authorization=Basic equals-auth-private-230",
             "equals-auth-private-230",
         ),
+        ("Basic c3RhbmRhbG9uZS1wcml2YXRlLTIzMA==", "cml2YXRlLTIzMA"),
+        (
+            'Authorization: Basic "quoted auth private 230"',
+            "quoted auth private 230",
+        ),
+        ("bearer=legacy-private-230", "legacy-private-230"),
+        ("Bearer: legacy-colon-private-230", "legacy-colon-private-230"),
+        ("Bearer standalone-private-230", "standalone-private-230"),
         (
             'password="correct horse battery staple"',
             "horse battery staple",
@@ -85,15 +93,20 @@ def test_public_error_truncation_cannot_reactivate_rich_markup() -> None:
         ("api_key='alpha beta gamma'", "beta gamma"),
     ],
 )
-def test_public_error_redacts_common_credential_forms(
+def test_error_projections_redact_common_credential_forms(
     message: str, private_fragment: str
 ) -> None:
     # When
-    sanitized = sanitize_public_error(message)
+    sanitized_values = (
+        sanitize_public_error(message),
+        sanitize_error_summary(message),
+        redact_str(message, mode="redacted"),
+    )
 
     # Then
-    assert private_fragment not in sanitized
-    assert "[REDACTED]" in sanitized
+    for sanitized in sanitized_values:
+        assert private_fragment not in sanitized
+        assert "[REDACTED]" in sanitized
 
 
 def _boundary_crossing_credentials() -> tuple[str, ...]:
@@ -163,9 +176,23 @@ def test_captured_error_record_contains_no_common_credential_payload(tmp_path) -
     try:
         raise RuntimeError(message)
     except RuntimeError as exc:
-        capture_exception(exc, run_ctx=run_context, mode="redacted")
+        capture_exception(
+            exc,
+            context={
+                "detail": "Basic c3RhbmRhbG9uZS1wcml2YXRlLTIzMA==",
+                "legacy": "bearer=record-private-230",
+            },
+            run_ctx=run_context,
+            likely_cause='Authorization: Basic "quoted auth private 230"',
+            suggested_next='password="suggested-next-private-230"',
+            mode="redacted",
+        )
 
     record = json.loads(run_context.errors_path.read_text().strip())
-    persisted = record["error_message"] + record["stacktrace"]
+    persisted = json.dumps(record, sort_keys=True)
     assert record["redaction_status"] == "redacted"
     assert not any(fragment in persisted for fragment in _PRIVATE_FRAGMENTS)
+    assert "cml2YXRlLTIzMA" not in persisted
+    assert "quoted auth private 230" not in persisted
+    assert "suggested-next-private-230" not in persisted
+    assert "record-private-230" not in persisted

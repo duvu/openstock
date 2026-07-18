@@ -202,7 +202,17 @@ public fields independently, cap the complete terminal message, use a bounded
 prefix for opaque summaries, and reuse the canonical credential sanitizer for
 observability redaction.
 
-- [ ] **Step 7: Recommit and repeat exact-SHA review/publication gates**
+- [x] **Step 7: Correct fourth exact-commit approval and redaction findings**
+
+Remove the test double that hid real safe-plan approval dispatch and route only
+sandbox approval-required plans through the sandbox approval service. Retain
+legacy `bearer=...`/`Bearer: ...` redaction while covering standalone and quoted
+Basic/Bearer credentials. Apply the selected observability content mode to
+context, likely cause and suggested next step before a record can claim it is
+redacted. Add regressions over public, database-summary, free-text observability
+and complete serialized-error projections.
+
+- [ ] **Step 8: Recommit and repeat exact-SHA review/publication gates**
 
 Run focused and full validation, five independent review lanes, the runtime
 debugging audit, exact-commit GitHub Actions and PR/issue reconciliation on the
