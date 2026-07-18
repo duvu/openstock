@@ -38,6 +38,7 @@ from vnalpha.assistant.policy import check_intent_policy, check_policy
 from vnalpha.assistant.research_templates import is_research_intent
 from vnalpha.assistant.synthesizer import AnswerSynthesizer
 from vnalpha.assistant.tool_policy import is_approval_required_plan
+from vnalpha.core.text_safety import sanitize_error_summary
 from vnalpha.data_availability.dates import (
     InvalidEnsureDateError,
     normalize_optional_date,
@@ -208,7 +209,7 @@ class AssistantApp:
                     classify_trace_id,
                     status="FAILED",
                     error={
-                        "message": str(exc),
+                        "message": sanitize_error_summary(exc),
                         **self._raw_response_summary(
                             self._classifier.last_raw_responses
                         ),
@@ -258,7 +259,10 @@ class AssistantApp:
                 self._conn,
                 session_id,
                 status="VALIDATION_ERROR",
-                error={"error_type": type(exc).__name__, "message": str(exc)},
+                error={
+                    "error_type": type(exc).__name__,
+                    "message": sanitize_error_summary(exc),
+                },
             )
             raise
         except AssistantError as exc:
@@ -266,7 +270,10 @@ class AssistantApp:
                 self._conn,
                 session_id,
                 status="FAILED",
-                error={"error_type": type(exc).__name__, "message": str(exc)},
+                error={
+                    "error_type": type(exc).__name__,
+                    "message": sanitize_error_summary(exc),
+                },
             )
             raise
 
@@ -369,7 +376,10 @@ class AssistantApp:
                 status="FAILED",
                 intent=prepared.intent_result.intent,
                 plan=prepared.plan.to_dict(),
-                error={"error_type": type(exc).__name__, "message": str(exc)},
+                error={
+                    "error_type": type(exc).__name__,
+                    "message": sanitize_error_summary(exc),
+                },
             )
             finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="FAILED")
             raise
@@ -408,7 +418,7 @@ class AssistantApp:
                 synthesis_trace_id,
                 status="FAILED",
                 error={
-                    "message": str(exc),
+                    "message": sanitize_error_summary(exc),
                     **self._raw_response_summary(self._synthesizer.last_raw_responses),
                 },
             )

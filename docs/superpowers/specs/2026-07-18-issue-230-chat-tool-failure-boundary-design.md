@@ -27,10 +27,11 @@ failure events do not create a second semantic chat error.
 Chat error formatting will reuse `vnalpha.core.text_safety.sanitize_text`,
 collapse whitespace, escape Rich markup, cap pre-sanitization scan work, and cap
 public error detail at 4,096 characters. When the detail is oversized, the cap
-retains both its identifying prefix and its actionable suffix. This removes
-terminal controls, prevents links/styles from being reparsed, and redacts inline
-credentials while keeping a current-symbol reason, bounded remediation and
-correlation ID intact.
+retains both its identifying prefix and its actionable suffix before escaping
+the selected segments. This removes terminal controls, prevents truncation from
+reactivating links/styles, and redacts inline credentials, URI user-info, Basic
+credentials, JWT-like tokens and PEM private-key bodies while keeping a
+current-symbol reason, bounded remediation and correlation ID intact.
 
 Only `ActionableToolExecutionError` receives a `[TOOL FAILED]` presentation and
 transcript type `tool_failed`. Known assistant input and plan validation receive
@@ -40,7 +41,8 @@ tool exceptions, and any other exception keep the fixed generic retry text and
 
 The controller emits exactly one presentation for a typed failure. It does not
 add a generic fallback afterward and does not synthesize an answer after failed
-tool execution.
+tool execution. Tool and assistant lifecycle rows remain diagnostically useful,
+but their error summaries are sanitized and bounded before persistence.
 
 ## Scope
 
@@ -57,7 +59,8 @@ Focused tests drive the real controller and DuckDB chat repository with a real
 compatibility branch, and an arbitrary exception originating inside the real
 assistant executor/tool trace. They prove public reason/remediation/correlation,
 redaction, markup neutralization, bounds, persisted message types, validation
-mapping, generic fallback and absence of duplicate generic output. Existing
+mapping, generic fallback, legacy post-approval parity, the established private
+assistant error contract, and absence of duplicate generic output. Existing
 issue #163/#228, stage, routing, trace and R4 tests prove the surrounding
 lifecycle remains unchanged; manual QA drives the same controller/repository
 path and inspects visible output plus transcript rows.

@@ -76,7 +76,13 @@ length-bounded while retaining the available readiness reason, remediation and
 correlation ID. Known request and plan validation failures SHALL use validation
 presentation. Ordinary tool failures and unexpected exceptions, including an
 exception originating inside a tool, SHALL continue to use the generic retry
-presentation and SHALL NOT expose exception details.
+presentation and SHALL NOT expose exception details. Length truncation SHALL NOT
+reactivate escaped markup, and public sanitization SHALL redact common structured
+credential forms before persistence.
+
+Affected tool-trace and assistant-session audit error summaries SHALL also be
+sanitized and length-bounded while retaining truthful failure status and error
+type.
 
 #### Scenario: Current-symbol provisioning fails
 - **GIVEN** `data.ensure_current_symbol` raises an explicitly public structured
@@ -98,6 +104,13 @@ presentation and SHALL NOT expose exception details.
 - **THEN** the trace remains `tool_trace_event`, exactly one actionable
   `tool_failed` row is persisted, and no generic duplicate is emitted.
 
+#### Scenario: Approved legacy current-symbol provisioning fails
+- **GIVEN** the compatibility assistant path previews a current-symbol plan
+- **WHEN** approval execution raises an explicitly public provisioning or known
+  validation failure
+- **THEN** chat persists the corresponding `tool_failed` or `validation_error`
+  presentation once and emits no generic duplicate.
+
 #### Scenario: Known validation fails
 - **GIVEN** prepared natural-language preparation raises a known request or plan
   validation error
@@ -118,3 +131,17 @@ presentation and SHALL NOT expose exception details.
 - **WHEN** the executor and chat boundary handle it
 - **THEN** the failed trace remains truthful while chat renders only the generic
   runtime error and persists none of the internal detail.
+
+#### Scenario: Long public failure contains markup and credential forms
+- **GIVEN** an explicitly public failure contains an oversized Rich link/style
+  sequence and structured credential text
+- **WHEN** chat sanitizes, bounds, renders and persists it
+- **THEN** the final text remains within the public bound, Rich parses no active
+  spans, and no credential payload is retained.
+
+#### Scenario: Unexpected tool failure is audited
+- **GIVEN** an allowlisted tool raises an unexpected exception containing a
+  structured credential form
+- **WHEN** tool and assistant lifecycle rows are finalized as failed
+- **THEN** both rows retain truthful failure type/status but their bounded error
+  summaries contain no credential payload.

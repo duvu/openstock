@@ -97,6 +97,10 @@ except (AssistantInputValidationError, PlanValidationError) as exc:
 
 Leave the unexpected fallback text and stage/tool callbacks unchanged.
 
+This initial implementation sketch is superseded by Task 4: only the explicit
+`ActionableToolExecutionError` subtype is public. Ordinary assistant
+`ToolExecutionError` values remain on the generic presentation path.
+
 - [x] **Step 3: Run focused green tests and Ruff**
 
 Run: `cd vnalpha && uv run --extra dev pytest -q tests/test_issue_230_chat_tool_failures.py tests/test_chat_errors.py`
@@ -161,8 +165,9 @@ persists one semantic failure, and arbitrary Rich link/style markup is inert.
 
 Carry an immutable `PublicToolFailure` through exact tool-layer and assistant-
 layer actionable exception subtypes. Mark only non-ready
-`data.ensure_current_symbol` results. Let unexpected tool runtime exceptions
-retain their original type so the controller's generic catch owns them.
+`data.ensure_current_symbol` results. Preserve the established assistant
+`ToolExecutionError` contract for unexpected tool runtime exceptions without
+adding the public marker, so the controller's generic catch owns them.
 
 - [x] **Step 3: Reuse typed presentation across supported paths**
 
@@ -174,10 +179,21 @@ failure persistence.
 - [x] **Step 4: Bound work and neutralize Rich markup**
 
 Crop oversized raw input before regex processing, retain the actionable
-head/tail, escape remaining Rich markup, then enforce the final 4,096-character
-bound.
+head/tail, and select the bounded head/tail before escaping each segment so
+truncation cannot cut a Rich escape sequence.
 
-- [ ] **Step 5: Recommit and repeat exact-SHA review/publication gates**
+- [x] **Step 5: Correct second exact-commit review blockers**
+
+Add red/green regressions for legacy post-approval actionable/validation
+presentation, long-input Rich escape truncation, common credential forms and
+the assistant executor error contract. Reuse the typed helpers in the legacy
+approval branch, restore private `ToolExecutionError` wrapping for unexpected
+tool implementations, strengthen bounded public sanitization, and persist only
+sanitized/bounded error summaries in affected tool and assistant audit rows.
+Remove ambient localhost and default-user-warehouse dependencies from the
+affected regression selector.
+
+- [ ] **Step 6: Recommit and repeat exact-SHA review/publication gates**
 
 Run focused and full validation, five independent review lanes, the runtime
 debugging audit, exact-commit GitHub Actions and PR/issue reconciliation on the

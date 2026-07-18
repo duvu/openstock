@@ -169,10 +169,25 @@ happened.
 
 **Prevent it:** carry an explicit structured public-failure type containing only
 allowlisted reason, remediation, correlation and evidence fields. Keep ordinary
-tool errors and arbitrary exceptions on the generic path. Test from the real
+tool errors and arbitrary exceptions on the generic presentation path, even if
+an internal compatibility wrapper converts them to a private assistant error
+type. Test from the real
 nested producer through conversion, persistence and rendering, including every
 approval and legacy branch. Treat text sanitization as defense in depth, not as
 the trust decision.
+
+## 20. A later transform undoes an earlier safety transform
+
+Escaping markup before length truncation can still be unsafe: a slice may drop
+the escape prefix while retaining the tag opener, turning inert text back into
+an active Rich link or style. Similar ordering mistakes can split redaction
+markers, encoded delimiters, or structured tokens.
+
+**Prevent it:** define safety over the final rendered and persisted value. Bound
+source segments first, escape each retained segment atomically, then assert the
+final character limit and parse the result with the real renderer. Include
+adversarial fixtures whose truncation boundary lands inside an escape sequence,
+not just short markup examples.
 
 # Mandatory checklist
 
@@ -198,6 +213,7 @@ the trust decision.
 - [ ] Do not default non-throwing work to success.
 - [ ] Reuse one service and one correlation ID across surfaces.
 - [ ] Sanitize public errors and audit summaries.
+- [ ] Apply bounding and escaping in an order that leaves the final rendered value safe.
 - [ ] Render only explicitly public structured failures; keep arbitrary nested exceptions generic.
 - [ ] Make remediation typed, ordered, executable, and root-cause-specific.
 - [ ] Preserve legacy defaults unless explicitly changed.
@@ -210,6 +226,7 @@ the trust decision.
 - [ ] Exercise empty, partial, failed, and legacy-row cases.
 - [ ] Give every review finding an explicit disposition.
 - [ ] Review test expectations for semantic correctness.
+- [ ] Parse bounded public text with the real renderer and assert no active markup.
 - [ ] Run and report required full validation gates honestly.
 - [ ] Check CI on the exact commit; skipped is not passed.
 - [ ] Update OpenSpec evidence.

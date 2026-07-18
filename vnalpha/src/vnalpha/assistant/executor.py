@@ -257,3 +257,5 @@ class AssistantExecutor:
             raise ActionableToolExecutionError(exc.failure) from exc
         except ToolError as exc:
             raise ToolExecutionError(str(exc)) from exc
+        except Exception as exc:
+            raise ToolExecutionError(str(exc)) from exc

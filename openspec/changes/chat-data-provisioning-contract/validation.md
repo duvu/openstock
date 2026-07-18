@@ -48,22 +48,38 @@ Five-lane review found that arbitrary tool runtime exceptions were wrapped into
 the same public type, approval discarded actionable/validation presentation,
 and the legacy trace callback created a semantic failure before the generic
 fallback. No review or runtime-audit pass on that SHA is reusable. The corrected
-candidate's exact SHA will be recorded in the PR evidence after this local gate
-set is committed.
+candidate's exact SHA will be recorded after the final local gate set is
+committed.
+
+Second candidate `3a77f328c8e414312a6a73f889777a74b1030ecc` is also
+rejected. Exact-SHA review reproduced a missing legacy post-approval typed
+mapping, truncation that could reactivate Rich markup, incomplete redaction for
+common structured credential forms, and a broken private assistant error-type
+contract for arbitrary tool implementation failures. Hands-on QA also found raw
+credential-shaped detail in affected internal tool/session error summaries. Its runtime-audit pass and
+local gate results are useful diagnostics but are not reusable as completion
+evidence for the next commit.
+
+The next correction also removes two validation-isolation leaks identified by
+hands-on QA: the supplied-correlation fixture no longer exercises an ambient
+localhost provider, and the swallowed slash-command exception test now owns a
+temporary DuckDB warehouse instead of opening the default user warehouse.
 
 | Check | Outcome | Evidence |
 |---|---|---|
 | Initial red/green boundary regressions | Passed, then superseded | The first red run exposed five direct boundary failures and the first focused green run passed 26 tests. Exact-SHA review then demonstrated missing nested-executor, approval and legacy cases, so this evidence did not establish completion. |
 | Exact-SHA review of `c440c71` | Failed | Goal, code-quality, QA, security and context review all rejected the snapshot. Runtime reproductions proved a credential-bearing DSN reached visible/persisted `tool_failed`, approval mapped three typed cases to generic `error`, and legacy execution persisted both trace-derived `tool_failed` and generic `error`. |
+| Exact-SHA review of `3a77f32` | Failed | All five independent lanes rejected the snapshot. Reproductions proved legacy post-approval typed failures became generic, final slicing could reactivate escaped Rich markup, common structured credentials could survive public and audit-summary sanitization, and arbitrary tool failures no longer satisfied the established assistant error contract. |
 | Corrective red/green surface regressions | Passed | The expanded test file produced eight expected failures before correction: missing structured public type, public ordinary/nested exceptions, three approval mappings, legacy duplication and active Rich markup. After correction, the three issue files passed 34 tests at `100%`, exit `0`; changed-file Ruff and format checks passed. |
-| Corrected affected chat/provisioning/lifecycle surface | Passed | The expanded issue #163/#228/chat/approval/executor selector completed at `100%`, exit `0`, including 15 test files and the real nested-executor regression. |
+| Second-review corrective red/green regressions | Passed | Four legacy approval/Rich-boundary cases failed before correction; the assistant error-contract case and four credential-form cases then failed before their fixes; affected audit persistence retained a controlled private fixture before sanitization. The final four issue files collect 23 passing cases and are split below 300 lines each. |
+| Corrected affected chat/provisioning/lifecycle surface | Passed | The issue #163/#228/chat/approval/executor/CLI/TUI-adjacent selector collected 361 tests across 18 files and completed at `100%`, exit `0`, including real nested-executor, audit-persistence and isolated legacy/default-path regressions. |
 | Manual controller/repository/tool lifecycle | Pending exact-SHA rerun | The rejected candidate passed the immediate actionable P0 path. Immediate, approved, legacy and unexpected nested-tool scenarios will be rerun after the corrected commit exists so the evidence binds to its exact SHA. |
 | Full vnalpha suite | Passed | `cd vnalpha && uv run --extra dev pytest -q` completed at `100%`, exit `0`, on the corrected worktree in one process. |
 | R4 acceptance | Passed | `make verify-r4` completed 81 selected permission/session/trace/clear/persistence tests at `100%`, exit `0`. |
-| Lint and formatting | Passed | `make lint-vnalpha` reported all checks passed and 695 files already formatted. Ruff LSP diagnostics reported no errors in all eight changed Python files. |
+| Lint and formatting | Passed | `make lint-vnalpha` reported all checks passed and 697 files already formatted. Focused Ruff checks and format checks also passed after the final test split. |
 | Installed-package vertical | Passed | `PIP_INDEX_URL=https://pypi.org/simple make verify-vnalpha-package` passed 59/59, including the built Debian package's application-wheel fixture contract and runtime-replay evaluation. |
 | Research evaluations | Passed | `make eval-research-answers` passed 5/5; `make eval-research-runtime` passed 22/22 with zero failures. |
-| OpenSpec | Passed | `openspec validate chat-data-provisioning-contract --strict` reported valid; `python -m pytest -q scripts/tests/test_check_openspec_completion.py` passed 12 tests; apply instructions report 18/19 tasks with publication reconciliation intentionally pending. |
+| OpenSpec | Passed | `openspec validate chat-data-provisioning-contract --strict` reported valid; `python -m pytest -q scripts/tests/test_check_openspec_completion.py` passed 12 tests; apply instructions report 19/20 tasks with publication reconciliation intentionally pending. |
 | Repository and packaging structure | Passed with one warning | `make repo-hygiene`, `make verify-repo-consistency`, `packaging/scripts/openstock-secret-scan`, and `make validate-compose` exited `0`. `make verify-r2-ci` exited `0` with 18 OK, one existing systemd verification warning and zero failures. |
-| Static no-excuse audit | Pre-existing debt plus one intentional fixture | The checker reports the inherited 922-pure-LOC controller, existing broad/silent top-level boundaries and mutable `ChatError`. Its only correction-specific test finding is the deliberate arbitrary `RuntimeError` fixture required to prove nested unexpected exceptions stay generic. The correction adds no broad source conversion and reuses two exact typed presentation helpers rather than refactoring unrelated controller responsibilities. |
+| Static no-excuse audit | Pre-existing debt plus intentional fixtures | The inherited controller remains above the source-size threshold with existing broad/silent top-level boundaries and mutable `ChatError`. New issue regressions are split into 230-, 252- and 70-line files; their arbitrary `RuntimeError` fixtures are required to prove nested unexpected exceptions stay generic while preserving the private assistant error contract. The correction reuses two exact typed presentation helpers rather than refactoring unrelated controller responsibilities. |
 | GitHub Actions on exact implementation commit | Pending | Exact implementation-commit CI will be recorded after the branch and PR exist. No merged-CI claim is inferred from local gates. |

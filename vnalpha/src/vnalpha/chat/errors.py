@@ -67,15 +67,39 @@ def sanitize_public_error(message: str) -> str:
         prefix_chars = _PUBLIC_ERROR_SCAN_CHARS // 4
         suffix_chars = _PUBLIC_ERROR_SCAN_CHARS - prefix_chars - 1
         raw = raw[:prefix_chars] + "…" + raw[-suffix_chars:]
-    sanitized = escape(" ".join(sanitize_text(raw).split()))
-    if len(sanitized) <= MAX_PUBLIC_ERROR_CHARS:
-        return sanitized
+    sanitized = " ".join(sanitize_text(raw).split())
+    escaped = escape(sanitized)
+    if len(escaped) <= MAX_PUBLIC_ERROR_CHARS:
+        return escaped
     prefix_chars = MAX_PUBLIC_ERROR_CHARS - _PUBLIC_ERROR_SUFFIX_CHARS - 1
     return (
-        sanitized[:prefix_chars].rstrip()
+        _escape_prefix(sanitized, prefix_chars).rstrip()
         + "…"
-        + sanitized[-_PUBLIC_ERROR_SUFFIX_CHARS:].lstrip()
+        + _escape_suffix(sanitized, _PUBLIC_ERROR_SUFFIX_CHARS).lstrip()
     )
+
+
+def _escape_prefix(text: str, budget: int) -> str:
+    low, high = 0, len(text)
+    while low < high:
+        midpoint = (low + high + 1) // 2
+        if len(escape(text[:midpoint])) <= budget:
+            low = midpoint
+        else:
+            high = midpoint - 1
+    return escape(text[:low])
+
+
+def _escape_suffix(text: str, budget: int) -> str:
+    low, high = 0, len(text)
+    while low < high:
+        midpoint = (low + high + 1) // 2
+        candidate = text[-midpoint:] if midpoint else ""
+        if len(escape(candidate)) <= budget:
+            low = midpoint
+        else:
+            high = midpoint - 1
+    return escape(text[-low:] if low else "")
 
 
 # ---------------------------------------------------------------------------

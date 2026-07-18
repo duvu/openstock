@@ -538,6 +538,10 @@ class ChatController:
                 self._persist_error_message(
                     refusal_text, ChatErrorKind.REFUSAL, role="assistant"
                 )
+        except ActionableToolExecutionError as exc:
+            self._present_actionable_tool_failure(exc)
+        except (AssistantInputValidationError, PlanValidationError) as exc:
+            self._present_validation_failure(exc)
         except Exception:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."

@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from vnalpha.core.text_safety import sanitize_error_summary
 from vnalpha.tools.errors import ToolPermissionError
 from vnalpha.tools.models import ToolPermission
 from vnalpha.tools.registry import LocalToolRegistry
@@ -119,7 +120,10 @@ class TracedLocalToolExecutor:
                 self._conn,
                 trace_id,
                 status="FAILED",
-                error={"message": str(exc), "error_type": type(exc).__name__},
+                error={
+                    "message": sanitize_error_summary(exc),
+                    "error_type": type(exc).__name__,
+                },
             )
             if self._trace_event_callback is not None:
                 self._trace_event_callback(
@@ -155,7 +159,10 @@ class TracedLocalToolExecutor:
                 self._conn,
                 trace_id,
                 status="FAILED",
-                error={"message": str(exc), "error_type": type(exc).__name__},
+                error={
+                    "message": sanitize_error_summary(exc),
+                    "error_type": type(exc).__name__,
+                },
             )
             # Emit FAILED event
             if self._trace_event_callback is not None:
