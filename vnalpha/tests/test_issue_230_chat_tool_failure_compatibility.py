@@ -204,6 +204,9 @@ def test_camel_case_sensitive_keys_redact_without_hiding_token_metrics() -> None
         "credentialValue": "credential-private-230",
         "valueCredential": "credential-private-230",
         "sessionId": "session-private-230",
+        "sessionIdValue": "session-private-230",
+        "tokenValue": "token-private-230",
+        "bearerToken": "bearer-private-230",
     }
 
     assert redact_structure(credential_fields) == dict.fromkeys(
@@ -211,6 +214,7 @@ def test_camel_case_sensitive_keys_redact_without_hiding_token_metrics() -> None
     )
     assert not is_sensitive_key("token_budgets")
     assert not is_sensitive_key("token_estimate")
+    assert not is_sensitive_key("auth_status")
 
     result = CommandResult(
         status="SUCCESS",
@@ -218,7 +222,10 @@ def test_camel_case_sensitive_keys_redact_without_hiding_token_metrics() -> None
         panels=[
             ResultPanel(
                 title="Memory Status",
-                content={"token_budgets": {"symbol_card": 1_600}},
+                content={
+                    "token_budgets": {"symbol_card": 1_600},
+                    "auth_status": "configured",
+                },
             )
         ],
     )
@@ -226,6 +233,7 @@ def test_camel_case_sensitive_keys_redact_without_hiding_token_metrics() -> None
     Console(file=output, highlight=False).print(result_to_markup(result))
     rendered = output.getvalue()
     assert "token_budgets: symbol_card=1600" in rendered
+    assert "auth_status: configured" in rendered
 
 
 def test_metadata_mode_retains_structural_closed_loop_fields(

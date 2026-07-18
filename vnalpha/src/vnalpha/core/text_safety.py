@@ -55,12 +55,13 @@ _TRUNCATED_URI_USERINFO = re.compile(
 )
 _JWT = re.compile(
     r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
-    r"[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])"
+    r"[A-Za-z0-9_-]*(?![A-Za-z0-9_-])"
 )
 _TRUNCATED_JWT = re.compile(
     r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
     r"(?:\.[A-Za-z0-9_-]*)?\Z"
 )
+_TRUNCATED_JWT_PREFIX = re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\Z")
 _PEM_PRIVATE_KEY = re.compile(
     r"-----BEGIN ((?:[A-Z0-9]+ )?PRIVATE KEY)-----.*?"
     r"(?:-----END \1-----|\Z)",
@@ -86,14 +87,19 @@ _SENSITIVE_KEYS = frozenset(
         "authorization",
         "authorization_header",
         "auth",
+        "bearer",
         "cookie",
         "credential",
         "credentials",
         "session_id",
         "session_token",
+        "passwd",
     }
 )
-_SENSITIVE_KEY_PREFIXES = _SENSITIVE_KEYS - {"token", "session_id"}
+_SENSITIVE_KEY_PREFIXES = _SENSITIVE_KEYS
+_SENSITIVE_KEY_VALUE_AFFIXES = frozenset(
+    {"data", "hash", "header", "key", "material", "payload", "secret", "token", "value"}
+)
 _BEARER_PROSE_TERMS = frozenset(
     {
         "bond",
@@ -113,7 +119,7 @@ _BEARER_PROSE_TERMS = frozenset(
 )
 _MAX_ERROR_SUMMARY_CHARS = 4_096
 _MAX_ERROR_SUMMARY_SCAN_CHARS = _MAX_ERROR_SUMMARY_CHARS * 2
-_URI_TRAILING_PUNCTUATION = ".,;!?)}'\""
+_URI_TRAILING_PUNCTUATION = ".,;!?)}>'\"`"
 
 
 def _redact_standalone_basic(match: re.Match[str], *, scan_truncated: bool) -> str:
@@ -167,21 +173,32 @@ def _redact_uri_userinfo(match: re.Match[str]) -> str:
 
 def _redact_truncated_uri_userinfo(match: re.Match[str]) -> str:
     candidate = match.group(0)
-    endpoint = candidate.rstrip(_URI_TRAILING_PUNCTUATION)
-    authority = match.group("authority").rstrip(_URI_TRAILING_PUNCTUATION)
+    authority = _strip_authority_punctuation(match.group("authority"))
+    removed_chars = len(match.group("authority")) - len(authority)
+    endpoint = candidate[:-removed_chars] if removed_chars else candidate
+    suffix = candidate[len(endpoint) :]
     if ":" not in authority or (authority.startswith("[") and authority.endswith("]")):
         return candidate
     try:
         parsed = urlsplit(endpoint)
     except ValueError:
-        return f"{match.group('scheme')}[REDACTED]"
+        return f"{match.group('scheme')}[REDACTED]{suffix}"
     try:
         port = parsed.port
     except ValueError:
         port = None
     if parsed.hostname and port is not None:
         return candidate
-    return f"{match.group('scheme')}[REDACTED]"
+    return f"{match.group('scheme')}[REDACTED]{suffix}"
+
+
+def _strip_authority_punctuation(authority: str) -> str:
+    stripped = authority.rstrip(_URI_TRAILING_PUNCTUATION)
+    if stripped.endswith("]") and not (
+        stripped.startswith("[") and stripped.count("]") == 1
+    ):
+        return stripped[:-1]
+    return stripped
 
 
 def is_sensitive_key(key: object) -> bool:
@@ -193,6 +210,8 @@ def is_sensitive_key(key: object) -> bool:
         normalized in _SENSITIVE_KEYS
         or any(
             normalized.startswith(f"{sensitive}_")
+            and normalized.removeprefix(f"{sensitive}_").split("_", 1)[0]
+            in _SENSITIVE_KEY_VALUE_AFFIXES
             for sensitive in _SENSITIVE_KEY_PREFIXES
         )
         or any(normalized.endswith(f"_{sensitive}") for sensitive in _SENSITIVE_KEYS)
@@ -220,6 +239,8 @@ def sanitize_text(
     text = _TRUNCATED_URI_USERINFO.sub(_redact_truncated_uri_userinfo, text)
     text = _JWT.sub("[REDACTED]", text)
     text = _TRUNCATED_JWT.sub("[REDACTED]", text)
+    if scan_truncated:
+        text = _TRUNCATED_JWT_PREFIX.sub("[REDACTED]", text)
     return _INLINE_UNQUOTED_SECRET.sub(r"\1[REDACTED]", text)
 
 

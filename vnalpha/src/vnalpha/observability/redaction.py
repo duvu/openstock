@@ -13,23 +13,6 @@ import os
 
 from vnalpha.core.text_safety import is_sensitive_key, sanitize_text
 
-# ---------------------------------------------------------------------------
-# Sensitive key patterns (case-insensitive substring match)
-# ---------------------------------------------------------------------------
-
-SENSITIVE_PATTERNS: tuple[str, ...] = (
-    "password",
-    "token",
-    "secret",
-    "api_key",
-    "apikey",
-    "authorization",
-    "bearer",
-    "private_key",
-    "access_key",
-    "passwd",
-)
-
 _REDACTED_PLACEHOLDER = "[REDACTED]"
 _REDACTED_STATUS = "redacted"
 _FULL_STATUS = "full"
@@ -73,8 +56,7 @@ def get_content_mode() -> str:
 
 
 def _is_sensitive_key(key: object) -> bool:
-    low = str(key).lower()
-    return is_sensitive_key(key) or any(pat in low for pat in SENSITIVE_PATTERNS)
+    return is_sensitive_key(key)
 
 
 def redact_dict(d: dict, mode: str | None = None) -> dict:
@@ -93,10 +75,14 @@ def redact_dict(d: dict, mode: str | None = None) -> dict:
     # redacted (default)
     result: dict = {}
     for k, v in d.items():
-        if _is_sensitive_key(k):
-            result[k] = _REDACTED_PLACEHOLDER
+        safe_key_text = sanitize_text(k)
+        safe_key = (
+            k if not isinstance(k, str) and safe_key_text == str(k) else safe_key_text
+        )
+        if _is_sensitive_key(k) or _REDACTED_PLACEHOLDER in safe_key_text:
+            result[safe_key] = _REDACTED_PLACEHOLDER
         else:
-            result[k] = _redact_value(v, mode)
+            result[safe_key] = _redact_value(v, mode)
     return result
 
 

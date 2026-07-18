@@ -243,8 +243,8 @@ correlation value is joined to its neighbors.
 
 **Prevent it:** make end-of-scan credential handling conservative, and verify
 the final composed renderer input rather than only each field. Test credential
-markers on both sides of every scan boundary and adversarial incomplete markup
-across every field boundary.
+markers and first protocol delimiters on both sides of every scan boundary, and
+test adversarial incomplete markup across every field boundary.
 
 ## 25. A content-mode primitive erases structural metadata
 
@@ -262,15 +262,29 @@ statuses remain usable.
 
 Delimiter-only normalization misses common JSON spellings such as
 `authHeader`, while applying every sensitive word as a prefix can classify
-ordinary operational fields such as `token_budgets` as credentials. The same
-helper often serves exception records, command renderers, logs and clipboards,
-so either direction silently invalidates multiple surfaces.
+ordinary operational fields such as `token_budgets` or `auth_status` as
+credentials. A second legacy substring matcher can silently override a correct
+canonical decision. The same helpers often serve exception records, command
+renderers, logs and clipboards, so either direction invalidates multiple
+surfaces.
 
 **Prevent it:** normalize common key casing before matching, keep exact and
-suffix compatibility, and allow prefix matching only for credential namespaces
-that do not collide with established metrics. Pair nested credential positives
-with real structured-consumer negatives, including operational status and
-budget fields.
+suffix compatibility, and require a credential-bearing affix for prefix
+matching. Make every consumer delegate to the canonical classifier. Pair nested
+credential positives with real structured-consumer negatives, including
+operational status and budget fields.
+
+## 27. Structured redaction treats map keys as harmless metadata
+
+Replacing a sensitive field's value does not make a record safe when the key
+itself contains `password=...`, an authorization token, terminal controls or
+markup. A record can therefore claim `redacted` while its serialized key names
+still carry the original secret.
+
+**Prevent it:** sanitize JSON-valid key names before persistence as well as
+classifying their values, preserve safe non-string keys where the boundary
+allows them, and assert over the complete serialized record with controlled
+secrets in both keys and values.
 
 # Mandatory checklist
 

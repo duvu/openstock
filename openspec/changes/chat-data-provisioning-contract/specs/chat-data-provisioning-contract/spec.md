@@ -140,8 +140,9 @@ boundary SHALL NOT erase structural identifiers required by other consumers.
 - **THEN** the final value contains no active markup and remains length-bounded.
 
 #### Scenario: Credential crosses the bounded scan edge
-- **GIVEN** a protocol-valid Basic credential begins inside the retained public
-  prefix and continues beyond the bounded scan window
+- **GIVEN** a protocol-valid Basic credential or JWT begins inside the retained
+  public prefix and its validating delimiter continues beyond the bounded scan
+  window
 - **WHEN** public and audit-summary projections sanitize the value
 - **THEN** no credential token prefix survives either projection.
 

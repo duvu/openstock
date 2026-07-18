@@ -244,7 +244,18 @@ Normalize camelCase nested credential keys but exclude ambiguous `token_*`
 operational metrics from prefix matching. Add real renderer and serialized
 exception-record compatibility coverage.
 
-- [ ] **Step 11: Recommit and repeat exact-SHA review/publication gates**
+- [x] **Step 11: Correct eighth exact-commit structured-output findings**
+
+Treat a JWT prefix ending at a known scan edge as incomplete and support empty
+signatures with following punctuation. Preserve square-, angle- and
+backtick-wrapped grammatical endpoints. Sanitize credential-bearing map key
+names before persistence, make observability delegate to the canonical key
+classifier, and restrict sensitive prefixes to credential-bearing affixes so
+`token_budgets`, token estimates and safe provider `auth_status` remain visible.
+Split the expanded compatibility matrix so every issue regression file remains
+below 300 lines.
+
+- [ ] **Step 12: Recommit and repeat exact-SHA review/publication gates**
 
 Run focused and full validation, five independent review lanes, the runtime
 debugging audit, exact-commit GitHub Actions and PR/issue reconciliation on the
