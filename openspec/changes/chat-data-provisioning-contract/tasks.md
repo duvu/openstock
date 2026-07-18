@@ -16,3 +16,6 @@
 - [x] 14. Add failing chat-boundary regressions for assistant tool failures, known validation, unexpected fallback, sanitization/bounds, `tool_failed` persistence and no duplicate generic message.
 - [x] 15. Map typed prepared-chat failures to their bounded public presentations without changing issue #228 stage/tool/correlation lifecycle behavior.
 - [x] 16. Run the focused chat/provisioning/lifecycle surface, strict OpenSpec validation and required repository gates; record exact outcomes in `validation.md`.
+- [x] 17. Preserve explicit public-failure provenance so arbitrary nested tool exceptions and ordinary tool errors remain generic and cannot leak internal detail.
+- [x] 18. Add red/green approval, legacy, real-executor and Rich-markup regressions; reuse typed presentation without duplicating semantic failure rows.
+- [ ] 19. Recommit the corrected candidate and repeat full gates, exact-SHA review/runtime audit, GitHub Actions and PR/issue reconciliation.

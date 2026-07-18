@@ -67,20 +67,36 @@ assistant plans.
 
 ### Requirement: Actionable typed failures survive the chat boundary
 
-The prepared natural-language chat boundary SHALL render and persist a known
-assistant tool failure exactly once as `tool_failed`. Its public text SHALL be
-sanitized and length-bounded while retaining the available readiness reason,
-remediation and correlation ID. Known request and plan validation failures SHALL
-use validation presentation. Unexpected exceptions SHALL continue to use the
-generic retry presentation and SHALL NOT expose exception details.
+Every supported prepared natural-language chat path SHALL render and persist an
+explicitly public structured assistant tool failure exactly once. Immediate,
+post-approval, and compatibility/legacy execution are all supported paths. The
+failure SHALL be stored as
+`tool_failed`. Its public text SHALL be sanitized, markup-neutralized and
+length-bounded while retaining the available readiness reason, remediation and
+correlation ID. Known request and plan validation failures SHALL use validation
+presentation. Ordinary tool failures and unexpected exceptions, including an
+exception originating inside a tool, SHALL continue to use the generic retry
+presentation and SHALL NOT expose exception details.
 
 #### Scenario: Current-symbol provisioning fails
-- **GIVEN** `data.ensure_current_symbol` raises a typed tool failure containing a
-  readiness reason, remediation and correlation ID
+- **GIVEN** `data.ensure_current_symbol` raises an explicitly public structured
+  tool failure containing a readiness reason, remediation and correlation ID
 - **WHEN** prepared natural-language execution reaches the chat boundary
 - **THEN** one visible and persisted `tool_failed` message retains those public
   details, contains no terminal controls or secrets, and no second generic error
   is emitted.
+
+#### Scenario: Approved current-symbol provisioning fails
+- **GIVEN** a current-symbol plan is previewed and approved
+- **WHEN** its explicitly public provisioning failure reaches chat
+- **THEN** the same `tool_failed` presentation and persistence contract applies.
+
+#### Scenario: Legacy current-symbol provisioning fails
+- **GIVEN** the compatibility assistant path emits a failed trace and then raises
+  the explicitly public provisioning failure
+- **WHEN** it reaches chat
+- **THEN** the trace remains `tool_trace_event`, exactly one actionable
+  `tool_failed` row is persisted, and no generic duplicate is emitted.
 
 #### Scenario: Known validation fails
 - **GIVEN** prepared natural-language preparation raises a known request or plan
@@ -95,3 +111,10 @@ generic retry presentation and SHALL NOT expose exception details.
 - **WHEN** it reaches the chat boundary
 - **THEN** the existing generic retry message is rendered and persisted as a
   runtime error without exposing the exception text.
+
+#### Scenario: Unexpected exception originates inside a tool
+- **GIVEN** an allowlisted tool raises an arbitrary runtime exception containing
+  internal or credential-bearing detail
+- **WHEN** the executor and chat boundary handle it
+- **THEN** the failed trace remains truthful while chat renders only the generic
+  runtime error and persists none of the internal detail.

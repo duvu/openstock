@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from vnalpha.tools.errors import PublicToolFailure
+
 
 class AssistantError(Exception):
     """Base class for all assistant errors."""
@@ -23,6 +25,14 @@ class AssistantInputValidationError(AssistantError):
 
 class ToolExecutionError(AssistantError):
     """Raised when a tool call fails during plan execution."""
+
+
+class ActionableToolExecutionError(ToolExecutionError):
+    """Assistant failure proven safe for bounded public presentation."""
+
+    def __init__(self, failure: PublicToolFailure) -> None:
+        self.failure = failure
+        super().__init__(str(failure))
 
 
 class SynthesisError(AssistantError):

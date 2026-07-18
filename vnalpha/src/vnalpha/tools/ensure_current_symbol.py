@@ -16,7 +16,11 @@ from vnalpha.data_provisioning.ensure_current_symbol import (
     ProvisioningOutcome,
     ensure_current_symbol_ready,
 )
-from vnalpha.tools.errors import ToolExecutionError
+from vnalpha.tools.errors import (
+    ActionableToolError,
+    PublicToolFailure,
+    ToolExecutionError,
+)
 from vnalpha.tools.models import ToolOutput
 
 
@@ -47,7 +51,13 @@ def ensure_current_symbol(
 
     summary = _summary(result)
     if not result.is_ready:
-        raise ToolExecutionError(_failure_message(result, summary))
+        raise ActionableToolError(
+            PublicToolFailure(
+                reason=summary,
+                remediation=result.remediation,
+                correlation_id=result.correlation_id,
+            )
+        )
     warnings = list(result.warnings)
     return ToolOutput(
         data=result.to_trace_dict(),
@@ -67,14 +77,6 @@ def _summary(result) -> str:
     if result.errors:
         return result.errors[0]
     return f"{result.symbol}: provisioning did not complete."
-
-
-def _failure_message(result, summary: str) -> str:
-    details = [summary]
-    if result.remediation:
-        details.append("Remediation: " + " -> ".join(result.remediation))
-    details.append(f"correlation_id={result.correlation_id}")
-    return ". ".join(details)
 
 
 __all__ = ["ensure_current_symbol"]

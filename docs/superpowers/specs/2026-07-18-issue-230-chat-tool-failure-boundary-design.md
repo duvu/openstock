@@ -8,26 +8,35 @@ stage/tool lifecycle fixed by issue #228.
 
 ## Boundary and data flow
 
-`AssistantExecutor` converts tool-layer failures to
-`vnalpha.assistant.errors.ToolExecutionError`. `AssistantApp.execute_prepared`
-persists the assistant/prepared-turn failure and re-raises it. The chat
-controller is the presentation boundary: it converts that typed failure into
-one visible message and one transcript row. Tool trace callbacks continue to
-own `RUNNING`/`SUCCESS`/`FAILED` events; the presentation mapping does not emit
-or reinterpret stage events.
+The tool layer marks only explicitly public readiness data as a structured
+`PublicToolFailure` and raises `ActionableToolError`. `AssistantExecutor`
+preserves that provenance as `ActionableToolExecutionError`. Arbitrary tool
+exceptions and ordinary `ToolExecutionError` values never receive that marker
+and therefore remain internal. `AssistantApp.execute_prepared` persists the
+assistant/prepared-turn failure and re-raises it. The chat controller is the
+presentation boundary: it renders only the actionable subtype and keeps every
+other execution failure on the generic path.
+
+The same typed presentation helper owns immediate prepared execution,
+post-approval prepared execution, and the compatibility/legacy assistant path.
+Tool trace callbacks continue to own `RUNNING`/`SUCCESS`/`FAILED` events; trace
+failure events do not create a second semantic chat error.
 
 ## Public failure contract
 
 Chat error formatting will reuse `vnalpha.core.text_safety.sanitize_text`,
-collapse whitespace, and cap public error detail at 4,096 characters. When the
-detail is oversized, the cap retains both its identifying prefix and its
-actionable suffix. This removes terminal controls, Rich tags and inline
+collapse whitespace, escape Rich markup, cap pre-sanitization scan work, and cap
+public error detail at 4,096 characters. When the detail is oversized, the cap
+retains both its identifying prefix and its actionable suffix. This removes
+terminal controls, prevents links/styles from being reparsed, and redacts inline
 credentials while keeping a current-symbol reason, bounded remediation and
 correlation ID intact.
-Typed tool failures receive a `[TOOL FAILED]` presentation and transcript type
-`tool_failed`. Known assistant input and plan validation receive `[WARNING]`
-and `validation_error`. Any other exception keeps the fixed generic retry text
-and `error` transcript type.
+
+Only `ActionableToolExecutionError` receives a `[TOOL FAILED]` presentation and
+transcript type `tool_failed`. Known assistant input and plan validation receive
+`[WARNING]` and `validation_error`. Ordinary tool failures, arbitrary nested
+tool exceptions, and any other exception keep the fixed generic retry text and
+`error` transcript type.
 
 The controller emits exactly one presentation for a typed failure. It does not
 add a generic fallback afterward and does not synthesize an answer after failed
@@ -35,17 +44,20 @@ tool execution.
 
 ## Scope
 
-The implementation changes only `chat/errors.py`, the prepared natural-language
-handler in `chat/controller.py`, and focused tests. It does not redesign
-readiness, exceptions, retries, tracing, approval, slash commands, providers or
-the research-only security boundary.
+The implementation adds one structured public-failure value at the existing
+tool/assistant error seam, marks only the current-symbol readiness failure with
+it, and centralizes its controller presentation across supported natural-
+language paths. It does not redesign readiness, retries, slash commands,
+providers or the research-only security boundary.
 
 ## Verification
 
 Focused tests drive the real controller and DuckDB chat repository with a real
-`PreparedAssistantTurn`, replacing only the prepared execution seam. They prove
-the public reason/remediation/correlation, redaction and length cap, persisted
-message types, validation mapping, generic fallback and absence of duplicate
-generic output. Existing issue #163/#228, stage, routing, trace and R4 tests prove
-the surrounding lifecycle remains unchanged; manual QA drives the same
-controller/repository path and inspects visible output plus transcript rows.
+`PreparedAssistantTurn`, including immediate execution, approval, the legacy
+compatibility branch, and an arbitrary exception originating inside the real
+assistant executor/tool trace. They prove public reason/remediation/correlation,
+redaction, markup neutralization, bounds, persisted message types, validation
+mapping, generic fallback and absence of duplicate generic output. Existing
+issue #163/#228, stage, routing, trace and R4 tests prove the surrounding
+lifecycle remains unchanged; manual QA drives the same controller/repository
+path and inspects visible output plus transcript rows.

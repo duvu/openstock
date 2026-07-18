@@ -138,3 +138,47 @@ as passed, failed, skipped, inconclusive or not run; do not infer unrun gates.
 Mark OpenSpec tasks 14-16 only after their evidence exists, and append exact
 commands/outcomes to `validation.md`. Do not mark CI passed unless GitHub Actions
 is green on the exact implementation commit.
+
+### Task 4: Correct exact-commit review blockers before publication
+
+**Files:**
+- Modify: `vnalpha/src/vnalpha/tools/errors.py`
+- Modify: `vnalpha/src/vnalpha/tools/ensure_current_symbol.py`
+- Modify: `vnalpha/src/vnalpha/assistant/errors.py`
+- Modify: `vnalpha/src/vnalpha/assistant/executor.py`
+- Modify: `vnalpha/src/vnalpha/chat/errors.py`
+- Modify: `vnalpha/src/vnalpha/chat/controller.py`
+- Create: `vnalpha/tests/test_issue_230_chat_tool_failure_surfaces.py`
+
+- [x] **Step 1: Reproduce trust and surface-parity defects**
+
+Add red regressions proving that an arbitrary exception originating inside a
+real tool remains generic, an unclassified assistant tool error remains generic,
+approval preserves actionable tool/validation presentation, the legacy path
+persists one semantic failure, and arbitrary Rich link/style markup is inert.
+
+- [x] **Step 2: Preserve explicit public-failure provenance**
+
+Carry an immutable `PublicToolFailure` through exact tool-layer and assistant-
+layer actionable exception subtypes. Mark only non-ready
+`data.ensure_current_symbol` results. Let unexpected tool runtime exceptions
+retain their original type so the controller's generic catch owns them.
+
+- [x] **Step 3: Reuse typed presentation across supported paths**
+
+Use the same actionable and validation presentation helpers for immediate,
+approved, and legacy prepared execution. Keep trace rows as
+`tool_trace_event` and remove the legacy trace callback's duplicate semantic
+failure persistence.
+
+- [x] **Step 4: Bound work and neutralize Rich markup**
+
+Crop oversized raw input before regex processing, retain the actionable
+head/tail, escape remaining Rich markup, then enforce the final 4,096-character
+bound.
+
+- [ ] **Step 5: Recommit and repeat exact-SHA review/publication gates**
+
+Run focused and full validation, five independent review lanes, the runtime
+debugging audit, exact-commit GitHub Actions and PR/issue reconciliation on the
+new full SHA. A pass recorded against the rejected candidate is not reusable.

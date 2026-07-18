@@ -6,10 +6,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final
 
+from rich.markup import escape
+
 from vnalpha.core.text_safety import sanitize_text
 
 MAX_PUBLIC_ERROR_CHARS: Final = 4_096
 _PUBLIC_ERROR_SUFFIX_CHARS: Final = MAX_PUBLIC_ERROR_CHARS * 3 // 4
+_PUBLIC_ERROR_SCAN_CHARS: Final = MAX_PUBLIC_ERROR_CHARS * 2
 
 
 class ChatErrorKind(str, Enum):
@@ -59,7 +62,12 @@ def format_tool_failure(tool_name: str, error: str) -> str:
 
 def sanitize_public_error(message: str) -> str:
     """Return safe bounded text while retaining its actionable suffix."""
-    sanitized = " ".join(sanitize_text(message).split())
+    raw = message
+    if len(raw) > _PUBLIC_ERROR_SCAN_CHARS:
+        prefix_chars = _PUBLIC_ERROR_SCAN_CHARS // 4
+        suffix_chars = _PUBLIC_ERROR_SCAN_CHARS - prefix_chars - 1
+        raw = raw[:prefix_chars] + "…" + raw[-suffix_chars:]
+    sanitized = escape(" ".join(sanitize_text(raw).split()))
     if len(sanitized) <= MAX_PUBLIC_ERROR_CHARS:
         return sanitized
     prefix_chars = MAX_PUBLIC_ERROR_CHARS - _PUBLIC_ERROR_SUFFIX_CHARS - 1

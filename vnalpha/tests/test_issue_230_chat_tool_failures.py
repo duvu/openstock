@@ -7,9 +7,9 @@ import duckdb
 import pytest
 
 from vnalpha.assistant.errors import (
+    ActionableToolExecutionError,
     AssistantInputValidationError,
     PlanValidationError,
-    ToolExecutionError,
 )
 from vnalpha.assistant.models import (
     AssistantPlan,
@@ -20,6 +20,7 @@ from vnalpha.assistant.models import (
     plan_hash,
 )
 from vnalpha.chat.controller import ChatController
+from vnalpha.tools.errors import PublicToolFailure
 from vnalpha.warehouse.chat_repo import create_chat_session, list_chat_messages
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -55,7 +56,7 @@ def _prepared_turn() -> PreparedAssistantTurn:
                 tool_name="data.ensure_current_symbol",
                 arguments={"symbol": "FPT"},
                 purpose="Provision current-symbol research data.",
-                required_permission="DATA_READ",
+                required_permission="WRITE_DATA",
             )
         ],
     )
@@ -104,16 +105,28 @@ def _run_prepared_failure(
         return controller.handle_natural_language("Phân tích FPT")
 
 
+def _actionable_failure(
+    reason: str,
+    remediation: tuple[str, ...] = (),
+    correlation_id: str = "correlation-230",
+) -> ActionableToolExecutionError:
+    return ActionableToolExecutionError(
+        PublicToolFailure(
+            reason=reason,
+            remediation=remediation,
+            correlation_id=correlation_id,
+        )
+    )
+
+
 def test_typed_tool_failure_preserves_actionable_public_message(
     connection: duckdb.DuckDBPyConnection,
 ) -> None:
     # Given
     controller, session_id, visible_messages = _controller(connection)
-    failure = ToolExecutionError(
-        "[red]FPT readiness failed[/red]. "
-        "Remediation: /data sync FPT -> /build features FPT. "
-        "Authorization: Bearer private-token. "
-        "correlation_id=correlation-230\x1b[31m"
+    failure = _actionable_failure(
+        "[red]FPT readiness failed[/red]. Authorization: Bearer private-token\x1b[31m",
+        remediation=("/data sync FPT", "/build features FPT"),
     )
 
     # When
@@ -143,7 +156,7 @@ def test_typed_tool_failure_bounds_public_message(
 ) -> None:
     # Given
     controller, _session_id, _visible_messages = _controller(connection)
-    failure = ToolExecutionError("x" * (_MAX_PUBLIC_ERROR_CHARS + 1_000))
+    failure = _actionable_failure("x" * (_MAX_PUBLIC_ERROR_CHARS + 1_000))
 
     # When
     result = _run_prepared_failure(controller, failure)
@@ -159,11 +172,9 @@ def test_bounded_tool_failure_retains_actionable_suffix(
 ) -> None:
     # Given
     controller, _session_id, _visible_messages = _controller(connection)
-    failure = ToolExecutionError(
-        "FPT readiness failed: "
-        + ("x" * (_MAX_PUBLIC_ERROR_CHARS + 1_000))
-        + ". Remediation: /data sync FPT -> /build features FPT. "
-        "correlation_id=correlation-230"
+    failure = _actionable_failure(
+        "FPT readiness failed: " + ("x" * (_MAX_PUBLIC_ERROR_CHARS + 1_000)),
+        remediation=("/data sync FPT", "/build features FPT"),
     )
 
     # When

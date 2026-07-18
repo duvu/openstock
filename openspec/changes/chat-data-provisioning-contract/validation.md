@@ -33,25 +33,37 @@ prepared turns synthesize only after all tool steps complete.
 
 ## Issue #230 actionable chat tool failure boundary - 2026-07-18
 
-The prepared natural-language boundary now presents assistant-layer
-`ToolExecutionError` as one sanitized, bounded `[TOOL FAILED]` message and one
-`tool_failed` transcript row. The public bound preserves the leading readiness
-reason and the actionable remediation/correlation suffix. Known assistant input
-and plan validation remain `validation_error`; unexpected exceptions retain the
-fixed generic retry text and `error` transcript type. Issue #228 stage and tool
-callbacks were not changed.
+The prepared natural-language boundary presents only the explicitly public
+`ActionableToolExecutionError` subtype as one sanitized, markup-neutralized and
+bounded `[TOOL FAILED]` message plus one `tool_failed` transcript row. The
+structured public payload contains readiness reason, bounded remediation and
+correlation ID. Ordinary tool errors and arbitrary nested exceptions retain the
+fixed generic retry text and `error` transcript type. The same typed presentation
+is used for immediate, approved and legacy-compatible execution. Issue #228
+stage/tool callbacks and canonical `tool_trace_event` persistence remain
+unchanged.
+
+Initial candidate `c440c71b2596f5cadcdacf7c4ae92d5790b49305` is rejected.
+Five-lane review found that arbitrary tool runtime exceptions were wrapped into
+the same public type, approval discarded actionable/validation presentation,
+and the legacy trace callback created a semantic failure before the generic
+fallback. No review or runtime-audit pass on that SHA is reusable. The corrected
+candidate's exact SHA will be recorded in the PR evidence after this local gate
+set is committed.
 
 | Check | Outcome | Evidence |
 |---|---|---|
-| Red/green boundary regressions | Passed | Before implementation, `tests/test_issue_230_chat_tool_failures.py` plus `tests/test_chat_errors.py` had five expected failures: typed tool and validation errors reached the generic branch, public tool text was not bounded/sanitized, and `TOOL_FAILED` mapped to `tool_trace_event`. The final focused run passed all 26 tests. A separate oversized-reason regression failed before the head/tail bound and passed afterward while retaining remediation and correlation. |
-| Affected chat/provisioning/lifecycle surface | Passed | `cd vnalpha && uv run --extra dev pytest -q tests/test_issue_230_chat_tool_failures.py tests/test_issue_163_chat_provisioning.py tests/test_assistant_lifecycle_hardening.py tests/test_staged_response.py tests/test_chat_controller.py tests/test_tui_routing.py tests/test_r4_trace.py tests/test_plan_approval.py tests/test_observability.py tests/test_chat_errors.py` completed at `100%`, exit `0`. |
-| Manual controller/repository/tool lifecycle | Passed | Public `ChatController.handle_turn("Phân tích FPT", correlation_id="turn-correlation-230")` used the real `AssistantApp`, executor, registry, `data.ensure_current_symbol`, trace callbacks and migrated in-memory DuckDB, replacing only the unavailable LLM route and readiness source. It emitted one actionable `[TOOL FAILED]` message and one `tool_failed` transcript row; trace rows stayed `tool_trace_event`, the provisioning tool and assistant session ended `FAILED`, and no analysis, synthesis, success or generic retry was emitted. |
-| Full vnalpha suite | Passed | `cd vnalpha && uv run --extra dev pytest -q` completed at `100%`, exit `0`, after the final public-bound implementation. The worktree environment required installing `pip` into its generated `.venv` so the existing package-resource subprocess tests could invoke `.venv/bin/python -m pip`; the affected selector then passed 3 tests before the full rerun. |
+| Initial red/green boundary regressions | Passed, then superseded | The first red run exposed five direct boundary failures and the first focused green run passed 26 tests. Exact-SHA review then demonstrated missing nested-executor, approval and legacy cases, so this evidence did not establish completion. |
+| Exact-SHA review of `c440c71` | Failed | Goal, code-quality, QA, security and context review all rejected the snapshot. Runtime reproductions proved a credential-bearing DSN reached visible/persisted `tool_failed`, approval mapped three typed cases to generic `error`, and legacy execution persisted both trace-derived `tool_failed` and generic `error`. |
+| Corrective red/green surface regressions | Passed | The expanded test file produced eight expected failures before correction: missing structured public type, public ordinary/nested exceptions, three approval mappings, legacy duplication and active Rich markup. After correction, the three issue files passed 34 tests at `100%`, exit `0`; changed-file Ruff and format checks passed. |
+| Corrected affected chat/provisioning/lifecycle surface | Passed | The expanded issue #163/#228/chat/approval/executor selector completed at `100%`, exit `0`, including 15 test files and the real nested-executor regression. |
+| Manual controller/repository/tool lifecycle | Pending exact-SHA rerun | The rejected candidate passed the immediate actionable P0 path. Immediate, approved, legacy and unexpected nested-tool scenarios will be rerun after the corrected commit exists so the evidence binds to its exact SHA. |
+| Full vnalpha suite | Passed | `cd vnalpha && uv run --extra dev pytest -q` completed at `100%`, exit `0`, on the corrected worktree in one process. |
 | R4 acceptance | Passed | `make verify-r4` completed 81 selected permission/session/trace/clear/persistence tests at `100%`, exit `0`. |
-| Lint and formatting | Passed | `make lint-vnalpha` reported all checks passed and 694 files already formatted. Changed Python files had no language-server diagnostics. |
-| Installed-package vertical | Passed | `PIP_INDEX_URL=https://pypi.org/simple make verify-vnalpha-package` built `/tmp/openstock-hardening-deb/vnalpha_0.1.0_amd64.deb` and passed 59/59 checks, including fixture-contract and runtime-replay evaluations from the bundled application wheel. Optional `shellcheck` was skipped because it is not installed. |
-| Research evaluations | Passed | `make eval-research-answers` passed 5/5 evaluated cases with zero failures; `make eval-research-runtime` passed 22/22 runtime-replay cases with zero failures. |
-| OpenSpec | Passed | `openspec validate chat-data-provisioning-contract --strict` reported the change valid. `python -m pytest -q scripts/tests/test_check_openspec_completion.py` passed 12 tests. |
-| Repository and packaging structure | Passed with one warning | `make repo-hygiene`, `make verify-repo-consistency`, `packaging/scripts/openstock-secret-scan`, and `make validate-compose` exited `0`. `make verify-r2-ci` exited `0` with 18 OK, one warning and zero failures; the warning was from `systemd-analyze verify openstock-daily-pipeline.service`. |
-| Static no-excuse audit | Pre-existing debt, no new finding | The checker found the existing 918-pure-LOC `chat/controller.py`, existing broad/silent exception boundaries and existing mutable `ChatError`. The issue #230 diff adds only typed catches immediately before the required generic unexpected-exception fallback; no unrelated controller refactor was attempted. |
+| Lint and formatting | Passed | `make lint-vnalpha` reported all checks passed and 695 files already formatted. Ruff LSP diagnostics reported no errors in all eight changed Python files. |
+| Installed-package vertical | Passed | `PIP_INDEX_URL=https://pypi.org/simple make verify-vnalpha-package` passed 59/59, including the built Debian package's application-wheel fixture contract and runtime-replay evaluation. |
+| Research evaluations | Passed | `make eval-research-answers` passed 5/5; `make eval-research-runtime` passed 22/22 with zero failures. |
+| OpenSpec | Passed | `openspec validate chat-data-provisioning-contract --strict` reported valid; `python -m pytest -q scripts/tests/test_check_openspec_completion.py` passed 12 tests; apply instructions report 18/19 tasks with publication reconciliation intentionally pending. |
+| Repository and packaging structure | Passed with one warning | `make repo-hygiene`, `make verify-repo-consistency`, `packaging/scripts/openstock-secret-scan`, and `make validate-compose` exited `0`. `make verify-r2-ci` exited `0` with 18 OK, one existing systemd verification warning and zero failures. |
+| Static no-excuse audit | Pre-existing debt plus one intentional fixture | The checker reports the inherited 922-pure-LOC controller, existing broad/silent top-level boundaries and mutable `ChatError`. Its only correction-specific test finding is the deliberate arbitrary `RuntimeError` fixture required to prove nested unexpected exceptions stay generic. The correction adds no broad source conversion and reuses two exact typed presentation helpers rather than refactoring unrelated controller responsibilities. |
 | GitHub Actions on exact implementation commit | Pending | Exact implementation-commit CI will be recorded after the branch and PR exist. No merged-CI claim is inferred from local gates. |

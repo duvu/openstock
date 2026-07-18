@@ -158,6 +158,22 @@ in-process wire fake for response behavior or an explicitly unreachable local
 endpoint for fail-closed behavior. Never let the ambient default service URL
 decide an offline test's expected status.
 
+## 19. Exception conversion destroys public/private provenance
+
+A lower layer may wrap both expected domain failures and arbitrary runtime
+exceptions in the same broad error type. If a presentation boundary later
+treats that type as public, provider internals, credentials, paths, or opaque
+debug data can escape despite regex redaction. Direct boundary tests miss the
+defect when they inject an exception after the unsafe conversion already
+happened.
+
+**Prevent it:** carry an explicit structured public-failure type containing only
+allowlisted reason, remediation, correlation and evidence fields. Keep ordinary
+tool errors and arbitrary exceptions on the generic path. Test from the real
+nested producer through conversion, persistence and rendering, including every
+approval and legacy branch. Treat text sanitization as defense in depth, not as
+the trust decision.
+
 # Mandatory checklist
 
 ## Before coding
@@ -169,6 +185,7 @@ decide an offline test's expected status.
 - [ ] Define typed request, result, status, issue, and evidence contracts.
 - [ ] Define required/optional/not-requested semantics.
 - [ ] Define the complete failure and audit boundary.
+- [ ] Preserve expected/actionable versus unexpected exception provenance across every wrapper.
 - [ ] Confirm bounded behavior and the read-only research boundary.
 - [ ] Write the negative and backward-compatibility test matrix.
 - [ ] Isolate offline tests from ambient localhost services and vendor state.
@@ -181,6 +198,7 @@ decide an offline test's expected status.
 - [ ] Do not default non-throwing work to success.
 - [ ] Reuse one service and one correlation ID across surfaces.
 - [ ] Sanitize public errors and audit summaries.
+- [ ] Render only explicitly public structured failures; keep arbitrary nested exceptions generic.
 - [ ] Make remediation typed, ordered, executable, and root-cause-specific.
 - [ ] Preserve legacy defaults unless explicitly changed.
 - [ ] Reload and revalidate persisted output after builders run.
