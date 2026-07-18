@@ -164,7 +164,7 @@ def test_typed_tool_failure_bounds_public_message(
     # Then
     assert result is not None
     assert result.startswith("[TOOL FAILED] ")
-    assert len(result) <= len("[TOOL FAILED] ") + _MAX_PUBLIC_ERROR_CHARS
+    assert len(result) <= _MAX_PUBLIC_ERROR_CHARS
 
 
 def test_bounded_tool_failure_retains_actionable_suffix(
@@ -182,7 +182,7 @@ def test_bounded_tool_failure_retains_actionable_suffix(
 
     # Then
     assert result is not None
-    assert len(result) <= len("[TOOL FAILED] ") + _MAX_PUBLIC_ERROR_CHARS
+    assert len(result) <= _MAX_PUBLIC_ERROR_CHARS
     assert result.startswith("[TOOL FAILED] FPT readiness failed")
     assert "Remediation: /data sync FPT -> /build features FPT" in result
     assert "correlation_id=correlation-230" in result
@@ -214,6 +214,21 @@ def test_known_validation_uses_validation_presentation(
     ]
     assert len(validation_rows) == 1
     assert validation_rows[0]["content"] == result
+
+
+def test_validation_presentation_bounds_complete_public_message(
+    connection: duckdb.DuckDBPyConnection,
+) -> None:
+    controller, _session_id, _visible_messages = _controller(connection)
+
+    result = _run_prepared_failure(
+        controller,
+        AssistantInputValidationError("x" * (_MAX_PUBLIC_ERROR_CHARS + 1_000)),
+    )
+
+    assert result is not None
+    assert result.startswith("[WARNING] ")
+    assert len(result) <= _MAX_PUBLIC_ERROR_CHARS
 
 
 def test_unexpected_failure_keeps_generic_retry_message(

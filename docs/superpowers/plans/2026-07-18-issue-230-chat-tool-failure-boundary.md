@@ -193,7 +193,16 @@ sanitized/bounded error summaries in affected tool and assistant audit rows.
 Remove ambient localhost and default-user-warehouse dependencies from the
 affected regression selector.
 
-- [ ] **Step 6: Recommit and repeat exact-SHA review/publication gates**
+- [x] **Step 6: Correct third exact-commit sanitizer findings**
+
+Add red/green regressions for quoted multi-word credentials, quoted/equal-sign
+Authorization forms, credentials crossing the former head/tail scan crop and
+the file-backed `errors.jsonl` redaction path. Sanitize bounded structured
+public fields independently, cap the complete terminal message, use a bounded
+prefix for opaque summaries, and reuse the canonical credential sanitizer for
+observability redaction.
+
+- [ ] **Step 7: Recommit and repeat exact-SHA review/publication gates**
 
 Run focused and full validation, five independent review lanes, the runtime
 debugging audit, exact-commit GitHub Actions and PR/issue reconciliation on the

@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import json
 import os
-import re
+
+from vnalpha.core.text_safety import sanitize_text
 
 # ---------------------------------------------------------------------------
 # Sensitive key patterns (case-insensitive substring match)
@@ -27,14 +28,6 @@ SENSITIVE_PATTERNS: tuple[str, ...] = (
     "private_key",
     "access_key",
     "passwd",
-)
-
-# Regex to match secret-like values in free-text strings
-_SECRET_VALUE_RE = re.compile(
-    r"(password|token|secret|api[_-]?key|apikey|authorization|bearer"
-    r"|private[_-]?key|access[_-]?key|passwd)"
-    r"\s*[=:]\s*\S+",
-    re.IGNORECASE,
 )
 
 _REDACTED_PLACEHOLDER = "[REDACTED]"
@@ -135,10 +128,7 @@ def redact_str(s: str, mode: str | None = None) -> str:
         parsed = None
     if isinstance(parsed, (dict, list)):
         return json.dumps(_redact_value(parsed, mode), sort_keys=True)
-    return _SECRET_VALUE_RE.sub(
-        lambda m: m.group(0).split("=")[0].split(":")[0] + "=[REDACTED]",
-        s,
-    )
+    return sanitize_text(s, strip_rich=False)
 
 
 def redaction_status(mode: str | None = None) -> str:

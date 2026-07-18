@@ -9,10 +9,13 @@ from typing import Final
 from rich.markup import escape
 
 from vnalpha.core.text_safety import sanitize_text
+from vnalpha.tools.errors import PublicToolFailure
 
 MAX_PUBLIC_ERROR_CHARS: Final = 4_096
-_PUBLIC_ERROR_SUFFIX_CHARS: Final = MAX_PUBLIC_ERROR_CHARS * 3 // 4
 _PUBLIC_ERROR_SCAN_CHARS: Final = MAX_PUBLIC_ERROR_CHARS * 2
+_TOOL_FAILURE_PREFIX: Final = "[TOOL FAILED] "
+_REMEDIATION_CHARS: Final = 1_536
+_CORRELATION_CHARS: Final = 512
 
 
 class ChatErrorKind(str, Enum):
@@ -60,23 +63,47 @@ def format_tool_failure(tool_name: str, error: str) -> str:
     return f"[TOOL FAILED] {tool_name}: {error}"
 
 
-def sanitize_public_error(message: str) -> str:
-    """Return safe bounded text while retaining its actionable suffix."""
-    raw = message
-    if len(raw) > _PUBLIC_ERROR_SCAN_CHARS:
-        prefix_chars = _PUBLIC_ERROR_SCAN_CHARS // 4
-        suffix_chars = _PUBLIC_ERROR_SCAN_CHARS - prefix_chars - 1
-        raw = raw[:prefix_chars] + "…" + raw[-suffix_chars:]
+def sanitize_public_error(
+    message: str, *, max_chars: int = MAX_PUBLIC_ERROR_CHARS
+) -> str:
+    if max_chars <= 0:
+        return ""
+    raw = message[:_PUBLIC_ERROR_SCAN_CHARS]
     sanitized = " ".join(sanitize_text(raw).split())
     escaped = escape(sanitized)
-    if len(escaped) <= MAX_PUBLIC_ERROR_CHARS:
+    if len(escaped) <= max_chars:
         return escaped
-    prefix_chars = MAX_PUBLIC_ERROR_CHARS - _PUBLIC_ERROR_SUFFIX_CHARS - 1
-    return (
-        _escape_prefix(sanitized, prefix_chars).rstrip()
-        + "…"
-        + _escape_suffix(sanitized, _PUBLIC_ERROR_SUFFIX_CHARS).lstrip()
+    return _escape_prefix(sanitized, max_chars - 1).rstrip() + "…"
+
+
+def format_actionable_tool_failure(failure: PublicToolFailure) -> str:
+    suffix_parts: list[str] = []
+    if failure.remediation:
+        remediation = sanitize_public_error(
+            " -> ".join(failure.remediation), max_chars=_REMEDIATION_CHARS
+        )
+        if remediation:
+            suffix_parts.append(f"Remediation: {remediation}")
+    if failure.correlation_id:
+        correlation_id = sanitize_public_error(
+            failure.correlation_id, max_chars=_CORRELATION_CHARS
+        )
+        if correlation_id:
+            suffix_parts.append(f"correlation_id={correlation_id}")
+
+    suffix = ". ".join(suffix_parts)
+    separator_chars = 2 if failure.reason and suffix else 0
+    reason_chars = (
+        MAX_PUBLIC_ERROR_CHARS
+        - len(_TOOL_FAILURE_PREFIX)
+        - len(suffix)
+        - separator_chars
     )
+    reason = sanitize_public_error(failure.reason.rstrip("."), max_chars=reason_chars)
+    detail = ". ".join(part for part in (reason, suffix) if part)
+    if not detail:
+        detail = "Tool execution failed."
+    return _TOOL_FAILURE_PREFIX + detail
 
 
 def _escape_prefix(text: str, budget: int) -> str:
@@ -88,18 +115,6 @@ def _escape_prefix(text: str, budget: int) -> str:
         else:
             high = midpoint - 1
     return escape(text[:low])
-
-
-def _escape_suffix(text: str, budget: int) -> str:
-    low, high = 0, len(text)
-    while low < high:
-        midpoint = (low + high + 1) // 2
-        candidate = text[-midpoint:] if midpoint else ""
-        if len(escape(candidate)) <= budget:
-            low = midpoint
-        else:
-            high = midpoint - 1
-    return escape(text[-low:] if low else "")
 
 
 # ---------------------------------------------------------------------------

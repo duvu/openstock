@@ -183,11 +183,16 @@ the escape prefix while retaining the tag opener, turning inert text back into
 an active Rich link or style. Similar ordering mistakes can split redaction
 markers, encoded delimiters, or structured tokens.
 
-**Prevent it:** define safety over the final rendered and persisted value. Bound
-source segments first, escape each retained segment atomically, then assert the
-final character limit and parse the result with the real renderer. Include
-adversarial fixtures whose truncation boundary lands inside an escape sequence,
-not just short markup examples.
+**Prevent it:** define safety over the final rendered and persisted value.
+Sanitize independently allowlisted fields before composing them; for opaque
+text, retain a bounded prefix and treat an incomplete credential at that
+boundary as sensitive instead of splicing an unredacted tail back in. Escape
+each retained sanitized field atomically, then assert the final character limit
+and parse the result with the real renderer. Route database summaries, JSONL
+errors and other stored projections through the same credential boundary.
+Include adversarial fixtures whose truncation boundary lands inside an escape
+sequence, quoted multi-word credential, URI user-info, Basic token, JWT or PEM
+body, not just short markup examples.
 
 # Mandatory checklist
 
@@ -212,7 +217,8 @@ not just short markup examples.
 - [ ] Do not equate row existence with readiness.
 - [ ] Do not default non-throwing work to success.
 - [ ] Reuse one service and one correlation ID across surfaces.
-- [ ] Sanitize public errors and audit summaries.
+- [ ] Sanitize public errors, database summaries, and file-backed error logs through one credential boundary.
+- [ ] Redact structured fields before any crop can orphan their credential marker or delimiter.
 - [ ] Apply bounding and escaping in an order that leaves the final rendered value safe.
 - [ ] Render only explicitly public structured failures; keep arbitrary nested exceptions generic.
 - [ ] Make remediation typed, ordered, executable, and root-cause-specific.

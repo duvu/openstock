@@ -12,8 +12,10 @@ from vnalpha.assistant.errors import (
 )
 from vnalpha.assistant.tool_policy import is_approval_required_plan, is_safe_plan
 from vnalpha.chat.errors import (
+    MAX_PUBLIC_ERROR_CHARS,
     ChatErrorKind,
     error_to_message_type,
+    format_actionable_tool_failure,
     format_refusal,
     format_runtime_error,
     format_validation_error,
@@ -942,7 +944,7 @@ class ChatController:
     def _present_actionable_tool_failure(
         self, exc: ActionableToolExecutionError
     ) -> str:
-        error_text = f"[TOOL FAILED] {sanitize_public_error(str(exc))}"
+        error_text = format_actionable_tool_failure(exc.failure)
         self._on_message("red", error_text)
         self._persist_error_message(error_text, ChatErrorKind.TOOL_FAILED)
         return error_text
@@ -950,7 +952,12 @@ class ChatController:
     def _present_validation_failure(
         self, exc: AssistantInputValidationError | PlanValidationError
     ) -> str:
-        error_text = format_validation_error(sanitize_public_error(str(exc)))
+        prefix_chars = len("[WARNING] ")
+        error_text = format_validation_error(
+            sanitize_public_error(
+                str(exc), max_chars=MAX_PUBLIC_ERROR_CHARS - prefix_chars
+            )
+        )
         self._on_message("yellow", error_text)
         self._persist_error_message(error_text, ChatErrorKind.VALIDATION)
         return error_text

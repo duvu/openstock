@@ -26,12 +26,13 @@ failure events do not create a second semantic chat error.
 
 Chat error formatting will reuse `vnalpha.core.text_safety.sanitize_text`,
 collapse whitespace, escape Rich markup, cap pre-sanitization scan work, and cap
-public error detail at 4,096 characters. When the detail is oversized, the cap
-retains both its identifying prefix and its actionable suffix before escaping
-the selected segments. This removes terminal controls, prevents truncation from
-reactivating links/styles, and redacts inline credentials, URI user-info, Basic
-credentials, JWT-like tokens and PEM private-key bodies while keeping a
-current-symbol reason, bounded remediation and correlation ID intact.
+the complete public error at 4,096 characters. It sanitizes the structured
+reason, remediation and correlation fields independently before composition,
+so no raw head/tail crop can orphan a credential marker while the bounded
+remediation and correlation suffix stays visible. This removes terminal
+controls, prevents truncation from reactivating links/styles, and redacts
+quoted inline credentials, URI user-info, Basic credentials, JWT-like tokens
+and PEM private-key bodies.
 
 Only `ActionableToolExecutionError` receives a `[TOOL FAILED]` presentation and
 transcript type `tool_failed`. Known assistant input and plan validation receive

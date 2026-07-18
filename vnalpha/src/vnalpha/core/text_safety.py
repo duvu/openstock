@@ -11,18 +11,43 @@ _RICH_TAGS = re.compile(
     r"\[/?(?:bold|dim|italic|underline|blink|reverse|strike|black|red|green|yellow|blue|magenta|cyan|white|default|bright_(?:black|red|green|yellow|blue|magenta|cyan|white)|on (?:black|red|green|yellow|blue|magenta|cyan|white|default))\]",
     re.IGNORECASE,
 )
-_AUTHORIZATION = re.compile(r"(?i)(authorization\s*:\s*(?:bearer|basic)\s+)[^\s,;]+")
+_SECRET_FIELD = (
+    r"(?:api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token|"
+    r"client[_-]?secret|private[_-]?key|refresh[_-]?token|session[_-]?token|"
+    r"token|password|passwd|secret|authorization|cookie|credentials?)"
+)
+_INLINE_DOUBLE_SECRET = re.compile(
+    rf'(?i)(?P<prefix>["\']?{_SECRET_FIELD}["\']?\s*[=:]\s*)'
+    r'"(?:\\.|[^"\\])*(?:"|\Z)'
+)
+_INLINE_SINGLE_SECRET = re.compile(
+    rf"(?i)(?P<prefix>[\"']?{_SECRET_FIELD}[\"']?\s*[=:]\s*)"
+    r"'(?:\\.|[^'\\])*(?:'|\Z)"
+)
+_AUTHORIZATION = re.compile(
+    r"(?i)([\"']?authorization[\"']?\s*[:=]\s*[\"']?"
+    r"(?:bearer|basic)\s+)[^\"'\s,;}]+"
+)
 _URI_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]{1,31}://)[^/\s@]+@")
+_TRUNCATED_URI_USERINFO = re.compile(
+    r"(?i)\b([a-z][a-z0-9+.-]{1,31}://)[^:/\s@]+:[^/\s@]+\Z"
+)
 _JWT = re.compile(
     r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
     r"[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])"
 )
+_TRUNCATED_JWT = re.compile(
+    r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
+    r"(?:\.[A-Za-z0-9_-]*)?\Z"
+)
 _PEM_PRIVATE_KEY = re.compile(
-    r"-----BEGIN ((?:[A-Z0-9]+ )?PRIVATE KEY)-----.*?-----END \1-----",
+    r"-----BEGIN ((?:[A-Z0-9]+ )?PRIVATE KEY)-----.*?"
+    r"(?:-----END \1-----|\Z)",
     re.DOTALL,
 )
-_INLINE_SECRET = re.compile(
-    r"(?i)((?:['\"]?(?:api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|refresh[_-]?token|session[_-]?token|token|password|secret|authorization|cookie|credentials?)['\"]?\s*[=:]\s*)['\"]?)[^\s,;}'\"]+"
+_INLINE_UNQUOTED_SECRET = re.compile(
+    rf"(?i)([\"']?{_SECRET_FIELD}[\"']?\s*[=:]\s*)(?![\"'])"
+    r"[^\s,;}]+"
 )
 _SENSITIVE_KEYS = frozenset(
     {
@@ -62,24 +87,20 @@ def sanitize_text(value: object, *, strip_rich: bool = True) -> str:
     if strip_rich:
         text = _RICH_TAGS.sub("", text)
     text = _PEM_PRIVATE_KEY.sub("[REDACTED]", text)
+    text = _INLINE_DOUBLE_SECRET.sub(r'\g<prefix>"[REDACTED]"', text)
+    text = _INLINE_SINGLE_SECRET.sub(r"\g<prefix>'[REDACTED]'", text)
     text = _AUTHORIZATION.sub(r"\1[REDACTED]", text)
     text = _URI_USERINFO.sub(r"\1[REDACTED]@", text)
+    text = _TRUNCATED_URI_USERINFO.sub(r"\1[REDACTED]", text)
     text = _JWT.sub("[REDACTED]", text)
-    return _INLINE_SECRET.sub(r"\1[REDACTED]", text)
+    text = _TRUNCATED_JWT.sub("[REDACTED]", text)
+    return _INLINE_UNQUOTED_SECRET.sub(r"\1[REDACTED]", text)
 
 
 def sanitize_error_summary(value: object) -> str:
-    raw = str(value)
-    if len(raw) > _MAX_ERROR_SUMMARY_SCAN_CHARS:
-        prefix_chars = _MAX_ERROR_SUMMARY_SCAN_CHARS // 4
-        suffix_chars = _MAX_ERROR_SUMMARY_SCAN_CHARS - prefix_chars - 1
-        raw = raw[:prefix_chars] + "…" + raw[-suffix_chars:]
+    raw = str(value)[:_MAX_ERROR_SUMMARY_SCAN_CHARS]
     sanitized = " ".join(sanitize_text(raw).split())
-    if len(sanitized) <= _MAX_ERROR_SUMMARY_CHARS:
-        return sanitized
-    suffix_chars = _MAX_ERROR_SUMMARY_CHARS * 3 // 4
-    prefix_chars = _MAX_ERROR_SUMMARY_CHARS - suffix_chars - 1
-    return sanitized[:prefix_chars].rstrip() + "…" + sanitized[-suffix_chars:].lstrip()
+    return sanitized[:_MAX_ERROR_SUMMARY_CHARS].rstrip()
 
 
 def redact_structure(value: Any, *, depth: int = 0) -> Any:

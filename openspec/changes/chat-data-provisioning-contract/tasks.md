@@ -18,5 +18,5 @@
 - [x] 16. Run the focused chat/provisioning/lifecycle surface, strict OpenSpec validation and required repository gates; record exact outcomes in `validation.md`.
 - [x] 17. Preserve explicit public-failure provenance so arbitrary nested tool exceptions and ordinary tool errors remain generic and cannot leak internal detail.
 - [x] 18. Add red/green approval, legacy, real-executor and Rich-markup regressions; reuse typed presentation without duplicating semantic failure rows.
-- [x] 19. Add red/green legacy post-approval, truncation-safe Rich escaping, common credential/audit-summary redaction and assistant error-contract regressions; correct every reproduced defect and isolate affected tests from ambient localhost/default-warehouse state.
+- [x] 19. Add red/green legacy post-approval, truncation-safe Rich escaping, quoted/crop-boundary credential redaction across public, database-summary and file-backed error projections, plus assistant error-contract regressions; correct every reproduced defect and isolate affected tests from ambient localhost/default-warehouse state.
 - [ ] 20. Recommit the corrected candidate and repeat full gates, exact-SHA review/runtime audit, GitHub Actions and PR/issue reconciliation.
