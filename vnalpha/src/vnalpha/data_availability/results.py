@@ -3,6 +3,8 @@ from __future__ import annotations
 from vnalpha.data_availability.cache import evaluate_cache_eligibility
 from vnalpha.data_availability.models import (
     EnsureDataAction,
+    EnsureDataActionOutcome,
+    EnsureDataActionStatus,
     EnsureDataResult,
     EnsureDataStatus,
 )
@@ -24,6 +26,12 @@ def cache_hit_result(
     result.candidate_score_exists = True
     _record_snapshot_evidence(result, snapshot)
     result.actions_taken.append(EnsureDataAction.CACHE_HIT)
+    result.action_outcomes.append(
+        EnsureDataActionOutcome(
+            action=EnsureDataAction.CACHE_HIT,
+            status=EnsureDataActionStatus.SUCCESS,
+        )
+    )
     result.freshness = "cache_hit"
     result.lineage_actions = [EnsureDataAction.CACHE_HIT.value]
     result.status = EnsureDataStatus.READY
@@ -78,7 +86,11 @@ def finalise_result(
             f"Benchmark '{policy.benchmark}' has insufficient bars: "
             f"{snapshot.benchmark_bars}. RS features will be NaN."
         )
-    if not eligibility.eligible:
+    action_failed = any(
+        outcome.status is EnsureDataActionStatus.FAILED
+        for outcome in result.action_outcomes
+    )
+    if not eligibility.eligible or action_failed:
         if not result.warnings:
             result.warnings.append(
                 "Candidate cache evidence remains incomplete: "
@@ -105,3 +117,7 @@ def _record_snapshot_evidence(
     result.lineage_fields = snapshot.lineage_fields
     result.artifact_evidence = snapshot.artifact_evidence
     result.core_evidence_evaluated = True
+    result.extra["raw_window_ready"] = bool(
+        snapshot.raw_ohlcv_bars >= 1
+        and snapshot.latest_raw_bar_date == snapshot.target_date
+    )

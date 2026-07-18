@@ -20,6 +20,8 @@ from vnalpha.data_availability.dates import normalize_optional_date
 from vnalpha.data_availability.lock import EnsureLock
 from vnalpha.data_availability.models import (
     EnsureDataAction,
+    EnsureDataActionOutcome,
+    EnsureDataActionStatus,
     EnsureDataResult,
     EnsureDataStatus,
 )
@@ -158,26 +160,38 @@ def ensure_data_availability(
                 provision_actions, snapshot, normalised_request.policy
             )
         _run_actions(provision_actions, context, result)
+        core_actions_completed = any(
+            outcome.action in _PROVISION_ACTIONS
+            and outcome.status is EnsureDataActionStatus.SUCCESS
+            for outcome in result.action_outcomes
+        )
         snapshot = _snapshot(normalised_request)
         feature_plan = plan_data_availability(snapshot, normalised_request.policy)
-        context = _action_context(normalised_request, snapshot, dependencies)
-        feature_actions: tuple[EnsureDataAction, ...] = ()
-        if snapshot.feature_snapshot_exists:
-            feature_actions = (EnsureDataAction.SCORED,)
-        elif snapshot.canonical_bars >= normalised_request.policy.min_required_bars:
-            feature_actions = (
-                EnsureDataAction.FEATURES_BUILT,
-                EnsureDataAction.SCORED,
-            )
-        if normalised_request.force_refresh:
-            feature_actions = _augment_refresh_feature_actions(
-                feature_actions, snapshot, normalised_request.policy
-            )
+        feature_actions = tuple(
+            action
+            for action in feature_plan.actions
+            if action is EnsureDataAction.FEATURES_BUILT
+        )
+        if (
+            normalised_request.policy.auto_sync
+            and (normalised_request.force_refresh or core_actions_completed)
+            and not any(action in _PROVISION_ACTIONS for action in feature_plan.actions)
+        ):
+            feature_actions = (EnsureDataAction.FEATURES_BUILT,)
+        _run_actions(
+            feature_actions,
+            _action_context(normalised_request, snapshot, dependencies),
+            result,
+        )
+        snapshot = _snapshot(normalised_request)
+        score_plan = plan_data_availability(snapshot, normalised_request.policy)
         _run_actions(
             tuple(
-                action for action in feature_plan.actions if action in feature_actions
+                action
+                for action in score_plan.actions
+                if action is EnsureDataAction.SCORED
             ),
-            context,
+            _action_context(normalised_request, snapshot, dependencies),
             result,
         )
         final_snapshot = _snapshot(normalised_request)
@@ -268,12 +282,29 @@ def _run_actions(
     context: ActionContext,
     result: EnsureDataResult,
 ) -> None:
+    failed: list[EnsureDataAction] = []
+
+    def on_failure(action: EnsureDataAction, error: Exception) -> None:
+        failed.append(action)
+        log_action_failure(action, context.symbol, error)
+
     completed, warnings = execute_planned_actions(
         actions,
         lambda action: execute_action(action, context),
-        lambda action, error: log_action_failure(action, context.symbol, error),
+        on_failure,
     )
     result.actions_taken.extend(completed)
+    result.action_outcomes.extend(
+        EnsureDataActionOutcome(
+            action=action,
+            status=(
+                EnsureDataActionStatus.FAILED
+                if action in failed
+                else EnsureDataActionStatus.SUCCESS
+            ),
+        )
+        for action in actions
+    )
     result.warnings.extend(_legacy_warning(warning) for warning in warnings)
 
 

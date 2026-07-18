@@ -28,6 +28,17 @@ class EnsureDataAction(str, Enum):
     SCORED = "SCORED"
 
 
+class EnsureDataActionStatus(str, Enum):
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+
+
+@dataclass(frozen=True, slots=True)
+class EnsureDataActionOutcome:
+    action: EnsureDataAction
+    status: EnsureDataActionStatus
+
+
 class DataArtifact(str, Enum):
     """Core persisted data required for deep-analysis readiness."""
 
@@ -42,6 +53,8 @@ class EvidenceIssue(str, Enum):
     SCORE_MISSING = "score_missing"
     SCORE_STALE = "score_stale"
     FEATURE_SNAPSHOT_MISSING = "feature_snapshot_missing"
+    FEATURE_SNAPSHOT_INVALID = "feature_snapshot_invalid"
+    FEATURE_LINEAGE_INCOMPLETE = "feature_lineage_incomplete"
     CANONICAL_HISTORY_INSUFFICIENT = "canonical_history_insufficient"
     CANONICAL_GAPS_UNRESOLVED = "canonical_gaps_unresolved"
     BENCHMARK_HISTORY_INSUFFICIENT = "benchmark_history_insufficient"
@@ -55,15 +68,19 @@ def evidence_issue_artifact(issue: EvidenceIssue) -> DataArtifact:
     if issue in {
         EvidenceIssue.SCORE_MISSING,
         EvidenceIssue.SCORE_STALE,
-        EvidenceIssue.QUALITY_UNACCEPTABLE,
         EvidenceIssue.LINEAGE_INCOMPLETE,
     }:
         return DataArtifact.CANDIDATE_SCORE
-    if issue is EvidenceIssue.FEATURE_SNAPSHOT_MISSING:
+    if issue in {
+        EvidenceIssue.FEATURE_SNAPSHOT_MISSING,
+        EvidenceIssue.FEATURE_SNAPSHOT_INVALID,
+        EvidenceIssue.FEATURE_LINEAGE_INCOMPLETE,
+    }:
         return DataArtifact.FEATURE_SNAPSHOT
     if issue in {
         EvidenceIssue.CANONICAL_HISTORY_INSUFFICIENT,
         EvidenceIssue.CANONICAL_GAPS_UNRESOLVED,
+        EvidenceIssue.QUALITY_UNACCEPTABLE,
     }:
         return DataArtifact.CANONICAL_OHLCV
     return DataArtifact.BENCHMARK_OHLCV
@@ -117,6 +134,7 @@ class EnsureDataResult:
     target_date: str
     status: EnsureDataStatus
     actions_taken: list[EnsureDataAction] = field(default_factory=list)
+    action_outcomes: list[EnsureDataActionOutcome] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     # diagnostics for the panels
@@ -151,6 +169,10 @@ class EnsureDataResult:
             "lineage_actions": self.lineage_actions,
             "cache_rejection_reasons": self.cache_rejection_reasons,
             "actions_taken": [a.value for a in self.actions_taken],
+            "action_outcomes": [
+                {"action": outcome.action.value, "status": outcome.status.value}
+                for outcome in self.action_outcomes
+            ],
             "warnings": self.warnings,
             "errors": self.errors,
         }

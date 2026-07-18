@@ -44,6 +44,41 @@ async def test_router_delegates_command_and_chat_to_focused_paths(
 
 
 @pytest.mark.asyncio
+async def test_router_assigns_distinct_correlations_to_chat_and_slash_turns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from vnalpha.observability.context import get_correlation_id
+    from vnalpha.tui.input_router import TuiInputRouter
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
+    output = MagicMock(spec=OutputStream)
+    with patch.object(TuiInputRouter, "_setup_controller"):
+        with patch.object(TuiInputRouter, "_setup_executor"):
+            router = TuiInputRouter(
+                output_stream=output,
+                workspace=create_workspace(root=tmp_path),
+            )
+    session = SimpleNamespace(_chat_session_id="chat-session-stable")
+    router._chat_controller = session
+    correlations: list[str] = []
+
+    async def capture_route(_router: object, _raw: str) -> None:
+        correlations.append(get_correlation_id())
+
+    router._command_path = SimpleNamespace(route=capture_route)
+    router._chat_path = SimpleNamespace(route=capture_route)
+
+    await router.route("Show FPT candidates")
+    await router.route("/scan FPT")
+
+    assert len(correlations) == 2
+    assert all(value not in {"", "unset"} for value in correlations)
+    assert correlations[0] != correlations[1]
+    assert session._chat_session_id == "chat-session-stable"
+
+
+@pytest.mark.asyncio
 async def test_busy_submission_is_rejected_before_workspace_persistence(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

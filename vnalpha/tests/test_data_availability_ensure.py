@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 import duckdb
 
+from vnalpha.features.status import FEATURE_STATUS_CONTRACT_VERSION
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -34,24 +37,43 @@ def _insert_canonical_bars(conn, symbol, dates, interval="1D"):
 
 
 def _insert_feature_snapshot(conn, symbol, date_str):
+    lineage = json.dumps(
+        {
+            "feature_status_contract_version": FEATURE_STATUS_CONTRACT_VERSION,
+            "benchmark_symbol": "VNINDEX",
+            "selected_provider": "test",
+            "ingestion_run_id": "test-run",
+        }
+    )
     conn.execute(
         """
         INSERT INTO feature_snapshot
         (symbol, date, close, ma20, as_of_bar_date, feature_data_status,
          feature_build_version, feature_generated_at, feature_profile,
          neutral_completeness, relative_strength_completeness,
-         required_bar_count, observed_bar_count, feature_completeness_rule_version)
+         required_bar_count, observed_bar_count, feature_completeness_rule_version,
+         lineage_json)
         VALUES (?, ?, 105.0, 100.0, ?, 'EXACT_DATE', 'dev', current_timestamp,
                 'STANDARD_120', 'COMPLETE', 'COMPLETE', 120, 120,
-                'feature-completeness-v1')
+                'feature-completeness-v1', ?)
         """,
-        [symbol, date_str, date_str],
+        [symbol, date_str, date_str, lineage],
+    )
+    conn.executemany(
+        "INSERT INTO relative_strength_snapshot "
+        "(symbol, date, benchmark_symbol, horizon_sessions, relative_return, "
+        "source_bar_date, benchmark_bar_date, source_row_count, "
+        "benchmark_row_count, data_status, methodology_version, generated_at, "
+        "lineage_json) VALUES (?, ?, 'VNINDEX', ?, 0.1, ?, ?, 120, 120, "
+        "'SUCCESS', 'test-v1', current_timestamp, ?)",
+        [
+            [symbol, date_str, horizon, date_str, date_str, lineage]
+            for horizon in (20, 60)
+        ],
     )
 
 
 def _insert_candidate_score(conn, symbol, date_str, as_of_bar_date=None):
-    import json
-
     lineage = {
         "as_of_bar_date": as_of_bar_date or date_str,
         "scoring_version": "test-v1",

@@ -133,8 +133,17 @@ class ChatController:
         return "natural_language"
 
     def handle_turn(
-        self, raw: str, *, workspace_context: str | None = None
+        self,
+        raw: str,
+        *,
+        workspace_context: str | None = None,
+        correlation_id: str | None = None,
     ) -> str | None:
+        from vnalpha.observability.context import set_correlation_id
+
+        set_correlation_id(
+            parent=correlation_id
+        ) if correlation_id else set_correlation_id()
         try:
             kind = self.classify_input(raw)
             if kind == "slash_command":
@@ -521,6 +530,7 @@ class ChatController:
             self._pending_plan_turn_context = None
             try:
                 from vnalpha.assistant.app import AssistantApp
+
                 conn = self._connection_factory()
                 try:
                     self._ensure_chat_schema_ready()
@@ -772,6 +782,7 @@ class ChatController:
         workspace_context: str | None = None,
     ):
         from vnalpha.assistant.app import AssistantApp
+
         self._ensure_chat_schema_ready()
 
         conn = self._connection_factory()
@@ -795,6 +806,7 @@ class ChatController:
     ) -> "PreparedAssistantTurn | tuple[RefusalMessage, AssistantPlan]":
         from vnalpha.assistant.app import AssistantApp
         from vnalpha.assistant.models import AssistantRequest
+
         self._ensure_chat_schema_ready()
 
         conn = self._connection_factory()
@@ -813,6 +825,7 @@ class ChatController:
 
     def _execute_prepared_turn(self, prepared: "PreparedAssistantTurn"):
         from vnalpha.assistant.app import AssistantApp
+
         self._ensure_chat_schema_ready()
 
         conn = self._connection_factory()
@@ -825,6 +838,7 @@ class ChatController:
 
     def _approve_prepared_turn(self, prepared: "PreparedAssistantTurn") -> None:
         from vnalpha.sandbox.execution_service import SandboxExecutionService
+
         self._ensure_chat_schema_ready()
 
         conn = self._connection_factory()
@@ -880,8 +894,8 @@ class ChatController:
                 self._on_message("dim", preview_text)
                 self._persist_message("assistant", preview_text, "plan_preview")
                 return None
-            self._emit_stage(AssistantStage.SYNTHESIZING)
             answer, _plan = self._execute_prepared_turn(prepared)
+            self._emit_stage(AssistantStage.SYNTHESIZING)
             self._render_prepared_answer(answer)
             return None
         except Exception as exc:

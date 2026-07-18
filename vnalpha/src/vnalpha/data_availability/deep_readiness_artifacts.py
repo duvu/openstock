@@ -5,7 +5,10 @@ from vnalpha.data_availability.deep_readiness_models import (
     ReadinessArtifactStatus,
     RemediationStep,
 )
-from vnalpha.data_availability.deep_readiness_remediation import remediation_steps
+from vnalpha.data_availability.deep_readiness_remediation import (
+    RemediationRequest,
+    remediation_steps,
+)
 from vnalpha.data_availability.models import (
     ArtifactEvidence,
     DataArtifact,
@@ -52,7 +55,16 @@ def build_artifacts(
             requested_date=requested_date,
             resolved_date=resolved_date,
             remediation=remediation_steps(
-                artifact.value, result.symbol, resolved_date, lookback_start
+                RemediationRequest(
+                    artifact=artifact.value,
+                    symbol=result.symbol,
+                    resolved_date=resolved_date,
+                    lookback_start=lookback_start,
+                    issues=evidence_by_artifact.get(
+                        artifact, _unknown_evidence(artifact)
+                    ).issues,
+                    raw_window_ready=result.extra.get("raw_window_ready") is True,
+                )
             ),
         )
         for artifact in DataArtifact

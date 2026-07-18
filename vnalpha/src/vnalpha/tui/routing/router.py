@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
+from vnalpha.observability.context import set_correlation_id
 from vnalpha.tui.operational_bridge import OperationalCommandBridge
 from vnalpha.tui.routing import events
 from vnalpha.tui.routing.chat_path import ChatPath
@@ -49,6 +50,7 @@ class TuiInputRouter:
         self._clipboard = clipboard
         self._log_text_provider = log_text_provider
         self._busy = False
+        self._turn_correlation_id = "unset"
         self._chat_controller: ChatController | None = None
         self._command_conn: DuckDBPyConnection | None = None
         self._command_executor: CommandExecutor | None = None
@@ -87,6 +89,7 @@ class TuiInputRouter:
         raw = text.strip()
         if not raw:
             return
+        self._turn_correlation_id = set_correlation_id()
         if raw.split(maxsplit=1)[0] == "/copy":
             self._handle_copy(raw)
             return

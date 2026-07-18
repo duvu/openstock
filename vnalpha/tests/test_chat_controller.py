@@ -529,7 +529,9 @@ def test_command_result_validation_error_rendered(in_memory_conn):
     assert "yellow" in styles
 
 
-def test_chat_controller_migrations_run_once_for_multiple_persistence_calls(in_memory_conn):
+def test_chat_controller_migrations_run_once_for_multiple_persistence_calls(
+    in_memory_conn,
+):
     from vnalpha.assistant.models import AssistantAnswer, AssistantPlan, RefusalMessage
     from vnalpha.chat.controller import ChatController
     from vnalpha.warehouse.chat_repo import create_chat_session
@@ -550,7 +552,9 @@ def test_chat_controller_migrations_run_once_for_multiple_persistence_calls(in_m
         tool_trace_summary="",
     )
     mock_plan = AssistantPlan(intent="scan_candidates", steps=[])
-    mock_refusal = RefusalMessage(reason="not available", policy_category="UNAVAILABLE_TOOL")
+    mock_refusal = RefusalMessage(
+        reason="not available", policy_category="UNAVAILABLE_TOOL"
+    )
 
     with patch("vnalpha.assistant.app.AssistantApp") as mock_app:
         app_instance = mock_app.return_value
@@ -597,8 +601,8 @@ def test_chat_controller_migrations_run_once_for_trace_events(in_memory_conn):
 
 
 def test_chat_controller_migrations_run_once_for_failure_paths(in_memory_conn):
-    from vnalpha.chat.errors import ChatErrorKind
     from vnalpha.chat.controller import ChatController
+    from vnalpha.chat.errors import ChatErrorKind
     from vnalpha.warehouse.chat_repo import create_chat_session
 
     sid = create_chat_session(in_memory_conn)
@@ -610,5 +614,7 @@ def test_chat_controller_migrations_run_once_for_failure_paths(in_memory_conn):
     ctrl._chat_session_id = sid
 
     with patch("vnalpha.warehouse.migrations.run_migrations") as mock_migrations:
-        ctrl._persist_error_message("temporary assistant failure", ChatErrorKind.RUNTIME)
+        ctrl._persist_error_message(
+            "temporary assistant failure", ChatErrorKind.RUNTIME
+        )
         assert mock_migrations.call_count == 1

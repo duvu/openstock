@@ -25,8 +25,7 @@ _CORRELATION_ID: ContextVar[str] = ContextVar("_obs_correlation_id", default="un
 
 
 def set_correlation_id(parent: str | None = None) -> str:
-    """Generate a new UUID4 hex correlation ID, bind it, and return it."""
-    cid = uuid4().hex
+    cid = parent if parent not in {None, ""} else uuid4().hex
     _CORRELATION_ID.set(cid)
     return cid
 
@@ -228,7 +227,7 @@ class CorrelationContext:
 
 def make_correlation_context(parent: str | None = None) -> CorrelationContext:
     """Create a new correlation context with a fresh ID."""
-    cid = set_correlation_id(parent=parent)
+    cid = set_correlation_id()
     return CorrelationContext(correlation_id=cid, parent_span_id=parent)
 
 

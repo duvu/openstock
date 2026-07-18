@@ -186,7 +186,11 @@ def _build_features(context: ActionContext) -> None:
 
 def _score_universe(context: ActionContext) -> None:
     score_universe = context.dependencies.score_universe or _get_score_universe()
-    score_universe(context.conn, date=context.target_date, universe=[context.symbol])
+    scored_rows = score_universe(
+        context.conn, date=context.target_date, universe=[context.symbol]
+    )
+    if scored_rows < 1:
+        raise RuntimeError("Scoring produced no row for the requested symbol.")
 
 
 def _get_sync_symbols() -> SyncAction:

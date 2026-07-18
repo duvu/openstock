@@ -233,7 +233,9 @@ def test_provider_unavailable_is_bounded_retry_after(monkeypatch) -> None:
     assert calls == 1
 
 
-def test_http_503_classification_stays_503_with_no_schema_downgrade(monkeypatch) -> None:
+def test_http_503_classification_stays_503_with_no_schema_downgrade(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("VNALPHA_LLM_API_KEY", "test")
     monkeypatch.setenv("VNALPHA_MODEL_SMALL", "strict-primary-model")
 

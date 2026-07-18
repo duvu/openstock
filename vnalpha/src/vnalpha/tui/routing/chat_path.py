@@ -37,6 +37,7 @@ class ChatPath:
                 router._chat_controller.handle_turn,
                 raw,
                 workspace_context=workspace_prefix,
+                correlation_id=router._turn_correlation_id,
             )
             await anyio.to_thread.run_sync(handle_turn)
             router._set_status_ready()

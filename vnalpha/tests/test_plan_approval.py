@@ -70,9 +70,11 @@ def _make_controller(
     # Import here so tests fail loudly if the module is broken
     from vnalpha.chat.controller import ChatController
 
+    schema_connection = MagicMock()
+    connection_factory = MagicMock(return_value=schema_connection)
     ctrl = ChatController(
         on_message=on_message,
-        connection_factory=lambda: None,
+        connection_factory=connection_factory,
         execution_mode=mode,
     )
     return ctrl, messages
@@ -335,7 +337,7 @@ class TestChatControllerPlanThenApprove:
     @pytest.mark.parametrize("no_execute", [True, False])
     def test_run_ask_forwards_workspace_context_to_assistant_app(self, no_execute):
         ctrl, _messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
-        with patch("vnalpha.warehouse.connection.get_connection") as get_connection:
+        with patch("vnalpha.warehouse.connection.get_connection"):
             with patch("vnalpha.warehouse.migrations.run_migrations"):
                 with patch("vnalpha.assistant.app.AssistantApp") as assistant_app:
                     ctrl._run_ask(
@@ -351,7 +353,7 @@ class TestChatControllerPlanThenApprove:
             on_trace_event=ctrl._on_trace,
             workspace_context="# Workspace Context\nstate",
         )
-        get_connection.assert_called_once()
+        assert ctrl._connection_factory.call_count == 2
 
 
 class TestPreparedSandboxApproval:

@@ -276,6 +276,15 @@ def _actions_from_readiness(
     readiness: ReadinessResult,
 ) -> tuple[ProvisioningAction, ...]:
     seen: list[ProvisioningAction] = []
+    if readiness.action_outcomes:
+        for outcome in readiness.action_outcomes:
+            label = _ACTION_LABELS.get(
+                outcome.action.value, outcome.action.value.lower()
+            )
+            action = ProvisioningAction(action=label, status=outcome.status.value)
+            if action not in seen:
+                seen.append(action)
+        return tuple(seen)
     for raw_action in readiness.actions:
         label = _ACTION_LABELS.get(raw_action, raw_action.lower())
         action = ProvisioningAction(action=label, status="SUCCESS")
