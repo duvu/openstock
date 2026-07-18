@@ -18,6 +18,24 @@ Residual risk: repository-wide formatting remains blocked by the pre-existing
 `symbol_memory/safe_files.py` formatting drift. This issue does not modify that
 file, and no green repository lint gate is claimed.
 
+## Issue #227 readiness repair regression - 2026-07-18
+
+Implementation commit `b081cff180aa6b09b4f8b248c407dd20e9e2a316` restores
+artifact-owned evidence, typed one-next-phase remediation, persisted-evidence
+reloads between phases, feature-contract truthfulness, and scoring
+postconditions. Accepted local raw OHLCV repairs unacceptable canonical quality
+without an unnecessary provider sync.
+
+| Check | Outcome | Evidence |
+|---|---|---|
+| Focused readiness regressions | Passed | 62 tests across issue #227, data-availability, OHLCV-gap, and deep-readiness suites exited `0`. |
+| FPT and VCB repair | Passed | Both installed-style fixtures repaired failed canonical quality from accepted raw evidence without invoking provider sync. |
+| Manual planner smoke | Passed | FPT and VCB each planned exactly `CANONICAL_BUILT` when raw evidence was current and canonical quality was unacceptable. |
+| Full vnalpha suite | Passed | `cd vnalpha && uv run --extra dev pytest -q` completed at `100%` with exit code `0` after the final fixture correction. |
+| Static gates | Passed | Repository-wide `ruff check .` and `ruff format --check .` exited `0`; existing custom-`noqa` warnings were non-failing. |
+| Repository integration | Passed | `make verify-repo-consistency`, `make repo-hygiene`, and `make verify-r4` exited `0`. |
+| Installed package | Passed | `PIP_INDEX_URL=https://pypi.org/simple make verify-vnalpha-package` passed `59/59`; the first attempt was blocked by the configured private Nexus timeout and made no package assertion. |
+
 ## Issue #77 data provisioning commands — 2026-07-14
 
 | Check | Outcome | Evidence |
