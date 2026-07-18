@@ -3,7 +3,7 @@ reviewed_at: 2026-07-16
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
-  roadmap_source: https://github.com/duvu/openstock/issues/162
+  roadmap_source: https://github.com/duvu/openstock/issues/209
   priorities_owned_by: github_issues
   dependencies_owned_by: github_issues
   require_github_issue_for_scheduled_work: true
@@ -28,7 +28,7 @@ changes:
 
   mvp1-golden-acceptance:
     status: ready
-    github_issues: [162]
+    github_issues: [167]
     roadmap_state: review_required
     summary: >-
       One automated golden conversation proving the MVP1 chat vertical slice end
@@ -43,7 +43,7 @@ changes:
 
   mvp1-startup-preflight:
     status: ready
-    github_issues: [162]
+    github_issues: [166]
     roadmap_state: review_required
     summary: >-
       Add one idempotent `openstock-mvp1-start` command and a read-only
@@ -59,7 +59,7 @@ changes:
 
   assistant-llm-preflight:
     status: ready
-    github_issues: [162]
+    github_issues: [165]
     roadmap_state: review_required
     summary: >-
       Add a bounded, typed, redaction-safe assistant LLM startup preflight that
@@ -75,7 +75,7 @@ changes:
 
   chat-data-provisioning-contract:
     status: ready
-    github_issues: [162, 175]
+    github_issues: [163, 175]
     roadmap_state: review_required
     summary: >-
       Make bounded current-symbol data provisioning one explicit, idempotent,
@@ -92,7 +92,7 @@ changes:
 
   symbol-knowledge-projection:
     status: ready
-    github_issues: [162]
+    github_issues: [164]
     roadmap_state: review_required
     summary: >-
       After a successful chat deep-analysis, project the turn's validated

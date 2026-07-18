@@ -242,6 +242,26 @@ def test_unreachable_gateway_is_typed(monkeypatch) -> None:
     assert result.code is LLMPreflightCode.UNREACHABLE_GATEWAY
 
 
+def test_unreachable_503_is_typed_and_preserves_gateway_error_info(monkeypatch) -> None:
+    _configure(monkeypatch)
+
+    def _probe():
+        raise LLMResponseError(
+            "LLM HTTP 503: temporary error",
+            status_code=503,
+            error_type="model_unavailable",
+            retry_after_seconds=45,
+        )
+
+    result = run_llm_preflight(probe=_probe)
+
+    assert result.code is LLMPreflightCode.UNREACHABLE_GATEWAY
+    assert result.error_type == "model_unavailable"
+    assert result.retry_after_seconds == 45
+    assert result.remediation is not None
+    assert "/health/umbrella" in result.remediation
+
+
 def test_auth_failure_is_typed_from_http_401(monkeypatch) -> None:
     _configure(monkeypatch)
 
@@ -368,6 +388,8 @@ def test_status_dict_is_redaction_safe(monkeypatch) -> None:
         "model",
         "endpoint",
         "route",
+        "error_type",
+        "retry_after_seconds",
         "remediation",
     }
 

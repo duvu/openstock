@@ -11,7 +11,7 @@ vnalpha  = DuckDB research warehouse + analysis + watchlists + CLI/TUI + optiona
 
 OpenStock is built for research, education and market analysis. It is **not** a broker, portfolio manager, investment adviser or trading-execution system.
 
-> **Project status:** active development. Stable architecture and operating procedures are documented in the repository. Current priority, dependency and delivery status are maintained in [GitHub issue #90](https://github.com/duvu/openstock/issues/90).
+> **Project status:** active development. Stable architecture and operating procedures are documented in the repository. Current priority, dependency and delivery status are maintained in [GitHub issue #209](https://github.com/duvu/openstock/issues/209).
 
 ## Why OpenStock
 
@@ -292,7 +292,7 @@ A pull request is not considered ready when code, configuration, current documen
 
 ## Roadmap and contribution workflow
 
-The live roadmap is [GitHub issue #90](https://github.com/duvu/openstock/issues/90). GitHub Issues are the source of truth for current priority, dependencies, acceptance criteria, ownership and closure evidence.
+The live roadmap is [GitHub issue #209](https://github.com/duvu/openstock/issues/209). GitHub Issues are the source of truth for current priority, dependencies, acceptance criteria, ownership and closure evidence.
 
 Expected delivery workflow:
 

@@ -2,7 +2,7 @@
 
 > **Status:** current implementation contract.
 >
-> Dataset priority and delivery order are maintained in GitHub issue #90. This
+> Dataset priority and delivery order are maintained in GitHub issue #209. This
 > document describes the stable ingestion, validation and lineage boundaries.
 
 ## Core rule

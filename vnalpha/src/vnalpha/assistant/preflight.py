@@ -106,6 +106,8 @@ class LLMPreflightResult:
     model: str | None = None
     endpoint: str | None = None
     route: dict | None = field(default=None)
+    error_type: str | None = None
+    retry_after_seconds: int | None = None
 
     @property
     def ready(self) -> bool:
@@ -113,6 +115,14 @@ class LLMPreflightResult:
 
     @property
     def remediation(self) -> str | None:
+        if (
+            self.code is LLMPreflightCode.UNREACHABLE_GATEWAY
+            and self.error_type == "model_unavailable"
+        ):
+            return (
+                "Check the gateway health endpoint (/health/umbrella) and "
+                "confirm the model route is healthy."
+            )
         return _REMEDIATION.get(self.code)
 
     def to_status_dict(self) -> dict[str, object]:
@@ -124,6 +134,8 @@ class LLMPreflightResult:
             "model": self.model,
             "endpoint": self.endpoint,
             "route": self.route,
+            "error_type": self.error_type,
+            "retry_after_seconds": self.retry_after_seconds,
             "remediation": self.remediation,
         }
 
@@ -250,9 +262,11 @@ def _classify_response_error(exc: LLMResponseError, config) -> LLMPreflightResul
     """Map an HTTP-shaped gateway error to a typed preflight code by status."""
     text = str(exc)
     status = exc.status_code or _status_code_from_error(text)
-    if status in {401, 403}:
+    if status == 503:
+        code = LLMPreflightCode.UNREACHABLE_GATEWAY
+    elif status in {401, 403}:
         code = LLMPreflightCode.AUTH_FAILED
-    elif status == 404:
+    elif status == 404 or exc.error_type == "model_not_found":
         code = LLMPreflightCode.MODEL_NOT_FOUND
     elif status == 400 and (
         exc.error_kind == "structured_output_unsupported" or _schema_unsupported(text)
@@ -267,6 +281,8 @@ def _classify_response_error(exc: LLMResponseError, config) -> LLMPreflightResul
         f"The LLM gateway returned HTTP {status or 'unknown'} during preflight.",
         model=config.model,
         endpoint=_safe_endpoint(config.endpoint),
+        error_type=exc.error_type,
+        retry_after_seconds=exc.retry_after_seconds,
     )
 
 

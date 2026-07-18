@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from typing import Any
 
 
 def _load_checker():
@@ -44,6 +45,80 @@ openstock-ci / Required merge gate
 Require branches to be up to date before merging
 Do not allow bypassing the above settings
 """
+
+
+def _active_changes_registry(roadmap_issue: int = 209) -> str:
+    return f"""policy:
+  active_directory: openspec/changes
+  archive_directory: openspec/changes/archive
+  roadmap_source: https://github.com/duvu/openstock/issues/{roadmap_issue}
+  priorities_owned_by: github_issues
+  dependencies_owned_by: github_issues
+  require_github_issue_for_scheduled_work: true
+  research_only_boundary: true
+
+changes:
+
+  alpha-change:
+    status: partial
+    github_issues: [101, 201]
+    roadmap_state: review_required
+    summary: fixture
+    evidence: PR #1 merged.
+
+  beta-change:
+    status: partial
+    github_issues: [102]
+    roadmap_state: review_required
+    summary: fixture
+    evidence: PR #2 merged.
+
+  feature-completeness-profiles:
+    status: partial
+    github_issues: [83, 131]
+    roadmap_state: review_required
+    summary: fixture
+    evidence: PR #3 merged.
+"""
+
+
+def _active_changes_registry_with_duplicate_issue(roadmap_issue: int = 209) -> str:
+    return f"""policy:
+  roadmap_source: https://github.com/duvu/openstock/issues/{roadmap_issue}
+
+changes:
+
+  alpha-change:
+    status: partial
+    github_issues: [101, 201]
+    roadmap_state: review_required
+
+  beta-change:
+    status: partial
+    github_issues: [101]
+    roadmap_state: review_required
+
+  feature-completeness-profiles:
+    status: partial
+    github_issues: [83, 131]
+    roadmap_state: review_required
+"""
+
+
+def _roadmap_docs_containing(needle: str) -> dict[str, str]:
+    return {
+        "README.md": f"live roadmap is #{needle}",
+        "ROADMAP.md": f"GitHub issue #{needle}",
+        "vnalpha/docs/02-system-architecture.md": f"GitHub issue #{needle}",
+        "vnalpha/docs/03-data-pipeline.md": f"GitHub issue #{needle}",
+        "vnalpha/docs/05-backtest-and-outcome.md": f"GitHub issue #{needle}",
+        "vnalpha/docs/README.md": f"Roadmap issue #{needle}",
+    }
+
+
+def _create_change_dirs(module: Any, tmp_root: Path) -> None:
+    for name in ("alpha-change", "beta-change", "feature-completeness-profiles"):
+        (tmp_root / "openspec" / "changes" / name).mkdir(parents=True)
 
 
 def test_ci_gate_contract_accepts_stable_required_checks(monkeypatch) -> None:
@@ -90,3 +165,55 @@ def test_ci_gate_contract_rejects_stale_documentation(monkeypatch) -> None:
     module._check_ci_gate_contract(errors)
 
     assert any("stale branch-protection contract" in error for error in errors)
+
+
+def test_active_changes_rejects_noncanonical_roadmap_source(monkeypatch, tmp_path) -> None:
+    module = _load_checker()
+    _create_change_dirs(module, tmp_path)
+    files: dict[str, str] = {
+        "openspec/active-changes.yaml": _active_changes_registry(roadmap_issue=90),
+    }
+    files.update(_roadmap_docs_containing("209"))
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "_read", files.__getitem__)
+    errors: list[str] = []
+
+    module._check_active_changes(errors)
+    module._check_live_roadmap_contract(errors)
+
+    assert any("roadmap_source must reference issue #209" in error for error in errors)
+
+
+def test_active_changes_rejects_duplicate_owners(monkeypatch, tmp_path) -> None:
+    module = _load_checker()
+    _create_change_dirs(module, tmp_path)
+    files: dict[str, str] = {
+        "openspec/active-changes.yaml": _active_changes_registry_with_duplicate_issue(),
+        "README.md": "issue #209",
+        "ROADMAP.md": "issue #209",
+        "vnalpha/docs/02-system-architecture.md": "issue #209",
+        "vnalpha/docs/03-data-pipeline.md": "issue #209",
+        "vnalpha/docs/05-backtest-and-outcome.md": "issue #209",
+        "vnalpha/docs/README.md": "issue #209",
+    }
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "_read", files.__getitem__)
+    errors: list[str] = []
+
+    module._check_active_changes(errors)
+
+    assert any("duplicate live github issue owner" in error for error in errors)
+
+
+def test_live_roadmap_docs_reject_stale_reference(monkeypatch) -> None:
+    module = _load_checker()
+    files = _roadmap_docs_containing("209")
+    files["README.md"] = "live roadmap is #90"
+    files[".github/workflows/openstock-ci.yml"] = _valid_workflow()
+    files["vnalpha/docs/branch-protection.md"] = _valid_document()
+    monkeypatch.setattr(module, "_read", files.__getitem__)
+    errors: list[str] = []
+
+    module._check_live_roadmap_contract(errors)
+
+    assert any("stale live-roadmap reference to issue #90" in error for error in errors)

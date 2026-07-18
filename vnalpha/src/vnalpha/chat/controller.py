@@ -23,7 +23,7 @@ from vnalpha.chat.modes import ExecutionMode, format_plan_preview
 from vnalpha.chat.safety import is_tool_approval_pending_eligible
 from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
-from vnalpha.warehouse.migrations import run_migrations
+from vnalpha.warehouse import migrations as _chat_schema_migrations
 
 if TYPE_CHECKING:
     from vnalpha.assistant.models import (
@@ -71,6 +71,7 @@ class ChatController:
         self._pending_plan: "AssistantPlan | None" = None
         self._pending_plan_turn_context: dict | None = None
         self._pending_prepared_turn: "PreparedAssistantTurn | None" = None
+        self._chat_schema_ready: bool = False
 
     def close(self) -> None:
         if self._chat_session_id:
@@ -79,6 +80,18 @@ class ChatController:
             DEFAULT_OVERRIDE_STORE.clear_override(
                 scope="session", session_id=self._chat_session_id
             )
+
+    def _ensure_chat_schema_ready(self) -> bool:
+        if self._chat_schema_ready:
+            return True
+
+        conn = self._connection_factory()
+        try:
+            _chat_schema_migrations.run_migrations(conn=conn)
+            self._chat_schema_ready = True
+            return True
+        finally:
+            conn.close()
 
     def _wrap_trace_with_persistence(
         self, original: Callable[["TraceEvent"], None] | None
@@ -92,7 +105,7 @@ class ChatController:
 
                     conn = self._connection_factory()
                     try:
-                        run_migrations(conn=conn)
+                        self._ensure_chat_schema_ready()
                         append_trace_event(
                             conn,
                             chat_session_id=self._chat_session_id,
@@ -147,9 +160,9 @@ class ChatController:
 
     def handle_slash_command(self, raw: str) -> str | None:
         self._persist_message("user", raw, "slash_command")
+        self._ensure_chat_schema_ready()
         conn = self._connection_factory()
         try:
-            run_migrations(conn=conn)
             registry = build_default_registry()
             executor = CommandExecutor(
                 conn=conn,
@@ -508,11 +521,9 @@ class ChatController:
             self._pending_plan_turn_context = None
             try:
                 from vnalpha.assistant.app import AssistantApp
-                from vnalpha.warehouse.migrations import run_migrations
-
                 conn = self._connection_factory()
                 try:
-                    run_migrations(conn=conn)
+                    self._ensure_chat_schema_ready()
                     AssistantApp(conn, surface=self._surface).cancel_prepared(prepared)
                 finally:
                     conn.close()
@@ -574,7 +585,7 @@ class ChatController:
 
         conn = self._connection_factory()
         try:
-            run_migrations(conn=conn)
+            self._ensure_chat_schema_ready()
             new_id = create_chat_session(
                 conn,
                 surface=self._surface,
@@ -598,11 +609,10 @@ class ChatController:
             return "No active chat session to clear."
 
         from vnalpha.warehouse.chat_repo import clear_visible_messages
-        from vnalpha.warehouse.migrations import run_migrations
 
         conn = self._connection_factory()
         try:
-            run_migrations(conn=conn)
+            self._ensure_chat_schema_ready()
             count = clear_visible_messages(conn, self._chat_session_id, forget=forget)
             if forget:
                 return (
@@ -665,11 +675,10 @@ class ChatController:
             return "No active chat session — no trace available."
 
         from vnalpha.warehouse.chat_repo import list_trace_events_for_session
-        from vnalpha.warehouse.migrations import run_migrations
 
         conn = self._connection_factory()
         try:
-            run_migrations(conn=conn)
+            self._ensure_chat_schema_ready()
             events = list_trace_events_for_session(conn, self._chat_session_id)
         finally:
             conn.close()
@@ -700,7 +709,7 @@ class ChatController:
 
             conn = self._connection_factory()
             try:
-                run_migrations(conn=conn)
+                self._ensure_chat_schema_ready()
                 append_chat_message(
                     conn,
                     chat_session_id=self._chat_session_id,
@@ -763,19 +772,20 @@ class ChatController:
         workspace_context: str | None = None,
     ):
         from vnalpha.assistant.app import AssistantApp
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        self._ensure_chat_schema_ready()
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        app = AssistantApp(conn, surface="tui-chat")
-        return app.ask(
-            question,
-            date=self._target_date,
-            no_execute=no_execute,
-            on_trace_event=self._on_trace,
-            workspace_context=workspace_context,
-        )
+        conn = self._connection_factory()
+        try:
+            app = AssistantApp(conn, surface="tui-chat")
+            return app.ask(
+                question,
+                date=self._target_date,
+                no_execute=no_execute,
+                on_trace_event=self._on_trace,
+                workspace_context=workspace_context,
+            )
+        finally:
+            conn.close()
 
     def _legacy_run_ask_override(self) -> bool:
         return getattr(self._run_ask, "__func__", None) is not ChatController._run_ask
@@ -785,12 +795,10 @@ class ChatController:
     ) -> "PreparedAssistantTurn | tuple[RefusalMessage, AssistantPlan]":
         from vnalpha.assistant.app import AssistantApp
         from vnalpha.assistant.models import AssistantRequest
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        self._ensure_chat_schema_ready()
 
-        conn = get_connection()
+        conn = self._connection_factory()
         try:
-            run_migrations(conn=conn)
             app = AssistantApp(conn, surface=self._surface)
             return app.prepare(
                 AssistantRequest(
@@ -805,12 +813,10 @@ class ChatController:
 
     def _execute_prepared_turn(self, prepared: "PreparedAssistantTurn"):
         from vnalpha.assistant.app import AssistantApp
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        self._ensure_chat_schema_ready()
 
-        conn = get_connection()
+        conn = self._connection_factory()
         try:
-            run_migrations(conn=conn)
             return AssistantApp(conn, surface=self._surface).execute_prepared(
                 prepared, on_trace_event=self._on_trace
             )
@@ -819,12 +825,10 @@ class ChatController:
 
     def _approve_prepared_turn(self, prepared: "PreparedAssistantTurn") -> None:
         from vnalpha.sandbox.execution_service import SandboxExecutionService
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        self._ensure_chat_schema_ready()
 
-        conn = get_connection()
+        conn = self._connection_factory()
         try:
-            run_migrations(conn=conn)
             SandboxExecutionService(conn, surface=self._surface).approve_prepared_turn(
                 prepared
             )
