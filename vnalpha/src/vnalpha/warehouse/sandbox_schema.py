@@ -5,6 +5,7 @@ from typing import Final
 from vnalpha.sandbox.contracts import (
     MAX_APPROVED_READ_PATHS,
     MAX_APPROVED_READ_PATHS_JSON_LENGTH,
+    MAX_OUTPUT_ARTIFACT_PATH_LENGTH,
     MAX_OUTPUT_ARTIFACTS,
 )
 from vnalpha.sandbox.models import (
@@ -18,12 +19,11 @@ CREATE TYPE IF NOT EXISTS sandbox_artifact_kind AS ENUM ('result', 'summary', 'c
 """
 
 _ARTIFACT_MEMBER_CHECKS: Final = "\n        AND ".join(
-    "(length(artifacts) < {index} OR sandbox_artifact_is_valid("
-    "list_extract(artifacts, {index})))".format(index=index)
+    f"(length(artifacts) < {index} OR sandbox_artifact_is_valid(list_extract(artifacts, {index})))"
     for index in range(1, MAX_OUTPUT_ARTIFACTS + 1)
 )
 
-SANDBOX_ARTIFACT_VALIDATION_DDL: Final = """
+SANDBOX_ARTIFACT_VALIDATION_DDL: Final = f"""
 CREATE MACRO IF NOT EXISTS sandbox_artifact_is_valid(artifact) AS (
     coalesce(
         artifact IS NOT NULL
@@ -31,6 +31,7 @@ CREATE MACRO IF NOT EXISTS sandbox_artifact_is_valid(artifact) AS (
         AND artifact.path IS NOT NULL
         AND artifact.media_type IS NOT NULL
         AND length(artifact.path) > 0
+        AND length(artifact.path) <= {MAX_OUTPUT_ARTIFACT_PATH_LENGTH}
         AND NOT starts_with(artifact.path, '/')
         AND instr(artifact.path, '\\') = 0
         AND NOT list_contains(string_split(artifact.path, '/'), '')

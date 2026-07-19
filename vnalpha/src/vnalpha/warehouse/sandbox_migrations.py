@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Final, TypedDict
+from datetime import datetime
+from typing import ClassVar, Final, TypedDict
 
 import duckdb
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from vnalpha.sandbox.contracts import SandboxFilesystemPolicy, SandboxOutputSchema
 from vnalpha.warehouse.sandbox_schema import SANDBOX_DDL, sandbox_job_table_ddl
@@ -18,6 +19,28 @@ class _ArtifactValue(TypedDict):
     media_type: str
 
 
+class _LegacySandboxJobRow(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    job_id: str
+    run_id: str
+    correlation_id: str
+    purpose: str
+    code_digest: str
+    status: str
+    cpu_millis: int
+    memory_mb: int
+    timeout_seconds: int
+    network_enabled: bool
+    filesystem_source: str
+    output_schema_json: str | None
+    result_summary: str | None
+    rejection_reason: str | None
+    failure_reason: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 def migrate_sandbox_contract_columns(conn: duckdb.DuckDBPyConnection) -> None:
     """Transactionally replace legacy JSON output schemas with typed artifacts."""
 
@@ -29,7 +52,7 @@ def migrate_sandbox_contract_columns(conn: duckdb.DuckDBPyConnection) -> None:
 
     has_created_at = _has_sandbox_job_column(conn, "created_at")
     has_updated_at = _has_sandbox_job_column(conn, "updated_at")
-    conn.execute("BEGIN TRANSACTION")
+    _ = conn.execute("BEGIN TRANSACTION")
     try:
         _ = conn.execute(sandbox_job_table_ddl("sandbox_job_upgrade"))
         _copy_legacy_rows(
@@ -72,8 +95,33 @@ def _copy_legacy_rows(
         """
     ).fetchall()
     for row in rows:
-        filesystem_policy = _parse_filesystem_policy(str(row[10]), has_legacy_paths)
-        output_schema = _parse_output_schema(row[11], has_output_schema)
+        source = _LegacySandboxJobRow.model_validate(
+            {
+                "job_id": row[0],
+                "run_id": row[1],
+                "correlation_id": row[2],
+                "purpose": row[3],
+                "code_digest": row[4],
+                "status": row[5],
+                "cpu_millis": row[6],
+                "memory_mb": row[7],
+                "timeout_seconds": row[8],
+                "network_enabled": row[9],
+                "filesystem_source": row[10],
+                "output_schema_json": row[11],
+                "result_summary": row[12],
+                "rejection_reason": row[13],
+                "failure_reason": row[14],
+                "created_at": row[15],
+                "updated_at": row[16],
+            }
+        )
+        filesystem_policy = _parse_filesystem_policy(
+            source.filesystem_source, has_legacy_paths
+        )
+        output_schema = _parse_output_schema(
+            source.output_schema_json, has_output_schema
+        )
         _ = conn.execute(
             """
             INSERT INTO sandbox_job_upgrade VALUES (
@@ -81,23 +129,23 @@ def _copy_legacy_rows(
             )
             """,
             [
-                row[0],
-                row[1],
-                row[2],
-                row[3],
-                row[4],
-                row[5],
-                row[6],
-                row[7],
-                row[8],
-                row[9],
+                source.job_id,
+                source.run_id,
+                source.correlation_id,
+                source.purpose,
+                source.code_digest,
+                source.status,
+                source.cpu_millis,
+                source.memory_mb,
+                source.timeout_seconds,
+                source.network_enabled,
                 filesystem_policy.model_dump_json(),
                 _typed_artifacts(output_schema),
-                row[12],
-                row[13],
-                row[14],
-                row[15],
-                row[16],
+                source.result_summary,
+                source.rejection_reason,
+                source.failure_reason,
+                source.created_at,
+                source.updated_at,
             ],
         )
 

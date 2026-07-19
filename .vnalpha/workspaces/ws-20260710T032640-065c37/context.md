@@ -30,6 +30,13 @@ Mode: general
 - phan tich co phieu fpt
 - phan tich co phieu fpt
 - /todo add
+- download data fpt
+- /help
+- /scan
+- scan fpt
+- /scan VCB
+- /scan vcb
+- phan tich co phieu vcb
 
 ## Artifacts
 - None

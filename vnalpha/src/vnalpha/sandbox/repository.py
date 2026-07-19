@@ -176,8 +176,8 @@ class SandboxJobRepository:
 
 _SELECT_SANDBOX_JOB_SQL = """
 SELECT job_id, run_id, correlation_id, purpose, code_digest, status,
-	       filesystem_policy_json,
-	       CAST(json_object('artifacts', output_artifacts) AS VARCHAR) AS output_schema_json,
+       filesystem_policy_json,
+       CAST(json_object('artifacts', output_artifacts) AS VARCHAR) AS output_schema_json,
        result_summary, rejection_reason, failure_reason
 FROM sandbox_job
 """

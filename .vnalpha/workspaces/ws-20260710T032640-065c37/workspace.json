@@ -5,8 +5,8 @@
   "assumptions": [],
   "context_size": {
     "artifacts": 0,
-    "events": 19,
-    "inputs": 18
+    "events": 26,
+    "inputs": 25
   },
   "created_at": "2026-07-10T03:26:40.879719+00:00",
   "data_freshness": {},
@@ -230,11 +230,95 @@
       "redaction_status": "redacted",
       "source": "tui",
       "summary": "/todo add"
+    },
+    {
+      "content": "download data fpt",
+      "created_at": "2026-07-11T08:38:31.375032+00:00",
+      "input_id": "input-13d6e5ee",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 17
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "download data fpt"
+    },
+    {
+      "content": "/help",
+      "created_at": "2026-07-11T10:09:57.419908+00:00",
+      "input_id": "input-5c617a15",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 5
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/help"
+    },
+    {
+      "content": "/scan",
+      "created_at": "2026-07-11T10:10:09.195861+00:00",
+      "input_id": "input-1d66ce2e",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 5
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/scan"
+    },
+    {
+      "content": "scan fpt",
+      "created_at": "2026-07-11T10:10:13.529257+00:00",
+      "input_id": "input-7b71db31",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 8
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "scan fpt"
+    },
+    {
+      "content": "/scan VCB",
+      "created_at": "2026-07-11T10:12:42.151402+00:00",
+      "input_id": "input-a1eceebc",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 9
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/scan VCB"
+    },
+    {
+      "content": "/scan vcb",
+      "created_at": "2026-07-11T10:12:54.729404+00:00",
+      "input_id": "input-0ad29f70",
+      "input_kind": "slash_command",
+      "metadata": {
+        "length": 9
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "/scan vcb"
+    },
+    {
+      "content": "phan tich co phieu vcb",
+      "created_at": "2026-07-11T11:55:18.081469+00:00",
+      "input_id": "input-f2cfa913",
+      "input_kind": "natural_language",
+      "metadata": {
+        "length": 22
+      },
+      "redaction_status": "redacted",
+      "source": "tui",
+      "summary": "phan tich co phieu vcb"
     }
   ],
   "status": "active",
   "title": "Workspace ws-20260710T032640-065c37",
-  "updated_at": "2026-07-11T06:44:14.560455+00:00",
+  "updated_at": "2026-07-11T11:55:18.081469+00:00",
   "warnings": [],
   "workspace_id": "ws-20260710T032640-065c37"
 }

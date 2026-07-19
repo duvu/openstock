@@ -14,33 +14,33 @@
 - [x] 1.1 Add `SandboxJob` model.
 - [x] 1.2 Add job status enum: `QUEUED`, `VALIDATING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `REJECTED`, `CANCELLED`.
 - [x] 1.3 Add resource limits model: runtime seconds, memory MB, CPU count.
-- [ ] 1.4 Add filesystem policy model: approved read paths and job output write path.
+- [x] 1.4 Add filesystem policy model: approved read paths and job output write path.
 - [x] 1.5 Add network policy field with MVP default `disabled`.
-- [ ] 1.6 Add output schema / expected artifacts model.
+- [x] 1.6 Add output schema / expected artifacts model.
 - [x] 1.7 Add correlation ID to every job.
 
 ## 2. Persistence and artifact layout
 
 - [x] 2.1 Add warehouse migration for sandbox jobs if persistence is database-backed.
-- [ ] 2.2 Add canonical filesystem artifact layout under `logs/runs/<run-id>/sandbox/<job-id>/` containing request metadata, generated code, input references or snapshots, sole writable job output, stdout/stderr, guard, execution, validation, manifest, and lifecycle evidence.
-- [ ] 2.3 Persist generated code as an artifact.
+- [x] 2.2 Add canonical filesystem artifact layout under `logs/runs/<run-id>/sandbox/<job-id>/` containing request metadata, generated code, input references or snapshots, sole writable job output, stdout/stderr, guard, execution, validation, manifest, and lifecycle evidence.
+- [x] 2.3 Persist generated code as an artifact.
 - [x] 2.4 Persist input dataset references or snapshots.
-- [ ] 2.5 Persist `result.json`.
-- [ ] 2.6 Persist `summary.md`.
-- [ ] 2.7 Persist artifact manifest.
+- [x] 2.5 Persist `result.json`.
+- [x] 2.6 Persist `summary.md`.
+- [x] 2.7 Persist artifact manifest.
 - [x] 2.8 Persist failure reason and guard rejection reason.
 
 ## 3. Static guard
 
-- [ ] 3.1 Add static code guard before execution.
-- [ ] 3.2 Deny `os.system` and unsafe shell patterns.
-- [ ] 3.3 Deny `subprocess` unless explicitly implemented as an internal runner boundary, not user code.
-- [ ] 3.4 Deny network libraries and socket access.
-- [ ] 3.5 Deny `pip install` and dynamic dependency installation.
-- [ ] 3.6 Deny environment variable and secret access.
-- [ ] 3.7 Deny filesystem writes outside the job output directory.
-- [ ] 3.8 Deny imports or identifiers related to broker/order/account/portfolio/margin/trading execution.
-- [ ] 3.9 Add tests for all deny rules.
+- [x] 3.1 Add static code guard before execution.
+- [x] 3.2 Deny `os.system` and unsafe shell patterns.
+- [x] 3.3 Deny `subprocess` unless explicitly implemented as an internal runner boundary, not user code.
+- [x] 3.4 Deny network libraries and socket access.
+- [x] 3.5 Deny `pip install` and dynamic dependency installation.
+- [x] 3.6 Deny environment variable and secret access.
+- [x] 3.7 Deny filesystem writes outside the job output directory.
+- [x] 3.8 Deny imports or identifiers related to broker/order/account/portfolio/margin/trading execution.
+- [x] 3.9 Add tests for all deny rules.
 
 ## 4. Sandbox runner
 
