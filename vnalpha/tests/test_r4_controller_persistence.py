@@ -91,6 +91,28 @@ class TestNaturalLanguagePersistence:
         assert rows[0]["message_type"] == "prompt"
         assert "VNM" in rows[0]["content"]
 
+    def test_answer_projection_removes_credentials_and_terminal_controls(self, conn):
+        ctrl, sid = _make_ctrl(conn)
+        private_fragment = "CHAT_MESSAGE_SECRET_67"
+        hostile = (
+            f"password={private_fragment} "
+            "\x1b]8;;https://example.invalid\x1b\\click\x1b]8;;\x1b\\"
+        )
+        answer = AssistantAnswer(
+            summary=hostile,
+            basis=hostile,
+            risks_caveats=hostile,
+            tool_trace_summary=hostile,
+        )
+
+        ctrl._emit_assistant_answer(answer)
+
+        stored = _msgs(conn, sid)[0]["content"]
+        visible = " ".join(text for _style, text in ctrl._messages)
+        assert private_fragment not in stored + visible
+        assert "\x1b]8;" not in stored + visible
+        assert "[REDACTED]" in stored + visible
+
     def test_plan_preview_persisted_in_plan_only_mode(self, conn):
         ctrl, sid = _make_ctrl(conn, mode=ExecutionMode.PLAN_ONLY)
 

@@ -8,6 +8,7 @@ from uuid import uuid4
 from vnalpha.assistant.groundedness import GroundednessResult
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
 from vnalpha.assistant.policy import ResearchPolicyResult
+from vnalpha.core.text_safety import redact_structure
 from vnalpha.observability.context import get_correlation_id
 
 
@@ -207,7 +208,12 @@ def _dedupe(values: list[str]) -> list[str]:
 
 
 def _dump(value: Any) -> str:
-    return json.dumps(value, default=str, ensure_ascii=False, sort_keys=True)
+    return json.dumps(
+        redact_structure(value, parse_json_strings=True),
+        default=str,
+        ensure_ascii=False,
+        sort_keys=True,
+    )
 
 
 __all__ = ["list_research_answer_audits", "persist_research_answer_audit"]

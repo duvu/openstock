@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from rich.console import RenderableType
+from rich.text import Text
 from textual.widgets import RichLog
+
+from vnalpha.core.text_safety import sanitize_text
 
 
 class CommandResultPanel(RichLog):
@@ -30,12 +33,12 @@ class CommandResultPanel(RichLog):
 
     def show_result(self, command: str, result: RenderableType) -> None:
         """Append a command prompt line followed by its result."""
-        self.write(f"[bold cyan]> {command}[/bold cyan]")
+        self.write(Text(f"> {sanitize_text(command)}", style="bold cyan"))
         self.write(result)
         self.write("")  # blank separator
 
     def show_error(self, command: str, message: str) -> None:
         """Append a command prompt line followed by an error."""
-        self.write(f"[bold cyan]> {command}[/bold cyan]")
-        self.write(f"[red]Error: {message}[/red]")
+        self.write(Text(f"> {sanitize_text(command)}", style="bold cyan"))
+        self.write(Text(f"Error: {sanitize_text(message)}", style="red"))
         self.write("")  # blank separator

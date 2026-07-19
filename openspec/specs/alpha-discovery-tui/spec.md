@@ -1,6 +1,10 @@
 # Spec: Alpha Discovery TUI MVP
 
-## ADDED Requirements
+## Purpose
+
+Define the deterministic local alpha-discovery workflow and its research-only TUI.
+
+## Requirements
 
 ### Requirement: openstock orchestrates the local research system
 
@@ -200,7 +204,7 @@ Then rank, score, candidate class, and generated timestamp SHALL be stored.
 
 ---
 
-## CLARIFIED Requirements (gap closure)
+**Clarified requirements (gap closure)**
 
 ### Requirement: date handling is deterministic
 
@@ -211,6 +215,11 @@ Then rank, score, candidate class, and generated timestamp SHALL be stored.
 Given `--date today` is passed to any CLI command  
 When the command executes  
 Then `today` SHALL resolve to the current ISO date (YYYY-MM-DD).
+
+This generic Phase 5 rule does not override the current-symbol research policy
+in the natural-language research assistant specification. Deep assistant and
+slash research surfaces SHALL resolve `today` to the latest configured Vietnam
+market session so readiness can provision one consistent effective date.
 
 #### Scenario: invalid date rejected
 
@@ -270,7 +279,7 @@ Then it SHALL contain `scoring_version` (e.g., `v1.0`) and `generated_at` (ISO t
 
 ---
 
-## MODIFIED Requirements (Phase 5 Hardening)
+**Modified requirements (Phase 5 hardening)**
 
 ### Requirement: Phase 5 pipeline shall be executable through documented commands
 
@@ -501,9 +510,21 @@ When the user lists available commands
 Then no command SHALL place orders
 And no command SHALL manage brokerage accounts or portfolios.
 
+### Requirement: Phase 5 dynamic terminal output shall remain inert
+
+CLI and TUI renderers SHALL sanitize dynamic command, result, error, answer,
+plan, and trace text before constructing final Rich or Textual renderables.
+
+#### Scenario: Dynamic terminal text contains hostile controls
+
+Given a dynamic value contains Rich markup, a credential, or an OSC sequence
+When a current or legacy CLI/TUI surface renders the value
+Then the credential and terminal controls SHALL be absent
+And the remaining text SHALL NOT create an active style or hyperlink
+
 ---
 
-## ADDED Requirements (Phase 5 Hardening)
+**Added requirements (Phase 5 hardening)**
 
 ### Requirement: Phase 5 shall expose a rich watchlist query object
 

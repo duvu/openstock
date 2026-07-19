@@ -18,11 +18,13 @@ Usage::
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
 
 import duckdb
+
+from vnalpha.ingestion.trading_calendar import VietnamSessionCalendar
 
 if TYPE_CHECKING:
     import duckdb
@@ -94,8 +96,6 @@ def resolve_date(
 
     value = value.strip()
     try:
-        from datetime import date
-
         parsed = date.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(
@@ -103,3 +103,19 @@ def resolve_date(
         ) from exc
 
     return str(parsed)
+
+
+def resolve_market_session_date(
+    value: Optional[str],
+    *,
+    today: date | None = None,
+    calendar: VietnamSessionCalendar | None = None,
+) -> str:
+    """Resolve implicit current dates through the versioned Vietnam calendar."""
+    normalized = value.strip() if value is not None else None
+    if normalized is not None and normalized.lower() != "today":
+        return resolve_date(normalized)
+
+    market_date = today or datetime.now(tz=_VN_TZ).date()
+    session_calendar = calendar or VietnamSessionCalendar()
+    return session_calendar.latest_session_on_or_before(market_date).isoformat()

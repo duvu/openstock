@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 from typer.testing import CliRunner
 
 from vnalpha.cli import app
@@ -10,6 +12,53 @@ runner = CliRunner()
 
 
 class TestCmdHelp:
+    def test_cmd_closes_connection_on_success(self):
+        from vnalpha.commands.models import CommandResult
+
+        connection = MagicMock()
+        with (
+            patch(
+                "vnalpha.warehouse.connection.get_connection",
+                return_value=connection,
+            ),
+            patch("vnalpha.warehouse.migrations.run_migrations"),
+            patch(
+                "vnalpha.commands.executor.CommandExecutor.execute",
+                return_value=CommandResult(status="SUCCESS", title="ok"),
+            ),
+            patch("vnalpha.commands.renderers.rich_renderer.render_result"),
+        ):
+            result = runner.invoke(app, ["cmd", "/scan"])
+
+        assert result.exit_code == 0
+        connection.close.assert_called_once_with()
+
+    def test_cmd_close_failure_is_generic(self):
+        from vnalpha.commands.models import CommandResult
+
+        private_fragment = "CMD_CLOSE_PRIVATE_42"
+        connection = MagicMock()
+        connection.close.side_effect = RuntimeError(f"password={private_fragment}")
+        with (
+            patch(
+                "vnalpha.warehouse.connection.get_connection",
+                return_value=connection,
+            ),
+            patch("vnalpha.warehouse.migrations.run_migrations"),
+            patch(
+                "vnalpha.commands.executor.CommandExecutor.execute",
+                return_value=CommandResult(status="SUCCESS", title="ok"),
+            ),
+            patch("vnalpha.commands.renderers.rich_renderer.render_result"),
+        ):
+            result = runner.invoke(app, ["cmd", "/scan"])
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "Traceback" not in result.output
+        assert "Command failed. Check logs and retry." in result.output
+        connection.close.assert_called_once_with()
+
     def test_cmd_help_option(self):
         result = runner.invoke(app, ["cmd", "--help"])
         assert result.exit_code == 0

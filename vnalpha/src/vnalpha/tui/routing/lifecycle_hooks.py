@@ -14,6 +14,15 @@ if TYPE_CHECKING:
     from vnalpha.tui.widgets.output_stream import OutputStream
 
 
+def _capture_exception_safely(exc: Exception) -> None:
+    try:
+        from vnalpha.observability.errors import capture_exception
+
+        capture_exception(exc)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutorResources:
     """The command executor and connection owned by one router."""
@@ -29,11 +38,13 @@ class LifecycleHooks:
         self,
         output: OutputStream,
         target_date: str | None,
+        target_date_is_implicit: bool,
         status: StatusAdapter,
         ui_dispatcher: Callable[[Callable[[], None]], None] | None,
     ) -> None:
         self._output = output
         self._target_date = target_date
+        self._target_date_is_implicit = target_date_is_implicit
         self._status = status
         self._ui_dispatcher = ui_dispatcher
 
@@ -52,8 +63,9 @@ class LifecycleHooks:
                     target_date=self._target_date,
                 )
             finally:
-                connection.close()
-        except Exception:
+                self.close_connection(connection)
+        except Exception as exc:
+            _capture_exception_safely(exc)
             return None
 
     def setup_controller(self, session_id: str | None) -> ChatController | None:
@@ -79,12 +91,14 @@ class LifecycleHooks:
 
             return ChatController(
                 target_date=self._target_date,
+                target_date_is_implicit=self._target_date_is_implicit,
                 on_message=on_message,
                 on_trace=on_trace,
                 on_assistant_answer=on_assistant_answer,
                 chat_session_id=session_id,
             )
-        except Exception:
+        except Exception as exc:
+            _capture_exception_safely(exc)
             return None
 
     def _coerce_assistant_answer(self, answer: object) -> object:
@@ -122,11 +136,13 @@ class LifecycleHooks:
                     connection,
                     surface="tui",
                     default_date=self._target_date,
+                    default_date_is_implicit=self._target_date_is_implicit,
                 ),
             )
-        except Exception:
+        except Exception as exc:
+            _capture_exception_safely(exc)
             if connection is not None:
-                connection.close()
+                self.close_connection(connection)
             return ExecutorResources(connection=None, executor=None)
 
     def dispatch_ui(self, callback: Callable[[], None]) -> None:
@@ -141,4 +157,7 @@ class LifecycleHooks:
 
     def close_connection(self, connection: DuckDBPyConnection | None) -> None:
         if connection is not None:
-            connection.close()
+            try:
+                connection.close()
+            except Exception as exc:
+                _capture_exception_safely(exc)

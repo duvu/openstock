@@ -6,7 +6,14 @@ import duckdb
 
 from vnalpha.assistant.app import AssistantApp
 from vnalpha.assistant.gateway import FakeLLMClient
-from vnalpha.assistant.research_audit import list_research_answer_audits
+from vnalpha.assistant.groundedness import GroundednessResult
+from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
+from vnalpha.assistant.policy import ResearchPolicyResult
+from vnalpha.assistant.research_audit import (
+    list_research_answer_audits,
+    persist_research_answer_audit,
+)
+from vnalpha.warehouse.assistant_repo import create_assistant_session
 from vnalpha.warehouse.migrations import run_migrations
 
 
@@ -130,4 +137,45 @@ def test_assistant_app_persists_validated_research_answer_audit(monkeypatch):
     # Knowledge projection runs on the validated deep-analysis turn (issue #164);
     # here no artifacts are persisted so it projects nothing but still reports.
     assert "knowledge_projection" in answer.research_metadata
+    conn.close()
+
+
+def test_research_answer_audit_redacts_dynamic_caveats():
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn)
+    session_id = create_assistant_session(
+        conn,
+        surface="test",
+        user_prompt="prompt summary",
+    )
+    private_fragment = "AUDIT_SECRET_49"
+    hostile = (
+        f"password={private_fragment} "
+        "\x1b]8;;https://example.invalid\x1b\\click\x1b]8;;\x1b\\"
+    )
+
+    persist_research_answer_audit(
+        conn,
+        assistant_session_id=session_id,
+        plan=AssistantPlan(intent="deep_analyze_symbol", steps=[]),
+        tool_outputs={
+            "step": {
+                "data": {"caveats": [hostile]},
+                "warnings": [hostile],
+            }
+        },
+        answer=AssistantAnswer(
+            summary="safe",
+            basis="safe",
+            risks_caveats=hostile,
+            tool_trace_summary="safe",
+        ),
+        groundedness=GroundednessResult(status="PASS"),
+        policy=ResearchPolicyResult(status="PASS", disclaimer_present=True),
+    )
+
+    caveats = json.dumps(list_research_answer_audits(conn)[0]["caveats"])
+    assert private_fragment not in caveats
+    assert "\\u001b]8;" not in caveats
+    assert "[REDACTED]" in caveats
     conn.close()

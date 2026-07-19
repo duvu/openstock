@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from vnalpha.assistant.errors import AssistantInputValidationError
-from vnalpha.core.dates import resolve_date
+from vnalpha.core.dates import resolve_date, resolve_market_session_date
+
+_CURRENT_SYMBOL_SESSION_INTENTS = frozenset({"deep_analyze_symbol", "fetch_data"})
 
 
 def normalize_date_candidate(value: str | None) -> str | None:
@@ -23,13 +25,25 @@ def validate_date_candidate(value: str | None) -> None:
 
 
 def resolve_effective_target_date(
-    *, classified_date: str | None, request_date: str | None
+    *,
+    classified_date: str | None,
+    request_date: str | None,
+    intent: str | None = None,
+    request_date_is_implicit: bool = False,
 ) -> str:
     classified = normalize_date_candidate(classified_date)
     requested = normalize_date_candidate(request_date)
     selected = classified if classified is not None else requested
     validate_date_candidate(selected)
-    return resolve_date(selected)
+    try:
+        if intent in _CURRENT_SYMBOL_SESSION_INTENTS:
+            current_symbol_date = (
+                None if classified is None and request_date_is_implicit else selected
+            )
+            return resolve_market_session_date(current_symbol_date)
+        return resolve_date(selected)
+    except ValueError as exc:
+        raise AssistantInputValidationError(str(exc)) from exc
 
 
 __all__ = [

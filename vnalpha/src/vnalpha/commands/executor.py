@@ -29,6 +29,8 @@ from vnalpha.warehouse.session_repo import (
     update_research_session_parse,
 )
 
+_GENERIC_COMMAND_FAILURE = "Command failed. Check logs and retry."
+
 
 class CommandExecutor:
     """Execute one slash command with session and tool-trace persistence."""
@@ -40,11 +42,13 @@ class CommandExecutor:
         surface: str = "cli",
         registry: CommandRegistry | None = None,
         default_date: str | None = None,
+        default_date_is_implicit: bool = False,
     ) -> None:
         self._conn = conn
         self._surface = surface
         self._registry = registry or build_default_registry()
         self._default_date = default_date
+        self._default_date_is_implicit = default_date_is_implicit
 
     def execute(
         self,
@@ -76,7 +80,9 @@ class CommandExecutor:
             and "date" not in parsed.options
             and _accepts_default_date(parsed)
         ):
-            parsed.options["date"] = self._default_date
+            parsed.options["date"] = (
+                "today" if self._default_date_is_implicit else self._default_date
+            )
 
         update_research_session_parse(
             self._conn,
@@ -117,9 +123,15 @@ class CommandExecutor:
                 title="Command validation error",
             )
         except CommandException as exc:
-            return self._finish_failed(session_id, type(exc).__name__, str(exc))
+            _capture_exception(exc)
+            return self._finish_failed(
+                session_id, type(exc).__name__, _GENERIC_COMMAND_FAILURE
+            )
         except Exception as exc:
-            return self._finish_failed(session_id, "RuntimeError", str(exc))
+            _capture_exception(exc)
+            return self._finish_failed(
+                session_id, "RuntimeError", _GENERIC_COMMAND_FAILURE
+            )
 
         finish_research_session(
             self._conn,
@@ -182,6 +194,15 @@ def _accepts_default_date(parsed: ParsedCommand) -> bool:
             in {"features", "score", "market-regime", "sector-strength"}
         )
     return parsed.command_name not in {"market-regime", "sector-strength"}
+
+
+def _capture_exception(exc: Exception) -> None:
+    try:
+        from vnalpha.observability.errors import capture_exception
+
+        capture_exception(exc)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _parsed_args(parsed: ParsedCommand) -> dict:

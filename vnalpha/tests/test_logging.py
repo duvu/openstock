@@ -117,6 +117,25 @@ def test_get_logger_json_fields(tmp_path: Path) -> None:
     assert rec["level"] == "info"
 
 
+def test_structlog_pipeline_redacts_dynamic_keys_and_values(tmp_path: Path) -> None:
+    from vnalpha.core.logging import configure_logging, get_logger
+
+    log_path = tmp_path / "redacted.log"
+    private_fragment = "STRUCTLOG_PRIVATE_88"
+    configure_logging(level="DEBUG", log_path=log_path)
+
+    get_logger("security").warning(
+        f"provider password={private_fragment}",
+        **{"pass\x1b[31mword": private_fragment},
+    )
+    time.sleep(0.3)
+
+    serialized = log_path.read_text()
+    assert private_fragment not in serialized
+    assert "\x1b[31m" not in serialized
+    assert "[REDACTED]" in serialized
+
+
 # ---------------------------------------------------------------------------
 # Task 1.4 — correlation ID: set_correlation_id / get_correlation_id
 # ---------------------------------------------------------------------------

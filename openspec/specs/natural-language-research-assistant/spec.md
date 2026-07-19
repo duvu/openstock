@@ -498,3 +498,73 @@ vnalpha cmd "..."
 - **GIVEN** Phase 5.9 is enabled
 - **WHEN** the user runs the Phase 5 fixture E2E tests
 - **THEN** the tests SHALL pass without regression
+
+---
+
+### Requirement: Current-symbol research dates shall use the versioned market session
+
+Current-symbol research SHALL resolve an omitted date or semantic `today` once
+in `Asia/Ho_Chi_Minh` to the latest configured Vietnam trading session on or
+before the current date. This policy SHALL apply to CLI ask, TUI defaults,
+assistant planning and persistence, deep readiness, `/analyze`,
+`/research-plan`, `/setup-evidence`, and assistant `fetch_data` plans that use
+`data.ensure_current_symbol`.
+
+An explicit ISO date SHALL remain explicit after validation. Current-symbol
+readiness SHALL own bounded provisioning for the resolved session and SHALL NOT
+replace an implicit current-session request with an older warehouse summary
+date. The generic `resolve_date` compatibility contract remains unchanged.
+Implicit resolution outside the versioned calendar coverage MUST fail closed.
+
+#### Scenario: Weekend current-symbol research uses the preceding session
+
+- **GIVEN** the Vietnam current date is Sunday `2026-07-19`
+- **WHEN** a current-symbol research surface receives no date or `today`
+- **THEN** the effective target date is Friday `2026-07-17`
+- **AND** planning, readiness, audit, persistence and remediation use that same date
+
+#### Scenario: Explicit non-session date remains explicit
+
+- **GIVEN** the user explicitly requests `2026-07-19`
+- **WHEN** current-symbol date resolution runs
+- **THEN** the effective target date remains `2026-07-19`
+
+#### Scenario: Non-current research retains generic date compatibility
+
+- **GIVEN** an assistant intent does not provision current-symbol research data
+- **WHEN** its effective date is resolved
+- **THEN** the existing generic `resolve_date` policy remains authoritative
+- **AND** the current-symbol calendar coverage gate is not applied
+
+#### Scenario: Calendar coverage is unavailable
+
+- **GIVEN** the implicit current date is outside the configured calendar range
+- **WHEN** current-symbol date resolution runs
+- **THEN** the surface returns a validation or fail-closed readiness result
+- **AND** the implicit current-symbol resolver does not claim an unconfigured weekday as a valid market session
+- **AND** generic historical calendar iteration retains its pre-existing compatibility behavior outside this current-symbol coverage gate
+
+---
+
+### Requirement: Dynamic assistant projections shall be terminal-safe and redacted
+
+Every dynamic CLI, TUI, legacy, chat, and persisted assistant projection SHALL
+remove terminal controls and recognized credentials through the canonical text
+safety boundary before final composition. Expected validation failures SHALL
+retain bounded actionable text after sanitization. Arbitrary warehouse,
+configuration, provider, and runtime exceptions SHALL use a generic public
+message while redacted diagnostics remain observable.
+
+#### Scenario: Successful model output contains hostile dynamic text
+
+- **GIVEN** an answer, refusal, plan, trace, or caveat contains a credential or terminal control sequence
+- **WHEN** a CLI, TUI, chat transcript, assistant session, prepared turn, or research audit projects that value
+- **THEN** the controlled private fragment and terminal control are absent from the final projection
+- **AND** no Rich markup or OSC hyperlink becomes active
+
+#### Scenario: Warehouse initialization fails
+
+- **GIVEN** the assistant CLI cannot open, migrate, or close its warehouse
+- **WHEN** the request crosses the public error boundary
+- **THEN** the CLI returns a generic literal failure without traceback, raw path, or provider detail
+- **AND** any opened connection is closed on every outcome

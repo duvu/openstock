@@ -13,12 +13,21 @@ from typing import Optional
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.core.text_safety import redact_structure, sanitize_text
 
 logger = get_logger("warehouse.chat_repo")
 
 
 def _now_utc_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
+
+
+def _dump_redacted_json(value: str, *, field_name: str) -> str:
+    try:
+        parsed = _json.loads(value)
+    except (TypeError, _json.JSONDecodeError) as exc:
+        raise ValueError(f"{field_name} must be valid JSON.") from exc
+    return _json.dumps(redact_structure(parsed, parse_json_strings=True))
 
 
 # ---------------------------------------------------------------------------
@@ -44,9 +53,9 @@ def create_chat_session(
         [
             chat_session_id,
             _now_utc_iso(),
-            surface,
+            sanitize_text(surface),
             target_date,
-            title,
+            sanitize_text(title) if title else None,
         ],
     )
     return chat_session_id
@@ -99,7 +108,11 @@ def update_chat_session_context(
         SET context_json = ?, updated_at = ?
         WHERE chat_session_id = ?
         """,
-        [context_json, _now_utc_iso(), chat_session_id],
+        [
+            _dump_redacted_json(context_json, field_name="context_json"),
+            _now_utc_iso(),
+            chat_session_id,
+        ],
     )
 
 
@@ -136,13 +149,19 @@ def append_chat_message(
             chat_session_id,
             _now_utc_iso(),
             role,
-            content,
+            sanitize_text(content),
             message_type,
             assistant_session_id,
             research_session_id,
-            tool_trace_ids_json,
-            plan_json,
-            metadata_json,
+            _dump_redacted_json(tool_trace_ids_json, field_name="tool_trace_ids_json")
+            if tool_trace_ids_json
+            else None,
+            _dump_redacted_json(plan_json, field_name="plan_json")
+            if plan_json
+            else None,
+            _dump_redacted_json(metadata_json, field_name="metadata_json")
+            if metadata_json
+            else None,
         ],
     )
     return chat_message_id

@@ -7,6 +7,12 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Label, Static
 
+from vnalpha.tui.error_boundary import (
+    capture_tui_exception,
+    generic_load_error,
+    literal_text,
+)
+
 
 class HomeScreen(Screen):
     """Shows system status: warehouse path, last sync, last score run."""
@@ -31,14 +37,17 @@ class HomeScreen(Screen):
 
             cfg = get_config()
             status_lines = [
-                f"[cyan]Warehouse:[/cyan] {cfg.warehouse.path}",
-                f"[cyan]Service:[/cyan] {cfg.vnstock.base_url}",
+                f"Warehouse: {cfg.warehouse.path}",
+                f"Service: {cfg.vnstock.base_url}",
                 "",
-                "Press [bold]w[/bold] to view today's watchlist candidates.",
-                "Press [bold]q[/bold] to quit.",
+                "Press w to view today's watchlist candidates.",
+                "Press q to quit.",
             ]
-            self.query_one("#status", Static).update("\n".join(status_lines))
-        except Exception as e:
             self.query_one("#status", Static).update(
-                f"[red]Error loading config: {e}[/red]"
+                literal_text("\n".join(status_lines))
+            )
+        except Exception as exc:
+            capture_tui_exception(exc)
+            self.query_one("#status", Static).update(
+                generic_load_error("System status")
             )

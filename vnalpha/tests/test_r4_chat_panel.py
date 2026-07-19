@@ -14,6 +14,9 @@ Task coverage:
 
 from __future__ import annotations
 
+import builtins
+import importlib.util
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -62,6 +65,52 @@ def test_chat_panel_passes_target_date_to_controller():
     panel = ChatPanel(target_date="2024-01-10")
     ctrl = panel._chat_controller
     assert ctrl._target_date == "2024-01-10"
+
+
+@skip_if_no_textual
+def test_chat_panel_passes_implicit_date_provenance_to_controller():
+    from vnalpha.tui.widgets.chat_panel import ChatPanel
+
+    panel = ChatPanel(
+        target_date="2026-07-19",
+        target_date_is_implicit=True,
+    )
+
+    assert panel._chat_controller._target_date == "2026-07-19"
+    assert panel._chat_controller._target_date_is_implicit is True
+
+
+def test_fallback_chat_panel_passes_implicit_date_provenance(monkeypatch) -> None:
+    module_path = (
+        Path(__file__).parents[1]
+        / "src"
+        / "vnalpha"
+        / "tui"
+        / "widgets"
+        / "chat_panel.py"
+    )
+    real_import = builtins.__import__
+
+    def import_without_textual(name, *args, **kwargs):
+        if name == "textual" or name.startswith("textual."):
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_textual)
+    spec = importlib.util.spec_from_file_location(
+        "chat_panel_fallback_test", module_path
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    panel = module.ChatPanel(
+        target_date="2026-07-19",
+        target_date_is_implicit=True,
+    )
+
+    assert panel._chat_controller._target_date == "2026-07-19"
+    assert panel._chat_controller._target_date_is_implicit is True
 
 
 @skip_if_no_textual

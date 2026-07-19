@@ -8,6 +8,8 @@ secrets or prompt content.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from vnalpha.assistant.errors import (
@@ -139,6 +141,22 @@ def test_ready_records_route_identity(monkeypatch) -> None:
     assert result.ready
     assert result.route == route
     assert result.model == "verified-model"
+
+
+def test_unexpected_preflight_failure_is_captured(monkeypatch) -> None:
+    _configure(monkeypatch)
+    private_fragment = "PREFLIGHT_PRIVATE_91"
+
+    with patch("vnalpha.observability.errors.capture_exception") as capture:
+        result = run_llm_preflight(
+            probe=lambda: (_ for _ in ()).throw(
+                RuntimeError(f"password={private_fragment}")
+            )
+        )
+
+    capture.assert_called_once()
+    assert result.code is LLMPreflightCode.PROBE_FAILED
+    assert private_fragment not in result.detail
 
 
 def test_explicit_key_is_passed_to_default_client_without_env_mutation(
@@ -433,6 +451,31 @@ def test_preflight_cli_exits_nonzero_when_unavailable(monkeypatch) -> None:
     assert result.exit_code == 1
     assert "UNAVAILABLE" in result.stdout
     assert "slash commands remain usable" in result.stdout
+
+
+@pytest.mark.parametrize("json_flag", [False, True])
+def test_preflight_cli_redacts_dynamic_model(monkeypatch, json_flag: bool) -> None:
+    from typer.testing import CliRunner
+
+    from vnalpha.cli import app
+
+    private_fragment = "PREFLIGHT_MODEL_SECRET_28"
+    control = "\x1b]8;;https://example.invalid\x1b\\model\x1b]8;;\x1b\\"
+    hostile_model = f"verified password={private_fragment} {control}"
+    monkeypatch.setenv(
+        "VNALPHA_LLM_ENDPOINT", "https://gateway.example.test/v1/chat/completions"
+    )
+    monkeypatch.setenv("VNALPHA_MODEL_DEFAULT", hostile_model)
+    monkeypatch.setenv("VNALPHA_LLM_MODEL", hostile_model)
+    monkeypatch.setenv("VNALPHA_LLM_API_KEY", "")
+
+    args = ["preflight", "--json"] if json_flag else ["preflight"]
+    result = CliRunner().invoke(app, args)
+
+    assert result.exit_code == 1
+    assert private_fragment not in result.stdout
+    assert "\x1b]8;" not in result.stdout
+    assert "[REDACTED]" in result.stdout
 
 
 def test_preflight_cli_json_is_secret_free(monkeypatch) -> None:

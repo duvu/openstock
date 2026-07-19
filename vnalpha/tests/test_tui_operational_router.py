@@ -369,6 +369,54 @@ def test_executor_setup_closes_connection_when_migration_fails(tmp_path: Path) -
     assert router._command_executor is None
 
 
+def test_executor_setup_contains_migration_and_close_failures(tmp_path: Path) -> None:
+    from vnalpha.tui.input_router import TuiInputRouter
+    from vnalpha.tui.widgets.output_stream import OutputStream
+
+    connection = MagicMock()
+    connection.close.side_effect = RuntimeError(
+        "password=LIFECYCLE_CLOSE_SECRET_6259369"
+    )
+    output = MagicMock(spec=OutputStream)
+    with patch.object(TuiInputRouter, "_setup_controller"):
+        with patch(
+            "vnalpha.warehouse.connection.get_connection", return_value=connection
+        ):
+            with patch(
+                "vnalpha.warehouse.migrations.run_migrations",
+                side_effect=RuntimeError("migration failed"),
+            ):
+                router = TuiInputRouter(
+                    output_stream=output,
+                    target_date="2026-07-10",
+                    workspace=create_workspace(root=tmp_path),
+                )
+
+    connection.close.assert_called_once_with()
+    assert router._command_conn is None
+    assert router._command_executor is None
+
+
+def test_router_close_attempts_all_cleanup_when_chat_close_fails(
+    tmp_path: Path,
+) -> None:
+    workspace = create_workspace(root=tmp_path)
+    router, _ = make_router(tmp_path, workspace)
+    controller = MagicMock()
+    controller.close.side_effect = RuntimeError("password=CHAT_CLOSE_SECRET_6259369")
+    connection = MagicMock()
+    connection.close.side_effect = RuntimeError("password=COMMAND_CLOSE_SECRET_6259369")
+    router._chat_controller = controller
+    router._command_conn = connection
+
+    router.close()
+
+    controller.close.assert_called_once_with()
+    connection.close.assert_called_once_with()
+    assert router._chat_controller is None
+    assert router._command_conn is None
+
+
 def test_executor_setup_retains_migrated_in_memory_connection(tmp_path: Path) -> None:
     from vnalpha.tui.input_router import TuiInputRouter
     from vnalpha.tui.widgets.output_stream import OutputStream

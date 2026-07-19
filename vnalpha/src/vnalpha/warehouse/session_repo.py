@@ -13,12 +13,17 @@ from typing import Any, Optional
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.core.text_safety import redact_structure, sanitize_text
 
 logger = get_logger("warehouse.session_repo")
 
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _dump_redacted(value: object) -> str:
+    return json.dumps(redact_structure(value, parse_json_strings=True))
 
 
 # ---------------------------------------------------------------------------
@@ -44,10 +49,10 @@ def create_research_session(
         [
             session_id,
             _now_utc(),
-            surface,
-            command_text,
-            command_name,
-            json.dumps(parsed_args or {}),
+            sanitize_text(surface),
+            sanitize_text(command_text),
+            sanitize_text(command_name) if command_name else None,
+            _dump_redacted(parsed_args or {}),
         ],
     )
     return session_id
@@ -70,8 +75,8 @@ def finish_research_session(
         [
             _now_utc(),
             status,
-            json.dumps(result_summary) if result_summary else None,
-            json.dumps(error) if error else None,
+            _dump_redacted(result_summary) if result_summary else None,
+            _dump_redacted(error) if error else None,
             session_id,
         ],
     )
@@ -90,7 +95,11 @@ def update_research_session_parse(
         SET command_name = ?, parsed_args_json = ?
         WHERE session_id = ?
         """,
-        [command_name, json.dumps(parsed_args or {}), session_id],
+        [
+            sanitize_text(command_name) if command_name else None,
+            _dump_redacted(parsed_args or {}),
+            session_id,
+        ],
     )
 
 
@@ -154,9 +163,9 @@ def create_tool_trace(
             session_id,
             assistant_session_id,
             trace_parent_type,
-            tool_name,
+            sanitize_text(tool_name),
             _now_utc(),
-            json.dumps(input_data or {}),
+            _dump_redacted(input_data or {}),
         ],
     )
     return trace_id
@@ -179,8 +188,8 @@ def finish_tool_trace(
         [
             _now_utc(),
             status,
-            json.dumps(output_summary) if output_summary else None,
-            json.dumps(error) if error else None,
+            _dump_redacted(output_summary) if output_summary else None,
+            _dump_redacted(error) if error else None,
             trace_id,
         ],
     )
@@ -209,10 +218,10 @@ def create_research_note(
         [
             note_id,
             _now_utc(),
-            symbol,
+            sanitize_text(symbol) if symbol else None,
             session_id,
-            note_text,
-            json.dumps(tags or []),
+            sanitize_text(note_text),
+            _dump_redacted(tags or []),
         ],
     )
     return note_id

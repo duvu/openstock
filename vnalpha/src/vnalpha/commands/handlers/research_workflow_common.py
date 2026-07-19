@@ -13,7 +13,7 @@ from vnalpha.commands.models import (
     ResultPanel,
     ResultTable,
 )
-from vnalpha.commands.normalizers import normalize_date
+from vnalpha.core.dates import resolve_date, resolve_market_session_date
 from vnalpha.tools.models import ToolOutput
 
 _SUPPORTED_SETUP_TYPES = frozenset(
@@ -60,7 +60,22 @@ def optional_date(parsed: ParsedCommand) -> str | None:
         return None
     if isinstance(value, bool):
         raise CommandValidationError("--date requires a YYYY-MM-DD value.")
-    return normalize_date(value)
+    try:
+        return resolve_market_session_date(value)
+    except (TypeError, ValueError) as exc:
+        raise CommandValidationError(str(exc)) from exc
+
+
+def optional_generic_date(parsed: ParsedCommand) -> str | None:
+    value = parsed.options.get("date")
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise CommandValidationError("--date requires a YYYY-MM-DD value.")
+    try:
+        return resolve_date(value)
+    except (TypeError, ValueError) as exc:
+        raise CommandValidationError(str(exc)) from exc
 
 
 def positive_int_option(

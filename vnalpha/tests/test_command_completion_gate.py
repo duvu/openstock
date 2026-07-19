@@ -96,6 +96,31 @@ def _latest_research_session(conn) -> dict:
 
 
 class TestCommandExecutorCompletion:
+    def test_unexpected_runtime_failure_is_generic_captured_and_persisted(self, conn):
+        from unittest.mock import MagicMock, patch
+
+        from vnalpha.commands.executor import CommandExecutor
+
+        private_fragment = "COMMAND_RUNTIME_PRIVATE_51"
+        registry = MagicMock()
+        registry.execute.side_effect = RuntimeError(
+            f"provider password={private_fragment}"
+        )
+        with patch("vnalpha.observability.errors.capture_exception") as capture:
+            result = CommandExecutor(conn, surface="cli", registry=registry).execute(
+                "/scan"
+            )
+
+        capture.assert_called_once()
+        assert result.status == "FAILED"
+        assert result.summary == "Command failed. Check logs and retry."
+        assert private_fragment not in result.summary
+        persisted = conn.execute(
+            "SELECT error_json FROM research_session ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()[0]
+        assert private_fragment not in persisted
+        assert "Command failed. Check logs and retry." in persisted
+
     def test_successful_scan_creates_session_and_tool_trace(self, conn):
         from vnalpha.commands.executor import CommandExecutor
 

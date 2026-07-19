@@ -30,6 +30,10 @@ class InvalidSessionOverlapError(ValueError):
     """Raised when a requested overlap cannot include a session."""
 
 
+class CalendarCoverageError(ValueError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class SessionRange:
     """Inclusive range of market dates to inspect."""
@@ -54,6 +58,8 @@ class VietnamSessionCalendar:
         "https://www.gov.hnx.vn/vi-vn/chi-tiet-lich-nghi-gd-60021971.html",
         "https://www.gov.hnx.vn/vi-vn/chi-tiet-lich-nghi-gd-60022084.html",
     )
+    valid_from: date = date(2026, 1, 1)
+    valid_through: date = date(2026, 12, 31)
 
     def sessions(self, session_range: SessionRange) -> tuple[date, ...]:
         """Return inclusive sessions, excluding weekends and configured holidays."""
@@ -69,6 +75,19 @@ class VietnamSessionCalendar:
         """Return whether the supplied date is a configured trading session."""
         return market_date.weekday() < 5 and market_date not in self.holidays
 
+    def latest_session_on_or_before(self, market_date: date) -> date:
+        """Return the latest configured session on or before a market date."""
+        self._ensure_covered(market_date)
+        current_date = market_date
+        while not self.is_session(current_date):
+            current_date -= timedelta(days=1)
+            if current_date < self.valid_from:
+                raise CalendarCoverageError(
+                    "Vietnam trading calendar has no configured prior session for "
+                    f"{market_date.isoformat()}."
+                )
+        return current_date
+
     def rewind_sessions(self, market_date: date, session_count: int) -> date:
         """Return the first date in an inclusive trailing session overlap."""
         if session_count < 1:
@@ -80,3 +99,11 @@ class VietnamSessionCalendar:
             if self.is_session(current_date):
                 remaining -= 1
         return current_date
+
+    def _ensure_covered(self, market_date: date) -> None:
+        if not self.valid_from <= market_date <= self.valid_through:
+            raise CalendarCoverageError(
+                "Vietnam trading calendar does not cover "
+                f"{market_date.isoformat()}; supported range is "
+                f"{self.valid_from.isoformat()} through {self.valid_through.isoformat()}."
+            )

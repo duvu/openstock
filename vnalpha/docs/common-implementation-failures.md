@@ -282,9 +282,10 @@ markup. A record can therefore claim `redacted` while its serialized key names
 still carry the original secret.
 
 **Prevent it:** sanitize JSON-valid key names before persistence as well as
-classifying their values, preserve safe non-string keys where the boundary
-allows them, and assert over the complete serialized record with controlled
-secrets in both keys and values.
+classifying their values, then classify the sanitized key so terminal controls
+cannot split a sensitive word before matching. Preserve safe non-string keys
+where the boundary allows them, and assert over the complete serialized record
+with controlled secrets in both keys and values.
 
 ## 28. A valid timer file is not a packaged, safe scheduling feature
 
@@ -332,6 +333,59 @@ move, run the verifier again against the archive path, validate the synchronized
 accepted spec strictly, replace generated purpose placeholders, and remove the
 change from `active-changes.yaml`.
 
+## 31. Literal terminal rendering is mistaken for content redaction
+
+Passing untrusted text through a `Rich` `Text` object prevents tags from
+becoming active styles or hyperlinks, but it does not remove credentials,
+provider payloads, paths, or other private exception details. A renderer can
+therefore be markup-safe while still disclosing secrets in CLI and TUI output.
+
+**Prevent it:** keep arbitrary exceptions on a generic public path and capture
+their redacted details only in observability. Send expected validation errors
+through the canonical bounded credential sanitizer before constructing the
+literal renderable. Test both properties independently: no active renderer
+spans or terminal controls, and no controlled private fragment in the final
+visible text, across CLI, current TUI, and legacy surfaces.
+
+## 32. Serialized JSON is sanitized as if it were plain text
+
+Sanitizing an already serialized JSON string cannot see sensitive keys and
+cannot remove terminal controls represented by JSON escape sequences. The
+stored text looks harmless, but decoding it restores the unsafe value.
+
+**Prevent it:** parse every JSON-bearing field, apply the canonical recursive
+redactor to the decoded structure, recursively decode and redact JSON-shaped
+strings such as stored provider response bodies, then serialize the redacted
+value. Reject malformed top-level JSON before mutation. Test safety after
+reading the row and decoding every serialized layer, including scalar string
+wrappers, nested sensitive keys, and escaped terminal controls.
+
+## 33. Primary failures make teardown failures escape or disappear
+
+A cleanup call in an exception handler can replace the original failure, leak
+private teardown details, or prevent later resources from being released.
+Conversely, swallowing a close failure can let a command report success even
+though its required lifecycle did not complete.
+
+**Prevent it:** give every owned resource an independent, exception-safe
+cleanup path; capture teardown details privately and keep public output generic.
+Where successful close is part of the command contract, make close failure set
+the final result to failure. Test both primary-plus-close failure and multiple
+cleanup failures, and assert every cleanup attempt still occurs exactly once.
+
+## 34. Hardening one persistence path is mistaken for protecting stored research
+
+Sanitizing chat messages or command history does not protect sibling tables such
+as research sessions, tool traces, and notes. Those records often carry the same
+provider payloads and exception text through separate repositories, so a safe
+visible response can coexist with a durable credential leak.
+
+**Prevent it:** inventory every repository that persists user, provider, tool,
+or exception-controlled content; apply the same canonical recursive redactor at
+each write boundary; and decode stored JSON again in tests to prove the database
+contains no private fragment. Cover every content-bearing column, not just the
+field that first exposed the defect.
+
 # Mandatory checklist
 
 ## Before coding
@@ -364,6 +418,7 @@ change from `active-changes.yaml`.
 - [ ] Derive nested sensitive-key checks from the canonical vocabulary and accept JSON-valid key types.
 - [ ] Redact structured fields before any crop can orphan their credential marker or delimiter.
 - [ ] Apply bounding and escaping in an order that leaves the final rendered value safe.
+- [ ] Verify literal renderables redact private content as well as disabling active markup.
 - [ ] Verify independently safe fields remain safe after final composition.
 - [ ] Render only explicitly public structured failures; keep arbitrary nested exceptions generic.
 - [ ] Make remediation typed, ordered, executable, and root-cause-specific.

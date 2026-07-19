@@ -34,6 +34,7 @@ from vnalpha.assistant.errors import (
     LLMResponseError,
     LLMTimeoutError,
 )
+from vnalpha.core.text_safety import redact_structure, sanitize_text
 
 # A minimal structured probe: the smallest strict json_schema request that
 # exercises the required JSON_SCHEMA capability end to end. It carries no user
@@ -109,6 +110,17 @@ class LLMPreflightResult:
     error_type: str | None = None
     retry_after_seconds: int | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "detail", sanitize_text(self.detail))
+        if self.model is not None:
+            object.__setattr__(self, "model", sanitize_text(self.model))
+        if self.endpoint is not None:
+            object.__setattr__(self, "endpoint", sanitize_text(self.endpoint))
+        if self.route is not None:
+            object.__setattr__(self, "route", redact_structure(self.route))
+        if self.error_type is not None:
+            object.__setattr__(self, "error_type", sanitize_text(self.error_type))
+
     @property
     def ready(self) -> bool:
         return self.code is LLMPreflightCode.READY
@@ -143,6 +155,15 @@ class LLMPreflightResult:
 # A gateway probe is any callable that performs one bounded structured chat and
 # returns the successful route identity dict. Injectable for tests.
 GatewayProbe = Callable[[], dict | None]
+
+
+def _capture_exception_safely(exc: Exception) -> None:
+    try:
+        from vnalpha.observability.errors import capture_exception
+
+        capture_exception(exc)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def run_llm_preflight(
@@ -242,6 +263,7 @@ def run_llm_preflight(
             endpoint=_safe_endpoint(config.endpoint),
         )
     except Exception as exc:  # noqa: BLE001, BROAD_EXCEPT_OK
+        _capture_exception_safely(exc)
         return LLMPreflightResult(
             LLMPreflightCode.PROBE_FAILED,
             f"Unexpected {type(exc).__name__} during the bounded LLM probe.",
