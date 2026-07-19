@@ -5,6 +5,12 @@ from vnalpha.maintenance.daily import (
     MaintenanceRunStatus,
     MaintenanceStageStatus,
 )
+from vnalpha.maintenance.ledger import (
+    get_failed_maintenance_stages,
+    get_latest_maintenance_run,
+    get_maintenance_run_stages,
+    persist_maintenance_run,
+)
 
 __all__ = [
     "DailyMaintenanceRequest",
@@ -12,4 +18,8 @@ __all__ = [
     "DailyMaintenanceService",
     "MaintenanceRunStatus",
     "MaintenanceStageStatus",
+    "get_failed_maintenance_stages",
+    "get_latest_maintenance_run",
+    "get_maintenance_run_stages",
+    "persist_maintenance_run",
 ]
