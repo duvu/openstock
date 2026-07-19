@@ -16,3 +16,6 @@ vnalpha/.vnalpha/
 **/.pytest_cache/
 **/.ruff_cache/
 *.pyc
+ya-router/
+/dist/
+/logs/
