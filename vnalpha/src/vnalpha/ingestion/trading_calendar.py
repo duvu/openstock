@@ -132,11 +132,7 @@ class VietnamSessionCalendar:
             "days_remaining": days_remaining if not is_expired else 0,
             "is_expired": is_expired,
             "near_expiry": near_expiry,
-            "status": (
-                "EXPIRED" if is_expired
-                else "WARNING" if near_expiry
-                else "OK"
-            ),
+            "status": ("EXPIRED" if is_expired else "WARNING" if near_expiry else "OK"),
         }
 
     def _ensure_covered(self, market_date: date) -> None:
