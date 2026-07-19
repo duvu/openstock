@@ -11,6 +11,13 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, Static
 
+from vnalpha.core.text_safety import sanitize_text
+from vnalpha.tui.error_boundary import (
+    capture_tui_exception,
+    generic_load_error,
+    literal_text,
+)
+
 
 class RejectedScreen(Screen):
     """Shows symbols rejected during research pipeline stages."""
@@ -25,7 +32,9 @@ class RejectedScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Vertical(
-            Label(f"[bold]Rejected Symbols — {self._target_date}[/bold]"),
+            Label(
+                literal_text(f"Rejected Symbols — {self._target_date}", style="bold")
+            ),
             DataTable(id="rejected-table"),
             Static("", id="rejected-status"),
             id="rejected-container",
@@ -42,24 +51,32 @@ class RejectedScreen(Screen):
             from vnalpha.warehouse.connection import get_connection
 
             conn = get_connection()
-            rows = conn.execute(
-                "SELECT symbol, stage, reason FROM rejected_symbol WHERE date = ? ORDER BY symbol",
-                [self._target_date],
-            ).fetchall()
+            try:
+                rows = conn.execute(
+                    "SELECT symbol, stage, reason FROM rejected_symbol WHERE date = ? ORDER BY symbol",
+                    [self._target_date],
+                ).fetchall()
+            finally:
+                conn.close()
             table = self.query_one("#rejected-table", DataTable)
             table.clear()
             if not rows:
                 self.query_one("#rejected-status", Static).update(
-                    f"[green]No rejected symbols for {self._target_date}[/green]"
+                    literal_text(
+                        f"No rejected symbols for {self._target_date}", style="green"
+                    )
                 )
                 return
             for row in rows:
-                table.add_row(row[0], row[1], row[2])
+                table.add_row(*(sanitize_text(value) for value in row))
             self.query_one("#rejected-status", Static).update(
-                f"[yellow]{len(rows)} symbols rejected[/yellow]"
+                literal_text(f"{len(rows)} symbols rejected", style="yellow")
             )
-        except Exception as e:
-            self.query_one("#rejected-status", Static).update(f"[red]Error: {e}[/red]")
+        except Exception as exc:
+            capture_tui_exception(exc)
+            self.query_one("#rejected-status", Static).update(
+                generic_load_error("Rejected-symbol data")
+            )
 
     def action_refresh(self) -> None:
         self._load_data()

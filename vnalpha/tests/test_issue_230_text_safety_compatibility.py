@@ -8,7 +8,11 @@ import pytest
 from rich.text import Text
 
 from vnalpha.chat.errors import sanitize_public_error
-from vnalpha.core.text_safety import sanitize_error_summary, sanitize_text
+from vnalpha.core.text_safety import (
+    redact_structure,
+    sanitize_error_summary,
+    sanitize_text,
+)
 from vnalpha.observability.errors import capture_exception
 from vnalpha.observability.redaction import redact_dict, redact_str
 
@@ -100,3 +104,38 @@ def test_error_record_sanitizes_keys_and_preserves_operational_token_metrics(
 
 def test_redacted_mapping_preserves_safe_non_string_keys() -> None:
     assert redact_dict({1: "safe"}, mode="redacted") == {1: "safe"}
+
+
+def test_sensitive_key_is_classified_after_terminal_controls_are_removed() -> None:
+    private_fragment = "CONTROLLED_KEY_BYPASS_5F06"
+    hostile_key = "pass\x1b[31mword"
+
+    assert redact_structure({hostile_key: private_fragment}) == {
+        "password": "[REDACTED]"
+    }
+    assert redact_dict({hostile_key: private_fragment}, mode="redacted") == {
+        "password": "[REDACTED]"
+    }
+
+
+def test_doubly_serialized_json_is_redacted_at_every_decode_layer() -> None:
+    private_fragment = "CONTROLLED_DOUBLE_JSON_5F06"
+    terminal_control = "\x1b]8;;https://example.invalid\x1b\\body\x1b]8;;\x1b\\"
+    encoded = json.dumps(
+        json.dumps(
+            {
+                "password": private_fragment,
+                "message": terminal_control,
+            }
+        )
+    )
+
+    projections = (
+        redact_structure(encoded, parse_json_strings=True),
+        redact_str(encoded, mode="redacted"),
+    )
+    for projection in projections:
+        decoded = json.loads(json.loads(projection))
+        assert decoded["password"] == "[REDACTED]"
+        assert private_fragment not in json.dumps(decoded)
+        assert "\x1b]8;" not in decoded["message"]

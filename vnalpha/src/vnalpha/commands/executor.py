@@ -29,6 +29,8 @@ from vnalpha.warehouse.session_repo import (
     update_research_session_parse,
 )
 
+_GENERIC_COMMAND_FAILURE = "Command failed. Check logs and retry."
+
 
 class CommandExecutor:
     """Execute one slash command with session and tool-trace persistence."""
@@ -121,9 +123,15 @@ class CommandExecutor:
                 title="Command validation error",
             )
         except CommandException as exc:
-            return self._finish_failed(session_id, type(exc).__name__, str(exc))
+            _capture_exception(exc)
+            return self._finish_failed(
+                session_id, type(exc).__name__, _GENERIC_COMMAND_FAILURE
+            )
         except Exception as exc:
-            return self._finish_failed(session_id, "RuntimeError", str(exc))
+            _capture_exception(exc)
+            return self._finish_failed(
+                session_id, "RuntimeError", _GENERIC_COMMAND_FAILURE
+            )
 
         finish_research_session(
             self._conn,
@@ -186,6 +194,15 @@ def _accepts_default_date(parsed: ParsedCommand) -> bool:
             in {"features", "score", "market-regime", "sector-strength"}
         )
     return parsed.command_name not in {"market-regime", "sector-strength"}
+
+
+def _capture_exception(exc: Exception) -> None:
+    try:
+        from vnalpha.observability.errors import capture_exception
+
+        capture_exception(exc)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _parsed_args(parsed: ParsedCommand) -> dict:

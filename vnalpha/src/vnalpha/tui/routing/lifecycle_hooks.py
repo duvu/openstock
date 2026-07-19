@@ -14,6 +14,15 @@ if TYPE_CHECKING:
     from vnalpha.tui.widgets.output_stream import OutputStream
 
 
+def _capture_exception_safely(exc: Exception) -> None:
+    try:
+        from vnalpha.observability.errors import capture_exception
+
+        capture_exception(exc)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutorResources:
     """The command executor and connection owned by one router."""
@@ -55,7 +64,8 @@ class LifecycleHooks:
                 )
             finally:
                 self.close_connection(connection)
-        except Exception:
+        except Exception as exc:
+            _capture_exception_safely(exc)
             return None
 
     def setup_controller(self, session_id: str | None) -> ChatController | None:
@@ -87,7 +97,8 @@ class LifecycleHooks:
                 on_assistant_answer=on_assistant_answer,
                 chat_session_id=session_id,
             )
-        except Exception:
+        except Exception as exc:
+            _capture_exception_safely(exc)
             return None
 
     def _coerce_assistant_answer(self, answer: object) -> object:
@@ -128,7 +139,8 @@ class LifecycleHooks:
                     default_date_is_implicit=self._target_date_is_implicit,
                 ),
             )
-        except Exception:
+        except Exception as exc:
+            _capture_exception_safely(exc)
             if connection is not None:
                 self.close_connection(connection)
             return ExecutorResources(connection=None, executor=None)
@@ -148,6 +160,4 @@ class LifecycleHooks:
             try:
                 connection.close()
             except Exception as exc:
-                from vnalpha.observability.errors import capture_exception
-
-                capture_exception(exc)
+                _capture_exception_safely(exc)

@@ -262,18 +262,19 @@ def redact_structure(
     if depth > 10:
         return "[REDACTED]"
     if isinstance(value, Mapping):
-        return {
-            sanitize_text(key): (
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            safe_key = sanitize_text(key)
+            redacted[safe_key] = (
                 "[REDACTED]"
-                if is_sensitive_key(key)
+                if is_sensitive_key(safe_key) or "[REDACTED]" in safe_key
                 else redact_structure(
                     item,
                     depth=depth + 1,
                     parse_json_strings=parse_json_strings,
                 )
             )
-            for key, item in value.items()
-        }
+        return redacted
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [
             redact_structure(
@@ -284,12 +285,20 @@ def redact_structure(
             for item in value
         ]
     if isinstance(value, str):
-        if parse_json_strings and value.lstrip().startswith(("{", "[")):
+        if parse_json_strings and value.lstrip().startswith(("{", "[", '"')):
             try:
                 parsed = json.loads(value)
             except json.JSONDecodeError:
                 pass
             else:
+                if isinstance(parsed, str):
+                    return json.dumps(
+                        redact_structure(
+                            parsed,
+                            depth=depth + 1,
+                            parse_json_strings=True,
+                        )
+                    )
                 return json.dumps(
                     redact_structure(
                         parsed,

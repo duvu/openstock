@@ -32,23 +32,38 @@ def register(app: typer.Typer) -> None:
         with command_lifecycle("cmd"):
             from vnalpha.commands.executor import CommandExecutor
             from vnalpha.commands.renderers.rich_renderer import render_result
+            from vnalpha.core.text_safety import sanitize_text
             from vnalpha.warehouse.connection import get_connection
             from vnalpha.warehouse.migrations import run_migrations
 
-            conn = get_connection()
-            run_migrations(conn=conn)
-            result = CommandExecutor(conn, surface="cli").execute(
-                command, date_override=date
-            )
-
+            conn = None
             try:
-                from rich.console import Console
+                conn = get_connection()
+                run_migrations(conn=conn)
+                result = CommandExecutor(conn, surface="cli").execute(
+                    command, date_override=date
+                )
 
-                render_result(result, console=Console())
-            except ImportError:
-                typer.echo(result.title)
-                if result.summary:
-                    typer.echo(result.summary)
+                try:
+                    from rich.console import Console
+
+                    render_result(result, console=Console())
+                except ImportError:
+                    typer.echo(sanitize_text(result.title))
+                    if result.summary:
+                        typer.echo(sanitize_text(result.summary))
+            except Exception as exc:
+                _capture_exception(exc)
+                typer.echo("Command failed. Check logs and retry.", err=True)
+                raise typer.Exit(code=1) from exc
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception as exc:
+                        _capture_exception(exc)
+                        typer.echo("Command failed. Check logs and retry.", err=True)
+                        raise typer.Exit(code=1) from exc
 
             match result.status:
                 case (
@@ -61,3 +76,12 @@ def register(app: typer.Typer) -> None:
                     raise typer.Exit(code=1)
                 case unreachable:
                     assert_never(unreachable)
+
+
+def _capture_exception(exc: Exception) -> None:
+    try:
+        from vnalpha.observability.errors import capture_exception
+
+        capture_exception(exc)
+    except Exception:  # noqa: BLE001
+        pass

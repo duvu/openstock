@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import duckdb
 import pytest
@@ -431,6 +431,29 @@ def test_prepared_natural_language_captures_unexpected_exception():
     all_text = " ".join(text for _, text in messages)
     assert result == "[ERROR] Assistant request failed. Check logs and retry."
     assert private_fragment not in all_text
+
+
+def test_chat_message_persistence_failure_is_captured():
+    from vnalpha.chat.controller import ChatController
+
+    connection = MagicMock()
+    ctrl = ChatController(
+        on_message=lambda _style, _text: None,
+        connection_factory=lambda: connection,
+        chat_session_id="chat-session",
+    )
+    ctrl._chat_schema_ready = True
+    with (
+        patch(
+            "vnalpha.warehouse.chat_repo.append_chat_message",
+            side_effect=RuntimeError("password=PERSIST_PRIVATE_71"),
+        ),
+        patch("vnalpha.observability.errors.capture_exception") as capture,
+    ):
+        ctrl._persist_message("assistant", "safe")
+
+    capture.assert_called_once()
+    connection.close.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------

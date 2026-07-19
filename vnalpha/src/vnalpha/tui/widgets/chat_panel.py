@@ -101,7 +101,8 @@ if _TEXTUAL_AVAILABLE:
                     )
                 finally:
                     conn.close()
-            except Exception:
+            except Exception as exc:
+                _capture_exception(exc)
                 return None
 
         def _setup_controller(self) -> None:
@@ -125,7 +126,8 @@ if _TEXTUAL_AVAILABLE:
                 )
                 if session_id is None:
                     self._session_bootstrap_failed = True
-            except Exception:
+            except Exception as exc:
+                _capture_exception(exc)
                 self._chat_controller = None
 
         def compose(self) -> ComposeResult:
@@ -234,8 +236,8 @@ if _TEXTUAL_AVAILABLE:
             try:
                 inp = self.query_one("#chat-input", Input)
                 inp.disabled = busy
-            except Exception:
-                pass
+            except Exception as exc:
+                _capture_exception(exc)
 
 else:
 
@@ -275,7 +277,8 @@ else:
                     )
                 finally:
                     conn.close()
-            except Exception:
+            except Exception as exc:
+                _capture_exception(exc)
                 return None
 
         def _setup_controller(self) -> None:
@@ -293,5 +296,6 @@ else:
                     on_message=_on_message,
                     chat_session_id=session_id,
                 )
-            except Exception:
+            except Exception as exc:
+                _capture_exception(exc)
                 self._chat_controller = None

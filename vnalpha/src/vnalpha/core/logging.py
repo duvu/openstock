@@ -72,6 +72,14 @@ def _inject_correlation_id(
     return event_dict
 
 
+def _redact_event_dict(
+    _logger: WrappedLogger, _method: str, event_dict: EventDict
+) -> EventDict:
+    from vnalpha.observability.redaction import redact_dict
+
+    return redact_dict(event_dict)
+
+
 # ---------------------------------------------------------------------------
 # Internal state
 # ---------------------------------------------------------------------------
@@ -241,6 +249,7 @@ def configure_logging(
             structlog.stdlib.PositionalArgumentsFormatter(),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
+            _redact_event_dict,
             structlog.processors.UnicodeDecoder(),
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
@@ -292,6 +301,7 @@ def _shared_pre_chain() -> list[Any]:
         _inject_correlation_id,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
+        _redact_event_dict,
         structlog.processors.UnicodeDecoder(),
     ]
 

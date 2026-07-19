@@ -11,6 +11,13 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, Static
 
+from vnalpha.core.text_safety import sanitize_text
+from vnalpha.tui.error_boundary import (
+    capture_tui_exception,
+    generic_load_error,
+    literal_text,
+)
+
 
 class WatchlistScreen(Screen):
     """Shows ranked watchlist candidates for a given date."""
@@ -40,7 +47,10 @@ class WatchlistScreen(Screen):
         yield Header()
         yield Vertical(
             Label(
-                f"[bold]Research Candidates — {self._target_date}[/bold]", id="wl-title"
+                literal_text(
+                    f"Research Candidates — {self._target_date}", style="bold"
+                ),
+                id="wl-title",
             ),
             Static("Loading...", id="wl-status"),
             DataTable(id="wl-table", cursor_type="row"),
@@ -61,13 +71,19 @@ class WatchlistScreen(Screen):
             from vnalpha.warehouse.repositories import get_watchlist
 
             conn = get_connection()
-            rows = get_watchlist(conn, self._target_date)
+            try:
+                rows = get_watchlist(conn, self._target_date)
+            finally:
+                conn.close()
             table = self.query_one("#wl-table", DataTable)
             table.clear()
             if not rows:
                 self.query_one("#wl-status", Static).update(
-                    f"[yellow]No research candidates found for {self._target_date}.[/yellow] "
-                    "Run: vnalpha score --date <date>"
+                    literal_text(
+                        f"No research candidates found for {self._target_date}. "
+                        "Run: vnalpha score --date <date>",
+                        style="yellow",
+                    )
                 )
                 return
             for row in rows:
@@ -77,24 +93,28 @@ class WatchlistScreen(Screen):
                 flags_str = ", ".join(risk_flags) if risk_flags else "—"
                 table.add_row(
                     str(row["rank"]),
-                    row["symbol"],
+                    sanitize_text(row["symbol"]),
                     f"{row['score']:.3f}" if row["score"] else "—",
-                    row.get("candidate_class") or "—",
-                    row.get("setup_type") or "—",
-                    flags_str,
-                    (
+                    sanitize_text(row.get("candidate_class") or "—"),
+                    sanitize_text(row.get("setup_type") or "—"),
+                    sanitize_text(flags_str),
+                    sanitize_text(
                         f"{row.get('scoring_policy_version') or 'UNKNOWN'} / "
                         f"{row.get('scoring_policy_status') or 'UNKNOWN'}"
                     ),
                 )
-            self.query_one("#wl-status", Static).update(
-                f"[green]{len(rows)} research candidates[/green] | "
+            status = (
+                f"{len(rows)} research candidates | "
                 f"policy={rows[0].get('scoring_policy_id') or 'UNKNOWN'}@"
                 f"{rows[0].get('scoring_policy_version') or 'UNKNOWN'} | "
                 f"hash={rows[0].get('scoring_policy_hash') or 'UNKNOWN'}"
             )
-        except Exception as e:
-            self.query_one("#wl-status", Static).update(f"[red]Error: {e}[/red]")
+            self.query_one("#wl-status", Static).update(
+                literal_text(status, style="green")
+            )
+        except Exception as exc:
+            capture_tui_exception(exc)
+            self.query_one("#wl-status", Static).update(generic_load_error("Watchlist"))
 
     def action_refresh(self) -> None:
         self._load_data()
@@ -106,5 +126,5 @@ class WatchlistScreen(Screen):
             try:
                 cell = table.get_cell_at((row_key, 1))  # Symbol column
                 self.app.show_detail(str(cell))
-            except Exception:
-                pass
+            except Exception as exc:
+                capture_tui_exception(exc)

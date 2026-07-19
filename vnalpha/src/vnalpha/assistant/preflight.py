@@ -157,6 +157,15 @@ class LLMPreflightResult:
 GatewayProbe = Callable[[], dict | None]
 
 
+def _capture_exception_safely(exc: Exception) -> None:
+    try:
+        from vnalpha.observability.errors import capture_exception
+
+        capture_exception(exc)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def run_llm_preflight(
     *,
     probe: GatewayProbe | None = None,
@@ -254,6 +263,7 @@ def run_llm_preflight(
             endpoint=_safe_endpoint(config.endpoint),
         )
     except Exception as exc:  # noqa: BLE001, BROAD_EXCEPT_OK
+        _capture_exception_safely(exc)
         return LLMPreflightResult(
             LLMPreflightCode.PROBE_FAILED,
             f"Unexpected {type(exc).__name__} during the bounded LLM probe.",

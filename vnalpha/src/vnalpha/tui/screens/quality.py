@@ -8,6 +8,9 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, Static
 
+from vnalpha.core.text_safety import sanitize_text
+from vnalpha.tui.error_boundary import capture_tui_exception, generic_load_error
+
 
 class QualityScreen(Screen):
     """Shows data quality and provider status information."""
@@ -43,18 +46,19 @@ class QualityScreen(Screen):
                 table.clear()
                 for p in health.providers:
                     table.add_row(
-                        p.get("provider", "—"),
-                        p.get("status", "—"),
-                        p.get("dataset", ""),
+                        sanitize_text(p.get("provider", "—")),
+                        sanitize_text(p.get("status", "—")),
+                        sanitize_text(p.get("dataset", "")),
                     )
                 self.query_one("#quality-status", Static).update(
                     f"[green]{len(health.providers)} providers[/green]"
                 )
             finally:
                 client.close()
-        except Exception as e:
+        except Exception as exc:
+            capture_tui_exception(exc)
             self.query_one("#quality-status", Static).update(
-                f"[yellow]Service unavailable: {e}[/yellow]"
+                generic_load_error("Provider health")
             )
 
     def action_refresh(self) -> None:

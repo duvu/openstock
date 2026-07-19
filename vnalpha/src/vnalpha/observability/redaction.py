@@ -79,7 +79,7 @@ def redact_dict(d: dict, mode: str | None = None) -> dict:
         safe_key = (
             k if not isinstance(k, str) and safe_key_text == str(k) else safe_key_text
         )
-        if _is_sensitive_key(k) or _REDACTED_PLACEHOLDER in safe_key_text:
+        if _is_sensitive_key(safe_key_text) or _REDACTED_PLACEHOLDER in safe_key_text:
             result[safe_key] = _REDACTED_PLACEHOLDER
         else:
             result[safe_key] = _redact_value(v, mode)
@@ -115,6 +115,8 @@ def redact_str(s: str, mode: str | None = None) -> str:
         parsed = None
     if isinstance(parsed, (dict, list)):
         return json.dumps(_redact_value(parsed, mode), sort_keys=True)
+    if isinstance(parsed, str):
+        return json.dumps(redact_str(parsed, mode), sort_keys=True)
     return sanitize_text(s, strip_rich=False)
 
 

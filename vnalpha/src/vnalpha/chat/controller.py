@@ -57,6 +57,15 @@ def _make_connection_factory(path: str | None = None) -> Callable:
     return factory
 
 
+def _capture_exception_safely(exc: Exception) -> None:
+    try:
+        from vnalpha.observability.errors import capture_exception
+
+        capture_exception(exc)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class ChatController:
     def __init__(
         self,
@@ -136,8 +145,8 @@ class ChatController:
                         )
                     finally:
                         conn.close()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _capture_exception_safely(exc)
 
         return _persisting_trace
 
@@ -331,8 +340,8 @@ class ChatController:
                                 for s in getattr(plan, "steps", [])
                             ]
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _capture_exception_safely(exc)
                 self._on_message("dim", format_plan_preview(plan))
                 self._persist_message(
                     "assistant",
@@ -579,9 +588,6 @@ class ChatController:
     def cancel_pending_plan(self) -> None:
         if self._pending_prepared_turn is not None:
             prepared = self._pending_prepared_turn
-            self._pending_prepared_turn = None
-            self._pending_plan = None
-            self._pending_plan_turn_context = None
             try:
                 from vnalpha.assistant.app import AssistantApp
 
@@ -591,8 +597,17 @@ class ChatController:
                     AssistantApp(conn, surface=self._surface).cancel_prepared(prepared)
                 finally:
                     conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                _capture_exception_safely(exc)
+                error_text = format_runtime_error(
+                    "Plan cancellation failed. Check logs and retry."
+                )
+                self._on_message("red", error_text)
+                self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+                return
+            self._pending_prepared_turn = None
+            self._pending_plan = None
+            self._pending_plan_turn_context = None
             self._persist_message("user", "Cancelled.", "plan_cancel")
             self._on_message("", "Plan canceled.")
             return
@@ -789,8 +804,8 @@ class ChatController:
                 )
             finally:
                 conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            _capture_exception_safely(exc)
 
     def _persist_error_message(
         self,

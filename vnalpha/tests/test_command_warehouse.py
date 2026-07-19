@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from vnalpha.warehouse.migrations import run_migrations
@@ -154,3 +156,64 @@ class TestResearchNote:
         create_research_note(conn, symbol="VNM", note_text="note B")
         notes = list_research_notes(conn)
         assert len(notes) == 2
+
+
+def test_research_repositories_redact_all_dynamic_projections(conn) -> None:
+    private_fragment = "CONTROLLED_RESEARCH_STORE_5F06"
+    control = "\x1b]8;;https://example.invalid\x1b\\body\x1b]8;;\x1b\\"
+    hostile = f"password={private_fragment} {control}"
+    nested = json.dumps(json.dumps({"password": private_fragment, "body": control}))
+
+    session_id = create_research_session(
+        conn,
+        surface=hostile,
+        command_text=hostile,
+        command_name=hostile,
+        parsed_args={"password": private_fragment, "nested": nested},
+    )
+    finish_research_session(
+        conn,
+        session_id,
+        status="FAILED",
+        result_summary={"value": hostile, "nested": nested},
+        error={"password": private_fragment, "nested": nested},
+    )
+    trace_id = create_tool_trace(
+        conn,
+        session_id=session_id,
+        tool_name=hostile,
+        input_data={"password": private_fragment, "nested": nested},
+    )
+    finish_tool_trace(
+        conn,
+        trace_id,
+        status="FAILED",
+        output_summary={"password": private_fragment, "nested": nested},
+        error={"value": hostile, "nested": nested},
+    )
+    note_id = create_research_note(
+        conn,
+        symbol=hostile,
+        note_text=hostile,
+        session_id=session_id,
+        tags=[hostile, nested],
+    )
+
+    session_row = conn.execute(
+        "SELECT surface, command_text, command_name, parsed_args_json, "
+        "result_summary_json, error_json FROM research_session WHERE session_id = ?",
+        [session_id],
+    ).fetchone()
+    trace_row = conn.execute(
+        "SELECT tool_name, input_json, output_summary_json, error_json "
+        "FROM tool_trace WHERE tool_trace_id = ?",
+        [trace_id],
+    ).fetchone()
+    note_row = conn.execute(
+        "SELECT symbol, note_text, tags_json FROM research_note WHERE note_id = ?",
+        [note_id],
+    ).fetchone()
+    serialized = " ".join(str(value) for value in (*session_row, *trace_row, *note_row))
+    assert private_fragment not in serialized
+    assert "\x1b]8;" not in serialized
+    assert "[REDACTED]" in serialized

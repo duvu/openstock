@@ -505,6 +505,28 @@ class TestPreparedSandboxApproval:
 
 
 class TestCancelPendingPlan:
+    def test_prepared_cancel_failure_is_captured_and_not_reported_as_success(self):
+        ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
+        prepared = _make_prepared_turn(_make_plan(["watchlist.scan"]))
+        ctrl._pending_prepared_turn = prepared
+        private_fragment = "CANCEL_PRIVATE_63"
+        ctrl._connection_factory.side_effect = RuntimeError(
+            f"password={private_fragment}"
+        )
+
+        with (
+            patch.object(ctrl, "_persist_error_message"),
+            patch("vnalpha.observability.errors.capture_exception") as capture,
+        ):
+            ctrl.cancel_pending_plan()
+
+        capture.assert_called_once()
+        rendered = " ".join(text for _, text in messages)
+        assert "Plan cancellation failed. Check logs and retry." in rendered
+        assert "Plan canceled." not in rendered
+        assert private_fragment not in rendered
+        assert ctrl._pending_prepared_turn is prepared
+
     def test_cancel_clears_pending_plan(self):
         ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
         ctrl._pending_plan = _make_plan(["watchlist.scan"])

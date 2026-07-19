@@ -282,9 +282,10 @@ markup. A record can therefore claim `redacted` while its serialized key names
 still carry the original secret.
 
 **Prevent it:** sanitize JSON-valid key names before persistence as well as
-classifying their values, preserve safe non-string keys where the boundary
-allows them, and assert over the complete serialized record with controlled
-secrets in both keys and values.
+classifying their values, then classify the sanitized key so terminal controls
+cannot split a sensitive word before matching. Preserve safe non-string keys
+where the boundary allows them, and assert over the complete serialized record
+with controlled secrets in both keys and values.
 
 ## 28. A valid timer file is not a packaged, safe scheduling feature
 
@@ -356,8 +357,8 @@ stored text looks harmless, but decoding it restores the unsafe value.
 redactor to the decoded structure, recursively decode and redact JSON-shaped
 strings such as stored provider response bodies, then serialize the redacted
 value. Reject malformed top-level JSON before mutation. Test safety after
-reading the row and decoding every serialized layer, including nested sensitive
-keys and escaped terminal controls.
+reading the row and decoding every serialized layer, including scalar string
+wrappers, nested sensitive keys, and escaped terminal controls.
 
 ## 33. Primary failures make teardown failures escape or disappear
 
@@ -371,6 +372,19 @@ cleanup path; capture teardown details privately and keep public output generic.
 Where successful close is part of the command contract, make close failure set
 the final result to failure. Test both primary-plus-close failure and multiple
 cleanup failures, and assert every cleanup attempt still occurs exactly once.
+
+## 34. Hardening one persistence path is mistaken for protecting stored research
+
+Sanitizing chat messages or command history does not protect sibling tables such
+as research sessions, tool traces, and notes. Those records often carry the same
+provider payloads and exception text through separate repositories, so a safe
+visible response can coexist with a durable credential leak.
+
+**Prevent it:** inventory every repository that persists user, provider, tool,
+or exception-controlled content; apply the same canonical recursive redactor at
+each write boundary; and decode stored JSON again in tests to prove the database
+contains no private fragment. Cover every content-bearing column, not just the
+field that first exposed the defect.
 
 # Mandatory checklist
 

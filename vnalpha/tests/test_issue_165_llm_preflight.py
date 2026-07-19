@@ -8,6 +8,8 @@ secrets or prompt content.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from vnalpha.assistant.errors import (
@@ -139,6 +141,22 @@ def test_ready_records_route_identity(monkeypatch) -> None:
     assert result.ready
     assert result.route == route
     assert result.model == "verified-model"
+
+
+def test_unexpected_preflight_failure_is_captured(monkeypatch) -> None:
+    _configure(monkeypatch)
+    private_fragment = "PREFLIGHT_PRIVATE_91"
+
+    with patch("vnalpha.observability.errors.capture_exception") as capture:
+        result = run_llm_preflight(
+            probe=lambda: (_ for _ in ()).throw(
+                RuntimeError(f"password={private_fragment}")
+            )
+        )
+
+    capture.assert_called_once()
+    assert result.code is LLMPreflightCode.PROBE_FAILED
+    assert private_fragment not in result.detail
 
 
 def test_explicit_key_is_passed_to_default_client_without_env_mutation(
