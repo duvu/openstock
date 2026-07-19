@@ -53,7 +53,7 @@ def _result(request, *, status=ProvisioningStatus.SUCCESS, counts=None, symbols=
     )
 
 
-def test_daily_maintenance_preserves_good_symbols_after_partial_provider_failure(
+def test_daily_maintenance_preserves_good_symbols_after_empty_and_provider_failure(
     conn,
 ) -> None:
     # Given: one bounded symbol succeeds while another carries typed diagnostics.
@@ -87,6 +87,15 @@ def test_daily_maintenance_preserves_good_symbols_after_partial_provider_failure
                                 "service_error_code": "no_healthy_provider",
                             },
                         ),
+                        SymbolIngestionResult(
+                            "HPG",
+                            SymbolIngestionStatus.EMPTY,
+                            0,
+                            "Provider returned no rows.",
+                            "KBS",
+                            retryable=False,
+                            diagnostics_ref="req-239-hpg-empty",
+                        ),
                     ),
                 )
             if (request.operation, request.artifact) == ("gaps", "ohlcv"):
@@ -101,13 +110,15 @@ def test_daily_maintenance_preserves_good_symbols_after_partial_provider_failure
     ).run(
         DailyMaintenanceRequest(
             date="2026-07-17",
-            symbols=("FPT", "VNM"),
+            symbols=("FPT", "VNM", "HPG"),
         )
     )
 
     # Then: the good symbol reaches downstream stages and the failed one does not.
     assert result.status is MaintenanceRunStatus.PARTIAL
-    assert result.diagnostics_refs == ("req-239-vnm",)
+    assert result.successful_symbols == ("FPT",)
+    assert result.failed_symbols == ("HPG", "VNM")
+    assert result.diagnostics_refs == ("req-239-vnm", "req-239-hpg-empty")
     canonical_symbols = [
         request.symbol
         for request in requests

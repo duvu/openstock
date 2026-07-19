@@ -23,4 +23,4 @@
 - [x] 21. Resolve one effective target date across explicit request, request default, planner, tools, persistence and TUI/assistant output. [evidence: `vnalpha/tests/test_issue_231_effective_target_date.py`]
 - [x] 22. Preserve typed provider status/code/retryability/request correlation through vnstock, ingestion, warehouse and public diagnostics without raw bodies. [evidence: `vnalpha/tests/test_issue_232_provider_diagnostics.py`, `vnstock/tests/unit/service/test_*`]
 - [x] 23. Add bounded data-only symbol provisioning that avoids deep-analysis readiness and remains shared by CLI, slash and deterministic tools. [evidence: `vnalpha/tests/test_issue_233_data_only_fetch.py`]
-- [ ] 24. Run the complete CLI/TUI/assistant/legacy/readiness/package matrix and attach exact-candidate evidence for issues #231-#233.
+- [x] 24. Run the complete CLI/TUI/assistant/legacy/readiness/package matrix and attach exact-candidate evidence for issues #231-#233. [evidence: full `vnalpha` suite, 42 installed issue tests, 87 installed CLI/TUI/assistant/safety tests, and 60 package checks]
