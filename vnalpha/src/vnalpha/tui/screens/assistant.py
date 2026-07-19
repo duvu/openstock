@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from vnalpha.assistant.errors import AssistantInputValidationError
+from vnalpha.core.text_safety import sanitize_error_summary
+from vnalpha.observability.errors import capture_exception
+
 try:
     from rich.text import Text
     from textual.app import ComposeResult
@@ -89,8 +93,17 @@ if _TEXTUAL_AVAILABLE:
                 from vnalpha.assistant.planner import PlanBuilder
 
                 plan_panel.update(Text(PlanBuilder().preview(plan), style="dim"))
+            except AssistantInputValidationError as exc:
+                public_error = sanitize_error_summary(exc)
+                answer_panel.update(Text(f"Error: {public_error}", style="red"))
             except Exception as exc:
-                answer_panel.update(Text(f"Error: {exc}", style="red"))
+                capture_exception(exc)
+                answer_panel.update(
+                    Text(
+                        "Assistant request failed. Check logs and retry.",
+                        style="red",
+                    )
+                )
 else:
 
     class AssistantScreen:  # type: ignore[no-redef]

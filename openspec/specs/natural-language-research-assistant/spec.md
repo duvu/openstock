@@ -507,7 +507,8 @@ Current-symbol research SHALL resolve an omitted date or semantic `today` once
 in `Asia/Ho_Chi_Minh` to the latest configured Vietnam trading session on or
 before the current date. This policy SHALL apply to CLI ask, TUI defaults,
 assistant planning and persistence, deep readiness, `/analyze`,
-`/research-plan`, and `/setup-evidence`.
+`/research-plan`, `/setup-evidence`, and assistant `fetch_data` plans that use
+`data.ensure_current_symbol`.
 
 An explicit ISO date SHALL remain explicit after validation. Current-symbol
 readiness SHALL own bounded provisioning for the resolved session and SHALL NOT

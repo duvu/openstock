@@ -211,7 +211,7 @@ class TestAskFunctional:
         ):
             result = runner.invoke(app, ["ask", "Show watchlist"])
         assert result.exit_code == 1
-        assert "Assistant error" in result.output
+        assert "Assistant request failed. Check logs and retry." in result.output
         assert "unexpected keyword argument 'err'" not in result.output
 
     def test_ask_without_date_uses_current_market_session(self, monkeypatch) -> None:
@@ -255,7 +255,9 @@ class TestAskFunctional:
         assert result.exit_code == 0
         assert observed_dates == [("2026-07-15", True)]
 
-    def test_ask_calendar_coverage_failure_is_user_facing(self, monkeypatch) -> None:
+    def test_ask_calendar_coverage_failure_is_user_facing_and_redacted(
+        self, monkeypatch
+    ) -> None:
         import duckdb
 
         from vnalpha.assistant.errors import AssistantInputValidationError
@@ -268,11 +270,13 @@ class TestAskFunctional:
         )
         _force_terminal_console(monkeypatch)
 
+        private_fragment = "CLASSIFIED_SECRET_91ef"
         try:
             with patch(
                 "vnalpha.assistant.app.AssistantApp.ask",
                 side_effect=AssistantInputValidationError(
-                    "calendar [link=https://example.invalid]coverage[/link] unavailable"
+                    "calendar [link=https://example.invalid]coverage[/link] unavailable "
+                    f"authorization=Bearer {private_fragment}"
                 ),
             ):
                 result = runner.invoke(app, ["ask", "Phân tích sâu mã VCB"])
@@ -281,6 +285,8 @@ class TestAskFunctional:
 
         assert result.exit_code == 1
         assert "[link=https://example.invalid]coverage[/link]" in result.output
+        assert private_fragment not in result.output
+        assert "[REDACTED]" in result.output
         assert "Unexpected error" not in result.output
         assert "\x1b]8;" not in result.output
 
@@ -314,6 +320,64 @@ class TestAskFunctional:
         assert "Assistant error:" in result.output
         assert "Unexpected error" not in result.output
         assert "\x1b]8;" not in result.output
+
+    def test_ask_malformed_date_redacts_credentials(self, monkeypatch) -> None:
+        import duckdb
+
+        from vnalpha.warehouse.migrations import run_migrations
+
+        connection = duckdb.connect()
+        run_migrations(conn=connection)
+        monkeypatch.setattr(
+            "vnalpha.warehouse.connection.get_connection", lambda: connection
+        )
+        private_fragment = "DATE_SECRET_7d9a"
+
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "ask",
+                    "Phân tích sâu mã VCB",
+                    "--date",
+                    f"2026-07-19 password={private_fragment}",
+                ],
+            )
+        finally:
+            connection.close()
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "[REDACTED]" in result.output
+
+    def test_ask_unexpected_assistant_error_is_generic(self, monkeypatch) -> None:
+        from vnalpha.assistant.errors import AssistantError
+
+        private_fragment = "PROVIDER_SECRET_42"
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask",
+            side_effect=AssistantError(f"provider password={private_fragment}"),
+        ):
+            result = runner.invoke(app, ["ask", "Show watchlist"])
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "Assistant request failed. Check logs and retry." in result.output
+
+    def test_ask_llm_config_error_is_generic(self) -> None:
+        from vnalpha.assistant.errors import LLMConfigError
+
+        private_fragment = "CONFIG_SECRET_84"
+        with patch(
+            "vnalpha.assistant.gateway.LLMGatewayConfig.from_env",
+            side_effect=LLMConfigError(f"api_key={private_fragment}"),
+        ):
+            result = runner.invoke(app, ["ask", "Show watchlist"])
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "LLM route is not configured" in result.output
+        assert "correctly" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -396,11 +460,12 @@ class TestTuiAskBinding:
         keys = [b[0] if isinstance(b, tuple) else b.key for b in bindings]
         assert "escape" in keys
 
-    def test_legacy_assistant_screen_preserves_provenance_and_literal_errors(
+    def test_legacy_assistant_screen_preserves_provenance_and_redacts_errors(
         self, monkeypatch
     ) -> None:
         from rich.text import Text
 
+        from vnalpha.assistant.errors import AssistantInputValidationError
         from vnalpha.tui.screens.assistant import AssistantScreen
 
         class Panel:
@@ -419,7 +484,11 @@ class TestTuiAskBinding:
                 answer_panel if selector == "#assistant-answer" else plan_panel
             ),
         )
-        malicious_error = "Invalid date [link=https://example.invalid]bad[/link]"
+        private_fragment = "LEGACY_SECRET_61"
+        malicious_error = (
+            "Invalid date [link=https://example.invalid]bad[/link] "
+            f"password={private_fragment}"
+        )
 
         with (
             patch("vnalpha.warehouse.connection.get_connection"),
@@ -428,7 +497,7 @@ class TestTuiAskBinding:
             patch("vnalpha.assistant.gateway.LLMGatewayClient"),
             patch(
                 "vnalpha.assistant.app.AssistantApp.ask",
-                side_effect=ValueError(malicious_error),
+                side_effect=AssistantInputValidationError(malicious_error),
             ) as ask,
         ):
             screen._process_question("Phân tích sâu mã VCB")
@@ -439,8 +508,49 @@ class TestTuiAskBinding:
             date_is_implicit=True,
         )
         assert isinstance(answer_panel.value, Text)
-        assert malicious_error in answer_panel.value.plain
+        assert "Invalid date" in answer_panel.value.plain
+        assert "[REDACTED]" in answer_panel.value.plain
+        assert private_fragment not in answer_panel.value.plain
         assert all("link" not in str(span.style) for span in answer_panel.value.spans)
+
+    def test_legacy_assistant_screen_hides_unexpected_errors(self, monkeypatch) -> None:
+        from vnalpha.tui.screens.assistant import AssistantScreen
+
+        class Panel:
+            value = None
+
+            def update(self, value):
+                self.value = value
+
+        answer_panel = Panel()
+        plan_panel = Panel()
+        screen = AssistantScreen(target_date="2026-07-19")
+        monkeypatch.setattr(
+            screen,
+            "query_one",
+            lambda selector, _type=None: (
+                answer_panel if selector == "#assistant-answer" else plan_panel
+            ),
+        )
+        private_fragment = "LEGACY_PROVIDER_SECRET_13"
+
+        with (
+            patch("vnalpha.warehouse.connection.get_connection"),
+            patch("vnalpha.warehouse.migrations.run_migrations"),
+            patch("vnalpha.assistant.gateway.LLMGatewayConfig.from_env"),
+            patch("vnalpha.assistant.gateway.LLMGatewayClient"),
+            patch(
+                "vnalpha.assistant.app.AssistantApp.ask",
+                side_effect=RuntimeError(f"password={private_fragment}"),
+            ),
+        ):
+            screen._process_question("Phân tích sâu mã VCB")
+
+        assert private_fragment not in answer_panel.value.plain
+        assert (
+            "Assistant request failed. Check logs and retry."
+            in answer_panel.value.plain
+        )
 
 
 # ---------------------------------------------------------------------------

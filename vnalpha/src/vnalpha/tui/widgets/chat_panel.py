@@ -7,7 +7,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from vnalpha.tools.executor import TraceEvent
 
+
+def _capture_exception(exc: Exception) -> None:
+    try:
+        from vnalpha.observability.errors import capture_exception
+
+        capture_exception(exc)
+    except Exception:
+        pass
+
+
 try:
+    from rich.text import Text
     from textual.app import ComposeResult
     from textual.binding import Binding
     from textual.widget import Widget
@@ -53,10 +64,18 @@ if _TEXTUAL_AVAILABLE:
             Binding("ctrl+slash", "focus_input", "Focus chat", show=False),
         ]
 
-        def __init__(self, conn=None, target_date: str | None = None, **kwargs) -> None:
+        def __init__(
+            self,
+            conn=None,
+            target_date: str | None = None,
+            *,
+            target_date_is_implicit: bool = False,
+            **kwargs,
+        ) -> None:
             super().__init__(**kwargs)
             self._conn = conn
             self._target_date = target_date
+            self._target_date_is_implicit = target_date_is_implicit
             self._busy = False
             self._chat_controller = None
             self._session_bootstrap_failed = False
@@ -97,6 +116,7 @@ if _TEXTUAL_AVAILABLE:
 
                 self._chat_controller = ChatController(
                     target_date=self._target_date,
+                    target_date_is_implicit=self._target_date_is_implicit,
                     on_message=_on_message,
                     on_trace=_on_trace,
                     chat_session_id=session_id,
@@ -113,36 +133,34 @@ if _TEXTUAL_AVAILABLE:
         def on_mount(self) -> None:
             if self._session_bootstrap_failed:
                 self.post_message_text(
-                    "[yellow]⚠ Chat session bootstrap failed — history will not persist.[/yellow]"
+                    "⚠ Chat session bootstrap failed — history will not persist.",
+                    style="yellow",
                 )
 
         def post_message_text(self, text: str, style: str = "") -> None:
             """Append styled text to the chat log."""
             log = self.query_one("#chat-log", RichLog)
-            if style:
-                log.write(f"[{style}]{text}[/{style}]")
-            else:
-                log.write(text)
+            log.write(Text(text, style=style or None))
 
         def post_trace_event(self, event: "TraceEvent") -> None:
             """Render a TraceEvent into the chat log."""
             log = self.query_one("#chat-log", RichLog)
             if event.status == "RUNNING":
-                log.write(f"[dim]⟳ {event.tool_name} RUNNING…[/dim]")
+                log.write(Text(f"⟳ {event.tool_name} RUNNING…", style="dim"))
             elif event.status == "SUCCESS":
                 ms = (
                     f"{event.duration_ms:.0f}ms"
                     if event.duration_ms is not None
                     else ""
                 )
-                log.write(f"[green]✓ {event.tool_name} SUCCESS {ms}[/green]")
+                log.write(Text(f"✓ {event.tool_name} SUCCESS {ms}", style="green"))
             else:
                 ms = (
                     f"{event.duration_ms:.0f}ms"
                     if event.duration_ms is not None
                     else ""
                 )
-                log.write(f"[red]✗ {event.tool_name} FAILED {ms}[/red]")
+                log.write(Text(f"✗ {event.tool_name} FAILED {ms}", style="red"))
 
         def on_input_submitted(self, event: Input.Submitted) -> None:
             raw = event.value.strip()
@@ -151,13 +169,14 @@ if _TEXTUAL_AVAILABLE:
             event.input.clear()
             if self._busy:
                 self.post_message_text(
-                    "[yellow]⚠ Still processing, please wait…[/yellow]"
+                    "⚠ Still processing, please wait…",
+                    style="yellow",
                 )
                 return
             if self._chat_controller is not None:
                 self.run_worker(self._dispatch_via_controller(raw), exclusive=True)
             else:
-                self.post_message_text("[red]Chat controller unavailable.[/red]")
+                self.post_message_text("Chat controller unavailable.", style="red")
 
         async def _dispatch_via_controller(self, raw: str) -> None:
             """Delegate input handling to ChatController asynchronously."""
@@ -167,7 +186,11 @@ if _TEXTUAL_AVAILABLE:
             try:
                 await asyncio.to_thread(self._chat_controller.handle_turn, raw)
             except Exception as exc:
-                self.post_message_text(f"[red]Error:[/red] {exc}")
+                _capture_exception(exc)
+                self.post_message_text(
+                    "Assistant request failed. Check logs and retry.",
+                    style="red",
+                )
             finally:
                 self._set_busy(False)
 
@@ -177,7 +200,11 @@ if _TEXTUAL_AVAILABLE:
                 try:
                     self._chat_controller.approve_pending_plan()
                 except Exception as exc:
-                    self.post_message_text(f"[red]Approve error:[/red] {exc}")
+                    _capture_exception(exc)
+                    self.post_message_text(
+                        "Plan approval failed. Check logs and retry.",
+                        style="red",
+                    )
 
         def action_cancel_plan(self) -> None:
             """Cancel the pending plan via ChatController."""
@@ -185,7 +212,11 @@ if _TEXTUAL_AVAILABLE:
                 try:
                     self._chat_controller.cancel_pending_plan()
                 except Exception as exc:
-                    self.post_message_text(f"[red]Cancel error:[/red] {exc}")
+                    _capture_exception(exc)
+                    self.post_message_text(
+                        "Plan cancellation failed. Check logs and retry.",
+                        style="red",
+                    )
 
         def action_toggle_panel(self) -> None:
             """Toggle the chat panel visibility."""
@@ -209,9 +240,17 @@ else:
         DEFAULT_CSS = ""
         BINDINGS = []
 
-        def __init__(self, conn=None, target_date: str | None = None, **kwargs) -> None:
+        def __init__(
+            self,
+            conn=None,
+            target_date: str | None = None,
+            *,
+            target_date_is_implicit: bool = False,
+            **kwargs,
+        ) -> None:
             self._conn = conn
             self._target_date = target_date
+            self._target_date_is_implicit = target_date_is_implicit
             self._chat_controller = None
             self._setup_controller()
 
@@ -247,6 +286,7 @@ else:
 
                 self._chat_controller = ChatController(
                     target_date=self._target_date,
+                    target_date_is_implicit=self._target_date_is_implicit,
                     on_message=_on_message,
                     chat_session_id=session_id,
                 )

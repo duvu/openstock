@@ -3,7 +3,7 @@ from __future__ import annotations
 from vnalpha.assistant.errors import AssistantInputValidationError
 from vnalpha.core.dates import resolve_date, resolve_market_session_date
 
-_CURRENT_SYMBOL_SESSION_INTENTS = frozenset({"deep_analyze_symbol"})
+_CURRENT_SYMBOL_SESSION_INTENTS = frozenset({"deep_analyze_symbol", "fetch_data"})
 
 
 def normalize_date_candidate(value: str | None) -> str | None:

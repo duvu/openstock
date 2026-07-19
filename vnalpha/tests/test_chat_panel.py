@@ -96,14 +96,36 @@ async def test_chat_panel_dispatch_error_handled():
 
     panel = ChatPanel()
     mock_controller = MagicMock()
-    mock_controller.handle_turn.side_effect = RuntimeError("LLM unreachable")
+    private_fragment = "CHAT_PANEL_SECRET_73"
+    mock_controller.handle_turn.side_effect = RuntimeError(
+        f"LLM unreachable password={private_fragment}"
+    )
     panel._chat_controller = mock_controller
     panel.post_message_text = MagicMock()
 
     await panel._dispatch_via_controller("Show strongest VN30 today")
 
     all_messages = " ".join(str(c) for c in panel.post_message_text.call_args_list)
-    assert "LLM unreachable" in all_messages or "Error" in all_messages
+    assert "Assistant request failed. Check logs and retry." in all_messages
+    assert private_fragment not in all_messages
+
+
+@skip_if_no_textual
+def test_chat_panel_writes_dynamic_text_without_active_markup():
+    from rich.text import Text
+
+    from vnalpha.tui.widgets.chat_panel import ChatPanel
+
+    panel = ChatPanel()
+    log = MagicMock()
+    panel.query_one = MagicMock(return_value=log)
+
+    panel.post_message_text("[link=https://example.invalid]bad[/link]", style="red")
+
+    rendered = log.write.call_args.args[0]
+    assert isinstance(rendered, Text)
+    assert rendered.plain == "[link=https://example.invalid]bad[/link]"
+    assert all("link" not in str(span.style) for span in rendered.spans)
 
 
 @skip_if_no_textual

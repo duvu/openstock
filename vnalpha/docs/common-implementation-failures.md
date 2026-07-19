@@ -332,6 +332,20 @@ move, run the verifier again against the archive path, validate the synchronized
 accepted spec strictly, replace generated purpose placeholders, and remove the
 change from `active-changes.yaml`.
 
+## 31. Literal terminal rendering is mistaken for content redaction
+
+Passing untrusted text through a `Rich` `Text` object prevents tags from
+becoming active styles or hyperlinks, but it does not remove credentials,
+provider payloads, paths, or other private exception details. A renderer can
+therefore be markup-safe while still disclosing secrets in CLI and TUI output.
+
+**Prevent it:** keep arbitrary exceptions on a generic public path and capture
+their redacted details only in observability. Send expected validation errors
+through the canonical bounded credential sanitizer before constructing the
+literal renderable. Test both properties independently: no active renderer
+spans or terminal controls, and no controlled private fragment in the final
+visible text, across CLI, current TUI, and legacy surfaces.
+
 # Mandatory checklist
 
 ## Before coding
@@ -364,6 +378,7 @@ change from `active-changes.yaml`.
 - [ ] Derive nested sensitive-key checks from the canonical vocabulary and accept JSON-valid key types.
 - [ ] Redact structured fields before any crop can orphan their credential marker or delimiter.
 - [ ] Apply bounding and escaping in an order that leaves the final rendered value safe.
+- [ ] Verify literal renderables redact private content as well as disabling active markup.
 - [ ] Verify independently safe fields remain safe after final composition.
 - [ ] Render only explicitly public structured failures; keep arbitrary nested exceptions generic.
 - [ ] Make remediation typed, ordered, executable, and root-cause-specific.

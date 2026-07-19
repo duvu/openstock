@@ -41,9 +41,15 @@ def register(app: typer.Typer) -> None:
             from rich.text import Text
 
             from vnalpha.assistant.app import AssistantApp
-            from vnalpha.assistant.errors import AssistantError, LLMConfigError
+            from vnalpha.assistant.errors import (
+                AssistantError,
+                AssistantInputValidationError,
+                LLMConfigError,
+            )
             from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
             from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
+            from vnalpha.core.text_safety import sanitize_error_summary
+            from vnalpha.observability.errors import capture_exception
             from vnalpha.warehouse.connection import get_connection
             from vnalpha.warehouse.migrations import run_migrations
 
@@ -56,7 +62,10 @@ def register(app: typer.Typer) -> None:
             try:
                 resolved_date = resolve_date(date, conn=conn)
             except ValueError as exc:
-                error_console.print(Text(f"Assistant error: {exc}", style="red"))
+                public_error = sanitize_error_summary(exc)
+                error_console.print(
+                    Text(f"Assistant error: {public_error}", style="red")
+                )
                 raise typer.Exit(code=1) from exc
 
             try:
@@ -70,10 +79,10 @@ def register(app: typer.Typer) -> None:
                     no_execute=no_execute,
                 )
             except LLMConfigError as exc:
-                # Natural-language chat is unavailable; deterministic slash and
-                # data commands remain usable (issue #165 degraded mode).
+                capture_exception(exc)
                 config_error = Text(
-                    f"Natural-language chat is unavailable: {exc}\n",
+                    "Natural-language chat is unavailable because the LLM route "
+                    "is not configured correctly.\n",
                     style="yellow",
                 )
                 config_error.append(
@@ -83,11 +92,29 @@ def register(app: typer.Typer) -> None:
                 )
                 error_console.print(config_error)
                 raise typer.Exit(code=1) from exc
+            except AssistantInputValidationError as exc:
+                public_error = sanitize_error_summary(exc)
+                error_console.print(
+                    Text(f"Assistant error: {public_error}", style="red")
+                )
+                raise typer.Exit(code=1) from exc
             except AssistantError as exc:
-                error_console.print(Text(f"Assistant error: {exc}", style="red"))
+                capture_exception(exc)
+                error_console.print(
+                    Text(
+                        "Assistant request failed. Check logs and retry.",
+                        style="red",
+                    )
+                )
                 raise typer.Exit(code=1) from exc
             except Exception as exc:
-                error_console.print(Text(f"Unexpected error: {exc}", style="red"))
+                capture_exception(exc)
+                error_console.print(
+                    Text(
+                        "Assistant request failed. Check logs and retry.",
+                        style="red",
+                    )
+                )
                 raise typer.Exit(code=1) from exc
 
             if show_plan or no_execute:

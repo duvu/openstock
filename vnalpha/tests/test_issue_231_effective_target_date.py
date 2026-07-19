@@ -216,6 +216,28 @@ def test_pre_resolved_implicit_tui_date_uses_current_symbol_session(
     assert prepared.plan.steps[0].arguments["date"] == "2026-07-17"
 
 
+def test_fetch_data_uses_current_symbol_session(conn, monkeypatch) -> None:
+    from vnalpha.assistant import effective_date as effective_date_module
+
+    monkeypatch.setattr(
+        effective_date_module,
+        "resolve_market_session_date",
+        lambda _value: "2026-07-17",
+    )
+
+    prepared = _prepare(
+        conn,
+        intent="fetch_data",
+        entities={"date": None, "symbol": "VCB"},
+        request_date="2026-07-19",
+        request_date_is_implicit=True,
+    )
+
+    assert prepared.request.date == "2026-07-17"
+    assert prepared.plan.steps[0].tool_name == "data.ensure_current_symbol"
+    assert prepared.plan.steps[0].arguments["date"] == "2026-07-17"
+
+
 def test_calendar_coverage_failure_is_typed_and_terminal(conn, monkeypatch) -> None:
     from vnalpha.assistant import effective_date as effective_date_module
     from vnalpha.ingestion.trading_calendar import CalendarCoverageError
