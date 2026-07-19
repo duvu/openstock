@@ -107,6 +107,18 @@ def test_llm_trace_models_are_redacted_before_persistence(conn):
         status="SUCCESS",
         usage={"model_route": {"model_id": hostile_model}},
     )
+    nested_body = json.dumps(
+        {
+            "api_key": private_fragment,
+            "message": "\x1b]8;;https://example.invalid\x1b\\body\x1b]8;;\x1b\\",
+        }
+    )
+    finish_llm_trace(
+        conn,
+        created_trace,
+        status="SUCCESS",
+        output_summary={"raw_responses": [{"body": nested_body}]},
+    )
 
     rows = conn.execute(
         "SELECT model FROM llm_trace WHERE llm_trace_id IN (?, ?) ORDER BY stage",
@@ -116,6 +128,16 @@ def test_llm_trace_models_are_redacted_before_persistence(conn):
     assert private_fragment not in stored
     assert "\x1b]8;" not in stored
     assert "[REDACTED]" in stored
+    summary = json.loads(
+        conn.execute(
+            "SELECT output_summary_json FROM llm_trace WHERE llm_trace_id = ?",
+            [created_trace],
+        ).fetchone()[0]
+    )
+    decoded_body = json.loads(summary["raw_responses"][0]["body"])
+    assert decoded_body["api_key"] == "[REDACTED]"
+    assert private_fragment not in json.dumps(decoded_body)
+    assert "\x1b]8;" not in decoded_body["message"]
 
 
 def test_no_execute_creates_no_tool_trace(conn):

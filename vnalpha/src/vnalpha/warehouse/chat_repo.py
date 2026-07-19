@@ -27,7 +27,7 @@ def _dump_redacted_json(value: str, *, field_name: str) -> str:
         parsed = _json.loads(value)
     except (TypeError, _json.JSONDecodeError) as exc:
         raise ValueError(f"{field_name} must be valid JSON.") from exc
-    return _json.dumps(redact_structure(parsed))
+    return _json.dumps(redact_structure(parsed, parse_json_strings=True))
 
 
 # ---------------------------------------------------------------------------
@@ -53,9 +53,9 @@ def create_chat_session(
         [
             chat_session_id,
             _now_utc_iso(),
-            surface,
+            sanitize_text(surface),
             target_date,
-            title,
+            sanitize_text(title) if title else None,
         ],
     )
     return chat_session_id

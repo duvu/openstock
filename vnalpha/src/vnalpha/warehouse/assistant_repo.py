@@ -16,7 +16,9 @@ def _now() -> str:
 
 
 def _dump_redacted(value: object, *, sort_keys: bool = False) -> str:
-    return json.dumps(redact_structure(value), sort_keys=sort_keys)
+    return json.dumps(
+        redact_structure(value, parse_json_strings=True), sort_keys=sort_keys
+    )
 
 
 def create_assistant_session(
@@ -45,11 +47,15 @@ def create_assistant_session(
             sanitize_text(prompt.prompt_text)
             if prompt and prompt.prompt_text
             else None,
-            prompt.prompt_summary if prompt else None,
+            sanitize_text(prompt.prompt_summary) if prompt else None,
             prompt.prompt_hash if prompt else None,
             prompt.prompt_chars if prompt else None,
-            prompt.workspace_context_ref if prompt else None,
-            prompt.chat_context_ref if prompt else None,
+            sanitize_text(prompt.workspace_context_ref)
+            if prompt and prompt.workspace_context_ref
+            else None,
+            sanitize_text(prompt.chat_context_ref)
+            if prompt and prompt.chat_context_ref
+            else None,
             prompt.raw_stored if prompt else False,
         ],
     )

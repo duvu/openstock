@@ -491,12 +491,18 @@ class ChatController:
                 self._present_actionable_tool_failure(exc)
             except (AssistantInputValidationError, PlanValidationError) as exc:
                 self._present_validation_failure(exc)
-            except Exception:
+            except Exception as exc:
                 error_text = format_runtime_error(
                     "Assistant request failed. Check logs and retry."
                 )
                 self._on_message("red", error_text)
                 self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+                try:
+                    from vnalpha.observability.errors import capture_exception
+
+                    capture_exception(exc)
+                except Exception:  # noqa: BLE001
+                    pass
             return
         if self._pending_plan is None:
             return
@@ -557,12 +563,18 @@ class ChatController:
             self._present_actionable_tool_failure(exc)
         except (AssistantInputValidationError, PlanValidationError) as exc:
             self._present_validation_failure(exc)
-        except Exception:
+        except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
             )
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+            try:
+                from vnalpha.observability.errors import capture_exception
+
+                capture_exception(exc)
+            except Exception:  # noqa: BLE001
+                pass
 
     def cancel_pending_plan(self) -> None:
         if self._pending_prepared_turn is not None:
@@ -952,12 +964,18 @@ class ChatController:
             return self._present_actionable_tool_failure(exc)
         except (AssistantInputValidationError, PlanValidationError) as exc:
             return self._present_validation_failure(exc)
-        except Exception:
+        except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
             )
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+            try:
+                from vnalpha.observability.errors import capture_exception
+
+                capture_exception(exc)
+            except Exception:  # noqa: BLE001
+                pass
             return error_text
 
     def _present_actionable_tool_failure(

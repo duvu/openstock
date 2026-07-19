@@ -209,7 +209,7 @@ def _dedupe(values: list[str]) -> list[str]:
 
 def _dump(value: Any) -> str:
     return json.dumps(
-        redact_structure(value),
+        redact_structure(value, parse_json_strings=True),
         default=str,
         ensure_ascii=False,
         sort_keys=True,

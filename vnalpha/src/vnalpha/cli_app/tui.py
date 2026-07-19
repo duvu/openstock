@@ -30,21 +30,33 @@ def tui(
             )
             raise typer.Exit(code=1) from err
 
-        logging_result = configure_logging(surface=LogSurface.TUI)
-        get_logger("vnalpha.cli.tui").info(
-            "LOGGING_SURFACE_CONFIGURED",
-            surface=logging_result.surface.value,
-            file_enabled=logging_result.file_enabled,
-            console_enabled=logging_result.console_enabled,
-        )
         try:
-            tui_app = VnAlphaApp(date=date, logging_warning=logging_result.error_id)
-        except ValueError as exc:
-            from vnalpha.core.text_safety import sanitize_error_summary
+            logging_result = configure_logging(surface=LogSurface.TUI)
+            get_logger("vnalpha.cli.tui").info(
+                "LOGGING_SURFACE_CONFIGURED",
+                surface=logging_result.surface.value,
+                file_enabled=logging_result.file_enabled,
+                console_enabled=logging_result.console_enabled,
+            )
+            try:
+                tui_app = VnAlphaApp(date=date, logging_warning=logging_result.error_id)
+            except ValueError as exc:
+                from vnalpha.core.text_safety import sanitize_error_summary
 
-            typer.echo(f"Error: {sanitize_error_summary(exc)}", err=True)
+                typer.echo(f"Error: {sanitize_error_summary(exc)}", err=True)
+                raise typer.Exit(code=1) from exc
+            tui_app.run()
+        except typer.Exit:
+            raise
+        except Exception as exc:
+            try:
+                from vnalpha.observability.errors import capture_exception
+
+                capture_exception(exc)
+            except Exception:  # noqa: BLE001
+                pass
+            typer.echo("TUI failed to start. Check logs and retry.", err=True)
             raise typer.Exit(code=1) from exc
-        tui_app.run()
 
 
 def register(app: typer.Typer) -> None:

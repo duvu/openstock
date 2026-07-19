@@ -12,6 +12,7 @@ from vnalpha.assistant.models import (
     AssistantRequest,
     IntentResult,
     PreparedAssistantTurn,
+    PromptPersistenceRecord,
     ToolPlanStep,
     plan_hash,
 )
@@ -59,6 +60,15 @@ def test_assistant_session_projections_redact_nested_dynamic_content(conn):
         conn,
         surface="test",
         user_prompt=hostile,
+        prompt=PromptPersistenceRecord(
+            prompt_text=hostile,
+            prompt_summary=hostile,
+            prompt_hash="hash",
+            prompt_chars=len(hostile),
+            workspace_context_ref=hostile,
+            chat_context_ref=hostile,
+            raw_stored=True,
+        ),
     )
 
     mark_assistant_session_prepared(
@@ -78,7 +88,8 @@ def test_assistant_session_projections_redact_nested_dynamic_content(conn):
     )
 
     row = conn.execute(
-        "SELECT user_prompt, plan_json, answer_json, refusal_reason, error_json "
+        "SELECT user_prompt, prompt_text, prompt_summary, workspace_context_ref, "
+        "chat_context_ref, plan_json, answer_json, refusal_reason, error_json "
         "FROM assistant_session WHERE assistant_session_id = ?",
         [session_id],
     ).fetchone()

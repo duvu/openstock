@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -255,7 +256,9 @@ def sanitize_error_summary(value: object) -> str:
     return sanitized[:_MAX_ERROR_SUMMARY_CHARS].rstrip()
 
 
-def redact_structure(value: Any, *, depth: int = 0) -> Any:
+def redact_structure(
+    value: Any, *, depth: int = 0, parse_json_strings: bool = False
+) -> Any:
     if depth > 10:
         return "[REDACTED]"
     if isinstance(value, Mapping):
@@ -263,12 +266,36 @@ def redact_structure(value: Any, *, depth: int = 0) -> Any:
             sanitize_text(key): (
                 "[REDACTED]"
                 if is_sensitive_key(key)
-                else redact_structure(item, depth=depth + 1)
+                else redact_structure(
+                    item,
+                    depth=depth + 1,
+                    parse_json_strings=parse_json_strings,
+                )
             )
             for key, item in value.items()
         }
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [redact_structure(item, depth=depth + 1) for item in value]
+        return [
+            redact_structure(
+                item,
+                depth=depth + 1,
+                parse_json_strings=parse_json_strings,
+            )
+            for item in value
+        ]
     if isinstance(value, str):
+        if parse_json_strings and value.lstrip().startswith(("{", "[")):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                pass
+            else:
+                return json.dumps(
+                    redact_structure(
+                        parsed,
+                        depth=depth + 1,
+                        parse_json_strings=True,
+                    )
+                )
         return sanitize_text(value)
     return value

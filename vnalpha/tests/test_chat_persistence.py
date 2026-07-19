@@ -82,6 +82,22 @@ def test_create_chat_session_custom_params(conn):
     assert title == "Morning scan"
 
 
+def test_create_chat_session_redacts_dynamic_title(conn):
+    private_fragment = "CHAT_TITLE_SECRET_44"
+    control = "\x1b]8;;https://example.invalid\x1b\\title\x1b]8;;\x1b\\"
+    sid = create_chat_session(
+        conn,
+        title=f"password={private_fragment} {control}",
+    )
+
+    title = conn.execute(
+        "SELECT title FROM chat_session WHERE chat_session_id = ?", [sid]
+    ).fetchone()[0]
+    assert private_fragment not in title
+    assert "\x1b]8;" not in title
+    assert "[REDACTED]" in title
+
+
 def test_finish_chat_session(conn):
     sid = create_chat_session(conn)
     finish_chat_session(conn, sid)

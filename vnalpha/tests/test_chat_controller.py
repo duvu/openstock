@@ -404,6 +404,35 @@ def test_handle_natural_language_sanitizes_unexpected_exception():
     assert "provider internals must not leak" not in all_text
 
 
+def test_prepared_natural_language_captures_unexpected_exception():
+    from vnalpha.chat.controller import ChatController
+
+    messages = []
+    ctrl = ChatController(
+        on_message=lambda style, text: messages.append((style, text)),
+        target_date="2026-07-07",
+    )
+    private_fragment = "PREPARED_PRIVATE_66"
+
+    with (
+        patch.object(
+            ctrl,
+            "_prepare_turn",
+            side_effect=RuntimeError(f"password={private_fragment}"),
+        ),
+        patch.object(ctrl, "_persist_error_message"),
+        patch("vnalpha.observability.errors.capture_exception") as capture,
+    ):
+        result = ctrl._handle_prepared_natural_language(
+            "What is happening?", workspace_context=None
+        )
+
+    capture.assert_called_once()
+    all_text = " ".join(text for _, text in messages)
+    assert result == "[ERROR] Assistant request failed. Check logs and retry."
+    assert private_fragment not in all_text
+
+
 # ---------------------------------------------------------------------------
 # Section 2 — Task 2.5: no textual dependency in tests
 # ---------------------------------------------------------------------------

@@ -623,6 +623,27 @@ class TestTuiAskBinding:
         assert "\x1b]8;" not in result.output
         assert "[REDACTED]" in result.output
 
+    def test_tui_runtime_error_is_generic(self, monkeypatch) -> None:
+        from vnalpha.tui import app as tui_app_module
+
+        private_fragment = "CONTROLLED_TUI_RUN_PRIVATE_23CE"
+
+        class FailingTuiApp:
+            def __init__(self, **_kwargs):
+                pass
+
+            def run(self) -> None:
+                raise RuntimeError(f"password={private_fragment}")
+
+        monkeypatch.setattr(tui_app_module, "VnAlphaApp", FailingTuiApp)
+
+        result = runner.invoke(app, ["tui"])
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "Traceback" not in result.output
+        assert "TUI failed to start. Check logs and retry." in result.output
+
     def test_assistant_screen_importable(self):
         """AssistantScreen must be importable (skip if textual not installed)."""
         try:

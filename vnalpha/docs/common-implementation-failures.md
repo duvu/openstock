@@ -353,9 +353,11 @@ cannot remove terminal controls represented by JSON escape sequences. The
 stored text looks harmless, but decoding it restores the unsafe value.
 
 **Prevent it:** parse every JSON-bearing field, apply the canonical recursive
-redactor to the decoded structure, then serialize the redacted value. Reject
-malformed JSON before mutation. Test safety after reading the row and decoding
-the stored JSON, including nested sensitive keys and escaped terminal controls.
+redactor to the decoded structure, recursively decode and redact JSON-shaped
+strings such as stored provider response bodies, then serialize the redacted
+value. Reject malformed top-level JSON before mutation. Test safety after
+reading the row and decoding every serialized layer, including nested sensitive
+keys and escaped terminal controls.
 
 ## 33. Primary failures make teardown failures escape or disappear
 

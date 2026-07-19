@@ -540,6 +540,48 @@ class TestCancelPendingPlan:
 
 
 class TestApprovePendingPlan:
+    def test_prepared_approval_captures_unexpected_exception(self):
+        ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
+        prepared = _make_prepared_turn(_make_plan(["watchlist.scan"]))
+        ctrl._pending_prepared_turn = prepared
+        private_fragment = "PREPARED_APPROVAL_PRIVATE_72"
+
+        with (
+            patch.object(ctrl, "_persist_message"),
+            patch.object(ctrl, "_persist_error_message"),
+            patch.object(
+                ctrl,
+                "_execute_prepared_turn",
+                side_effect=RuntimeError(f"password={private_fragment}"),
+            ),
+            patch("vnalpha.observability.errors.capture_exception") as capture,
+        ):
+            ctrl.approve_pending_plan()
+
+        capture.assert_called_once()
+        assert private_fragment not in " ".join(text for _, text in messages)
+
+    def test_legacy_approval_captures_unexpected_exception(self):
+        ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
+        ctrl._pending_plan = _make_plan(["watchlist.scan"])
+        ctrl._pending_plan_turn_context = {"question": "show watchlist"}
+        private_fragment = "LEGACY_APPROVAL_PRIVATE_81"
+
+        with (
+            patch.object(ctrl, "_persist_message"),
+            patch.object(ctrl, "_persist_error_message"),
+            patch.object(
+                ctrl,
+                "_run_ask",
+                side_effect=RuntimeError(f"password={private_fragment}"),
+            ),
+            patch("vnalpha.observability.errors.capture_exception") as capture,
+        ):
+            ctrl.approve_pending_plan()
+
+        capture.assert_called_once()
+        assert private_fragment not in " ".join(text for _, text in messages)
+
     def test_approve_executes_and_clears_plan(self):
         ctrl, messages = _make_controller(ExecutionMode.PLAN_THEN_APPROVE)
         plan = _make_plan(["watchlist.scan"])
