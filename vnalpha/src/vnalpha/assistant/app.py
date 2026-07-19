@@ -15,6 +15,11 @@ if TYPE_CHECKING:
     from vnalpha.chat.context import ChatContext
     from vnalpha.tools.executor import TraceEvent
 
+from vnalpha.assistant.effective_date import (
+    normalize_date_candidate,
+    resolve_effective_target_date,
+    validate_date_candidate,
+)
 from vnalpha.assistant.errors import (
     AssistantError,
     AssistantInputValidationError,
@@ -40,7 +45,6 @@ from vnalpha.assistant.synthesizer import AnswerSynthesizer
 from vnalpha.assistant.tool_policy import is_approval_required_plan
 from vnalpha.core.text_safety import sanitize_error_summary
 from vnalpha.data_availability.dates import (
-    InvalidEnsureDateError,
     normalize_optional_date,
 )
 from vnalpha.warehouse.assistant_repo import (
@@ -103,7 +107,8 @@ def _refusal_result(exc: RefusalError) -> tuple[RefusalMessage, AssistantPlan]:
 
 
 def _request_as_of_date(value: str | None) -> date:
-    return date.fromisoformat(normalize_optional_date(value))
+    normalized = normalize_date_candidate(value)
+    return date.fromisoformat(normalize_optional_date(normalized))
 
 
 class AssistantApp:
@@ -170,14 +175,8 @@ class AssistantApp:
         except Exception:  # noqa: BLE001
             pass
         try:
-            if request.date is not None:
-                try:
-                    normalize_optional_date(request.date)
-                except InvalidEnsureDateError as exc:
-                    raise AssistantInputValidationError(
-                        f"Invalid date value {request.date!r}; "
-                        "expected 'today' or ISO format YYYY-MM-DD."
-                    ) from exc
+            request = replace(request, date=normalize_date_candidate(request.date))
+            validate_date_candidate(request.date)
             check_policy(prompt)
             classify_trace_id = create_llm_trace(
                 self._conn,
@@ -216,8 +215,16 @@ class AssistantApp:
                     },
                 )
                 raise
-            if request.date and "date" not in intent_result.entities:
-                intent_result.entities["date"] = request.date
+            raw_classified_date = intent_result.entities.get("date")
+            classified_date = (
+                raw_classified_date if isinstance(raw_classified_date, str) else None
+            )
+            effective_date = resolve_effective_target_date(
+                classified_date=classified_date,
+                request_date=request.date,
+            )
+            intent_result.entities["date"] = effective_date
+            request = replace(request, date=effective_date)
             check_intent_policy(intent_result)
             plan = self._planner.build(intent_result)
             request = self._with_symbol_memory_context(request, intent_result.entities)

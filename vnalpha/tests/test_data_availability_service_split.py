@@ -174,8 +174,8 @@ def test_service_returns_warning_after_vnstock_http_error() -> None:
 
     assert completed == []
     assert warnings == [
-        "BENCHMARK_SYNCED failed: HTTP 503 from /v1/index/ohlcv: unavailable",
-        "FEATURES_BUILT failed: HTTP 503 from /v1/index/ohlcv: unavailable",
+        "BENCHMARK_SYNCED failed: HTTP 503 from /v1/index/ohlcv",
+        "FEATURES_BUILT failed: HTTP 503 from /v1/index/ohlcv",
     ]
 
 

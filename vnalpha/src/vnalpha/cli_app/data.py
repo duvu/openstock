@@ -200,8 +200,18 @@ def build_sector_strength(
 @sync_app.command("daily")
 def sync_daily(
     date: str | None = typer.Option(None, "--date", help="Market date (YYYY-MM-DD)."),
+    source: str | None = typer.Option(None, "--source", help="Preferred provider."),
+    interval: str = typer.Option("1D", "--interval", help="OHLCV interval."),
 ) -> None:
-    _run(DataProvisioningRequest(operation="sync", artifact="daily", date=date))
+    _run(
+        DataProvisioningRequest(
+            operation="sync",
+            artifact="daily",
+            date=date,
+            source=source,
+            interval=interval,
+        )
+    )
 
 
 @app.command("gaps")

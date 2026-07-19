@@ -14,7 +14,14 @@
 set -e
 
 case "$1" in
-  remove|upgrade|deconfigure)
+  remove)
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl stop openstock-daily-pipeline.timer || true
+      systemctl stop openstock-daily-pipeline.service || true
+    fi
+    ;;
+
+  upgrade|deconfigure)
     # Nothing to do.
     # /opt/vnalpha/venv will be removed by dpkg as part of the payload.
     # /var/lib/openstock/warehouse is NOT part of the package payload and

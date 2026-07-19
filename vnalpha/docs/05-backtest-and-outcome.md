@@ -4,7 +4,7 @@
 >
 > Current Backtest Lab scope, dependencies and status are owned by GitHub issue
 > [#108](https://github.com/duvu/openstock/issues/108); product priority is
-> maintained in [#209](https://github.com/duvu/openstock/issues/209).
+> maintained in [#238](https://github.com/duvu/openstock/issues/238).
 
 ## Purpose
 

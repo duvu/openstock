@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any
 
 from vnalpha.research_automation.models import (
     ResearchArtifact,
@@ -20,6 +21,7 @@ from vnalpha.symbol_memory.context_snapshots import (
 )
 from vnalpha.symbol_memory.ingestion import MemoryEvidence
 from vnalpha.symbol_memory.paths import normalize_symbol
+from vnalpha.warehouse.symbol_lifecycle import SymbolTaxonomyAsOf
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +47,19 @@ class FeatureSnapshot:
     persisted_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class CandidateStateSnapshot:
+    symbol: str
+    as_of_date: date
+    candidate_class: str
+    setup_type: str | None
+    risk_flags: tuple[str, ...]
+    correlation_id: str
+    persisted_at: datetime
+    scoring_policy_id: str
+    scoring_policy_hash: str
+
+
 def candidate_score_evidence(snapshot: CandidateScoreSnapshot) -> MemoryEvidence:
     symbol = normalize_symbol(snapshot.symbol)
     value = {
@@ -68,6 +83,64 @@ def candidate_score_evidence(snapshot: CandidateScoreSnapshot) -> MemoryEvidence
         correlation_id=snapshot.correlation_id,
         source_published_at=snapshot.as_of_date,
     )
+
+
+def candidate_state_evidence(snapshot: CandidateStateSnapshot) -> MemoryEvidence:
+    symbol = normalize_symbol(snapshot.symbol)
+    return MemoryEvidence(
+        symbol=symbol,
+        claim_type="candidate_state",
+        predicate="candidate_classification",
+        value={
+            "candidate_class": snapshot.candidate_class,
+            "setup_type": snapshot.setup_type,
+            "risk_flags": list(snapshot.risk_flags),
+            "scoring_policy_id": snapshot.scoring_policy_id,
+            "scoring_policy_hash": snapshot.scoring_policy_hash,
+        },
+        source_ref=f"candidate_score:{symbol}:{snapshot.as_of_date.isoformat()}",
+        observed_at=snapshot.persisted_at,
+        as_of_date=snapshot.as_of_date,
+        confidence=None,
+        correlation_id=snapshot.correlation_id,
+        source_published_at=snapshot.as_of_date,
+    )
+
+
+def taxonomy_identity_evidence(
+    taxonomy: SymbolTaxonomyAsOf,
+    *,
+    correlation_id: str,
+    observed_at: datetime,
+    as_of_date: date,
+) -> MemoryEvidence:
+    return MemoryEvidence(
+        symbol=normalize_symbol(taxonomy.symbol),
+        claim_type="symbol_identity",
+        predicate="taxonomy_identity",
+        value=taxonomy_identity_value(taxonomy),
+        source_ref=f"symbol_identity:{taxonomy.symbol}:{as_of_date.isoformat()}",
+        observed_at=observed_at,
+        as_of_date=as_of_date,
+        confidence=None,
+        correlation_id=correlation_id,
+        source_published_at=as_of_date,
+    )
+
+
+def taxonomy_identity_value(taxonomy: SymbolTaxonomyAsOf) -> dict[str, Any]:
+    return {
+        "exchange": taxonomy.exchange,
+        "security_type": taxonomy.security_type,
+        "lifecycle_status": taxonomy.lifecycle_status,
+        "sector_code": taxonomy.sector_code,
+        "sector_name": taxonomy.sector_name,
+        "industry_code": taxonomy.industry_code,
+        "industry_name": taxonomy.industry_name,
+        "taxonomy_name": taxonomy.taxonomy_name,
+        "taxonomy_version": taxonomy.taxonomy_version,
+        "source_snapshot_id": taxonomy.source_snapshot_id,
+    }
 
 
 def feature_snapshot_evidence(snapshot: FeatureSnapshot) -> MemoryEvidence:
@@ -240,15 +313,19 @@ def research_automation_evidence(
 
 __all__ = [
     "CandidateScoreSnapshot",
+    "CandidateStateSnapshot",
     "CanonicalOhlcvBasisSnapshot",
     "FeatureSnapshot",
     "SymbolIdentitySnapshot",
     "canonical_ohlcv_basis_evidence",
     "candidate_score_evidence",
+    "candidate_state_evidence",
     "feature_snapshot_evidence",
     "market_regime_evidence",
     "research_automation_evidence",
     "setup_analysis_evidence",
     "symbol_identity_evidence",
     "symbol_level_evidence",
+    "taxonomy_identity_evidence",
+    "taxonomy_identity_value",
 ]

@@ -20,7 +20,7 @@ Develop a provider-independent Vietnamese financial data platform that can:
 - expose provider health, routing, freshness and provenance;
 - serve bounded read-only data to `vnalpha`, notebooks, batch jobs and approved tools.
 
-Current priority and delivery order are maintained in [the root roadmap](../ROADMAP.md) and GitHub issue [#90](https://github.com/duvu/openstock/issues/90), not in component planning documents.
+Current priority and delivery order are maintained in [the root roadmap](../ROADMAP.md) and GitHub issue [#238](https://github.com/duvu/openstock/issues/238), not in component planning documents.
 
 ## Current scope
 

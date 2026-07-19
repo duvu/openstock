@@ -189,7 +189,6 @@ _release_lock() {
     return 0
   fi
   flock -u "$LOCK_FD" 2>/dev/null || true
-  rm -f "$LOCK_FILE" 2>/dev/null || true
 }
 
 _on_exit() {

@@ -2,14 +2,14 @@
 
 `openspec/changes/` contains changes with unresolved product or implementation scope. Completed, superseded, duplicate, abandoned or incompatible changes belong under `openspec/changes/archive/`.
 
-The product roadmap is GitHub issue [#90 — OpenStock unified product roadmap](https://github.com/duvu/openstock/issues/90). The local [`active-changes.yaml`](active-changes.yaml) registry tracks only OpenSpec lifecycle and evidence; it does not own priority or execution order.
+The product roadmap is GitHub issue [#238 — OpenStock core data and knowledge loop](https://github.com/duvu/openstock/issues/238). The local [`active-changes.yaml`](active-changes.yaml) registry tracks only OpenSpec lifecycle and evidence; it does not own priority or execution order.
 
 ## Responsibility split
 
 | Artifact | Owns | Must not own |
 |---|---|---|
 | GitHub issue | priority, dependencies, delivery status, scope, acceptance criteria, closure | detailed design duplicated across files |
-| Master issue #90 | portfolio order and track-level progress | implementation detail |
+| Master issue #238 | dependency order and track-level progress | implementation detail |
 | OpenSpec change | requirements, design, tasks and validation evidence | a competing P0/P1 queue |
 | Pull request | implementation diff and exact verification results | roadmap reprioritization hidden in PR prose |
 | Stable docs | architecture, concepts and operating guidance | live status checklists |
@@ -25,7 +25,7 @@ The product roadmap is GitHub issue [#90 — OpenStock unified product roadmap](
 5. Search active changes, archived changes, accepted specs and GitHub Issues before creating overlapping work.
 6. Check a task only when the requested code and evidence exist; PR prose alone is not evidence.
 7. Sync only accepted implemented requirements into `openspec/specs/`.
-8. Change priority or delivery order in GitHub Issues and update #90, never in this README.
+8. Change priority or delivery order in GitHub Issues and update #238, never in this README.
 
 ## Registry fields
 

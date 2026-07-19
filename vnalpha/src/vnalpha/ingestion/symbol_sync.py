@@ -24,6 +24,10 @@ from vnalpha.ingestion.persistence import (
     persistence_diagnostics,
     validated_ohlcv_price_basis,
 )
+from vnalpha.ingestion.provider_failures import (
+    is_retryable_http_failure,
+    project_http_diagnostics,
+)
 from vnalpha.ingestion.symbol_outcomes import (
     failed_symbol_result,
     invalid_symbol_result,
@@ -46,6 +50,7 @@ def sync_ohlcv_for_symbol(
     source: str | None = None,
 ) -> SymbolIngestionResult:
     provider = source or "auto"
+    attempted_providers: list[str] = []
     for attempt in range(1, _MAX_ATTEMPTS + 1):
         try:
             response = client.get_equity_ohlcv(
@@ -56,17 +61,27 @@ def sync_ohlcv_for_symbol(
                 source=source,
             )
         except VnstockHTTPError as exc:
+            if exc.provider is not None and exc.provider not in attempted_providers:
+                attempted_providers.append(exc.provider)
+            diagnostics = project_http_diagnostics(
+                exc,
+                source_requested=source or "auto",
+                attempted_providers=tuple(attempted_providers),
+            )
+            failed_provider = exc.provider or provider
             if exc.status_code == 422:
                 return invalid_symbol_result(
                     symbol,
                     start,
                     end,
-                    provider,
+                    failed_provider,
                     IngestionErrorCategory.PROVIDER_DATA,
                     "Provider rejected invalid OHLCV data.",
                     attempt,
+                    diagnostics=diagnostics,
+                    diagnostics_ref=exc.request_id,
                 )
-            retryable = exc.status_code in {408, 429} or exc.status_code >= 500
+            retryable = is_retryable_http_failure(exc)
             if retryable and attempt < _MAX_ATTEMPTS:
                 logger.warning("Retrying OHLCV provider request for %s", symbol)
                 continue
@@ -74,11 +89,13 @@ def sync_ohlcv_for_symbol(
                 symbol,
                 start,
                 end,
-                provider,
+                failed_provider,
                 IngestionErrorCategory.HTTP,
                 retryable,
                 "Provider HTTP request failed.",
                 attempt,
+                diagnostics=diagnostics,
+                diagnostics_ref=exc.request_id,
             )
         except VnstockTimeoutError:
             if attempt < _MAX_ATTEMPTS:
@@ -141,6 +158,7 @@ def sync_ohlcv_for_symbol(
             )
 
         provider = response.meta.provider.strip().upper()
+        diagnostics = persistence_diagnostics(provider, response.diagnostics)
         if response.meta.dataset != "equity.ohlcv":
             return invalid_symbol_result(
                 symbol,
@@ -150,6 +168,7 @@ def sync_ohlcv_for_symbol(
                 IngestionErrorCategory.PROVIDER_DATA,
                 "Provider returned an unexpected OHLCV dataset.",
                 attempt,
+                diagnostics=diagnostics,
             )
         actual_source = validate_persistence_source(provider)
         requested_source = source.strip().upper() if source else None
@@ -162,8 +181,8 @@ def sync_ohlcv_for_symbol(
                 IngestionErrorCategory.PROVIDER_DATA,
                 "Provider response did not match the explicitly selected source.",
                 attempt,
+                diagnostics=diagnostics,
             )
-        diagnostics = persistence_diagnostics(provider, response.diagnostics)
         price_basis = validated_ohlcv_price_basis(provider, response.diagnostics)
         quality_report = response.meta.quality_report or response.diagnostics.get(
             "quality", {}
@@ -204,6 +223,7 @@ def sync_ohlcv_for_symbol(
                 IngestionErrorCategory.PROVIDER_DATA,
                 "Provider response lacked validated quality evidence.",
                 attempt,
+                diagnostics=diagnostics,
             )
         if not response.data:
             remediation = remediation_step(

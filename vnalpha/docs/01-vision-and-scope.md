@@ -1,5 +1,10 @@
 # 01. Vision and scope
 
+> **Status: historical design context.** Permanent research-only boundaries
+> remain applicable, but capability and priority statements are not current
+> delivery evidence. Use [GitHub issue #238](https://github.com/duvu/openstock/issues/238)
+> and the [root roadmap](../../ROADMAP.md) for live status.
+
 ## Product name
 
 The project name is **vnalpha**.

@@ -7,6 +7,7 @@ from vnalpha.cli_app import (
     eval,
     init,
     log,
+    maintain,
     preflight,
     score,
     shortlist,
@@ -27,6 +28,7 @@ configure_app(app)
 app.add_typer(sync_app, name="sync")
 app.add_typer(build_app, name="build")
 app.add_typer(data.app, name="data")
+app.add_typer(maintain.app, name="maintain")
 app.add_typer(warehouse.app, name="warehouse")
 init.register(app)
 score.register(app)

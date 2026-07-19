@@ -143,6 +143,15 @@ sed -i "s/^Installed-Size:.*/Installed-Size: ${PAYLOAD_KB}/" \
 
 WHEELS_DIR="${STAGE_DIR}/opt/vnalpha/wheels"
 mkdir -p "${WHEELS_DIR}"
+TARGET_PYTHON_VERSIONS=("310" "311" "312")
+TARGET_WHEEL_PLATFORMS=(
+  "manylinux_2_28_x86_64"
+  "manylinux_2_27_x86_64"
+  "manylinux_2_26_x86_64"
+  "manylinux_2_24_x86_64"
+  "manylinux_2_17_x86_64"
+  "manylinux2014_x86_64"
+)
 
 # Build the local project wheel independently because pip download of a local
 # project resolves dependencies but does not place the project wheel in the destination.
@@ -154,13 +163,28 @@ python3 -m pip wheel \
   "${VNALPHA_SRC}"
 
 if [[ "${SKIP_WHEELS}" == false ]]; then
-  echo "build-deb.sh: Downloading wheels for offline install ..."
-  # Download the vnalpha package and all its runtime deps as wheels
-  python3 -m pip download \
-    --quiet \
-    --dest "${WHEELS_DIR}" \
-    --find-links "${WHEELS_DIR}" \
-    "${VNALPHA_SRC}"
+  echo "build-deb.sh: Downloading CPython 3.10-3.12 wheels ..."
+  VNALPHA_WHEEL="$(find "${WHEELS_DIR}" -maxdepth 1 -name 'vnalpha-*.whl' -print -quit)"
+  TARGET_WHEELS_DIR="${STAGE_DIR}/target-wheels"
+  mkdir -p "${TARGET_WHEELS_DIR}"
+  PLATFORM_ARGS=()
+  for platform in "${TARGET_WHEEL_PLATFORMS[@]}"; do
+    PLATFORM_ARGS+=(--platform "${platform}")
+  done
+  for target_python in "${TARGET_PYTHON_VERSIONS[@]}"; do
+    python3 -m pip download \
+      --quiet \
+      --only-binary=:all: \
+      --dest "${TARGET_WHEELS_DIR}" \
+      "${PLATFORM_ARGS[@]}" \
+      --python-version "${target_python}" \
+      --implementation cp \
+      --abi "cp${target_python}" \
+      "${VNALPHA_WHEEL}"
+  done
+
+  rm -rf "${WHEELS_DIR}"
+  mv "${TARGET_WHEELS_DIR}" "${WHEELS_DIR}"
 
   WHEEL_COUNT="$(find "${WHEELS_DIR}" -name "*.whl" | wc -l)"
   echo "build-deb.sh: Downloaded ${WHEEL_COUNT} wheels."

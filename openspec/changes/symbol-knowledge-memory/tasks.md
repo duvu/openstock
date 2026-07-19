@@ -144,6 +144,15 @@
 - [x] 11.11 Run `packaging/scripts/openstock-verify --ci`. [evidence: command log, 2026-07-13]
 - [x] 11.12 Attach exact validation evidence to the implementation PR before checking phase gates. [evidence: draft PR #71, exact implementation SHA `3af296419b04155e4aee16d45258f6d458fd8ba2`]
 
+## 12. Daily selective and typed entity memory
+
+- [x] 12.1 Project only material validated candidate/taxonomy changes after daily maintenance and expose lifecycle counters. [evidence: `vnalpha/tests/test_issue_240_selective_symbol_memory.py`]
+- [x] 12.2 Add allowlisted SYMBOL, MARKET, SECTOR, INDUSTRY and ASSET_CLASS identity across repository, lifecycle, retrieval and compaction with symbol compatibility wrappers. [evidence: `vnalpha/tests/test_issue_241_entity_memory.py`]
+- [x] 12.3 Persist deterministic point-in-time group snapshots using the production sector metrics and project only changed validated context. [evidence: `vnalpha/tests/test_issue_242_group_context_memory.py`]
+- [x] 12.4 Retrieve market/group context alongside symbol context under one total token budget. [evidence: `vnalpha/tests/test_issue_242_group_context_memory.py`]
+- [x] 12.5 Prove migration of populated legacy event, claim, document and compaction tables without loss. [evidence: `vnalpha/tests/test_issue_241_entity_memory.py`]
+- [ ] 12.6 Run exact-candidate full gates and reconcile issues #240-#242.
+
 ## Phase gates
 
 - [x] G1 Domain, migrations, canonical paths, and explicit user-note workflow pass. [evidence: 35 focused tests on `3af2964`; draft PR #71]

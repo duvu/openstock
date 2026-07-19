@@ -11,7 +11,7 @@ vnalpha  = DuckDB research warehouse + analysis + watchlists + CLI/TUI + optiona
 
 OpenStock is built for research, education and market analysis. It is **not** a broker, portfolio manager, investment adviser or trading-execution system.
 
-> **Project status:** active development. Stable architecture and operating procedures are documented in the repository. Current priority, dependency and delivery status are maintained in [GitHub issue #209](https://github.com/duvu/openstock/issues/209).
+> **Project status:** active development. Stable architecture and operating procedures are documented in the repository. Current priority, dependency and delivery status are maintained in [GitHub issue #238](https://github.com/duvu/openstock/issues/238).
 
 ## Why OpenStock
 
@@ -71,6 +71,27 @@ public or credentialed data providers
 ```
 
 Provider access must not bypass the `vnstock` runtime and canonical contracts. CLI, TUI, assistant and read-only API surfaces should delegate to the same typed application services.
+
+## Canonical product loop
+
+```text
+provider evidence → canonical warehouse → features and research context
+        ↑                                      ↓
+validation and outcomes ← evaluation ← typed memory ← deterministic tools
+                                                   ↓
+                                          optional AI synthesis
+```
+
+The loop is date-bound and evidence-first. Deterministic application services
+provision data; the assistant cannot autonomously call `data.fetch`. Evaluation
+and observed outcomes feed policy review without creating order, broker,
+account, allocation or execution capabilities.
+
+| Truth layer | Role | Authority |
+|---|---|---|
+| Fresh warehouse and deterministic tool output | Current data, readiness, calculations, diagnostics and lineage | Authoritative |
+| Typed memory claims and cards | Bounded, source-validated historical context with expiry and supersession | Derived; revalidated before use |
+| Optional model prose | Explanation and synthesis | Non-authoritative; must cite the layers above |
 
 ## Current capabilities
 
@@ -292,7 +313,7 @@ A pull request is not considered ready when code, configuration, current documen
 
 ## Roadmap and contribution workflow
 
-The live roadmap is [GitHub issue #209](https://github.com/duvu/openstock/issues/209). GitHub Issues are the source of truth for current priority, dependencies, acceptance criteria, ownership and closure evidence.
+The live roadmap is [GitHub issue #238](https://github.com/duvu/openstock/issues/238). GitHub Issues are the source of truth for current priority, dependencies, acceptance criteria, ownership and closure evidence.
 
 Expected delivery workflow:
 

@@ -123,6 +123,7 @@ def ensure_current_symbol_ready(
     requested_date: str | None = None,
     *,
     refresh: bool = False,
+    data_only: bool = False,
     market_regime_requirement: ContextRequirement = ContextRequirement.NOT_REQUESTED,
     sector_strength_requirement: ContextRequirement = ContextRequirement.NOT_REQUESTED,
     correlation_id: str | None = None,
@@ -159,7 +160,6 @@ def ensure_current_symbol_ready(
             force_refresh=refresh,
         )
 
-    service = DeepAnalysisReadinessService(ensure=_ensure)
     log_audit(
         "CURRENT_SYMBOL_PROVISIONING_STARTED",
         f"Current-symbol provisioning started for {normalized_symbol}.",
@@ -167,25 +167,40 @@ def ensure_current_symbol_ready(
             "symbol": normalized_symbol,
             "requested_date": requested_date,
             "refresh": refresh,
+            "data_only": data_only,
             "correlation_id": active_correlation_id,
         },
     )
-    readiness = service.ensure_ready(
-        _readiness_request(
+    if data_only:
+        from vnalpha.data_provisioning.data_only_symbol import (
+            provision_data_only_symbol,
+        )
+
+        result = provision_data_only_symbol(
             conn,
             normalized_symbol,
             requested_date,
-            market_regime_requirement,
-            sector_strength_requirement,
+            refresh=refresh,
+            correlation_id=active_correlation_id,
         )
-    )
-    result = _build_result(
-        normalized_symbol,
-        requested_date,
-        refresh,
-        readiness,
-        active_correlation_id,
-    )
+    else:
+        service = DeepAnalysisReadinessService(ensure=_ensure)
+        readiness = service.ensure_ready(
+            _readiness_request(
+                conn,
+                normalized_symbol,
+                requested_date,
+                market_regime_requirement,
+                sector_strength_requirement,
+            )
+        )
+        result = _build_result(
+            normalized_symbol,
+            requested_date,
+            refresh,
+            readiness,
+            active_correlation_id,
+        )
     log_audit(
         "CURRENT_SYMBOL_PROVISIONING_COMPLETED",
         f"Current-symbol provisioning {result.outcome.value} for {normalized_symbol}.",

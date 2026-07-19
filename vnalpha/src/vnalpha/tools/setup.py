@@ -369,6 +369,7 @@ def _ensure_current_symbol(impl, conn, **kwargs):
         conn,
         symbol=symbol,
         date=kwargs.get("date"),
+        data_only=kwargs.get("data_only", False),
         refresh=kwargs.get("refresh", False),
         market_regime_requirement=kwargs.get(
             "market_regime_requirement", ContextRequirement.NOT_REQUESTED

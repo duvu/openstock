@@ -465,6 +465,7 @@ class TestServiceCallsPluginRuntime:
 
         assert status == 422
         assert body["error"] == "contract_validation_failed"
+        assert body["retryable"] is False
 
     def test_valid_empty_fiinquantx_frame_returns_success(self):
         from vnstock.providers.fiinquantx.normalize import normalize_ohlcv

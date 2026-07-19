@@ -3,7 +3,7 @@
 > **Status:** current architecture.
 >
 > Delivery priority and completion status are owned by the root `ROADMAP.md` and
-> GitHub issue #209. This document describes stable component boundaries and the
+> [GitHub issue #238](https://github.com/duvu/openstock/issues/238). This document describes stable component boundaries and the
 > implementation direction; it is not a second roadmap.
 
 ## Architecture goal

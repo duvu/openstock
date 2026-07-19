@@ -3,6 +3,24 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+VIETNAM_EXCHANGE_HOLIDAYS_2026 = frozenset(
+    {
+        date(2026, 1, 1),
+        date(2026, 1, 2),
+        date(2026, 2, 16),
+        date(2026, 2, 17),
+        date(2026, 2, 18),
+        date(2026, 2, 19),
+        date(2026, 2, 20),
+        date(2026, 4, 27),
+        date(2026, 4, 30),
+        date(2026, 5, 1),
+        date(2026, 8, 31),
+        date(2026, 9, 1),
+        date(2026, 9, 2),
+    }
+)
+
 
 class InvalidSessionRangeError(ValueError):
     """Raised when a calendar session range is inverted."""
@@ -30,8 +48,12 @@ class SessionRange:
 class VietnamSessionCalendar:
     """Versioned weekday calendar with explicit Vietnam-market holidays."""
 
-    holidays: frozenset[date] = frozenset()
-    version: str = "vn-session-v1"
+    holidays: frozenset[date] = VIETNAM_EXCHANGE_HOLIDAYS_2026
+    version: str = "hnx-vnx-2026-1403-1517"
+    sources: tuple[str, str] = (
+        "https://www.gov.hnx.vn/vi-vn/chi-tiet-lich-nghi-gd-60021971.html",
+        "https://www.gov.hnx.vn/vi-vn/chi-tiet-lich-nghi-gd-60022084.html",
+    )
 
     def sessions(self, session_range: SessionRange) -> tuple[date, ...]:
         """Return inclusive sessions, excluding weekends and configured holidays."""

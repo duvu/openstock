@@ -7,6 +7,8 @@ from typing import Protocol
 
 import duckdb
 
+from vnalpha.data_availability.checks import compute_lookback_start
+from vnalpha.data_availability.policy import DEFAULT_POLICY
 from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
 from vnalpha.ingestion.models import BatchIngestionStatus, OHLCVBatchResult
 from vnalpha.ingestion.ohlcv_gap_inspection import (
@@ -63,6 +65,7 @@ class DailyOHLCVSyncRequest:
     resolved_market_date: date
     interval: str = "1D"
     source: str | None = None
+    symbols: tuple[str, ...] | None = None
     overlap_sessions: int = 2
 
 
@@ -96,13 +99,20 @@ class DailyOHLCVSyncService:
         """Fetch every active symbol from its overlap watermark through market date."""
         watermarks: list[OHLCVWatermark] = []
         batches: list[OHLCVBatchResult] = []
-        for symbol in get_symbols_active(conn):
+        symbols = request.symbols or tuple(get_symbols_active(conn))
+        for symbol in symbols:
+            bootstrap_start = date.fromisoformat(
+                compute_lookback_start(
+                    request.resolved_market_date.isoformat(),
+                    DEFAULT_POLICY.lookback_days,
+                )
+            )
             watermark = self.watermark_service.resolve(
                 conn,
                 OHLCVWatermarkRequest(
                     symbol=symbol,
                     interval=request.interval,
-                    requested_start=request.resolved_market_date,
+                    requested_start=bootstrap_start,
                     overlap_sessions=request.overlap_sessions,
                     overlap_floor=date.min,
                 ),

@@ -3,7 +3,7 @@ Version: 0.1.0
 Section: misc
 Priority: optional
 Architecture: amd64
-Depends: python3 (>= 3.10), python3-venv, python3-pip
+Depends: python3 (>= 3.10), python3 (<< 3.13), python3-venv, python3-pip, util-linux, systemd, tzdata, init-system-helpers
 Recommends: curl
 Maintainer: OpenStock Maintainers <maintainers@openstock.local>
 Description: VnAlpha — Alpha discovery research CLI/TUI for Vietnamese equities

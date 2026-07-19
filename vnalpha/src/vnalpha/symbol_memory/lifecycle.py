@@ -9,14 +9,18 @@ from vnalpha.symbol_memory.models import (
     ClaimOrigin,
     ClaimStatus,
     MemoryClaim,
+    MemoryEntity,
     MemoryEvent,
 )
 from vnalpha.symbol_memory.repository import SymbolMemoryRepository
 
 _EXPIRY_DAYS: dict[str, int | None] = {
     "candidate_score": 1,
+    "candidate_state": 7,
     "technical_observation": 5,
     "market_or_sector_context": 7,
+    "market_context": 7,
+    "group_context": 7,
     "periodic_fact": 90,
     "durable_fact": None,
     "hypothesis": 30,
@@ -28,11 +32,14 @@ _EXPIRY_DAYS: dict[str, int | None] = {
 }
 _SOURCE_AUTHORITY_BY_CLAIM_TYPE: dict[str, dict[str, int]] = {
     "candidate_score": {"candidate_score": 90, "feature_snapshot": 80},
+    "candidate_state": {"candidate_score": 90},
     "technical_observation": {
         "research_symbol_level_snapshot": 90,
         "research_setup_analysis": 85,
     },
     "market_or_sector_context": {"research_market_regime_snapshot": 90},
+    "market_context": {"market_regime_snapshot": 95},
+    "group_context": {"group_context_snapshot": 95},
     "research_automation_artifact": {"research_automation": 80},
 }
 
@@ -42,8 +49,8 @@ class SymbolMemoryLifecycleService:
         self.repository = repository
 
     def accept(self, claim: MemoryClaim) -> MemoryClaim:
-        active_claims = self.repository.list_claims(
-            claim.symbol, statuses=(ClaimStatus.ACTIVE,)
+        active_claims = self.repository.list_entity_claims(
+            claim.entity, statuses=(ClaimStatus.ACTIVE,)
         )
         matching = [
             existing
@@ -123,13 +130,15 @@ class SymbolMemoryLifecycleService:
                     origin=ClaimOrigin.USER_CORRECTION,
                     correlation_id=claim.correlation_id,
                     created_at=timestamp,
+                    entity_type=claim.entity.entity_type,
+                    entity_id=claim.entity.entity_id,
                 )
             ):
                 raise RuntimeError("Memory correction audit event was not recorded.")
             unresolved = [
                 candidate
-                for candidate in self.repository.list_claims(
-                    claim.symbol, statuses=(ClaimStatus.CONFLICTED,)
+                for candidate in self.repository.list_entity_claims(
+                    claim.entity, statuses=(ClaimStatus.CONFLICTED,)
                 )
                 if candidate.claim_id != claim.claim_id
                 and candidate.claim_type == claim.claim_type
@@ -155,6 +164,8 @@ class SymbolMemoryLifecycleService:
                         origin=ClaimOrigin.USER_CORRECTION,
                         correlation_id=claim.correlation_id,
                         created_at=timestamp,
+                        entity_type=claim.entity.entity_type,
+                        entity_id=claim.entity.entity_id,
                     )
                 ):
                     raise RuntimeError(
@@ -162,9 +173,16 @@ class SymbolMemoryLifecycleService:
                     )
 
     def expire_due_claims(self, symbol: str, *, as_of_date: date) -> tuple[str, ...]:
+        return self.expire_due_entity_claims(
+            MemoryEntity.symbol(symbol), as_of_date=as_of_date
+        )
+
+    def expire_due_entity_claims(
+        self, entity: MemoryEntity, *, as_of_date: date
+    ) -> tuple[str, ...]:
         expired: list[str] = []
-        for claim in self.repository.list_claims(
-            symbol, statuses=(ClaimStatus.ACTIVE,)
+        for claim in self.repository.list_entity_claims(
+            entity, statuses=(ClaimStatus.ACTIVE,)
         ):
             expiry_date = _expiry_date(claim)
             if expiry_date is None or expiry_date >= as_of_date:
@@ -204,6 +222,8 @@ class SymbolMemoryLifecycleService:
                         origin=ClaimOrigin.VALIDATED_EVIDENCE,
                         correlation_id=claim.correlation_id,
                         created_at=timestamp,
+                        entity_type=claim.entity.entity_type,
+                        entity_id=claim.entity.entity_id,
                     )
                 )
                 invalidated.append(claim.claim_id)
@@ -215,7 +235,7 @@ class SymbolMemoryLifecycleService:
 
 def _equivalent(left: MemoryClaim, right: MemoryClaim) -> bool:
     return (
-        left.symbol == right.symbol
+        left.entity == right.entity
         and left.claim_type == right.claim_type
         and left.predicate == right.predicate
         and left.as_of_date == right.as_of_date

@@ -286,6 +286,35 @@ classifying their values, preserve safe non-string keys where the boundary
 allows them, and assert over the complete serialized record with controlled
 secrets in both keys and values.
 
+## 28. A valid timer file is not a packaged, safe scheduling feature
+
+Keeping systemd units only in a source directory proves neither that the Debian
+artifact installs them nor that upgrades preserve operator choice. Timer-to-
+service `Requires=` edges, installable oneshot services, local-time schedules,
+and lock-file unlinking can also create activation cycles, unexpected enablement,
+timezone drift, or overlapping writers even when `systemd-analyze verify` passes.
+
+**Prevent it:** inspect the built package payload, keep the service without an
+`[Install]` section, install but do not enable or start the timer, declare the
+IANA timezone in `OnCalendar`, use one stable `flock` inode, and test maintainer
+scripts for install, upgrade and removal. Verify the exact packaged `ExecStart`,
+partial-success exit code, timer schedule, lock contention, and operator
+enable/disable/inspection commands.
+
+## 29. A package built on one Python ABI is not portable to its declared hosts
+
+`pip download` resolves binary wheels for the build interpreter by default. A
+package assembled on Python 3.12 can therefore contain only `cp312` wheels while
+its Debian 12 target creates a Python 3.11 virtual environment. Structural
+payload checks still pass, but offline installation fails on the first binary
+dependency.
+
+**Prevent it:** declare the package's supported interpreter range, resolve
+binary wheels explicitly for every supported ABI and target platform, and
+reject artifacts missing any required ABI. Install the exact built artifact in
+the oldest supported clean host, exercise packaged commands and evaluations,
+and keep release metadata honest about commit and tree state.
+
 # Mandatory checklist
 
 ## Before coding

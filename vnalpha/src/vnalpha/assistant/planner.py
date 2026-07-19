@@ -38,8 +38,11 @@ def _step(tool: str, args: dict, purpose: str, permission: str) -> ToolPlanStep:
 
 def _date_args(entities: dict, **base: Any) -> dict[str, Any]:
     args = dict(base)
-    if entities.get("date"):
-        args["date"] = entities["date"]
+    date_value = entities.get("date")
+    if isinstance(date_value, str):
+        normalized = date_value.strip()
+        if normalized:
+            args["date"] = normalized
     return args
 
 
@@ -145,12 +148,14 @@ def _build_explain_plan(entities: dict) -> AssistantPlan:
 
 
 def _provision_step(
-    entities: dict, symbol: str, *, refresh: bool = False
+    entities: dict, symbol: str, *, refresh: bool = False, data_only: bool = False
 ) -> ToolPlanStep:
     """Build an explicit current-symbol provisioning step for a plan."""
     args = _date_args(entities, symbol=symbol)
     if refresh:
         args["refresh"] = True
+    if data_only:
+        args["data_only"] = True
     purpose = (
         "Refresh and validate the minimum current-symbol data"
         if refresh
@@ -423,10 +428,11 @@ def _build_fetch_plan(entities: dict) -> AssistantPlan:
         return _missing_entity_plan("fetch_data", "symbol")
     return AssistantPlan(
         intent="fetch_data",
-        steps=[_provision_step(entities, symbol, refresh=True)],
+        steps=[_provision_step(entities, symbol, refresh=True, data_only=True)],
         assumptions=[
-            "Provisioning is bounded to the current symbol and its benchmark; "
-            "it never performs arbitrary or unrestricted data fetching."
+            "Provisioning is bounded to deterministic OHLCV and canonical data "
+            "for the current symbol; it never performs arbitrary or unrestricted "
+            "data fetching."
         ],
         required_artifacts=["canonical_ohlcv"],
     )
