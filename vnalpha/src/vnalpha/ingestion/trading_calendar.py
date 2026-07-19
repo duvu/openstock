@@ -69,6 +69,13 @@ class VietnamSessionCalendar:
         """Return whether the supplied date is a configured trading session."""
         return market_date.weekday() < 5 and market_date not in self.holidays
 
+    def latest_session_on_or_before(self, market_date: date) -> date:
+        """Return the latest configured session on or before a market date."""
+        current_date = market_date
+        while not self.is_session(current_date):
+            current_date -= timedelta(days=1)
+        return current_date
+
     def rewind_sessions(self, market_date: date, session_count: int) -> date:
         """Return the first date in an inclusive trailing session overlap."""
         if session_count < 1:

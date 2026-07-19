@@ -199,6 +199,42 @@ class TestAskFunctional:
         assert "Assistant error" in result.output
         assert "unexpected keyword argument 'err'" not in result.output
 
+    def test_ask_without_date_uses_current_market_session(self, monkeypatch) -> None:
+        # Given: the current calendar day resolves to the previous market session.
+        import duckdb
+
+        from vnalpha.cli_app import ask as ask_module
+
+        connection = duckdb.connect()
+        observed_dates: list[str | None] = []
+        monkeypatch.setattr(
+            "vnalpha.warehouse.connection.get_connection", lambda: connection
+        )
+        monkeypatch.setattr(
+            ask_module,
+            "resolve_market_session_date",
+            lambda _value: "2026-07-17",
+            raising=False,
+        )
+
+        def record_date(question, *, date=None, no_execute=False):
+            del question, no_execute
+            observed_dates.append(date)
+            return _make_answer()
+
+        # When: `vnalpha ask` runs without an explicit --date.
+        try:
+            with patch(
+                "vnalpha.assistant.app.AssistantApp.ask", side_effect=record_date
+            ):
+                result = runner.invoke(app, ["ask", "Phân tích sâu mã VCB"])
+        finally:
+            connection.close()
+
+        # Then: the assistant receives the resolved market session once.
+        assert result.exit_code == 0
+        assert observed_dates == ["2026-07-17"]
+
 
 # ---------------------------------------------------------------------------
 # TUI binding and screen tests
@@ -224,6 +260,23 @@ class TestTuiAskBinding:
         except ImportError:
             pytest.skip("textual not installed")
         assert hasattr(TuiInputRouter, "_route_chat")
+
+    def test_tui_default_target_uses_current_market_session(self, monkeypatch) -> None:
+        # Given: the current calendar day resolves to the previous market session.
+        from vnalpha.tui import app as tui_app_module
+
+        monkeypatch.setattr(
+            tui_app_module,
+            "resolve_market_session_date",
+            lambda _value: "2026-07-17",
+            raising=False,
+        )
+
+        # When: the TUI is created without --date.
+        tui_app = tui_app_module.VnAlphaApp()
+
+        # Then: its shared command/chat target is the market session.
+        assert tui_app.target_date == "2026-07-17"
 
     def test_assistant_screen_importable(self):
         """AssistantScreen must be importable (skip if textual not installed)."""

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import duckdb
 
-from vnalpha.core.dates import resolve_date
+from vnalpha.core.dates import resolve_market_session_date
 from vnalpha.data_availability.deep_context_failures import (
     unavailable_context_artifacts,
 )
@@ -40,7 +40,7 @@ class DeepAnalysisReadinessService:
         current_correlation_id = correlation_id()
         normalized_symbol = request.symbol.upper().strip()
         try:
-            resolved_date = resolve_date(request.requested_date, conn=request.conn)
+            resolved_date = resolve_market_session_date(request.requested_date)
         except Exception as exc:  # noqa: BROAD_EXCEPT_OK
             return self._terminal_failure(
                 symbol=normalized_symbol,

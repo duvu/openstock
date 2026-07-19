@@ -4,7 +4,7 @@ from typing import Optional
 
 import typer
 
-from vnalpha.core.dates import resolve_date
+from vnalpha.core.dates import resolve_market_session_date
 from vnalpha.core.logging import set_correlation_id
 from vnalpha.observability.commands import command_lifecycle
 
@@ -53,7 +53,7 @@ def register(app: typer.Typer) -> None:
             conn = get_connection()
             run_migrations(conn=conn)
 
-            resolved_date = resolve_date(date, conn=conn)
+            resolved_date = resolve_market_session_date(date)
 
             try:
                 llm_config = LLMGatewayConfig.from_env()

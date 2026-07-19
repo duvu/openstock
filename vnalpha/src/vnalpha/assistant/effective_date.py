@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from vnalpha.assistant.errors import AssistantInputValidationError
-from vnalpha.core.dates import resolve_date
+from vnalpha.core.dates import resolve_date, resolve_market_session_date
 
 
 def normalize_date_candidate(value: str | None) -> str | None:
@@ -29,7 +29,7 @@ def resolve_effective_target_date(
     requested = normalize_date_candidate(request_date)
     selected = classified if classified is not None else requested
     validate_date_candidate(selected)
-    return resolve_date(selected)
+    return resolve_market_session_date(selected)
 
 
 __all__ = [

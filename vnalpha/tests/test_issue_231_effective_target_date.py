@@ -160,3 +160,29 @@ def test_no_default_resolves_and_persists_one_effective_date(conn) -> None:
     assert json.loads(row[0])["date"] == effective_date
     assert json.loads(row[1])["entities"]["date"] == effective_date
     assert json.loads(row[2])["steps"][0]["arguments"]["date"] == effective_date
+
+
+def test_no_default_uses_current_market_session_before_planning(
+    conn, monkeypatch
+) -> None:
+    # Given: the current calendar day resolves to the previous market session.
+    from vnalpha.assistant import effective_date as effective_date_module
+
+    monkeypatch.setattr(
+        effective_date_module,
+        "resolve_market_session_date",
+        lambda _value: "2026-07-17",
+        raising=False,
+    )
+
+    # When: the assistant prepares a request with no explicit date.
+    prepared = _prepare(
+        conn,
+        intent="deep_analyze_symbol",
+        entities={"date": None, "symbol": "VCB"},
+        request_date=None,
+    )
+
+    # Then: request and provisioning plan share the resolved market session.
+    assert prepared.request.date == "2026-07-17"
+    assert prepared.plan.steps[0].arguments["date"] == "2026-07-17"

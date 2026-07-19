@@ -118,7 +118,9 @@ def test_unexpected_context_evaluation_failure_returns_structured_result(
     from vnalpha.data_availability import deep_readiness_service
 
     monkeypatch.setattr(
-        deep_readiness_service, "resolve_date", lambda _value, conn: "2026-07-10"
+        deep_readiness_service,
+        "resolve_market_session_date",
+        lambda _value: "2026-07-10",
     )
     monkeypatch.setattr(deep_readiness_service, "build_artifacts", lambda **_kwargs: ())
     monkeypatch.setattr(

@@ -449,11 +449,12 @@ def test_readiness_audits_start_and_sets_correlation_before_ensure(monkeypatch) 
     assert result.correlation_id == events[0]["extra"]["correlation_id"]
 
 
-def test_readiness_resolves_one_effective_date_before_ensure(monkeypatch) -> None:
+def test_readiness_resolves_current_market_session_before_ensure(monkeypatch) -> None:
     observed_dates: list[str] = []
     monkeypatch.setattr(
-        "vnalpha.data_availability.deep_readiness_service.resolve_date",
-        lambda _value, conn: "2026-07-10",
+        "vnalpha.data_availability.deep_readiness_service.resolve_market_session_date",
+        lambda _value: "2026-07-10",
+        raising=False,
     )
     service = DeepAnalysisReadinessService(
         ensure=lambda _conn, _symbol, date: (
@@ -589,8 +590,8 @@ def test_readiness_converts_date_resolution_failure_to_typed_result(
 ) -> None:
     # Given: the warehouse date resolver cannot determine an effective date.
     monkeypatch.setattr(
-        "vnalpha.data_availability.deep_readiness_service.resolve_date",
-        lambda _value, conn: (_ for _ in ()).throw(ValueError("bad date")),
+        "vnalpha.data_availability.deep_readiness_service.resolve_market_session_date",
+        lambda _value: (_ for _ in ()).throw(ValueError("bad date")),
     )
 
     # When: readiness is evaluated.

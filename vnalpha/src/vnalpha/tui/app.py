@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from vnalpha.core.dates import resolve_date
+from vnalpha.core.dates import resolve_market_session_date
 from vnalpha.tui.responsive_layout import ResponsiveLayoutController
 
 if TYPE_CHECKING:
@@ -161,7 +161,7 @@ if _TEXTUAL_AVAILABLE:
         ):
             _load_dotenv()
             super().__init__(**kwargs)
-            self.target_date: str = resolve_date(date)
+            self.target_date: str = resolve_market_session_date(date)
             self._router = None
             self._workspace: WorkspaceState | None = None
             self._layout_controller = ResponsiveLayoutController()
@@ -458,7 +458,7 @@ else:
             **kwargs,
         ):
             del logging_warning, clipboard
-            self.target_date: str = resolve_date(date)
+            self.target_date: str = resolve_market_session_date(date)
 
         def run(self) -> None:
             raise ImportError("textual is required for the TUI")

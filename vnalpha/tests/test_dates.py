@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import duckdb
 import pytest
 
-from vnalpha.core.dates import resolve_date
+from vnalpha.core.dates import resolve_date, resolve_market_session_date
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -71,6 +71,40 @@ class TestResolveDateErrors:
     def test_empty_string_raises(self):
         with pytest.raises(ValueError):
             resolve_date("")
+
+
+class TestResolveMarketSessionDate:
+    def test_implicit_sunday_rewinds_to_friday(self) -> None:
+        # Given: the Vietnam current date is Sunday 2026-07-19.
+        # When: an implicit research date is resolved.
+        result = resolve_market_session_date(None, today=date(2026, 7, 19))
+
+        # Then: the latest configured market session is Friday 2026-07-17.
+        assert result == "2026-07-17"
+
+    def test_today_on_consecutive_holidays_rewinds_across_weekend(self) -> None:
+        # Given: the current date is the final configured National Day holiday.
+        # When: the semantic `today` value is resolved.
+        result = resolve_market_session_date("today", today=date(2026, 9, 2))
+
+        # Then: the target is the last open session before holidays and weekend.
+        assert result == "2026-08-28"
+
+    def test_implicit_open_weekday_remains_current_session(self) -> None:
+        # Given: the Vietnam current date is an open Friday.
+        # When: an implicit research date is resolved.
+        result = resolve_market_session_date(None, today=date(2026, 7, 17))
+
+        # Then: the target remains that Friday.
+        assert result == "2026-07-17"
+
+    def test_explicit_non_session_date_remains_explicit(self) -> None:
+        # Given: the user explicitly requests a Sunday ISO date.
+        # When: the research date is resolved.
+        result = resolve_market_session_date("2026-07-19", today=date(2026, 7, 20))
+
+        # Then: explicit historical semantics are preserved.
+        assert result == "2026-07-19"
 
 
 class TestResolveDateWithConn:
