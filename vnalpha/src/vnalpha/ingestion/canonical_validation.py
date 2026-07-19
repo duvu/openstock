@@ -64,19 +64,25 @@ def validate_candidate(
 
     # Find conflicting peer providers
     conflicting_peers = [
-        peer for peer in peer_candidates
-        if (_is_independently_valid_passing_observation(peer)
+        peer
+        for peer in peer_candidates
+        if (
+            _is_independently_valid_passing_observation(peer)
             and peer.provider != candidate.provider
-            and _ohlcv_values(peer) != candidate_values)
+            and _ohlcv_values(peer) != candidate_values
+        )
     ]
 
     if conflicting_peers:
         # For indices, check if conflict can be resolved by provider policy
         if is_index_symbol(candidate.symbol):
             all_providers = tuple(
-                {candidate.provider} | {p.provider for p in conflicting_peers if p.provider}
+                {candidate.provider}
+                | {p.provider for p in conflicting_peers if p.provider}
             )
-            resolution = resolve_index_provider_conflict(candidate.symbol, all_providers)
+            resolution = resolve_index_provider_conflict(
+                candidate.symbol, all_providers
+            )
 
             # Only apply consistency rule if candidate is not the selected provider
             if resolution and candidate.provider == resolution.selected_provider:
