@@ -4,16 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-import pytest
-
 from vnalpha.ingestion.canonical_validation import (
     CanonicalCandidate,
     CanonicalValidationRule,
     validate_candidate,
 )
 from vnalpha.ingestion.index_provider_policy import (
-    IndexConflictResolution,
-    IndexProviderPreference,
     is_index_symbol,
     resolve_index_provider_conflict,
 )

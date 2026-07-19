@@ -45,10 +45,10 @@ def is_index_symbol(symbol: str) -> bool:
     normalized = symbol.strip().upper()
     return normalized in {
         "VNINDEX",  # Ho Chi Minh Stock Exchange Index
-        "VN30",     # VN30 Index
-        "HNXINDEX", # Hanoi Stock Exchange Index
-        "HNX30",    # HNX30 Index
-        "UPCOM",    # UPCOM Index
+        "VN30",  # VN30 Index
+        "HNXINDEX",  # Hanoi Stock Exchange Index
+        "HNX30",  # HNX30 Index
+        "UPCOM",  # UPCOM Index
     }
 
 
@@ -71,8 +71,7 @@ def resolve_index_provider_conflict(
     for preferred in INDEX_PROVIDER_PRECEDENCE:
         if preferred.value in normalized_providers:
             rejected = tuple(
-                p for p in provider_candidates
-                if p.strip().lower() != preferred.value
+                p for p in provider_candidates if p.strip().lower() != preferred.value
             )
             return IndexConflictResolution(
                 selected_provider=preferred.value,
