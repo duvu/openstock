@@ -311,3 +311,38 @@ Symbol memory SHALL support research observations, hypotheses, caveats, user not
 - **THEN** the system does not create an execution capability
 - **AND** does not bypass the existing policy boundary
 - **AND** treats the content only as untrusted text or rejects it according to existing safety policy
+
+### Requirement: Memory identity shall support bounded research entities
+
+The existing lifecycle SHALL support only `SYMBOL`, `MARKET`, `SECTOR`,
+`INDUSTRY` and `ASSET_CLASS` identities. Existing symbol rows MUST migrate to
+explicit `SYMBOL` identity without data loss, and symbol repositories, commands
+and Markdown paths MUST remain compatibility wrappers.
+
+#### Scenario: Equal text appears in different entity types
+
+- **WHEN** a market and taxonomy group have the same text identifier
+- **THEN** their events, claims, documents, compaction history and paths remain distinct
+
+#### Scenario: Existing symbol warehouse is migrated
+
+- **WHEN** migrations run over populated legacy memory tables
+- **THEN** every legacy row resolves to `entity_type=SYMBOL` and `entity_id=<symbol>` without loss
+
+### Requirement: Daily memory projection shall be selective and source validated
+
+Daily maintenance SHALL project only changed, persisted and validated symbol,
+market and group context. Equivalent repeated snapshots MUST NOT create a new
+claim or document generation. Short-lived context MUST expire under explicit
+claim-type policy, while durable identity and taxonomy claims do not expire
+automatically.
+
+#### Scenario: Daily score changes without material state change
+
+- **WHEN** a numeric candidate score changes but class, setup, risks and taxonomy remain equivalent
+- **THEN** no new material-state claim or symbol-card generation is created
+
+#### Scenario: Group rotation changes
+
+- **WHEN** a validated point-in-time group snapshot changes rotation state
+- **THEN** the newer claim supersedes the prior active context and retains source lineage

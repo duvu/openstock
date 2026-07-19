@@ -779,9 +779,44 @@ CREATE TABLE IF NOT EXISTS sector_strength_snapshot (
 )
 """
 
+GROUP_CONTEXT_SNAPSHOT_DDL = """
+CREATE TABLE IF NOT EXISTS group_context_snapshot (
+    as_of_date                  DATE NOT NULL,
+    group_type                 VARCHAR NOT NULL,
+    entity_id                  VARCHAR NOT NULL,
+    group_code                 VARCHAR NOT NULL,
+    group_name                 VARCHAR NOT NULL,
+    taxonomy_name              VARCHAR NOT NULL,
+    taxonomy_version           VARCHAR NOT NULL,
+    rank                        INTEGER NOT NULL,
+    member_count                INTEGER NOT NULL,
+    eligible_count              INTEGER NOT NULL,
+    median_return20             DOUBLE NOT NULL,
+    median_return60             DOUBLE NOT NULL,
+    median_rs20_vs_vnindex      DOUBLE NOT NULL,
+    median_rs60_vs_vnindex      DOUBLE NOT NULL,
+    pct_above_ma20              DOUBLE NOT NULL,
+    pct_above_ma50              DOUBLE NOT NULL,
+    leadership_count            INTEGER NOT NULL,
+    leadership_concentration    DOUBLE NOT NULL,
+    score                       DOUBLE NOT NULL,
+    rotation                    VARCHAR NOT NULL,
+    coverage                    DOUBLE NOT NULL,
+    unclassified_count          INTEGER NOT NULL,
+    quality                     VARCHAR NOT NULL,
+    caveats_json                VARCHAR NOT NULL,
+    lineage_json                VARCHAR NOT NULL,
+    methodology_version         VARCHAR NOT NULL,
+    source_hash                 VARCHAR NOT NULL,
+    generated_at                TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (as_of_date, group_type, entity_id)
+)
+"""
+
 ALL_DDL_MARKET_CONTEXT = [
     MARKET_REGIME_SNAPSHOT_DDL,
     SECTOR_STRENGTH_SNAPSHOT_DDL,
+    GROUP_CONTEXT_SNAPSHOT_DDL,
 ]
 
 ALL_DDL_COMBINED = (

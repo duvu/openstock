@@ -1,6 +1,6 @@
 # Plugin architecture status
 
-This document records the stable architecture and accepted closure state of the synchronous `vnstock` provider platform. It is not a live delivery roadmap; current priority and issue status are maintained in GitHub issue #90.
+This document records the stable architecture and accepted closure state of the synchronous `vnstock` provider platform. It is not a live delivery roadmap; current priority and issue status are maintained in GitHub issue #238.
 
 ## Scorecard
 

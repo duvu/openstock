@@ -97,12 +97,16 @@ def sync_ohlcv(
             batch.rows_inserted,
         )
         return batch
-    except Exception:
+    except Exception as exc:
+        logger.exception("OHLCV batch failed before completion for run_id=%s", run_id)
         finish_ingestion_run(
             conn,
             run_id,
             "FAILED",
-            error={"error": "OHLCV batch failed before completion."},
+            error={
+                "error": "OHLCV batch failed before completion.",
+                "cause": type(exc).__name__,
+            },
         )
         raise
     finally:

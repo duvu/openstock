@@ -68,6 +68,7 @@ case "$1" in
     else
       echo "vnalpha: warehouse directory already exists — preserving data."
     fi
+    install -d -m 0750 -o root -g openstock /var/log/openstock
 
     # ------------------------------------------------------------------
     # 4. Permissions
@@ -78,6 +79,10 @@ case "$1" in
 
     chown root:openstock /etc/vnalpha/vnalpha.env || true
     chmod 0640 /etc/vnalpha/vnalpha.env || true
+
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl daemon-reload || true
+    fi
 
     echo "vnalpha: installation complete."
     ;;

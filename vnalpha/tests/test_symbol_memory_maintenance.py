@@ -186,7 +186,9 @@ def test_ten_thousand_archived_events_do_not_expand_retrieval_budget(tmp_path) -
     repository = _repository()
     repository.create_claim(_claim("active"))
     repository.connection.executemany(
-        "INSERT INTO memory_event VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memory_event (event_id, symbol, event_type, evidence_ref, "
+        "content_hash, observed_at, as_of_date, origin, correlation_id, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 f"event-{index}",
@@ -216,7 +218,9 @@ def test_ten_thousand_archived_events_do_not_expand_retrieval_budget(tmp_path) -
 def test_archive_rotation_reaches_events_after_an_archived_page(tmp_path) -> None:
     repository = _repository()
     repository.connection.executemany(
-        "INSERT INTO memory_event VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memory_event (event_id, symbol, event_type, evidence_ref, "
+        "content_hash, observed_at, as_of_date, origin, correlation_id, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 f"event-{index:05d}",

@@ -88,6 +88,7 @@ def test_all_tables_created(conn):
         "memory_claim",
         "memory_document",
         "memory_compaction_run",
+        "group_context_snapshot",
     }
     assert expected == names
 
@@ -171,7 +172,7 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 62
+    assert len(tables) == 63
 
 
 def test_get_watchlist_empty(conn):

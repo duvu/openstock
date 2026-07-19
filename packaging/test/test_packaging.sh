@@ -358,33 +358,44 @@ if [[ -n "${DEB_FILE}" ]]; then
       else
         fail ".deb is missing runtime dependency wheels"
       fi
+      if find "${DEB_ROOT}/opt/vnalpha/wheels" -maxdepth 1 -name 'duckdb-*-cp310-*.whl' -print -quit | grep -q . && \
+         find "${DEB_ROOT}/opt/vnalpha/wheels" -maxdepth 1 -name 'duckdb-*-cp311-*.whl' -print -quit | grep -q . && \
+         find "${DEB_ROOT}/opt/vnalpha/wheels" -maxdepth 1 -name 'duckdb-*-cp312-*.whl' -print -quit | grep -q .; then
+        ok ".deb dependency wheels cover supported CPython 3.10-3.12 hosts"
+      else
+        fail ".deb dependency wheel ABI set does not cover CPython 3.10-3.12"
+      fi
       if unzip -Z1 "${VNALPHA_WHEEL}" | grep -F "vnalpha/evals/runtime_cases/invalid_explicit_date.json" >/dev/null; then
         ok ".deb application wheel bundles runtime eval resources"
       else
         fail ".deb application wheel is missing runtime eval resources"
       fi
-      DEB_EVAL_ROOT="$(mktemp -d /tmp/vnalpha-deb-eval.XXXXXX)"
-      DEB_LOG_ROOT="$(mktemp -d /tmp/vnalpha-deb-logs.XXXXXX)"
-      python3 -m venv "${DEB_EVAL_ROOT}/venv"
-      if "${DEB_EVAL_ROOT}/venv/bin/pip" install \
+      if python3 -c 'import sys; raise SystemExit(not ((3, 10) <= sys.version_info[:2] < (3, 13)))'; then
+        DEB_EVAL_ROOT="$(mktemp -d /tmp/vnalpha-deb-eval.XXXXXX)"
+        DEB_LOG_ROOT="$(mktemp -d /tmp/vnalpha-deb-logs.XXXXXX)"
+        python3 -m venv "${DEB_EVAL_ROOT}/venv"
+        if "${DEB_EVAL_ROOT}/venv/bin/pip" install \
         --quiet \
         --no-index \
         --find-links "${DEB_ROOT}/opt/vnalpha/wheels" \
         vnalpha; then
-        if VNALPHA_LOG_ROOT="${DEB_LOG_ROOT}" VNALPHA_LOG_PATH="${DEB_LOG_ROOT}/vnalpha.log" "${DEB_EVAL_ROOT}/venv/bin/python" -c 'from vnalpha.cli import app; app()' eval research-answers --ci >/dev/null; then
-          ok ".deb application wheel runs fixture-contract eval"
+          if VNALPHA_LOG_ROOT="${DEB_LOG_ROOT}" VNALPHA_LOG_PATH="${DEB_LOG_ROOT}/vnalpha.log" "${DEB_EVAL_ROOT}/venv/bin/python" -c 'from vnalpha.cli import app; app()' eval research-answers --ci >/dev/null; then
+            ok ".deb application wheel runs fixture-contract eval"
+          else
+            fail ".deb application wheel fixture-contract eval failed"
+          fi
+          if VNALPHA_LOG_ROOT="${DEB_LOG_ROOT}" VNALPHA_LOG_PATH="${DEB_LOG_ROOT}/vnalpha.log" "${DEB_EVAL_ROOT}/venv/bin/python" -c 'from vnalpha.cli import app; app()' eval research-runtime --ci >/dev/null; then
+            ok ".deb application wheel runs runtime-replay eval"
+          else
+            fail ".deb application wheel runtime-replay eval failed"
+          fi
         else
-          fail ".deb application wheel fixture-contract eval failed"
+          fail ".deb application wheel could not be installed into an isolated target"
         fi
-        if VNALPHA_LOG_ROOT="${DEB_LOG_ROOT}" VNALPHA_LOG_PATH="${DEB_LOG_ROOT}/vnalpha.log" "${DEB_EVAL_ROOT}/venv/bin/python" -c 'from vnalpha.cli import app; app()' eval research-runtime --ci >/dev/null; then
-          ok ".deb application wheel runs runtime-replay eval"
-        else
-          fail ".deb application wheel runtime-replay eval failed"
-        fi
+        rm -rf "${DEB_EVAL_ROOT}" "${DEB_LOG_ROOT}"
       else
-        fail ".deb application wheel could not be installed into an isolated target"
+        echo "[SKIP] packaged runtime eval requires CPython 3.10-3.12"
       fi
-      rm -rf "${DEB_EVAL_ROOT}" "${DEB_LOG_ROOT}"
     else
       fail ".deb is missing the vnalpha application wheel"
     fi

@@ -233,6 +233,6 @@ Historical scores are preserved as-is; only new `(symbol, date)` pairs are overw
 
 This runbook documents a historical Phase 5 operating surface; it does not schedule future work.
 
-- Use [the unified roadmap](../../ROADMAP.md) and GitHub issue [#90](https://github.com/duvu/openstock/issues/90) for current priority and dependencies.
+- Use [the unified roadmap](../../ROADMAP.md) and GitHub issue [#238](https://github.com/duvu/openstock/issues/238) for current priority and dependencies.
 - Backtest Lab MVP scope is tracked in [#108](https://github.com/duvu/openstock/issues/108).
 - Any remaining MCP, narrative, multi-interval or workspace work requires a focused GitHub issue before it enters the roadmap.

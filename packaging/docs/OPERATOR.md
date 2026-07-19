@@ -233,16 +233,16 @@ open it.
 
 ## 8.4 Daily pipeline
 
-The optional daily pipeline re-runs sync, build, and score on a schedule.
+The optional daily pipeline runs the deterministic `vnalpha maintain daily`
+workflow on Vietnam market weekdays at 17:30 Asia/Ho_Chi_Minh. The Debian
+package installs both units but deliberately leaves the timer disabled.
 
-### Install the timer units
+### Confirm the packaged units
 
 ```bash
-sudo cp packaging/systemd/openstock-daily-pipeline.service \
-        /etc/systemd/system/
-sudo cp packaging/systemd/openstock-daily-pipeline.timer   \
-        /etc/systemd/system/
-sudo systemctl daemon-reload
+systemctl cat openstock-daily-pipeline.service
+systemctl cat openstock-daily-pipeline.timer
+systemctl is-enabled openstock-daily-pipeline.timer
 ```
 
 ### Enable and start
@@ -254,7 +254,7 @@ sudo systemctl enable --now openstock-daily-pipeline.timer
 ### Check the schedule
 
 ```bash
-systemctl list-timers openstock-daily-pipeline.timer
+systemctl list-timers --all openstock-daily-pipeline.timer
 ```
 
 ### Trigger a manual run
@@ -275,9 +275,12 @@ sudo systemctl disable --now openstock-daily-pipeline.timer
 sudo journalctl -u openstock-daily-pipeline.service -n 100
 ```
 
-The pipeline service uses a lock file to prevent concurrent writers. If a
-job is already running when the timer fires, the new invocation exits
-cleanly rather than overlapping.
+Each invocation emits one JSON result containing `schema_version`, status,
+effective session, stage results, typed diagnostics references, and mutation
+counts. `FAILED` exits 1, `PARTIAL` exits 3 (accepted by the service), and a
+held writer lock exits 75 without overlapping the active writer. The stable
+lock inode remains at `/run/openstock-pipeline.lock`; operators must not delete
+it to recover from contention.
 
 ---
 
@@ -336,8 +339,8 @@ vnalpha-poc --date 2026-06-15
 ### Not suitable for non-interactive use
 
 Don't run `vnalpha tui` from cron, systemd service units, or any context
-without a TTY. For scheduled data jobs, use the `vnalpha-worker` Docker
-profile instead (see section 8.4).
+without a TTY. For scheduled data jobs, use the packaged daily maintenance
+timer described in section 8.4.
 
 ---
 

@@ -159,6 +159,18 @@ check_systemd() {
   else
     warn "openstock-data-platform systemd service status: ${status:-unknown} (may not be installed yet)"
   fi
+
+  local timer_load timer_enabled timer_active service_result service_exit
+  timer_load="$(systemctl show openstock-daily-pipeline.timer -p LoadState --value 2>/dev/null || true)"
+  if [ "$timer_load" = "loaded" ]; then
+    timer_enabled="$(systemctl is-enabled openstock-daily-pipeline.timer 2>/dev/null || true)"
+    timer_active="$(systemctl is-active openstock-daily-pipeline.timer 2>/dev/null || true)"
+    service_result="$(systemctl show openstock-daily-pipeline.service -p Result --value 2>/dev/null || true)"
+    service_exit="$(systemctl show openstock-daily-pipeline.service -p ExecMainStatus --value 2>/dev/null || true)"
+    ok "daily timer installed enabled=${timer_enabled:-unknown} active=${timer_active:-unknown} last_result=${service_result:-unknown} last_exit=${service_exit:-unknown}"
+  else
+    warn "daily timer is not installed"
+  fi
 }
 
 # --- check 6.4: vnstock-service container running ---
@@ -523,7 +535,8 @@ check_ci_systemd_analyze() {
     if systemd-analyze verify "$unit" 2>/dev/null; then
       ok "CI: systemd-analyze verify $(basename "$unit") OK"
     else
-      warn "CI: systemd-analyze verify $(basename "$unit") reported issues"
+      fail "CI: systemd-analyze verify $(basename "$unit") reported issues"
+      failed=1
     fi
   done
 }
@@ -541,7 +554,9 @@ check_ci_package_files() {
     "${pkg_dir}/DEBIAN/control" \
     "${pkg_dir}/usr/bin/vnalpha" \
     "${pkg_dir}/usr/bin/vnalpha-poc" \
-    "${pkg_dir}/etc/vnalpha/vnalpha.env"
+    "${pkg_dir}/etc/vnalpha/vnalpha.env" \
+    "${pkg_dir}/usr/lib/systemd/system/openstock-daily-pipeline.service" \
+    "${pkg_dir}/usr/lib/systemd/system/openstock-daily-pipeline.timer"
   do
     if [ -f "$f" ]; then
       ok "CI: package file exists: $(basename "$f")"

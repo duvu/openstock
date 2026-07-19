@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from vnalpha.symbol_memory.models import MemoryEntity, MemoryEntityType
 from vnalpha.symbol_memory.paths import normalize_symbol
 from vnalpha.workspace_context.storage import resolve_workspace_root
 
@@ -66,6 +67,18 @@ def symbol_card_path(root: Path | None, symbol: str) -> Path:
     return ensure_knowledge_layout(root).symbols_dir / f"{normalize_symbol(symbol)}.md"
 
 
+def entity_card_path(root: Path | None, entity: MemoryEntity) -> Path:
+    if entity.entity_type is MemoryEntityType.SYMBOL:
+        return symbol_card_path(root, entity.entity_id)
+    safe_id = entity.entity_id.replace(":", "--")
+    return (
+        ensure_knowledge_layout(root).root
+        / "entities"
+        / entity.entity_type.value.lower()
+        / f"{safe_id}.md"
+    )
+
+
 def assert_knowledge_path(root: Path | None, path: Path) -> None:
     layout = ensure_knowledge_layout(root)
     try:
@@ -86,6 +99,7 @@ __all__ = [
     "KnowledgePathError",
     "assert_knowledge_path",
     "ensure_knowledge_layout",
+    "entity_card_path",
     "resolve_knowledge_root",
     "symbol_card_path",
 ]

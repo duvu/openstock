@@ -79,7 +79,7 @@ class VnstockClient:
         try:
             return r.json()
         except json.JSONDecodeError as exc:
-            raise VnstockDataError(f"Failed to parse JSON from {path}") from exc
+            raise VnstockDataError(f"Failed to parse JSON from {path}.") from exc
 
     def health_check(self) -> dict[str, Any]:
         """GET /healthz."""

@@ -13,6 +13,8 @@ from vnalpha.symbol_memory.models import (
     MemoryClaim,
     MemoryCompactionRun,
     MemoryDocument,
+    MemoryEntity,
+    MemoryEntityType,
     MemoryEvent,
 )
 from vnalpha.symbol_memory.paths import normalize_symbol
@@ -50,20 +52,27 @@ class SymbolMemoryRepository:
                     raise
 
     def append_event(self, event: MemoryEvent) -> bool:
-        symbol = normalize_symbol(event.symbol)
+        entity = event.entity
+        symbol = _compatibility_symbol(entity)
         duplicate = self.connection.execute(
             "SELECT 1 FROM memory_event "
-            "WHERE symbol = ? AND evidence_ref IS NOT DISTINCT FROM ? "
+            "WHERE entity_type = ? AND entity_id = ? "
+            "AND evidence_ref IS NOT DISTINCT FROM ? "
             "AND content_hash = ?",
-            [symbol, event.evidence_ref, event.content_hash],
+            [
+                entity.entity_type.value,
+                entity.entity_id,
+                event.evidence_ref,
+                event.content_hash,
+            ],
         ).fetchone()
         if duplicate is not None:
             return False
         self.connection.execute(
             "INSERT INTO memory_event ("
             "event_id, symbol, event_type, evidence_ref, content_hash, observed_at, "
-            "as_of_date, origin, correlation_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "as_of_date, origin, correlation_id, created_at, entity_type, entity_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 event.event_id,
                 symbol,
@@ -75,6 +84,8 @@ class SymbolMemoryRepository:
                 event.origin.value,
                 event.correlation_id,
                 _storage_datetime(event.created_at),
+                entity.entity_type.value,
+                entity.entity_id,
             ],
         )
         return True
@@ -82,9 +93,22 @@ class SymbolMemoryRepository:
     def list_events(self, symbol: str, *, limit: int = 100) -> list[MemoryEvent]:
         rows = self.connection.execute(
             "SELECT event_id, symbol, event_type, evidence_ref, content_hash, observed_at, "
-            "as_of_date, origin, correlation_id, created_at FROM memory_event "
+            "as_of_date, origin, correlation_id, created_at, entity_type, entity_id "
+            "FROM memory_event "
             "WHERE symbol = ? ORDER BY created_at, event_id LIMIT ?",
             [normalize_symbol(symbol), _event_limit(limit)],
+        ).fetchall()
+        return [_event_from_row(row) for row in rows]
+
+    def list_entity_events(
+        self, entity: MemoryEntity, *, limit: int = 100
+    ) -> list[MemoryEvent]:
+        rows = self.connection.execute(
+            "SELECT event_id, symbol, event_type, evidence_ref, content_hash, observed_at, "
+            "as_of_date, origin, correlation_id, created_at, entity_type, entity_id "
+            "FROM memory_event WHERE entity_type = ? AND entity_id = ? "
+            "ORDER BY created_at, event_id LIMIT ?",
+            [entity.entity_type.value, entity.entity_id, _event_limit(limit)],
         ).fetchall()
         return [_event_from_row(row) for row in rows]
 
@@ -98,7 +122,8 @@ class SymbolMemoryRepository:
         values: list[object] = [normalize_symbol(symbol)]
         query = (
             "SELECT event_id, symbol, event_type, evidence_ref, content_hash, observed_at, "
-            "as_of_date, origin, correlation_id, created_at FROM memory_event "
+            "as_of_date, origin, correlation_id, created_at, entity_type, entity_id "
+            "FROM memory_event "
             "WHERE symbol = ?"
         )
         if after is not None:
@@ -140,11 +165,23 @@ class SymbolMemoryRepository:
                 return False
             if source_kind == "candidate_score":
                 row = self.connection.execute(
-                    "SELECT score, candidate_class, setup_type, "
+                    "SELECT score, candidate_class, setup_type, risk_flags_json, "
                     "scoring_policy_id, scoring_policy_hash "
                     "FROM candidate_score WHERE symbol = ? AND date = ?",
                     [canonical_symbol, reference_date],
                 ).fetchone()
+                if (
+                    row is not None
+                    and claim_type == "candidate_state"
+                    and predicate == "candidate_classification"
+                ):
+                    return value == {
+                        "candidate_class": row[1],
+                        "setup_type": row[2],
+                        "risk_flags": _risk_flag_codes(row[3]),
+                        "scoring_policy_id": row[4],
+                        "scoring_policy_hash": row[5],
+                    }
                 return (
                     row is not None
                     and claim_type == "candidate_score"
@@ -168,8 +205,8 @@ class SymbolMemoryRepository:
                         or value["candidate_class"] == row[1]
                     )
                     and ("setup_type" not in value or value["setup_type"] == row[2])
-                    and value.get("scoring_policy_id") == row[3]
-                    and value.get("scoring_policy_hash") == row[4]
+                    and value.get("scoring_policy_id") == row[4]
+                    and value.get("scoring_policy_hash") == row[5]
                 )
             row = self.connection.execute(
                 "SELECT feature_data_status FROM feature_snapshot WHERE symbol = ? AND date = ?",
@@ -199,6 +236,18 @@ class SymbolMemoryRepository:
             if reference_date != as_of_date:
                 return False
             if source_kind == "symbol_identity":
+                if claim_type == "symbol_identity" and predicate == "taxonomy_identity":
+                    from vnalpha.symbol_memory.adapters import taxonomy_identity_value
+                    from vnalpha.warehouse.symbol_lifecycle import (
+                        get_symbol_taxonomy_as_of,
+                    )
+
+                    taxonomy = get_symbol_taxonomy_as_of(
+                        self.connection, canonical_symbol, reference_date
+                    )
+                    return taxonomy is not None and value == taxonomy_identity_value(
+                        taxonomy
+                    )
                 snapshot = load_symbol_identity(
                     self.connection,
                     canonical_symbol,
@@ -296,7 +345,8 @@ class SymbolMemoryRepository:
 
     def list_symbols(self, *, limit: int = 1_000) -> tuple[str, ...]:
         rows = self.connection.execute(
-            "SELECT DISTINCT symbol FROM memory_claim ORDER BY symbol LIMIT ?",
+            "SELECT DISTINCT symbol FROM memory_claim "
+            "WHERE entity_type = 'SYMBOL' ORDER BY symbol LIMIT ?",
             [_event_limit(limit)],
         ).fetchall()
         return tuple(str(row[0]) for row in rows)
@@ -308,7 +358,8 @@ class SymbolMemoryRepository:
             "claim_id, symbol, claim_type, predicate, value_json, status, pinned, "
             "confidence, observed_at, as_of_date, valid_from, valid_until, origin, "
             "source_refs_json, correlation_id, created_at, supersedes_claim_id, "
-            "lifecycle_reason, source_published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "lifecycle_reason, source_published_at, entity_type, entity_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             _claim_values(claim),
         )
 
@@ -327,6 +378,25 @@ class SymbolMemoryRepository:
     ) -> list[MemoryClaim]:
         values: list[object] = [normalize_symbol(symbol)]
         query = _CLAIM_SELECT + " WHERE symbol = ?"
+        status_values = tuple(status.value for status in statuses) if statuses else ()
+        if status_values:
+            placeholders = ", ".join("?" for _ in status_values)
+            query += f" AND status IN ({placeholders})"
+            values.extend(status_values)
+        query += " ORDER BY created_at, claim_id LIMIT ?"
+        values.append(_limit(limit))
+        rows = self.connection.execute(query, values).fetchall()
+        return [_claim_from_row(row) for row in rows]
+
+    def list_entity_claims(
+        self,
+        entity: MemoryEntity,
+        *,
+        statuses: Iterable[ClaimStatus] | None = None,
+        limit: int = 100,
+    ) -> list[MemoryClaim]:
+        values: list[object] = [entity.entity_type.value, entity.entity_id]
+        query = _CLAIM_SELECT + " WHERE entity_type = ? AND entity_id = ?"
         status_values = tuple(status.value for status in statuses) if statuses else ()
         if status_values:
             placeholders = ", ".join("?" for _ in status_values)
@@ -364,13 +434,15 @@ class SymbolMemoryRepository:
         )
 
     def upsert_document(self, document: MemoryDocument) -> None:
-        symbol = normalize_symbol(document.symbol)
+        entity = document.entity
+        symbol = _compatibility_symbol(entity)
         self.connection.execute(
             "INSERT INTO memory_document ("
             "symbol, path, schema_version, generation, managed_hash, document_hash, "
-            "token_estimate, last_compacted_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(symbol) DO UPDATE SET "
+            "token_estimate, last_compacted_at, updated_at, entity_type, entity_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(entity_type, entity_id) DO UPDATE SET "
+            "symbol = excluded.symbol, "
             "path = excluded.path, schema_version = excluded.schema_version, "
             "generation = excluded.generation, managed_hash = excluded.managed_hash, "
             "document_hash = excluded.document_hash, token_estimate = excluded.token_estimate, "
@@ -385,6 +457,8 @@ class SymbolMemoryRepository:
                 document.token_estimate,
                 _storage_datetime(document.last_compacted_at),
                 _storage_datetime(document.updated_at),
+                entity.entity_type.value,
+                entity.entity_id,
             ],
         )
 
@@ -394,24 +468,35 @@ class SymbolMemoryRepository:
         )
 
     def get_document(self, symbol: str) -> MemoryDocument | None:
+        return self.get_entity_document(MemoryEntity.symbol(symbol))
+
+    def delete_entity_document(self, entity: MemoryEntity) -> None:
+        self.connection.execute(
+            "DELETE FROM memory_document WHERE entity_type = ? AND entity_id = ?",
+            [entity.entity_type.value, entity.entity_id],
+        )
+
+    def get_entity_document(self, entity: MemoryEntity) -> MemoryDocument | None:
         row = self.connection.execute(
             "SELECT symbol, path, schema_version, generation, managed_hash, document_hash, "
-            "token_estimate, last_compacted_at, updated_at FROM memory_document "
-            "WHERE symbol = ?",
-            [normalize_symbol(symbol)],
+            "token_estimate, last_compacted_at, updated_at, entity_type, entity_id "
+            "FROM memory_document WHERE entity_type = ? AND entity_id = ?",
+            [entity.entity_type.value, entity.entity_id],
         ).fetchone()
         return None if row is None else _document_from_row(row)
 
     def record_compaction_run(self, run: MemoryCompactionRun) -> None:
+        entity = run.entity
         self.connection.execute(
             "INSERT INTO memory_compaction_run ("
             "compaction_run_id, symbol, before_generation, after_generation, before_hash, "
             "after_hash, retained_claim_count, archived_claim_count, conflicted_claim_count, "
             "before_token_estimate, after_token_estimate, source_coverage, created_at, "
-            "correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "correlation_id, entity_type, entity_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 run.compaction_run_id,
-                normalize_symbol(run.symbol),
+                _compatibility_symbol(entity),
                 run.before_generation,
                 run.after_generation,
                 run.before_hash,
@@ -424,6 +509,8 @@ class SymbolMemoryRepository:
                 run.source_coverage,
                 _storage_datetime(run.created_at),
                 run.correlation_id,
+                entity.entity_type.value,
+                entity.entity_id,
             ],
         )
 
@@ -434,7 +521,8 @@ class SymbolMemoryRepository:
             "SELECT compaction_run_id, symbol, before_generation, after_generation, "
             "before_hash, after_hash, retained_claim_count, archived_claim_count, "
             "conflicted_claim_count, before_token_estimate, after_token_estimate, "
-            "source_coverage, created_at, correlation_id FROM memory_compaction_run "
+            "source_coverage, created_at, correlation_id, entity_type, entity_id "
+            "FROM memory_compaction_run "
             "WHERE symbol = ? ORDER BY created_at, compaction_run_id LIMIT ?",
             [normalize_symbol(symbol), _limit(limit)],
         ).fetchall()
@@ -445,7 +533,7 @@ _CLAIM_SELECT = (
     "SELECT claim_id, symbol, claim_type, predicate, value_json, status, pinned, "
     "confidence, observed_at, as_of_date, valid_from, valid_until, origin, "
     "source_refs_json, correlation_id, created_at, supersedes_claim_id, lifecycle_reason, "
-    "source_published_at "
+    "source_published_at, entity_type, entity_id "
     "FROM memory_claim"
 )
 
@@ -473,6 +561,20 @@ def _claim_shape_matches_source(
             "validated_research_artifact",
         ),
     }.get(source_kind) == (claim_type, predicate)
+
+
+def _risk_flag_codes(value: object) -> list[str]:
+    try:
+        parsed = json.loads(str(value)) if isinstance(value, str) else value
+    except json.JSONDecodeError:
+        return []
+    if isinstance(parsed, dict):
+        raw = [key for key, enabled in parsed.items() if bool(enabled)]
+    elif isinstance(parsed, list):
+        raw = parsed
+    else:
+        return []
+    return sorted({str(item).strip()[:80] for item in raw if str(item).strip()})[:20]
 
 
 def _source_payload_matches(
@@ -530,9 +632,10 @@ def _source_payload_matches(
 
 
 def _claim_values(claim: MemoryClaim) -> list[object]:
+    entity = claim.entity
     return [
         claim.claim_id,
-        normalize_symbol(claim.symbol),
+        _compatibility_symbol(entity),
         claim.claim_type,
         claim.predicate,
         json.dumps(dict(claim.value), sort_keys=True, separators=(",", ":")),
@@ -550,10 +653,13 @@ def _claim_values(claim: MemoryClaim) -> list[object]:
         claim.supersedes_claim_id,
         claim.lifecycle_reason,
         claim.source_published_at,
+        entity.entity_type.value,
+        entity.entity_id,
     ]
 
 
 def _event_from_row(row: tuple[object, ...]) -> MemoryEvent:
+    entity_type = MemoryEntityType(str(row[10]))
     return MemoryEvent(
         event_id=str(row[0]),
         symbol=str(row[1]),
@@ -565,10 +671,13 @@ def _event_from_row(row: tuple[object, ...]) -> MemoryEvent:
         origin=ClaimOrigin(str(row[7])),
         correlation_id=str(row[8]),
         created_at=_datetime(row[9]),
+        entity_type=entity_type,
+        entity_id=_model_entity_id(entity_type, row[1], row[11]),
     )
 
 
 def _claim_from_row(row: tuple[object, ...]) -> MemoryClaim:
+    entity_type = MemoryEntityType(str(row[19]))
     return MemoryClaim(
         claim_id=str(row[0]),
         symbol=str(row[1]),
@@ -589,10 +698,13 @@ def _claim_from_row(row: tuple[object, ...]) -> MemoryClaim:
         supersedes_claim_id=_optional_string(row[16]),
         lifecycle_reason=_optional_string(row[17]),
         source_published_at=_optional_date(row[18]),
+        entity_type=entity_type,
+        entity_id=_model_entity_id(entity_type, row[1], row[20]),
     )
 
 
 def _document_from_row(row: tuple[object, ...]) -> MemoryDocument:
+    entity_type = MemoryEntityType(str(row[9]))
     return MemoryDocument(
         symbol=str(row[0]),
         path=str(row[1]),
@@ -603,10 +715,13 @@ def _document_from_row(row: tuple[object, ...]) -> MemoryDocument:
         token_estimate=int(row[6]),
         last_compacted_at=_optional_datetime(row[7]),
         updated_at=_datetime(row[8]),
+        entity_type=entity_type,
+        entity_id=_model_entity_id(entity_type, row[0], row[10]),
     )
 
 
 def _compaction_run_from_row(row: tuple[object, ...]) -> MemoryCompactionRun:
+    entity_type = MemoryEntityType(str(row[14]))
     return MemoryCompactionRun(
         compaction_run_id=str(row[0]),
         symbol=str(row[1]),
@@ -622,7 +737,23 @@ def _compaction_run_from_row(row: tuple[object, ...]) -> MemoryCompactionRun:
         source_coverage=float(row[11]),
         created_at=_datetime(row[12]),
         correlation_id=str(row[13]),
+        entity_type=entity_type,
+        entity_id=_model_entity_id(entity_type, row[1], row[15]),
     )
+
+
+def _compatibility_symbol(entity: MemoryEntity) -> str | None:
+    if entity.entity_type is MemoryEntityType.SYMBOL:
+        return entity.entity_id
+    return None
+
+
+def _model_entity_id(
+    entity_type: MemoryEntityType, symbol: object, entity_id: object
+) -> str | None:
+    if entity_type is MemoryEntityType.SYMBOL and symbol is not None:
+        return None
+    return None if entity_id is None else str(entity_id)
 
 
 def _optional_string(value: object) -> str | None:

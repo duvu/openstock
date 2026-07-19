@@ -19,7 +19,7 @@ Build a trustworthy, reproducible workspace that helps a researcher:
 - test hypotheses and strategies with point-in-time data and explicit assumptions;
 - use AI for explanation, critique and workflow assistance without allowing it to invent evidence or bypass deterministic policy.
 
-The live delivery order is maintained in [the canonical roadmap](../ROADMAP.md) and GitHub issue [#90](https://github.com/duvu/openstock/issues/90).
+The live delivery order is maintained in [the canonical roadmap](../ROADMAP.md) and GitHub issue [#238](https://github.com/duvu/openstock/issues/238).
 
 ## Architecture
 

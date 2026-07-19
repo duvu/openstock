@@ -77,6 +77,7 @@ verify-r0: ## Run offline R0 pipeline confidence tests (no network required)
 		tests/test_r0_gaps.py
 
 verify-r2-ci: ## Run static CI verification for R2 deploy correctness
+	packaging/tests/test_daily_pipeline_units.sh
 	packaging/scripts/openstock-verify --ci
 
 verify-r4: ## Run R4 chat-workspace acceptance tests (no network required)

@@ -4,6 +4,7 @@ from vnalpha.ingestion.models import (
     IngestionErrorCategory,
     IngestionRemediationAction,
     IngestionRemediationStep,
+    JsonValue,
     SymbolIngestionResult,
     SymbolIngestionStatus,
 )
@@ -18,6 +19,8 @@ def failed_symbol_result(
     retryable: bool,
     message: str,
     attempts: int,
+    diagnostics: dict[str, JsonValue] | None = None,
+    diagnostics_ref: str | None = None,
 ) -> SymbolIngestionResult:
     remediation = remediation_step(
         symbol,
@@ -36,6 +39,8 @@ def failed_symbol_result(
         error_category=category,
         retryable=retryable,
         message=message,
+        diagnostics_ref=diagnostics_ref,
+        diagnostics=diagnostics or {},
         remediation=f"{remediation.guidance} {remediation.render_command()}",
         remediation_steps=(remediation,),
         attempts=attempts,
@@ -50,6 +55,8 @@ def invalid_symbol_result(
     category: IngestionErrorCategory,
     message: str,
     attempts: int,
+    diagnostics: dict[str, JsonValue] | None = None,
+    diagnostics_ref: str | None = None,
 ) -> SymbolIngestionResult:
     remediation = remediation_step(
         symbol,
@@ -67,6 +74,8 @@ def invalid_symbol_result(
         provider=provider,
         error_category=category,
         message=message,
+        diagnostics_ref=diagnostics_ref,
+        diagnostics=diagnostics or {},
         remediation=f"{remediation.guidance} {remediation.render_command()}",
         remediation_steps=(remediation,),
         attempts=attempts,

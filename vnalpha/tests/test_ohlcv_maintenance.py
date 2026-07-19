@@ -36,7 +36,7 @@ def test_daily_sync_uses_watermark_overlap_and_rebuilds_each_symbol(conn) -> Non
         """
             INSERT INTO canonical_ohlcv
                 (symbol, time, interval, close, quality_status)
-            VALUES ('FPT', '2026-09-01', '1D', 100.0, 'pass')
+            VALUES ('FPT', '2026-07-15', '1D', 100.0, 'pass')
         """
     )
     batch = OHLCVBatchResult(
@@ -46,8 +46,8 @@ def test_daily_sync_uses_watermark_overlap_and_rebuilds_each_symbol(conn) -> Non
             SymbolIngestionResult(
                 symbol="FPT",
                 status=SymbolIngestionStatus.SUCCESS,
-                requested_start="2026-08-31",
-                requested_end="2026-09-02",
+                requested_start="2026-07-14",
+                requested_end="2026-07-16",
                 provider="KBS",
                 rows_inserted=2,
             ),
@@ -64,17 +64,17 @@ def test_daily_sync_uses_watermark_overlap_and_rebuilds_each_symbol(conn) -> Non
     # When
     result = service.sync(
         conn,
-        DailyOHLCVSyncRequest(resolved_market_date=date(2026, 9, 2)),
+        DailyOHLCVSyncRequest(resolved_market_date=date(2026, 7, 16)),
     )
 
     # Then
     assert result.status is BatchIngestionStatus.SUCCESS
-    assert result.watermarks[0].next_request_start == date(2026, 8, 31)
+    assert result.watermarks[0].next_request_start == date(2026, 7, 14)
     fetch_ohlcv.assert_called_once_with(
         conn,
         universe=["FPT"],
-        start="2026-08-31",
-        end="2026-09-02",
+        start="2026-07-14",
+        end="2026-07-16",
         interval="1D",
         source=None,
     )
@@ -86,26 +86,26 @@ def test_gap_scan_persists_true_gap_observation_with_current_correlation(conn) -
     conn.execute(
         """
         INSERT INTO canonical_ohlcv (symbol, time, interval, close)
-        VALUES ('FPT', '2026-09-01', '1D', 100.0)
+        VALUES ('FPT', '2026-07-15', '1D', 100.0)
         """
     )
     request = OHLCVGapScanRequest(
         symbol="FPT",
         interval="1D",
-        session_range=SessionRange(start=date(2026, 9, 1), end=date(2026, 9, 2)),
+        session_range=SessionRange(start=date(2026, 7, 15), end=date(2026, 7, 16)),
     )
 
     # When
     result = OHLCVGapScanService().scan(conn, request)
 
     # Then
-    assert result.report.true_gap_dates == (date(2026, 9, 2),)
+    assert result.report.true_gap_dates == (date(2026, 7, 16),)
     assert (
         conn.execute(
             """
         SELECT gap_kind, correlation_id
         FROM ohlcv_gap_observation
-        WHERE symbol = 'FPT' AND session_date = '2026-09-02'
+        WHERE symbol = 'FPT' AND session_date = '2026-07-16'
         """
         ).fetchone()[0]
         == "TRUE_GAP"

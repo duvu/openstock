@@ -1,6 +1,6 @@
 # OpenStock roadmap
 
-The canonical product roadmap is GitHub issue [#209](https://github.com/duvu/openstock/issues/209).
+The canonical product roadmap is GitHub issue [#238](https://github.com/duvu/openstock/issues/238).
 
 GitHub Issues are the only source of truth for:
 
@@ -20,7 +20,7 @@ OpenStock develops in four evidence-driven layers:
 3. publication-aware fundamentals, official documents and verified events;
 4. optional providers and intelligence features that conform to the same contracts.
 
-The exact order within and across these layers is maintained in [#209](https://github.com/duvu/openstock/issues/209), not in this file.
+The exact order within and across these layers is maintained in [#238](https://github.com/duvu/openstock/issues/238), not in this file.
 
 ## Work-item contract
 
@@ -41,9 +41,9 @@ OpenSpec supports an issue with requirements, design decisions, tasks and valida
 - Every scheduled OpenSpec change links at least one GitHub issue.
 - An unlinked OpenSpec is proposed/untracked and cannot enter the execution queue.
 - When an issue closes, its OpenSpec is reconciled and archived or a follow-up issue is created for any remaining scope.
-- Priority and dependency changes are made in GitHub Issues and reflected in #209.
+- Priority and dependency changes are made in GitHub Issues and reflected in #238.
 
-When roadmap ownership migrates to a successor issue, first move this pointer and close/merge #209 only after the successor issue and evidence handoff are recorded.
+When roadmap ownership migrates to a successor issue, first move this pointer and close/merge #238 only after the successor issue and evidence handoff are recorded.
 
 ## Research boundary
 

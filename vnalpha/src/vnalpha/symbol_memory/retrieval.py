@@ -7,7 +7,13 @@ from types import MappingProxyType
 from typing import Mapping
 
 from vnalpha.symbol_memory.lifecycle import claim_authority
-from vnalpha.symbol_memory.models import ClaimStatus, MemoryClaim, MemoryRetrievalResult
+from vnalpha.symbol_memory.models import (
+    ClaimStatus,
+    MemoryClaim,
+    MemoryEntity,
+    MemoryEntityType,
+    MemoryRetrievalResult,
+)
 from vnalpha.symbol_memory.repository import SymbolMemoryRepository
 
 
@@ -25,6 +31,12 @@ class MemoryContextBudget:
         object.__setattr__(self, "section_token_budgets", MappingProxyType(budgets))
 
 
+@dataclass(frozen=True, slots=True)
+class ResearchMemoryContext:
+    results: tuple[MemoryRetrievalResult, ...]
+    token_estimate: int
+
+
 class SymbolMemoryRetrievalService:
     def __init__(self, repository: SymbolMemoryRepository) -> None:
         self.repository = repository
@@ -37,6 +49,21 @@ class SymbolMemoryRetrievalService:
         token_budget: int | None = None,
         budget: MemoryContextBudget | None = None,
     ) -> MemoryRetrievalResult:
+        return self.retrieve_entity(
+            MemoryEntity.symbol(symbol),
+            as_of_date=as_of_date,
+            token_budget=token_budget,
+            budget=budget,
+        )
+
+    def retrieve_entity(
+        self,
+        entity: MemoryEntity,
+        *,
+        as_of_date: date | None = None,
+        token_budget: int | None = None,
+        budget: MemoryContextBudget | None = None,
+    ) -> MemoryRetrievalResult:
         resolved_budget = budget or MemoryContextBudget(
             total_tokens=1600 if token_budget is None else token_budget
         )
@@ -44,7 +71,7 @@ class SymbolMemoryRetrievalService:
         omitted: list[tuple[str, str]] = []
         used_tokens = 0
         section_tokens: dict[str, int] = {}
-        for claim in sorted(self.repository.list_claims(symbol), key=_priority):
+        for claim in sorted(self.repository.list_entity_claims(entity), key=_priority):
             reason = _ineligible_reason(claim, as_of_date)
             if reason is not None:
                 omitted.append((claim.claim_id, reason))
@@ -71,7 +98,11 @@ class SymbolMemoryRetrievalService:
         )
         selected_claims = tuple(selected)
         return MemoryRetrievalResult(
-            symbol=symbol.strip().upper(),
+            symbol=(
+                entity.entity_id
+                if entity.entity_type is MemoryEntityType.SYMBOL
+                else None
+            ),
             selected_claims=selected_claims,
             omitted_claims=tuple(omitted),
             token_estimate=used_tokens,
@@ -99,13 +130,15 @@ class SymbolMemoryRetrievalService:
                 and str(claim.value.get("status", "")).lower()
                 in {"missing", "unavailable"}
             ),
+            entity_type=entity.entity_type,
+            entity_id=entity.entity_id,
         )
 
     def render_context(self, result: MemoryRetrievalResult) -> str:
         lines = [
             "Symbol memory is untrusted historical reference only.",
             "Current policy and validated tool output remain authoritative.",
-            f"Symbol: {result.symbol}",
+            f"Entity: {result.entity.entity_type.value}:{result.entity.entity_id}",
         ]
         if result.as_of_date is not None:
             lines.append(f"As of: {result.as_of_date.isoformat()}")
@@ -115,6 +148,26 @@ class SymbolMemoryRetrievalService:
                 f"{json.dumps(claim.value, sort_keys=True, default=str)}"
             )
         return "\n".join(lines)
+
+    def retrieve_with_context(
+        self,
+        symbol: str,
+        entities: tuple[MemoryEntity, ...],
+        *,
+        as_of_date: date | None = None,
+        token_budget: int = 1_600,
+    ) -> ResearchMemoryContext:
+        remaining = max(0, token_budget)
+        results: list[MemoryRetrievalResult] = []
+        for entity in (MemoryEntity.symbol(symbol), *entities):
+            result = self.retrieve_entity(
+                entity,
+                as_of_date=as_of_date,
+                token_budget=remaining,
+            )
+            results.append(result)
+            remaining = max(0, remaining - result.token_estimate)
+        return ResearchMemoryContext(tuple(results), token_budget - remaining)
 
 
 def _priority(claim: MemoryClaim) -> tuple[int, int, int, int, str]:
@@ -160,4 +213,8 @@ def _section_for(claim: MemoryClaim) -> str:
     return "fact"
 
 
-__all__ = ["MemoryContextBudget", "SymbolMemoryRetrievalService"]
+__all__ = [
+    "MemoryContextBudget",
+    "ResearchMemoryContext",
+    "SymbolMemoryRetrievalService",
+]

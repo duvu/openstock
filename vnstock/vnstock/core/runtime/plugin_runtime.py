@@ -24,6 +24,7 @@ import pandas as pd
 from vnstock.core.auth.redaction import is_sensitive_key, redact_dict
 from vnstock.core.provider.exceptions import (
     DatasetContractError,
+    InvalidProviderRequestError,
     ProviderFetchError,
     VnstockPlatformError,
 )
@@ -205,10 +206,7 @@ class PluginRuntime:
         try:
             provider.validate_params(dataset, params)
         except ValueError as exc:
-            raise VnstockPlatformError(
-                f"Invalid parameters for dataset '{dataset}' on provider "
-                f"'{provider.name}': {exc}"
-            ) from exc
+            raise InvalidProviderRequestError(provider.name, dataset) from exc
 
         latency_ms: float | None = None
         try:
@@ -261,6 +259,7 @@ class PluginRuntime:
                     raise DatasetContractError(
                         dataset,
                         message=f"Contract validation failed: {contract_errors}",
+                        provider_name=provider.name,
                     )
             else:
                 quality_status = "PASS"

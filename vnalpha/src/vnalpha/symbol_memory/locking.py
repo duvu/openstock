@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterator
 from uuid import uuid4
 
+from vnalpha.symbol_memory.models import MemoryEntity
 from vnalpha.symbol_memory.paths import normalize_symbol
 from vnalpha.symbol_memory.storage import assert_knowledge_path, ensure_knowledge_layout
 
@@ -30,6 +31,16 @@ class MemoryFileLock:
 def symbol_memory_lock(root: Path | None, symbol: str) -> Iterator[MemoryFileLock]:
     canonical_symbol = normalize_symbol(symbol)
     with _acquire_lock(root, "symbols", f"{canonical_symbol}.lock") as lock:
+        yield lock
+
+
+@contextmanager
+def entity_memory_lock(
+    root: Path | None, entity: MemoryEntity
+) -> Iterator[MemoryFileLock]:
+    category = entity.entity_type.value.lower()
+    name = entity.entity_id.replace(":", "--") + ".lock"
+    with _acquire_lock(root, category, name) as lock:
         yield lock
 
 
@@ -104,6 +115,7 @@ def _reclaim_stale_lock(path: Path) -> bool:
 __all__ = [
     "MemoryFileLock",
     "MemoryLockContentionError",
+    "entity_memory_lock",
     "root_maintenance_lock",
     "symbol_memory_lock",
 ]

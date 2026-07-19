@@ -30,15 +30,15 @@ def test_repair_fetches_only_true_gap_rebuilds_and_is_idempotent(
         """
         INSERT INTO canonical_ohlcv (symbol, time, interval, close)
         VALUES
-            ('FPT', '2026-09-01', '1D', 100.0),
-            ('FPT', '2026-09-03', '1D', 102.0)
+            ('FPT', '2026-07-15', '1D', 100.0),
+            ('FPT', '2026-07-17', '1D', 102.0)
         """
     )
     response_data = {
         "data": [
             {
                 "symbol": "FPT",
-                "time": "2026-09-02 00:00:00",
+                "time": "2026-07-16 00:00:00",
                 "interval": "1D",
                 "open": 100.0,
                 "high": 102.0,
@@ -51,7 +51,7 @@ def test_repair_fetches_only_true_gap_rebuilds_and_is_idempotent(
             "dataset": "equity.ohlcv",
             "provider": "kbs",
             "quality_status": "pass",
-            "fetched_at": "2026-09-02T09:00:00",
+            "fetched_at": "2026-07-16T09:00:00",
         },
         "diagnostics": {},
     }
@@ -61,7 +61,7 @@ def test_repair_fetches_only_true_gap_rebuilds_and_is_idempotent(
     request = OHLCVRepairRequest(
         symbol="FPT",
         interval="1D",
-        session_range=SessionRange(start=date(2026, 9, 1), end=date(2026, 9, 3)),
+        session_range=SessionRange(start=date(2026, 7, 15), end=date(2026, 7, 17)),
     )
     client = VnstockClient(base_url=MOCK_BASE)
     service = OHLCVRepairService(client=client)
@@ -71,16 +71,16 @@ def test_repair_fetches_only_true_gap_rebuilds_and_is_idempotent(
     repeated = service.repair(conn, request)
 
     # Then
-    assert repaired.fetched_dates == (date(2026, 9, 2),)
+    assert repaired.fetched_dates == (date(2026, 7, 16),)
     assert repaired.after.true_gap_dates == ()
     assert repeated.fetched_dates == ()
     assert route.call_count == 1
-    assert route.calls[0].request.url.params["start"] == "2026-09-02"
-    assert route.calls[0].request.url.params["end"] == "2026-09-02"
+    assert route.calls[0].request.url.params["start"] == "2026-07-16"
+    assert route.calls[0].request.url.params["end"] == "2026-07-16"
     assert conn.execute(
         """
         SELECT gap_kind, resolved_at IS NOT NULL
         FROM ohlcv_gap_observation
-        WHERE symbol = 'FPT' AND session_date = '2026-09-02'
+        WHERE symbol = 'FPT' AND session_date = '2026-07-16'
         """
     ).fetchone() == ("TRUE_GAP", True)

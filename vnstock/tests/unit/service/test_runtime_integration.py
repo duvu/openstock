@@ -240,6 +240,11 @@ class TestErrorHandling:
         runtime_dependency.reset_runtime()
 
         assert status == 502
+        assert body["error"] == "provider_fetch_error"
+        assert body["dataset"] == "equity.ohlcv"
+        assert body["provider"] == "FAKE"
+        assert body["retryable"] is True
+        assert body["request_id"].startswith("req_")
 
     def test_explicit_provider_without_dataset_support_returns_422(self):
         from vnstock.core.provider.exceptions import UnsupportedDatasetForProviderError
@@ -280,6 +285,9 @@ class TestErrorHandling:
 
         assert status == 400
         assert body["error"] == "invalid_parameters"
+        assert body["dataset"] == "equity.ohlcv"
+        assert body["retryable"] is False
+        assert body["request_id"].startswith("req_")
         fake.fetch.assert_not_called()
 
     def test_no_healthy_provider_returns_503(self):
@@ -290,7 +298,10 @@ class TestErrorHandling:
         fake.fetch.side_effect = NoHealthyProviderError(
             "equity.ohlcv",
             candidates=["KBS", "VCI"],
-            rejection_reasons={"KBS": "failing", "VCI": "cooldown"},
+            rejection_reasons={
+                "KBS": "Authorization: Bearer must-not-leak",
+                "VCI": "cooldown",
+            },
         )
         runtime_dependency.override_runtime(fake)
 
@@ -304,7 +315,12 @@ class TestErrorHandling:
 
         assert status == 503
         assert body["candidates"] == ["KBS", "VCI"]
-        assert body["rejection_reasons"] == {"KBS": "failing", "VCI": "cooldown"}
+        assert body["retryable"] is True
+        assert body["rejection_reasons"] == {
+            "KBS": "unavailable",
+            "VCI": "unavailable",
+        }
+        assert "must-not-leak" not in json.dumps(body)
 
 
 # ---------------------------------------------------------------------------

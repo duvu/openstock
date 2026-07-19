@@ -2,7 +2,7 @@
 
 > **Status:** historical architecture reference, not a live roadmap.
 >
-> The canonical OpenStock roadmap is GitHub issue [#90 — OpenStock unified product roadmap](https://github.com/duvu/openstock/issues/90), linked through [`../ROADMAP.md`](../ROADMAP.md). GitHub Issues own priority, dependencies, delivery status and closure evidence.
+> The canonical OpenStock roadmap is GitHub issue [#238 — OpenStock core data and knowledge loop](https://github.com/duvu/openstock/issues/238), linked through [`../ROADMAP.md`](../ROADMAP.md). GitHub Issues own priority, dependencies, delivery status and closure evidence.
 
 This file preserves the stable architectural direction that evolved `vnstock` from a Python SDK into the data-only provider platform used by OpenStock. Detailed historical phase text remains available in Git history.
 
@@ -111,7 +111,7 @@ Each requires a focused GitHub issue and reviewed design before implementation.
 
 ## Governance
 
-- Use [#90](https://github.com/duvu/openstock/issues/90) for current priority and dependency order.
+- Use [#238](https://github.com/duvu/openstock/issues/238) for current priority and dependency order.
 - Use focused implementation issues for provider/dataset acceptance criteria.
 - Use OpenSpec for linked requirements, design, tasks and validation evidence.
 - Do not create a second phase queue in component documentation.

@@ -31,20 +31,20 @@ def test_watermark_uses_latest_complete_raw_and_canonical_with_session_overlap(
         """
         INSERT INTO canonical_ohlcv
             (symbol, time, interval, close, quality_status)
-        VALUES ('FPT', '2026-09-01', '1D', 100.0, 'pass')
+        VALUES ('FPT', '2026-07-15', '1D', 100.0, 'pass')
         """
     )
     conn.execute(
         """
         INSERT INTO market_ohlcv_raw
             (ingestion_run_id, symbol, time, interval, close, quality_status)
-        VALUES ('run-1', 'FPT', '2026-09-02', '1D', 101.0, 'pass')
+        VALUES ('run-1', 'FPT', '2026-07-16', '1D', 101.0, 'pass')
         """
     )
     request = OHLCVWatermarkRequest(
         symbol="FPT",
         interval="1D",
-        requested_start=date(2026, 8, 1),
+        requested_start=date(2026, 7, 1),
         overlap_sessions=2,
     )
 
@@ -52,9 +52,9 @@ def test_watermark_uses_latest_complete_raw_and_canonical_with_session_overlap(
     watermark = OHLCVWatermarkService().resolve(conn, request)
 
     # Then
-    assert watermark.last_canonical_date == date(2026, 9, 1)
-    assert watermark.last_raw_date == date(2026, 9, 2)
-    assert watermark.next_request_start == date(2026, 9, 1)
+    assert watermark.last_canonical_date == date(2026, 7, 15)
+    assert watermark.last_raw_date == date(2026, 7, 16)
+    assert watermark.next_request_start == date(2026, 7, 15)
 
 
 @pytest.mark.parametrize("quality_status", [None, "warn", "skipped", "unknown"])

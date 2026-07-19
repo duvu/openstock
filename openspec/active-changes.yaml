@@ -1,9 +1,9 @@
 # Registry for non-archived OpenSpec lifecycle and evidence.
-reviewed_at: 2026-07-16
+reviewed_at: 2026-07-19
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
-  roadmap_source: https://github.com/duvu/openstock/issues/209
+  roadmap_source: https://github.com/duvu/openstock/issues/238
   priorities_owned_by: github_issues
   dependencies_owned_by: github_issues
   require_github_issue_for_scheduled_work: true
@@ -75,7 +75,7 @@ changes:
 
   chat-data-provisioning-contract:
     status: ready
-    github_issues: [163, 175, 228, 230]
+    github_issues: [163, 175, 228, 230, 231, 232, 233]
     roadmap_state: review_required
     summary: >-
       Make bounded current-symbol data provisioning one explicit, idempotent,
@@ -92,6 +92,8 @@ changes:
       and rendered character volume. Issue 230 owns preservation of sanitized,
       bounded tool failure text, remediation and correlation through the chat
       transcript boundary without changing issue 228 lifecycle semantics.
+      Issues 231-233 add one effective target date, typed provider diagnostics
+      and bounded data-only symbol provisioning without assistant-owned fetches.
 
   symbol-knowledge-projection:
     status: ready
@@ -223,8 +225,8 @@ changes:
 
   symbol-knowledge-memory:
     status: partial
-    github_issues: []
-    roadmap_state: proposed_untracked
+    github_issues: [240, 241, 242]
+    roadmap_state: scheduled
     summary: >-
       Per-symbol knowledge cards backed by structured claims, auditable
       correction, compaction and bounded temporal retrieval.
@@ -233,7 +235,23 @@ changes:
       lifecycle, compaction, commands and assistant retrieval. Later review
       found residual scalable-retrieval, ingestion-order, auto-ingestion,
       context-budget and governance gaps. No open GitHub issue owns that
-      hardening, so residual work is not scheduled.
+      hardening. Issues #240-#242 now own selective daily projection, bounded
+      typed entity migration and point-in-time market/group context. Focused
+      implementation is present; legacy migration and final exact-candidate
+      validation remain open.
+
+  core-data-knowledge-loop:
+    status: partial
+    github_issues: [238, 239, 243, 244, 245]
+    roadmap_state: scheduled
+    summary: >-
+      Deterministic one-shot daily maintenance, disabled-by-default explicit-
+      timezone scheduling, one canonical #238 roadmap pointer and exact-candidate
+      clean-host acceptance for the core data and knowledge loop.
+    evidence: >-
+      Focused daily, scheduling and roadmap consistency tests pass in the current
+      worktree. Vietnam holiday coverage, complete idempotency/CLI matrices,
+      exact package/commit acceptance and publication evidence remain required.
 
   deep-symbol-analysis-engine:
     status: partial

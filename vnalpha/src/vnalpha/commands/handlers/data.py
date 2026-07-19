@@ -38,6 +38,7 @@ def handle_data(
         "end",
         "date",
         "source",
+        "interval",
         "benchmark",
         "from",
         "to",
@@ -81,6 +82,7 @@ def handle_data(
         end=_range_option(parsed, "end", "to"),
         date=_option_value(parsed, "date"),
         source=_option_value(parsed, "source"),
+        interval=_option_value(parsed, "interval") or "1D",
         benchmark=_option_value(parsed, "benchmark"),
         scoring_policy_id=policy_id,
         scoring_policy_version=policy_version,
@@ -167,6 +169,7 @@ def _usage() -> str:
         "[--scoring-policy ID@VERSION] or "
         "/data build <canonical SYMBOL|features SYMBOL --date DATE|score SYMBOL --date DATE|"
         "market-regime --date DATE|sector-strength --date DATE>, "
-        "/data sync daily [--date DATE], /data gaps SYMBOL [--from DATE] [--to DATE], "
+        "/data sync daily [--date DATE] [--source PROVIDER] [--interval INTERVAL], "
+        "/data gaps SYMBOL [--from DATE] [--to DATE], "
         "or /data repair ohlcv SYMBOL [--from DATE] [--to DATE]."
     )

@@ -653,14 +653,12 @@ def _validate_maintenance(fields: _MaintenanceFields) -> _MaintenanceFields:
             raise DataProvisioningValidationError("Supported sync: daily.")
         if (
             fields.symbol is not None
-            or fields.symbols
             or fields.allow_all_symbols
             or fields.start is not None
             or fields.end is not None
-            or fields.source is not None
         ):
             raise DataProvisioningValidationError(
-                "Data sync daily accepts only an optional --date."
+                "Data sync daily accepts only optional --date, --source and --interval."
             )
         return _MaintenanceFields(
             operation=fields.operation,
@@ -704,7 +702,10 @@ def _daily_sync_request(request: DataProvisioningRequest):
     from vnalpha.ingestion.ohlcv_maintenance import DailyOHLCVSyncRequest
 
     return DailyOHLCVSyncRequest(
-        resolved_market_date=_required_date_value(request.date)
+        resolved_market_date=_required_date_value(request.date),
+        source=request.source,
+        interval=request.interval,
+        symbols=request.symbols,
     )
 
 
@@ -755,12 +756,16 @@ def _daily_sync_result(
             batch.status is BatchIngestionStatus.FAILED for batch in raw.batches
         ),
     }
+    symbol_results = tuple(
+        symbol_result for batch in raw.batches for symbol_result in batch.symbol_results
+    )
     return _result(
         request,
         correlation_id,
         counts=counts,
         status=_provisioning_status(raw.status),
         warnings=_count_warnings(counts, ("failed", "symbols failed")),
+        symbol_results=symbol_results,
     )
 
 

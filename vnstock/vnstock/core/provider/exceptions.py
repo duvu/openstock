@@ -33,8 +33,14 @@ class DatasetContractError(VnstockPlatformError):
         message: Optional detail message.
     """
 
-    def __init__(self, dataset: str, message: str | None = None) -> None:
+    def __init__(
+        self,
+        dataset: str,
+        message: str | None = None,
+        provider_name: str | None = None,
+    ) -> None:
         self.dataset = dataset
+        self.provider_name = provider_name
         detail = message or f"Dataset contract error for '{dataset}'."
         super().__init__(detail)
 
@@ -99,6 +105,13 @@ class ProviderFetchError(VnstockPlatformError):
         self.cause = cause
         msg = f"Provider '{provider_name}' failed to fetch dataset '{dataset}'."
         super().__init__(msg)
+
+
+class InvalidProviderRequestError(VnstockPlatformError):
+    def __init__(self, provider_name: str, dataset: str) -> None:
+        self.provider_name = provider_name
+        self.dataset = dataset
+        super().__init__("Invalid parameters: provider rejected the request.")
 
 
 class NoProviderForDatasetError(VnstockPlatformError):

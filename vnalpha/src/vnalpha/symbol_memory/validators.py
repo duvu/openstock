@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from vnalpha.symbol_memory.models import ClaimOrigin, MemoryClaim
-from vnalpha.symbol_memory.paths import SymbolPathError, normalize_symbol
+from vnalpha.symbol_memory.paths import SymbolPathError
 
 
 class MemoryValidationError(ValueError):
@@ -12,8 +12,8 @@ class MemoryValidationError(ValueError):
 
 def validate_claim(claim: MemoryClaim) -> None:
     try:
-        normalize_symbol(claim.symbol)
-    except SymbolPathError as exc:
+        _ = claim.entity
+    except (SymbolPathError, ValueError) as exc:
         raise MemoryValidationError(str(exc)) from exc
     if not claim.claim_id or not claim.claim_type or not claim.predicate:
         raise MemoryValidationError("Claim identity fields are required.")

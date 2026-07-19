@@ -14,7 +14,7 @@ vnalpha          = independent research workspace and evidence engine
 The live delivery queue is maintained only in:
 
 - [root ROADMAP.md](../../ROADMAP.md);
-- GitHub issue [#209](https://github.com/duvu/openstock/issues/209).
+- GitHub issue [#238](https://github.com/duvu/openstock/issues/238).
 
 Documents such as `07-implementation-roadmap.md` and `10-roadmap-phases.md` preserve earlier design history. They are non-authoritative and must not be used to infer current priority, dependency or completion status.
 
@@ -24,21 +24,19 @@ Current architecture documents begin with an explicit `Status` block. Target cap
 
 ## Documentation map
 
-1. **Vision and scope** — product objective and permanent boundaries.
-2. **System architecture** — service split, warehouse, application services and execution flow.
-3. **Data pipeline** — ingestion, validation, canonicalization, readiness and provenance.
-4. **Pattern engine** — structured price/volume pattern evidence.
-5. **Backtest and outcome tracking** — forward outcomes, event studies and the target point-in-time Backtest Lab.
-6. **AI layer** — safe classification, planning, deterministic tools and grounded synthesis.
-7. **Workspace interfaces** — Typer CLI, Textual TUI and optional read-only API boundaries.
-8. **Operations and hardening** — logging, packaging, evaluation, repair and implementation guardrails.
-9. **Historical planning documents** — earlier roadmaps retained for context only.
+1. **System architecture** — service split, warehouse, application services and execution flow.
+2. **Data pipeline** — ingestion, validation, canonicalization, readiness and provenance.
+3. **Pattern engine** — structured price/volume pattern evidence.
+4. **Backtest and outcome tracking** — forward outcomes, event studies and the target point-in-time Backtest Lab.
+5. **AI layer** — safe classification, planning, deterministic tools and grounded synthesis.
+6. **Workspace interfaces** — Typer CLI, Textual TUI and optional read-only API boundaries.
+7. **Operations and hardening** — logging, packaging, evaluation, repair and implementation guardrails.
+8. **Historical documents** — earlier vision and roadmaps retained for context only.
 
 ## Key documents
 
 ### Current architecture and operation
 
-- [Vision and scope](01-vision-and-scope.md)
 - [System architecture](02-system-architecture.md)
 - [Data pipeline](03-data-pipeline.md) — includes corporate-action raw/canonical/revision boundaries
 - [Market context methodology](market-context-methodology.md)
@@ -59,6 +57,7 @@ Current architecture documents begin with an explicit `Status` block. Target cap
 
 ### Historical, non-authoritative planning
 
+- [Earlier vision and scope](01-vision-and-scope.md)
 - [Earlier implementation roadmap](07-implementation-roadmap.md)
 - [Earlier phased roadmap](10-roadmap-phases.md)
 

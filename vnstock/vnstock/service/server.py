@@ -285,6 +285,7 @@ class VnstockHandler(BaseHTTPRequestHandler):
         """
         from vnstock.core.provider.exceptions import (
             DatasetContractError,
+            InvalidProviderRequestError,
             NoHealthyProviderError,
             ProviderFetchError,
             UnsupportedDatasetError,
@@ -312,6 +313,7 @@ class VnstockHandler(BaseHTTPRequestHandler):
                     "error": "unsupported_dataset",
                     "message": f"No dataset available at '{path}'.",
                     "request_id": request_id,
+                    "retryable": False,
                 },
             )
             return
@@ -336,6 +338,7 @@ class VnstockHandler(BaseHTTPRequestHandler):
                     "message": "Credential query parameters are not allowed.",
                     "dataset": dataset,
                     "request_id": request_id,
+                    "retryable": False,
                 },
             )
             return
@@ -351,25 +354,27 @@ class VnstockHandler(BaseHTTPRequestHandler):
                 quality_mode=quality_mode,
                 return_result=True,
             )
-        except UnsupportedDatasetError as exc:
+        except UnsupportedDatasetError:
             self._send_json(
                 404,
                 {
                     "error": "unsupported_dataset",
-                    "message": str(exc)[:300],
+                    "message": "The requested dataset is unsupported.",
                     "dataset": dataset,
                     "request_id": request_id,
+                    "retryable": False,
                 },
             )
             return
-        except UnsupportedDatasetForProviderError as exc:
+        except UnsupportedDatasetForProviderError:
             self._send_json(
                 422,
                 {
                     "error": "unsupported_dataset_for_provider",
-                    "message": str(exc)[:300],
+                    "message": "The selected provider does not support this dataset.",
                     "dataset": dataset,
                     "request_id": request_id,
+                    "retryable": False,
                 },
             )
             return
@@ -378,24 +383,34 @@ class VnstockHandler(BaseHTTPRequestHandler):
                 503,
                 {
                     "error": "no_healthy_provider",
-                    "message": str(exc)[:300],
+                    "message": "No healthy provider is currently available.",
                     "dataset": dataset,
                     "candidates": list(exc.candidates),
-                    "rejection_reasons": {
-                        provider: reason[:200]
-                        for provider, reason in exc.rejection_reasons.items()
-                    },
+                    "rejection_reasons": dict.fromkeys(
+                        exc.rejection_reasons, "unavailable"
+                    ),
                     "request_id": request_id,
+                    "retryable": True,
                 },
             )
             return
         except ProviderFetchError as exc:
+            failure_kind = getattr(exc, "kind", None)
+            provider_error_code = getattr(failure_kind, "value", failure_kind)
+            retryable = getattr(exc, "retryable", True)
             self._send_json(
                 502,
                 {
                     "error": "provider_fetch_error",
-                    "message": str(exc)[:300],
+                    "message": "The selected provider could not fetch the dataset.",
                     "dataset": dataset,
+                    "provider": exc.provider_name,
+                    **(
+                        {"provider_error_code": str(provider_error_code)}
+                        if provider_error_code is not None
+                        else {}
+                    ),
+                    "retryable": retryable if isinstance(retryable, bool) else True,
                     "request_id": request_id,
                 },
             )
@@ -405,9 +420,28 @@ class VnstockHandler(BaseHTTPRequestHandler):
                 422,
                 {
                     "error": "contract_validation_failed",
-                    "message": str(exc)[:300],
+                    "message": "Provider data failed the dataset contract.",
                     "dataset": dataset,
+                    **(
+                        {"provider": exc.provider_name}
+                        if exc.provider_name is not None
+                        else {}
+                    ),
                     "request_id": request_id,
+                    "retryable": False,
+                },
+            )
+            return
+        except InvalidProviderRequestError as exc:
+            self._send_json(
+                400,
+                {
+                    "error": "invalid_request",
+                    "message": "The selected provider rejected the request parameters.",
+                    "dataset": dataset,
+                    "provider": exc.provider_name,
+                    "request_id": request_id,
+                    "retryable": False,
                 },
             )
             return
@@ -421,9 +455,10 @@ class VnstockHandler(BaseHTTPRequestHandler):
                 status,
                 {
                     "error": "platform_error",
-                    "message": msg[:300],
+                    "message": "The provider platform could not complete the request.",
                     "dataset": dataset,
                     "request_id": request_id,
+                    "retryable": status >= 500,
                 },
             )
             return
@@ -435,6 +470,7 @@ class VnstockHandler(BaseHTTPRequestHandler):
                     "message": "Unexpected internal service failure.",
                     "dataset": dataset,
                     "request_id": request_id,
+                    "retryable": True,
                 },
             )
             return

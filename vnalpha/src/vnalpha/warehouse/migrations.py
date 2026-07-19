@@ -148,6 +148,90 @@ def _migrate_symbol_memory_columns(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         "ALTER TABLE memory_claim ADD COLUMN IF NOT EXISTS source_published_at DATE"
     )
+    for table in ("memory_event", "memory_claim", "memory_compaction_run"):
+        columns = _table_columns(conn, table)
+        symbol_is_required = not _column_is_nullable(conn, table, "symbol")
+        if "entity_type" not in columns or symbol_is_required:
+            for index_name in {
+                "memory_event": ("memory_event_evidence_content_idx",),
+                "memory_claim": ("memory_claim_symbol_status_idx",),
+                "memory_compaction_run": ("memory_compaction_run_symbol_idx",),
+            }[table]:
+                conn.execute(f"DROP INDEX IF EXISTS {index_name}")
+        if "entity_type" not in columns:
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN entity_type VARCHAR DEFAULT 'SYMBOL'"
+            )
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN entity_id VARCHAR")
+            conn.execute(
+                f"UPDATE {table} SET entity_type = 'SYMBOL', entity_id = symbol "
+                "WHERE entity_id IS NULL"
+            )
+            conn.execute(f"ALTER TABLE {table} ALTER COLUMN entity_type SET NOT NULL")
+        if symbol_is_required:
+            conn.execute(f"ALTER TABLE {table} ALTER COLUMN symbol DROP NOT NULL")
+    if "entity_type" not in _table_columns(conn, "memory_document"):
+        conn.execute("ALTER TABLE memory_document RENAME TO memory_document_legacy")
+        conn.execute(
+            "CREATE TABLE memory_document ("
+            "symbol VARCHAR, path VARCHAR NOT NULL, schema_version INTEGER NOT NULL, "
+            "generation INTEGER NOT NULL, managed_hash VARCHAR NOT NULL, "
+            "document_hash VARCHAR NOT NULL, token_estimate INTEGER NOT NULL, "
+            "last_compacted_at TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL, "
+            "entity_type VARCHAR NOT NULL, entity_id VARCHAR NOT NULL, "
+            "PRIMARY KEY(entity_type, entity_id))"
+        )
+        conn.execute(
+            "INSERT INTO memory_document SELECT symbol, path, schema_version, generation, "
+            "managed_hash, document_hash, token_estimate, last_compacted_at, updated_at, "
+            "'SYMBOL', symbol FROM memory_document_legacy"
+        )
+        conn.execute("DROP TABLE memory_document_legacy")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS memory_event_entity_idx "
+        "ON memory_event(entity_type, entity_id, created_at)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS memory_event_evidence_content_idx "
+        "ON memory_event(symbol, evidence_ref, content_hash)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS memory_claim_symbol_status_idx "
+        "ON memory_claim(symbol, status, as_of_date)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS memory_claim_entity_status_idx "
+        "ON memory_claim(entity_type, entity_id, status, as_of_date)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS memory_compaction_run_entity_idx "
+        "ON memory_compaction_run(entity_type, entity_id, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS memory_compaction_run_symbol_idx "
+        "ON memory_compaction_run(symbol, created_at)"
+    )
+
+
+def _table_columns(conn: duckdb.DuckDBPyConnection, table_name: str) -> frozenset[str]:
+    return frozenset(
+        str(row[0])
+        for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+            [table_name],
+        ).fetchall()
+    )
+
+
+def _column_is_nullable(
+    conn: duckdb.DuckDBPyConnection, table_name: str, column_name: str
+) -> bool:
+    row = conn.execute(
+        "SELECT is_nullable FROM information_schema.columns "
+        "WHERE table_name = ? AND column_name = ?",
+        [table_name, column_name],
+    ).fetchone()
+    return row is not None and str(row[0]) == "YES"
 
 
 def _migrate_ohlcv_price_basis_columns(conn: duckdb.DuckDBPyConnection) -> None:

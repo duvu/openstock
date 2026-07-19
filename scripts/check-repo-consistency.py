@@ -9,7 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_WAREHOUSE = "/var/lib/openstock/warehouse/warehouse.duckdb"
-LIVE_ROADMAP_ISSUE_ID = 209
+LIVE_ROADMAP_ISSUE_ID = 238
+LIVE_ROADMAP_URL = "https://github.com/duvu/openstock/issues/238"
 CURRENT_ROADMAP_DOCS = (
     "README.md",
     "ROADMAP.md",
@@ -17,6 +18,13 @@ CURRENT_ROADMAP_DOCS = (
     "vnalpha/docs/03-data-pipeline.md",
     "vnalpha/docs/05-backtest-and-outcome.md",
     "vnalpha/docs/README.md",
+    "vnalpha/docs/RUNBOOK.md",
+    "vnalpha/docs/07-implementation-roadmap.md",
+    "vnalpha/docs/10-roadmap-phases.md",
+    "vnalpha/README.md",
+    "vnstock/README.md",
+    "vnstock/roadmap.md",
+    "openspec/README.md",
 )
 
 
@@ -163,13 +171,17 @@ def _check_active_changes(errors: list[str]) -> None:
 def _check_live_roadmap_contract(errors: list[str]) -> None:
     for path in CURRENT_ROADMAP_DOCS:
         text = _read(path)
-        if str(LIVE_ROADMAP_ISSUE_ID) not in text:
+        if LIVE_ROADMAP_URL not in text:
             errors.append(
-                f"{path}: missing canonical live roadmap reference #{LIVE_ROADMAP_ISSUE_ID}"
+                f"{path}: missing canonical live roadmap URL {LIVE_ROADMAP_URL}"
             )
         if "#90" in text or "issues/90" in text:
             errors.append(
                 f"{path}: contains stale live-roadmap reference to issue #90"
+            )
+        if "#209" in text or "issues/209" in text:
+            errors.append(
+                f"{path}: contains superseded live-roadmap reference to issue #209"
             )
         if "#162" in text or "issues/162" in text:
             errors.append(

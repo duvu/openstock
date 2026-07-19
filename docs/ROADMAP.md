@@ -1,5 +1,10 @@
 # openstock System Roadmap
 
+> **Status: historical and non-authoritative.** This document preserves an
+> earlier target design. Current priority, dependencies and closure evidence
+> live in [GitHub issue #238](https://github.com/duvu/openstock/issues/238) via
+> the canonical [root roadmap](../ROADMAP.md).
+
 ## Product thesis
 
 `openstock` is a local-first Vietnamese equity research system.
