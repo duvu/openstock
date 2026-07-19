@@ -151,7 +151,7 @@
 - [x] 12.3 Persist deterministic point-in-time group snapshots using the production sector metrics and project only changed validated context. [evidence: `vnalpha/tests/test_issue_242_group_context_memory.py`]
 - [x] 12.4 Retrieve market/group context alongside symbol context under one total token budget. [evidence: `vnalpha/tests/test_issue_242_group_context_memory.py`]
 - [x] 12.5 Prove migration of populated legacy event, claim, document and compaction tables without loss. [evidence: `vnalpha/tests/test_issue_241_entity_memory.py`]
-- [ ] 12.6 Run exact-candidate full gates and reconcile issues #240-#242.
+- [x] 12.6 Run exact-candidate full gates and reconcile issues #240-#242. [evidence: merged PR #247, exact candidate `e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d`, required merge gate green, issues #240-#242 closed]
 
 ## Phase gates
 

@@ -29,10 +29,10 @@
 
 - [x] 5.1 Run focused issue matrices plus complete vnalpha, vnstock, packaging, repository, OpenSpec and evaluation gates. [evidence: full `vnalpha` suite; 1,388 offline `vnstock` tests; 60 package checks; repository, OpenSpec and 5/5 fixture plus 22/22 runtime evaluations]
 - [x] 5.2 Run the prepared clean-host install, preflight, data, maintenance, CLI/TUI/assistant, repeat and failure-injection transcript against the exact package and commit. [evidence: Debian 12/Python 3.11 clean-host transcript; 42 installed issue tests; 87 installed CLI/TUI/assistant/safety tests; timer and lock checks]
-- [ ] 5.3 Publish a sanitized #245 acceptance report with exact identities, commands, outcomes and explicit fixture/live-provider limitations.
+- [x] 5.3 Publish a sanitized #245 acceptance report with exact identities, commands, outcomes and explicit fixture/live-provider limitations. [evidence: `https://github.com/duvu/openstock/issues/245#issuecomment-5014594723`]
 
 ## 6. Lifecycle reconciliation
 
 - [x] 6.1 Update overlapping active OpenSpec entries with #231–#244 evidence and validate every affected change strictly. [evidence: strict validation of `core-data-knowledge-loop`, `chat-data-provisioning-contract` and `symbol-knowledge-memory`]
-- [ ] 6.2 Publish the exact candidate, wait for required GitHub checks, then close child issues in dependency order.
-- [ ] 6.3 Close #238 only after #245 evidence is accepted; close backlog-gated #235 as not planned unless qualifying evidence exists.
+- [x] 6.2 Publish the exact candidate, wait for required GitHub checks, then close child issues in dependency order. [evidence: merged PR #247, required merge gate green]
+- [x] 6.3 Close #238 only after #245 evidence is accepted; close backlog-gated #235 as not planned unless qualifying evidence exists. [evidence: #245 closed before #238; #235 closed as not planned]

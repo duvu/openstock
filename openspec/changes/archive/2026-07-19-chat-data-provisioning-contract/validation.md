@@ -1,5 +1,13 @@
 # Validation Ledger
 
+Final implementation SHA: `e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d`
+
+| UTC timestamp | Commit SHA | Task/gate | Command or inspection | Exit | Result summary | Evidence artifact |
+|---|---|---|---|---:|---|---|
+| 2026-07-19T05:53:30Z | e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d | 1.1–1.24 | `gh pr checks 247` plus exact-candidate local and installed-package matrices | 0 | Required merge gate passed; full vnalpha, 42 installed issue, 87 installed CLI/TUI/assistant/safety and 60 package checks passed; issues 231–233 closed | PR #247, GitHub issues #231–#233, clean-host acceptance transcript |
+
+## Historical validation narrative
+
 PR #168 merged the issue #163 implementation with required CI green. Current
 follow-on validation for issue #175 covers nullable, malformed, duplicate,
 empty, oversized, and service-unavailable remediation inputs. The shared
@@ -144,7 +152,7 @@ snapshot, so none of its evidence is reusable for the next candidate.
 | Lint and formatting | Passed | `make lint-vnalpha` reported all checks passed and 699 files already formatted. Focused Ruff checks, format checks and LSP diagnostics also passed after the final test split. |
 | Installed-package vertical | Passed | `PIP_INDEX_URL=https://pypi.org/simple make verify-vnalpha-package` passed 59/59, including the built Debian package's application-wheel fixture contract and runtime-replay evaluation. |
 | Research evaluations | Passed | `make eval-research-answers` passed 5/5; `make eval-research-runtime` passed 22/22 with zero failures. |
-| OpenSpec | Passed | `openspec validate chat-data-provisioning-contract --strict` reported valid; `python -m pytest -q scripts/tests/test_check_openspec_completion.py` passed 12 tests; apply instructions report 19/20 tasks with publication reconciliation intentionally pending. |
+| OpenSpec | Passed | `openspec validate chat-data-provisioning-contract --strict` reported valid; `python -m pytest -q scripts/tests/test_check_openspec_completion.py` passed 12 tests; all 24 tasks are reconciled. |
 | Repository and packaging structure | Passed with one warning | `make repo-hygiene`, `make verify-repo-consistency`, `packaging/scripts/openstock-secret-scan`, and `make validate-compose` exited `0`. `make verify-r2-ci` exited `0` with 18 OK, one existing systemd verification warning and zero failures. |
 | Static no-excuse audit | Pre-existing debt plus intentional fixtures | The inherited controller remains above the source-size threshold with existing broad/silent top-level boundaries and mutable `ChatError`. New issue regressions are split into 252-, 251-, 229-, 292-, 261- and 102-line files; their arbitrary `RuntimeError` fixtures are required to prove nested unexpected exceptions stay generic while preserving the private assistant error contract. The correction reuses two exact typed presentation helpers rather than refactoring unrelated controller responsibilities. |
-| GitHub Actions on exact implementation commit | Pending | Exact implementation-commit CI will be recorded after the branch and PR exist. No merged-CI claim is inferred from local gates. |
+| GitHub Actions on exact implementation commit | Passed | PR #247 merged with all five required checks green, including the required merge gate. |

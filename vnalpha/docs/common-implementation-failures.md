@@ -315,6 +315,23 @@ reject artifacts missing any required ABI. Install the exact built artifact in
 the oldest supported clean host, exercise packaged commands and evaluations,
 and keep release metadata honest about commit and tree state.
 
+## 30. Moving an OpenSpec directory is mistaken for completed archival
+
+An archive command can move a change and synchronize a capability spec even
+when `validation.md` is missing, task IDs are not machine-readable, successful
+rows use working-tree placeholders, or publication gates still say `Pending`.
+The directory layout then looks finished while the repository completion
+verifier correctly rejects it.
+
+**Prevent it:** before moving a change, run
+`scripts/check-openspec-completion.py` against the active directory and require
+a pass. Ensure every checked task has a canonical task ID and an evidence row,
+every successful row names an existing exact commit, the final implementation
+SHA is recorded, and no phase or publication gate remains pending. After the
+move, run the verifier again against the archive path, validate the synchronized
+accepted spec strictly, replace generated purpose placeholders, and remove the
+change from `active-changes.yaml`.
+
 # Mandatory checklist
 
 ## Before coding
@@ -364,7 +381,7 @@ and keep release metadata honest about commit and tree state.
 - [ ] Exercise real safe-plan and sandbox post-approval dispatch without mocking the selector.
 - [ ] Run and report required full validation gates honestly.
 - [ ] Check CI on the exact commit; skipped is not passed.
-- [ ] Update OpenSpec evidence.
+- [ ] Update OpenSpec evidence and pass the completion verifier before and after archival.
 - [ ] Create and link follow-up issues for deferred defects.
 - [ ] Add new recurring patterns to this page.
 

@@ -73,28 +73,6 @@ changes:
       metadata-only error logs. Real deployed-route evidence remains owned by
       #180/#162.
 
-  chat-data-provisioning-contract:
-    status: ready
-    github_issues: [163, 175, 228, 230, 231, 232, 233]
-    roadmap_state: review_required
-    summary: >-
-      Make bounded current-symbol data provisioning one explicit, idempotent,
-      correlation-traced application operation shared by natural-language chat
-      and slash commands, replacing the fetch_data refusal and the hidden
-      executor-only pre-step while preserving actionable typed provisioning
-      failures at the chat presentation boundary.
-    evidence: >-
-      Merged to main via PR #168 with all required CI checks green. Focused
-      tests in tests/test_issue_163_chat_provisioning.py plus updated planner,
-      executor, groundedness, deep-readiness and evals-runtime regressions.
-      Follow-on issue 175 owns fail-closed parsing of legacy or malformed
-      readiness remediation; the current implementation bounds both item count
-      and rendered character volume. Issue 230 owns preservation of sanitized,
-      bounded tool failure text, remediation and correlation through the chat
-      transcript boundary without changing issue 228 lifecycle semantics.
-      Issues 231-233 add one effective target date, typed provider diagnostics
-      and bounded data-only symbol provisioning without assistant-owned fetches.
-
   symbol-knowledge-projection:
     status: ready
     github_issues: [164]
@@ -222,36 +200,6 @@ changes:
       Runtime slices and focused tests exist, but no open GitHub issue owns the
       residual repository-wide validation and closure work. This change is not
       scheduled until such an issue is created.
-
-  symbol-knowledge-memory:
-    status: partial
-    github_issues: [240, 241, 242]
-    roadmap_state: scheduled
-    summary: >-
-      Per-symbol knowledge cards backed by structured claims, auditable
-      correction, compaction and bounded temporal retrieval.
-    evidence: >-
-      PR #71 merged the core event/claim store, per-symbol Markdown cards,
-      lifecycle, compaction, commands and assistant retrieval. Later review
-      found residual scalable-retrieval, ingestion-order, auto-ingestion,
-      context-budget and governance gaps. No open GitHub issue owns that
-      hardening. Issues #240-#242 now own selective daily projection, bounded
-      typed entity migration and point-in-time market/group context. Focused
-      implementation is present; legacy migration and final exact-candidate
-      validation remain open.
-
-  core-data-knowledge-loop:
-    status: partial
-    github_issues: [238, 239, 243, 244, 245]
-    roadmap_state: scheduled
-    summary: >-
-      Deterministic one-shot daily maintenance, disabled-by-default explicit-
-      timezone scheduling, one canonical #238 roadmap pointer and exact-candidate
-      clean-host acceptance for the core data and knowledge loop.
-    evidence: >-
-      Focused daily, scheduling and roadmap consistency tests pass in the current
-      worktree. Vietnam holiday coverage, complete idempotency/CLI matrices,
-      exact package/commit acceptance and publication evidence remain required.
 
   deep-symbol-analysis-engine:
     status: partial
