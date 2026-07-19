@@ -7,6 +7,7 @@ from vnalpha.commands.handlers.research_workflow_common import (
     format_number,
     format_percent,
     optional_date,
+    optional_generic_date,
     positive_int_option,
     symbol_or_setup_token,
     validate_workflow_command,
@@ -38,9 +39,9 @@ def handle_setup_evidence(parsed: ParsedCommand, conn=None, **kwargs):
         raise CommandValidationError("/setup-evidence requires a setup type or symbol.")
 
     horizon = positive_int_option(parsed, "horizon", maximum=252)
-    date = optional_date(parsed)
     requested_token = parsed.positional[0]
     normalized_token, is_setup_type = symbol_or_setup_token(requested_token)
+    date = optional_generic_date(parsed) if is_setup_type else optional_date(parsed)
     tool_executor = workflow_tool_executor(kwargs, title="/setup-evidence")
     if isinstance(tool_executor, CommandResult):
         return tool_executor

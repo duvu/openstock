@@ -72,17 +72,22 @@ def register(app: typer.Typer) -> None:
             except LLMConfigError as exc:
                 # Natural-language chat is unavailable; deterministic slash and
                 # data commands remain usable (issue #165 degraded mode).
-                error_console.print(
-                    f"[yellow]Natural-language chat is unavailable: {exc}[/yellow]\n"
-                    "[dim]Deterministic slash and data commands remain usable. "
-                    "Run 'vnalpha preflight' to diagnose the LLM route.[/dim]"
+                config_error = Text(
+                    f"Natural-language chat is unavailable: {exc}\n",
+                    style="yellow",
                 )
+                config_error.append(
+                    "Deterministic slash and data commands remain usable. "
+                    "Run 'vnalpha preflight' to diagnose the LLM route.",
+                    style="dim",
+                )
+                error_console.print(config_error)
                 raise typer.Exit(code=1) from exc
             except AssistantError as exc:
-                error_console.print(f"[red]Assistant error: {exc}[/red]")
+                error_console.print(Text(f"Assistant error: {exc}", style="red"))
                 raise typer.Exit(code=1) from exc
             except Exception as exc:
-                error_console.print(f"[red]Unexpected error: {exc}[/red]")
+                error_console.print(Text(f"Unexpected error: {exc}", style="red"))
                 raise typer.Exit(code=1) from exc
 
             if show_plan or no_execute:
@@ -94,14 +99,13 @@ def register(app: typer.Typer) -> None:
                 )
 
             if isinstance(result, RefusalMessage):
+                refusal_text = Text(result.reason, style="yellow")
+                if result.suggestion:
+                    refusal_text.append("\n\nSuggestion: ", style="dim")
+                    refusal_text.append(result.suggestion, style="dim")
                 console.print(
                     Panel(
-                        f"[yellow]{result.reason}[/yellow]"
-                        + (
-                            f"\n\n[dim]Suggestion: {result.suggestion}[/dim]"
-                            if result.suggestion
-                            else ""
-                        ),
+                        refusal_text,
                         title="[red]Request Refused[/red]",
                         border_style="red",
                     )

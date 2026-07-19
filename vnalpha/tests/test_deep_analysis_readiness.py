@@ -982,14 +982,15 @@ def test_deep_slash_omitted_date_propagates_resolved_market_session(
         errors=(),
         correlation_id="slash-omitted-date",
     )
-    monkeypatch.setattr(
-        analyze_handler,
-        "ensure_current_symbol_ready",
-        lambda _conn, _symbol, _date, **_kwargs: CurrentSymbolReadyResult(
+    observed_readiness_dates: list[str | None] = []
+
+    def ready_provisioning(_conn, _symbol, requested_date, **_kwargs):
+        observed_readiness_dates.append(requested_date)
+        return CurrentSymbolReadyResult(
             symbol="FPT",
             outcome=ProvisioningOutcome.READY,
             correlation_id=readiness.correlation_id,
-            requested_date=None,
+            requested_date=requested_date,
             resolved_date=resolved_date,
             actions=(),
             reused_fresh_data=False,
@@ -997,17 +998,26 @@ def test_deep_slash_omitted_date_propagates_resolved_market_session(
             warnings=(),
             errors=(),
             readiness=readiness,
-        ),
+        )
+
+    def ready_readiness(_conn, _symbol, requested_date):
+        observed_readiness_dates.append(requested_date)
+        return readiness
+
+    monkeypatch.setattr(
+        analyze_handler,
+        "ensure_current_symbol_ready",
+        ready_provisioning,
     )
     monkeypatch.setattr(
         research_plan_handler,
         "ensure_deep_analysis_ready",
-        lambda _conn, _symbol, _date: readiness,
+        ready_readiness,
     )
     monkeypatch.setattr(
         setup_evidence_handler,
         "ensure_deep_analysis_ready",
-        lambda _conn, _symbol, _date: readiness,
+        ready_readiness,
     )
     observed_calls: list[tuple[str, str | None]] = []
 
@@ -1029,12 +1039,46 @@ def test_deep_slash_omitted_date_propagates_resolved_market_session(
     run_migrations(conn=conn)
 
     # When: the real slash executor runs without a --date option.
-    result = CommandExecutor(conn, surface="cli").execute(command)
+    result = CommandExecutor(
+        conn,
+        surface="tui",
+        default_date="2026-07-19",
+        default_date_is_implicit=True,
+    ).execute(command)
 
     # Then: every downstream tool receives the exact readiness session, never None.
     assert result.status is not CommandStatus.FAILED
+    assert observed_readiness_dates == [resolved_date]
     assert [name for name, _date in observed_calls] == expected_tool_names
     assert {date for _name, date in observed_calls} == {resolved_date}
+
+
+def test_setup_type_evidence_today_preserves_generic_date(monkeypatch) -> None:
+    from vnalpha.commands.handlers import research_workflow_common
+
+    monkeypatch.setattr(
+        research_workflow_common,
+        "resolve_date",
+        lambda _value: "2026-07-19",
+    )
+    observed_dates: list[str | None] = []
+
+    def call_tool(_executor, _name, **kwargs):
+        observed_dates.append(kwargs.get("date"))
+        return ToolOutput(data={"as_of_date": "2026-07-19"})
+
+    monkeypatch.setattr(
+        "vnalpha.tools.executor.TracedLocalToolExecutor.call", call_tool
+    )
+    conn = duckdb.connect()
+    run_migrations(conn=conn)
+
+    result = CommandExecutor(conn, surface="cli").execute(
+        "/setup-evidence ACCUMULATION_BASE --date today"
+    )
+
+    assert result.status is not CommandStatus.FAILED
+    assert observed_dates == ["2026-07-19"]
 
 
 def test_tui_command_path_renders_blocked_readiness_without_calling_tool(

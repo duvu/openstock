@@ -30,6 +30,12 @@ class TestCommandScreenSmoke:
         screen = CommandScreen(target_date="2026-07-06")
         assert screen.target_date == "2026-07-06"
 
+    def test_command_screen_preserves_implicit_target_provenance(self):
+        from vnalpha.tui.screens.command import CommandScreen
+
+        screen = CommandScreen(target_date="2026-07-19", target_date_is_implicit=True)
+        assert screen.target_date_is_implicit is True
+
 
 @skip_if_no_textual
 class TestCommandWidgets:

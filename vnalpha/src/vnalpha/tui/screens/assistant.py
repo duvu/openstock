@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 try:
+    from rich.text import Text
     from textual.app import ComposeResult
     from textual.screen import Screen
     from textual.widgets import Footer, Header, Input, Label, Static
@@ -19,9 +20,16 @@ if _TEXTUAL_AVAILABLE:
         TITLE = "Research Assistant"
         BINDINGS = [("escape", "app.pop_screen", "Back")]
 
-        def __init__(self, target_date: str | None = None, **kwargs):
+        def __init__(
+            self,
+            target_date: str | None = None,
+            *,
+            target_date_is_implicit: bool = False,
+            **kwargs,
+        ):
             super().__init__(**kwargs)
             self.target_date = target_date
+            self.target_date_is_implicit = target_date_is_implicit
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -50,7 +58,7 @@ if _TEXTUAL_AVAILABLE:
         def _process_question(self, question: str) -> None:
             answer_panel = self.query_one("#assistant-answer", Static)
             plan_panel = self.query_one("#assistant-plan", Static)
-            answer_panel.update("[dim]Processing...[/dim]")
+            answer_panel.update(Text("Processing...", style="dim"))
             try:
                 from vnalpha.assistant.app import AssistantApp
                 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
@@ -62,24 +70,37 @@ if _TEXTUAL_AVAILABLE:
                 run_migrations(conn=conn)
                 llm_client = LLMGatewayClient(LLMGatewayConfig.from_env())
                 app = AssistantApp(conn, surface="tui", llm_client=llm_client)
-                result, plan = app.ask(question, date=self.target_date)
-                if isinstance(result, RefusalMessage):
-                    answer_panel.update(f"[red]Refused:[/red] {result.reason}")
-                    return
-                answer_panel.update(
-                    f"[bold]{result.summary}[/bold]\n\n"
-                    f"[dim]Basis:[/dim] {result.basis}\n"
-                    f"[dim yellow]Risks:[/dim yellow] {result.risks_caveats}"
+                result, plan = app.ask(
+                    question,
+                    date=self.target_date,
+                    date_is_implicit=self.target_date_is_implicit,
                 )
+                if isinstance(result, RefusalMessage):
+                    refusal_text = Text("Refused: ", style="red")
+                    refusal_text.append(result.reason)
+                    answer_panel.update(refusal_text)
+                    return
+                answer_text = Text(result.summary, style="bold")
+                answer_text.append("\n\nBasis: ", style="dim")
+                answer_text.append(result.basis)
+                answer_text.append("\nRisks: ", style="dim yellow")
+                answer_text.append(result.risks_caveats)
+                answer_panel.update(answer_text)
                 from vnalpha.assistant.planner import PlanBuilder
 
-                plan_panel.update(f"[dim]{PlanBuilder().preview(plan)}[/dim]")
+                plan_panel.update(Text(PlanBuilder().preview(plan), style="dim"))
             except Exception as exc:
-                answer_panel.update(f"[red]Error: {exc}[/red]")
+                answer_panel.update(Text(f"Error: {exc}", style="red"))
 else:
 
     class AssistantScreen:  # type: ignore[no-redef]
         """Stub when textual is not installed."""
 
-        def __init__(self, target_date: str | None = None):
+        def __init__(
+            self,
+            target_date: str | None = None,
+            *,
+            target_date_is_implicit: bool = False,
+        ):
             self.target_date = target_date
+            self.target_date_is_implicit = target_date_is_implicit

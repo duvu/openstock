@@ -40,11 +40,13 @@ class CommandExecutor:
         surface: str = "cli",
         registry: CommandRegistry | None = None,
         default_date: str | None = None,
+        default_date_is_implicit: bool = False,
     ) -> None:
         self._conn = conn
         self._surface = surface
         self._registry = registry or build_default_registry()
         self._default_date = default_date
+        self._default_date_is_implicit = default_date_is_implicit
 
     def execute(
         self,
@@ -76,7 +78,9 @@ class CommandExecutor:
             and "date" not in parsed.options
             and _accepts_default_date(parsed)
         ):
-            parsed.options["date"] = self._default_date
+            parsed.options["date"] = (
+                "today" if self._default_date_is_implicit else self._default_date
+            )
 
         update_research_session_parse(
             self._conn,

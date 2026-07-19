@@ -125,6 +125,7 @@ class LifecycleHooks:
                     connection,
                     surface="tui",
                     default_date=self._target_date,
+                    default_date_is_implicit=self._target_date_is_implicit,
                 ),
             )
         except Exception:

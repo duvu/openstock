@@ -191,6 +191,7 @@ class ChatController:
                 surface=self._surface,
                 registry=registry,
                 default_date=self._target_date,
+                default_date_is_implicit=self._target_date_is_implicit,
             )
             execute_parameters = inspect.signature(executor.execute).parameters
             if self._chat_session_id and "session_scope_id" in execute_parameters:

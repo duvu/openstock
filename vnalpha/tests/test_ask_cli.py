@@ -13,6 +13,21 @@ from vnalpha.cli import app
 runner = CliRunner()
 
 
+def _force_terminal_console(monkeypatch) -> None:
+    from rich.console import Console
+
+    class ForcedTerminalConsole(Console):
+        def __init__(self, *args, **kwargs):
+            super().__init__(
+                *args,
+                **kwargs,
+                force_terminal=True,
+                color_system="standard",
+            )
+
+    monkeypatch.setattr("rich.console.Console", ForcedTerminalConsole)
+
+
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
@@ -251,12 +266,13 @@ class TestAskFunctional:
         monkeypatch.setattr(
             "vnalpha.warehouse.connection.get_connection", lambda: connection
         )
+        _force_terminal_console(monkeypatch)
 
         try:
             with patch(
                 "vnalpha.assistant.app.AssistantApp.ask",
                 side_effect=AssistantInputValidationError(
-                    "calendar coverage unavailable"
+                    "calendar [link=https://example.invalid]coverage[/link] unavailable"
                 ),
             ):
                 result = runner.invoke(app, ["ask", "Phân tích sâu mã VCB"])
@@ -264,12 +280,12 @@ class TestAskFunctional:
             connection.close()
 
         assert result.exit_code == 1
-        assert "Assistant error: calendar coverage unavailable" in result.output
+        assert "[link=https://example.invalid]coverage[/link]" in result.output
         assert "Unexpected error" not in result.output
+        assert "\x1b]8;" not in result.output
 
     def test_ask_malformed_date_is_user_facing(self, monkeypatch) -> None:
         import duckdb
-        from rich.console import Console
 
         from vnalpha.warehouse.migrations import run_migrations
 
@@ -279,16 +295,7 @@ class TestAskFunctional:
             "vnalpha.warehouse.connection.get_connection", lambda: connection
         )
 
-        class ForcedTerminalConsole(Console):
-            def __init__(self, *args, **kwargs):
-                super().__init__(
-                    *args,
-                    **kwargs,
-                    force_terminal=True,
-                    color_system="standard",
-                )
-
-        monkeypatch.setattr("rich.console.Console", ForcedTerminalConsole)
+        _force_terminal_console(monkeypatch)
         try:
             result = runner.invoke(
                 app,
@@ -388,6 +395,52 @@ class TestTuiAskBinding:
         bindings = AssistantScreen.BINDINGS
         keys = [b[0] if isinstance(b, tuple) else b.key for b in bindings]
         assert "escape" in keys
+
+    def test_legacy_assistant_screen_preserves_provenance_and_literal_errors(
+        self, monkeypatch
+    ) -> None:
+        from rich.text import Text
+
+        from vnalpha.tui.screens.assistant import AssistantScreen
+
+        class Panel:
+            value = None
+
+            def update(self, value):
+                self.value = value
+
+        answer_panel = Panel()
+        plan_panel = Panel()
+        screen = AssistantScreen(target_date="2026-07-19", target_date_is_implicit=True)
+        monkeypatch.setattr(
+            screen,
+            "query_one",
+            lambda selector, _type=None: (
+                answer_panel if selector == "#assistant-answer" else plan_panel
+            ),
+        )
+        malicious_error = "Invalid date [link=https://example.invalid]bad[/link]"
+
+        with (
+            patch("vnalpha.warehouse.connection.get_connection"),
+            patch("vnalpha.warehouse.migrations.run_migrations"),
+            patch("vnalpha.assistant.gateway.LLMGatewayConfig.from_env"),
+            patch("vnalpha.assistant.gateway.LLMGatewayClient"),
+            patch(
+                "vnalpha.assistant.app.AssistantApp.ask",
+                side_effect=ValueError(malicious_error),
+            ) as ask,
+        ):
+            screen._process_question("Phân tích sâu mã VCB")
+
+        ask.assert_called_once_with(
+            "Phân tích sâu mã VCB",
+            date="2026-07-19",
+            date_is_implicit=True,
+        )
+        assert isinstance(answer_panel.value, Text)
+        assert malicious_error in answer_panel.value.plain
+        assert all("link" not in str(span.style) for span in answer_panel.value.spans)
 
 
 # ---------------------------------------------------------------------------

@@ -20,9 +20,12 @@ class CommandScreen(Screen):
 
     TITLE = "Command Workspace"
 
-    def __init__(self, target_date: str, **kwargs) -> None:
+    def __init__(
+        self, target_date: str, *, target_date_is_implicit: bool = False, **kwargs
+    ) -> None:
         super().__init__(**kwargs)
         self.target_date = target_date
+        self.target_date_is_implicit = target_date_is_implicit
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -65,6 +68,7 @@ class CommandScreen(Screen):
                 conn,
                 surface="tui",
                 default_date=self.target_date,
+                default_date_is_implicit=self.target_date_is_implicit,
             ).execute(text)
             markup = result_to_markup(result)
             log.show_result(text, markup)
