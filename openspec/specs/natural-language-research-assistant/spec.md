@@ -543,3 +543,28 @@ Implicit resolution outside the versioned calendar coverage MUST fail closed.
 - **THEN** the surface returns a validation or fail-closed readiness result
 - **AND** the implicit current-symbol resolver does not claim an unconfigured weekday as a valid market session
 - **AND** generic historical calendar iteration retains its pre-existing compatibility behavior outside this current-symbol coverage gate
+
+---
+
+### Requirement: Dynamic assistant projections shall be terminal-safe and redacted
+
+Every dynamic CLI, TUI, legacy, chat, and persisted assistant projection SHALL
+remove terminal controls and recognized credentials through the canonical text
+safety boundary before final composition. Expected validation failures SHALL
+retain bounded actionable text after sanitization. Arbitrary warehouse,
+configuration, provider, and runtime exceptions SHALL use a generic public
+message while redacted diagnostics remain observable.
+
+#### Scenario: Successful model output contains hostile dynamic text
+
+- **GIVEN** an answer, refusal, plan, trace, or caveat contains a credential or terminal control sequence
+- **WHEN** a CLI, TUI, chat transcript, assistant session, prepared turn, or research audit projects that value
+- **THEN** the controlled private fragment and terminal control are absent from the final projection
+- **AND** no Rich markup or OSC hyperlink becomes active
+
+#### Scenario: Warehouse initialization fails
+
+- **GIVEN** the assistant CLI cannot open, migrate, or close its warehouse
+- **WHEN** the request crosses the public error boundary
+- **THEN** the CLI returns a generic literal failure without traceback, raw path, or provider detail
+- **AND** any opened connection is closed on every outcome

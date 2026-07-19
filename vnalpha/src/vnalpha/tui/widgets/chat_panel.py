@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from vnalpha.core.text_safety import sanitize_text
+
 if TYPE_CHECKING:
     from vnalpha.tools.executor import TraceEvent
 
@@ -140,27 +142,28 @@ if _TEXTUAL_AVAILABLE:
         def post_message_text(self, text: str, style: str = "") -> None:
             """Append styled text to the chat log."""
             log = self.query_one("#chat-log", RichLog)
-            log.write(Text(text, style=style or None))
+            log.write(Text(sanitize_text(text), style=style or None))
 
         def post_trace_event(self, event: "TraceEvent") -> None:
             """Render a TraceEvent into the chat log."""
             log = self.query_one("#chat-log", RichLog)
+            tool_name = sanitize_text(event.tool_name)
             if event.status == "RUNNING":
-                log.write(Text(f"⟳ {event.tool_name} RUNNING…", style="dim"))
+                log.write(Text(f"⟳ {tool_name} RUNNING…", style="dim"))
             elif event.status == "SUCCESS":
                 ms = (
                     f"{event.duration_ms:.0f}ms"
                     if event.duration_ms is not None
                     else ""
                 )
-                log.write(Text(f"✓ {event.tool_name} SUCCESS {ms}", style="green"))
+                log.write(Text(f"✓ {tool_name} SUCCESS {ms}", style="green"))
             else:
                 ms = (
                     f"{event.duration_ms:.0f}ms"
                     if event.duration_ms is not None
                     else ""
                 )
-                log.write(Text(f"✗ {event.tool_name} FAILED {ms}", style="red"))
+                log.write(Text(f"✗ {tool_name} FAILED {ms}", style="red"))
 
         def on_input_submitted(self, event: Input.Submitted) -> None:
             raw = event.value.strip()

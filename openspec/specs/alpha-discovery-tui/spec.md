@@ -510,6 +510,18 @@ When the user lists available commands
 Then no command SHALL place orders
 And no command SHALL manage brokerage accounts or portfolios.
 
+### Requirement: Phase 5 dynamic terminal output shall remain inert
+
+CLI and TUI renderers SHALL sanitize dynamic command, result, error, answer,
+plan, and trace text before constructing final Rich or Textual renderables.
+
+#### Scenario: Dynamic terminal text contains hostile controls
+
+Given a dynamic value contains Rich markup, a credential, or an OSC sequence
+When a current or legacy CLI/TUI surface renders the value
+Then the credential and terminal controls SHALL be absent
+And the remaining text SHALL NOT create an active style or hyperlink
+
 ---
 
 **Added requirements (Phase 5 hardening)**

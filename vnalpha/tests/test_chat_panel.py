@@ -120,12 +120,50 @@ def test_chat_panel_writes_dynamic_text_without_active_markup():
     log = MagicMock()
     panel.query_one = MagicMock(return_value=log)
 
-    panel.post_message_text("[link=https://example.invalid]bad[/link]", style="red")
+    private_fragment = "PANEL_TEXT_SECRET_28"
+    hostile = (
+        "[link=https://example.invalid]bad[/link] "
+        f"password={private_fragment} "
+        "\x1b]8;;https://example.invalid\x1b\\click\x1b]8;;\x1b\\"
+    )
+
+    panel.post_message_text(hostile, style="red")
 
     rendered = log.write.call_args.args[0]
     assert isinstance(rendered, Text)
-    assert rendered.plain == "[link=https://example.invalid]bad[/link]"
+    assert private_fragment not in rendered.plain
+    assert "\x1b]8;" not in rendered.plain
+    assert "[REDACTED]" in rendered.plain
     assert all("link" not in str(span.style) for span in rendered.spans)
+
+
+@skip_if_no_textual
+def test_chat_panel_sanitizes_dynamic_trace_names():
+    from vnalpha.tools.executor import TraceEvent
+    from vnalpha.tui.widgets.chat_panel import ChatPanel
+
+    panel = ChatPanel()
+    log = MagicMock()
+    panel.query_one = MagicMock(return_value=log)
+    private_fragment = "TRACE_SECRET_78"
+    hostile_name = (
+        f"tool password={private_fragment} "
+        "\x1b]8;;https://example.invalid\x1b\\click\x1b]8;;\x1b\\"
+    )
+
+    panel.post_trace_event(
+        TraceEvent(
+            tool_name=hostile_name,
+            status="FAILED",
+            duration_ms=1.0,
+            tool_trace_id="trace-hostile",
+        )
+    )
+
+    rendered = log.write.call_args.args[0]
+    assert private_fragment not in rendered.plain
+    assert "\x1b]8;" not in rendered.plain
+    assert "[REDACTED]" in rendered.plain
 
 
 @skip_if_no_textual

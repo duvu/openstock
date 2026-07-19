@@ -6,6 +6,7 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Label
 
+from vnalpha.observability.errors import capture_exception
 from vnalpha.tui.widgets.command_input import CommandInput
 from vnalpha.tui.widgets.command_result import CommandResultPanel
 
@@ -50,19 +51,15 @@ class CommandScreen(Screen):
 
         self.query_one("#cmd-bar", CommandInput).action_clear_input()
 
+        conn = None
         try:
             from vnalpha.commands.executor import CommandExecutor
             from vnalpha.commands.renderers.textual_renderer import result_to_markup
+            from vnalpha.warehouse.connection import get_connection
+            from vnalpha.warehouse.migrations import run_migrations
 
-            conn = None
-            try:
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
-
-                conn = get_connection()
-                run_migrations(conn=conn)
-            except Exception:
-                pass
+            conn = get_connection()
+            run_migrations(conn=conn)
 
             result = CommandExecutor(
                 conn,
@@ -74,4 +71,12 @@ class CommandScreen(Screen):
             log.show_result(text, markup)
 
         except Exception as exc:
-            log.show_error(text, str(exc))
+            capture_exception(exc)
+            log.show_error(text, "Command failed. Check logs and retry.")
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception as exc:
+                    capture_exception(exc)
+                    log.show_error(text, "Command failed. Check logs and retry.")

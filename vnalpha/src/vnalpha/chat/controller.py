@@ -31,6 +31,7 @@ from vnalpha.chat.modes import ExecutionMode, format_plan_preview
 from vnalpha.chat.safety import is_tool_approval_pending_eligible
 from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
+from vnalpha.core.text_safety import redact_structure, sanitize_text
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
 from vnalpha.warehouse import migrations as _chat_schema_migrations
 
@@ -74,7 +75,7 @@ class ChatController:
         self._target_date = target_date
         self._target_date_is_implicit = target_date_is_implicit
         self._surface = surface
-        self._on_message = on_message
+        self._on_message = lambda style, text: on_message(style, sanitize_text(text))
         self._on_trace = self._wrap_trace_with_persistence(on_trace)
         self._on_assistant_answer = on_assistant_answer
         self._chat_session_id = chat_session_id
@@ -108,8 +109,16 @@ class ChatController:
         self, original: Callable[["TraceEvent"], None] | None
     ) -> Callable[["TraceEvent"], None] | None:
         def _persisting_trace(event: "TraceEvent") -> None:
+            from vnalpha.tools.executor import TraceEvent
+
+            safe_event = TraceEvent(
+                tool_name=sanitize_text(event.tool_name),
+                status=event.status,
+                duration_ms=event.duration_ms,
+                tool_trace_id=sanitize_text(event.tool_trace_id),
+            )
             if original:
-                original(event)
+                original(safe_event)
             if self._chat_session_id:
                 try:
                     from vnalpha.warehouse.chat_repo import append_trace_event
@@ -120,10 +129,10 @@ class ChatController:
                         append_trace_event(
                             conn,
                             chat_session_id=self._chat_session_id,
-                            tool_name=event.tool_name,
-                            status=event.status,
-                            elapsed_ms=event.duration_ms,
-                            tool_trace_id=getattr(event, "tool_trace_id", None),
+                            tool_name=safe_event.tool_name,
+                            status=safe_event.status,
+                            elapsed_ms=safe_event.duration_ms,
+                            tool_trace_id=safe_event.tool_trace_id,
                         )
                     finally:
                         conn.close()
@@ -757,9 +766,13 @@ class ChatController:
                     conn,
                     chat_session_id=self._chat_session_id,
                     role=role,
-                    content=content,
+                    content=sanitize_text(content),
                     message_type=message_type,
-                    plan_json=plan_json,
+                    plan_json=(
+                        sanitize_text(plan_json, strip_rich=False)
+                        if plan_json
+                        else None
+                    ),
                     research_session_id=research_session_id,
                 )
             finally:
@@ -1019,15 +1032,21 @@ class ChatController:
         from vnalpha.tui.models.conversation import AssistantAnswerMessage
 
         return AssistantAnswerMessage(
-            text=answer.summary,
-            summary=answer.summary,
-            basis=getattr(answer, "basis", ""),
-            risks_caveats=getattr(answer, "risks_caveats", ""),
-            missing_data=list(getattr(answer, "missing_data", [])),
-            grounded_source_refs=list(getattr(answer, "grounded_source_refs", [])),
-            claim_source_refs=dict(getattr(answer, "claim_source_refs", {})),
-            research_metadata=getattr(answer, "research_metadata", None),
-            tool_trace_summary=getattr(answer, "tool_trace_summary", ""),
+            text=sanitize_text(answer.summary),
+            summary=sanitize_text(answer.summary),
+            basis=sanitize_text(getattr(answer, "basis", "")),
+            risks_caveats=sanitize_text(getattr(answer, "risks_caveats", "")),
+            missing_data=redact_structure(list(getattr(answer, "missing_data", []))),
+            grounded_source_refs=redact_structure(
+                list(getattr(answer, "grounded_source_refs", []))
+            ),
+            claim_source_refs=redact_structure(
+                dict(getattr(answer, "claim_source_refs", {}))
+            ),
+            research_metadata=redact_structure(
+                getattr(answer, "research_metadata", None)
+            ),
+            tool_trace_summary=sanitize_text(getattr(answer, "tool_trace_summary", "")),
         )
 
     def _render_command_result(self, result) -> None:

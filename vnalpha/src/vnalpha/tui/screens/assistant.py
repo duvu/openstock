@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from vnalpha.assistant.errors import AssistantInputValidationError
-from vnalpha.core.text_safety import sanitize_error_summary
+from vnalpha.core.text_safety import sanitize_error_summary, sanitize_text
 from vnalpha.observability.errors import capture_exception
 
 try:
@@ -63,6 +63,7 @@ if _TEXTUAL_AVAILABLE:
             answer_panel = self.query_one("#assistant-answer", Static)
             plan_panel = self.query_one("#assistant-plan", Static)
             answer_panel.update(Text("Processing...", style="dim"))
+            conn = None
             try:
                 from vnalpha.assistant.app import AssistantApp
                 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
@@ -81,18 +82,20 @@ if _TEXTUAL_AVAILABLE:
                 )
                 if isinstance(result, RefusalMessage):
                     refusal_text = Text("Refused: ", style="red")
-                    refusal_text.append(result.reason)
+                    refusal_text.append(sanitize_text(result.reason))
                     answer_panel.update(refusal_text)
                     return
-                answer_text = Text(result.summary, style="bold")
+                answer_text = Text(sanitize_text(result.summary), style="bold")
                 answer_text.append("\n\nBasis: ", style="dim")
-                answer_text.append(result.basis)
+                answer_text.append(sanitize_text(result.basis))
                 answer_text.append("\nRisks: ", style="dim yellow")
-                answer_text.append(result.risks_caveats)
+                answer_text.append(sanitize_text(result.risks_caveats))
                 answer_panel.update(answer_text)
                 from vnalpha.assistant.planner import PlanBuilder
 
-                plan_panel.update(Text(PlanBuilder().preview(plan), style="dim"))
+                plan_panel.update(
+                    Text(sanitize_text(PlanBuilder().preview(plan)), style="dim")
+                )
             except AssistantInputValidationError as exc:
                 public_error = sanitize_error_summary(exc)
                 answer_panel.update(Text(f"Error: {public_error}", style="red"))
@@ -104,6 +107,18 @@ if _TEXTUAL_AVAILABLE:
                         style="red",
                     )
                 )
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception as exc:
+                        capture_exception(exc)
+                        answer_panel.update(
+                            Text(
+                                "Assistant request failed. Check logs and retry.",
+                                style="red",
+                            )
+                        )
 else:
 
     class AssistantScreen:  # type: ignore[no-redef]

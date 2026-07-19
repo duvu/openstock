@@ -379,6 +379,120 @@ class TestAskFunctional:
         assert "LLM route is not configured" in result.output
         assert "correctly" in result.output
 
+    def test_ask_warehouse_initialization_error_is_generic(self) -> None:
+        private_fragment = "WAREHOUSE_SECRET_57"
+        with patch(
+            "vnalpha.warehouse.connection.get_connection",
+            side_effect=RuntimeError(f"path password={private_fragment}"),
+        ):
+            result = runner.invoke(app, ["ask", "Show watchlist"])
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "Traceback" not in result.output
+        assert "Assistant request failed. Check logs and retry." in result.output
+
+    def test_ask_migration_error_is_generic_and_closes_connection(self) -> None:
+        from unittest.mock import MagicMock
+
+        connection = MagicMock()
+        private_fragment = "MIGRATION_SECRET_32"
+        with (
+            patch(
+                "vnalpha.warehouse.connection.get_connection",
+                return_value=connection,
+            ),
+            patch(
+                "vnalpha.warehouse.migrations.run_migrations",
+                side_effect=RuntimeError(f"password={private_fragment}"),
+            ),
+        ):
+            result = runner.invoke(app, ["ask", "Show watchlist"])
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "Traceback" not in result.output
+        assert "Assistant request failed. Check logs and retry." in result.output
+        connection.close.assert_called_once_with()
+
+    def test_ask_invalid_explicit_date_fails_before_warehouse_open(self) -> None:
+        with patch("vnalpha.warehouse.connection.get_connection") as get_connection:
+            result = runner.invoke(
+                app,
+                ["ask", "Phân tích sâu mã VCB", "--date", "not-a-date"],
+            )
+
+        assert result.exit_code == 1
+        get_connection.assert_not_called()
+
+    def test_ask_sanitizes_successful_dynamic_output(self, monkeypatch) -> None:
+        from vnalpha.assistant.models import (
+            AssistantAnswer,
+            AssistantPlan,
+            ToolPlanStep,
+        )
+
+        _force_terminal_console(monkeypatch)
+        private_fragment = "ANSWER_SECRET_96"
+        control = "\x1b]8;;https://example.invalid\x1b\\click\x1b]8;;\x1b\\"
+        hostile = f"password={private_fragment} {control}"
+        answer = AssistantAnswer(
+            summary=hostile,
+            basis=hostile,
+            risks_caveats=hostile,
+            tool_trace_summary=hostile,
+            missing_data=[hostile],
+        )
+        plan = AssistantPlan(
+            intent="scan_candidates",
+            steps=[
+                ToolPlanStep(
+                    step_id="step-1",
+                    tool_name="watchlist.scan",
+                    arguments={"note": hostile},
+                    purpose=hostile,
+                    required_permission="READ_WATCHLIST",
+                )
+            ],
+        )
+
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask",
+            return_value=(answer, plan),
+        ):
+            result = runner.invoke(
+                app,
+                ["ask", "Show watchlist", "--show-plan", "--trace"],
+                color=True,
+            )
+
+        assert result.exit_code == 0
+        assert private_fragment not in result.output
+        assert "\x1b]8;" not in result.output
+        assert "[REDACTED]" in result.output
+
+    def test_ask_sanitizes_refusal_output(self, monkeypatch) -> None:
+        from vnalpha.assistant.models import AssistantPlan, RefusalMessage
+
+        _force_terminal_console(monkeypatch)
+        private_fragment = "REFUSAL_SECRET_44"
+        control = "\x1b]8;;https://example.invalid\x1b\\click\x1b]8;;\x1b\\"
+        refusal = RefusalMessage(
+            reason=f"password={private_fragment} {control}",
+            policy_category="UNAVAILABLE_TOOL",
+            suggestion=f"authorization=Bearer {private_fragment} {control}",
+        )
+
+        with patch(
+            "vnalpha.assistant.app.AssistantApp.ask",
+            return_value=(refusal, AssistantPlan(intent="unsupported", steps=[])),
+        ):
+            result = runner.invoke(app, ["ask", "Show watchlist"], color=True)
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "\x1b]8;" not in result.output
+
 
 # ---------------------------------------------------------------------------
 # TUI binding and screen tests
@@ -491,7 +605,7 @@ class TestTuiAskBinding:
         )
 
         with (
-            patch("vnalpha.warehouse.connection.get_connection"),
+            patch("vnalpha.warehouse.connection.get_connection") as get_connection,
             patch("vnalpha.warehouse.migrations.run_migrations"),
             patch("vnalpha.assistant.gateway.LLMGatewayConfig.from_env"),
             patch("vnalpha.assistant.gateway.LLMGatewayClient"),
@@ -512,6 +626,7 @@ class TestTuiAskBinding:
         assert "[REDACTED]" in answer_panel.value.plain
         assert private_fragment not in answer_panel.value.plain
         assert all("link" not in str(span.style) for span in answer_panel.value.spans)
+        get_connection.return_value.close.assert_called_once_with()
 
     def test_legacy_assistant_screen_hides_unexpected_errors(self, monkeypatch) -> None:
         from vnalpha.tui.screens.assistant import AssistantScreen
@@ -535,7 +650,7 @@ class TestTuiAskBinding:
         private_fragment = "LEGACY_PROVIDER_SECRET_13"
 
         with (
-            patch("vnalpha.warehouse.connection.get_connection"),
+            patch("vnalpha.warehouse.connection.get_connection") as get_connection,
             patch("vnalpha.warehouse.migrations.run_migrations"),
             patch("vnalpha.assistant.gateway.LLMGatewayConfig.from_env"),
             patch("vnalpha.assistant.gateway.LLMGatewayClient"),
@@ -551,6 +666,58 @@ class TestTuiAskBinding:
             "Assistant request failed. Check logs and retry."
             in answer_panel.value.plain
         )
+        get_connection.return_value.close.assert_called_once_with()
+
+    def test_legacy_assistant_screen_sanitizes_successful_output(
+        self, monkeypatch
+    ) -> None:
+        from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
+        from vnalpha.tui.screens.assistant import AssistantScreen
+
+        class Panel:
+            value = None
+
+            def update(self, value):
+                self.value = value
+
+        answer_panel = Panel()
+        plan_panel = Panel()
+        screen = AssistantScreen(target_date="2026-07-19")
+        monkeypatch.setattr(
+            screen,
+            "query_one",
+            lambda selector, _type=None: (
+                answer_panel if selector == "#assistant-answer" else plan_panel
+            ),
+        )
+        private_fragment = "LEGACY_ANSWER_SECRET_75"
+        hostile = (
+            f"password={private_fragment} "
+            "\x1b]8;;https://example.invalid\x1b\\click\x1b]8;;\x1b\\"
+        )
+        answer = AssistantAnswer(
+            summary=hostile,
+            basis=hostile,
+            risks_caveats=hostile,
+            tool_trace_summary=hostile,
+        )
+
+        with (
+            patch("vnalpha.warehouse.connection.get_connection"),
+            patch("vnalpha.warehouse.migrations.run_migrations"),
+            patch("vnalpha.assistant.gateway.LLMGatewayConfig.from_env"),
+            patch("vnalpha.assistant.gateway.LLMGatewayClient"),
+            patch(
+                "vnalpha.assistant.app.AssistantApp.ask",
+                return_value=(answer, AssistantPlan(intent="scan", steps=[])),
+            ),
+        ):
+            screen._process_question("Phân tích sâu mã VCB")
+
+        visible = answer_panel.value.plain + plan_panel.value.plain
+        assert private_fragment not in visible
+        assert "\x1b]8;" not in visible
+        assert "[REDACTED]" in visible
 
 
 # ---------------------------------------------------------------------------

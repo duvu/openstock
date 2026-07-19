@@ -5,6 +5,9 @@ These tests run without a real terminal (textual not installed in test env = ski
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 try:
@@ -35,6 +38,42 @@ class TestCommandScreenSmoke:
 
         screen = CommandScreen(target_date="2026-07-19", target_date_is_implicit=True)
         assert screen.target_date_is_implicit is True
+
+    def test_command_screen_hides_errors_and_closes_connection(self, monkeypatch):
+        from vnalpha.tui.screens.command import CommandScreen
+
+        screen = CommandScreen(target_date="2026-07-19")
+        log = MagicMock()
+        command_input = MagicMock()
+        monkeypatch.setattr(
+            screen,
+            "query_one",
+            lambda selector, _type=None: (
+                log if selector == "#cmd-result" else command_input
+            ),
+        )
+        connection = MagicMock()
+        private_fragment = "COMMAND_SECRET_29"
+
+        with (
+            patch(
+                "vnalpha.warehouse.connection.get_connection",
+                return_value=connection,
+            ),
+            patch("vnalpha.warehouse.migrations.run_migrations"),
+            patch(
+                "vnalpha.commands.executor.CommandExecutor.execute",
+                side_effect=RuntimeError(f"password={private_fragment}"),
+            ),
+        ):
+            screen.on_command_input_command_submitted(
+                SimpleNamespace(text="/analyze VCB")
+            )
+
+        connection.close.assert_called_once_with()
+        public_error = log.show_error.call_args.args[1]
+        assert private_fragment not in public_error
+        assert public_error == "Command failed. Check logs and retry."
 
 
 @skip_if_no_textual
@@ -134,3 +173,21 @@ class TestCommandWidgetsStatic:
         render_result(result, console=console)
         output = buf.getvalue()
         assert "test" in output
+
+    def test_command_result_panel_renders_dynamic_text_literally(self):
+        from rich.text import Text
+
+        from vnalpha.tui.widgets.command_result import CommandResultPanel
+
+        panel = CommandResultPanel()
+        panel.write = MagicMock()
+        hostile = "[link=https://example.invalid]bad[/link]"
+
+        panel.show_error(hostile, hostile)
+
+        prompt, error = (call.args[0] for call in panel.write.call_args_list[:2])
+        assert isinstance(prompt, Text)
+        assert isinstance(error, Text)
+        assert hostile in prompt.plain
+        assert hostile in error.plain
+        assert all("link" not in str(span.style) for span in prompt.spans + error.spans)

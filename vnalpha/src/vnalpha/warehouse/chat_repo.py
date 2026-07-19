@@ -13,6 +13,7 @@ from typing import Optional
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.core.text_safety import sanitize_text
 
 logger = get_logger("warehouse.chat_repo")
 
@@ -136,13 +137,15 @@ def append_chat_message(
             chat_session_id,
             _now_utc_iso(),
             role,
-            content,
+            sanitize_text(content),
             message_type,
             assistant_session_id,
             research_session_id,
-            tool_trace_ids_json,
-            plan_json,
-            metadata_json,
+            sanitize_text(tool_trace_ids_json, strip_rich=False)
+            if tool_trace_ids_json
+            else None,
+            sanitize_text(plan_json, strip_rich=False) if plan_json else None,
+            sanitize_text(metadata_json, strip_rich=False) if metadata_json else None,
         ],
     )
     return chat_message_id

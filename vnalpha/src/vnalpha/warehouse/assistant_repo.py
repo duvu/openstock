@@ -8,10 +8,15 @@ from vnalpha.assistant.models import (
     PreparedAssistantTurn,
     PromptPersistenceRecord,
 )
+from vnalpha.core.text_safety import redact_structure, sanitize_text
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _dump_redacted(value: object, *, sort_keys: bool = False) -> str:
+    return json.dumps(redact_structure(value), sort_keys=sort_keys)
 
 
 def create_assistant_session(
@@ -35,9 +40,11 @@ def create_assistant_session(
             session_id,
             _now(),
             surface,
-            user_prompt,
+            sanitize_text(user_prompt),
             intent,
-            prompt.prompt_text if prompt else None,
+            sanitize_text(prompt.prompt_text)
+            if prompt and prompt.prompt_text
+            else None,
             prompt.prompt_summary if prompt else None,
             prompt.prompt_hash if prompt else None,
             prompt.prompt_chars if prompt else None,
@@ -76,10 +83,10 @@ def finish_assistant_session(
             _now(),
             status,
             intent,
-            json.dumps(plan) if plan else None,
-            json.dumps(answer) if answer else None,
-            refusal_reason,
-            json.dumps(error) if error else None,
+            _dump_redacted(plan) if plan else None,
+            _dump_redacted(answer) if answer else None,
+            sanitize_text(refusal_reason) if refusal_reason else None,
+            _dump_redacted(error) if error else None,
             session_id,
         ],
     )
@@ -98,7 +105,7 @@ def mark_assistant_session_prepared(
         SET status = 'PREPARED', intent = ?, plan_json = ?
         WHERE assistant_session_id = ?
         """,
-        [intent, json.dumps(plan, sort_keys=True), session_id],
+        [intent, _dump_redacted(plan, sort_keys=True), session_id],
     )
 
 
@@ -147,7 +154,7 @@ def create_llm_trace(
             stage,
             model,
             _now(),
-            json.dumps(input_summary) if input_summary else None,
+            _dump_redacted(input_summary) if input_summary else None,
         ],
     )
     return trace_id
@@ -179,9 +186,9 @@ def finish_llm_trace(
             _now(),
             status,
             resolved_model,
-            json.dumps(output_summary) if output_summary else None,
-            json.dumps(usage) if usage else None,
-            json.dumps(error) if error else None,
+            _dump_redacted(output_summary) if output_summary else None,
+            _dump_redacted(usage) if usage else None,
+            _dump_redacted(error) if error else None,
             trace_id,
         ],
     )
@@ -209,9 +216,9 @@ def persist_prepared_turn(conn, turn: PreparedAssistantTurn) -> None:
             turn.prepared_turn_id,
             turn.assistant_session_id,
             turn.created_at,
-            json.dumps(turn.request.to_dict(), sort_keys=True),
-            json.dumps(turn.intent_result.__dict__, sort_keys=True),
-            json.dumps(turn.plan.to_dict(), sort_keys=True),
+            _dump_redacted(turn.request.to_dict(), sort_keys=True),
+            _dump_redacted(turn.intent_result.__dict__, sort_keys=True),
+            _dump_redacted(turn.plan.to_dict(), sort_keys=True),
             turn.plan_hash,
             turn.policy_status,
         ],

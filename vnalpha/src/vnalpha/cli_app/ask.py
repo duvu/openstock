@@ -12,6 +12,7 @@ from vnalpha.observability.commands import command_lifecycle
 def register(app: typer.Typer) -> None:
     @app.command("ask")
     def ask_runner(
+        ctx: typer.Context,
         question: str = typer.Argument(..., help="Natural-language research question."),
         date: Optional[str] = typer.Option(
             None, "--date", help="Target date (YYYY-MM-DD or 'today')."
@@ -48,7 +49,7 @@ def register(app: typer.Typer) -> None:
             )
             from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
             from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
-            from vnalpha.core.text_safety import sanitize_error_summary
+            from vnalpha.core.text_safety import sanitize_error_summary, sanitize_text
             from vnalpha.observability.errors import capture_exception
             from vnalpha.warehouse.connection import get_connection
             from vnalpha.warehouse.migrations import run_migrations
@@ -56,8 +57,36 @@ def register(app: typer.Typer) -> None:
             console = Console()
             error_console = Console(stderr=True)
 
-            conn = get_connection()
-            run_migrations(conn=conn)
+            if date is not None and date.strip().lower() != "today":
+                try:
+                    resolve_date(date)
+                except ValueError as exc:
+                    public_error = sanitize_error_summary(exc)
+                    error_console.print(
+                        Text(f"Assistant error: {public_error}", style="red")
+                    )
+                    raise typer.Exit(code=1) from exc
+
+            try:
+                conn = get_connection()
+
+                def close_connection() -> None:
+                    try:
+                        conn.close()
+                    except Exception as exc:
+                        capture_exception(exc)
+
+                ctx.call_on_close(close_connection)
+                run_migrations(conn=conn)
+            except Exception as exc:
+                capture_exception(exc)
+                error_console.print(
+                    Text(
+                        "Assistant request failed. Check logs and retry.",
+                        style="red",
+                    )
+                )
+                raise typer.Exit(code=1) from exc
 
             try:
                 resolved_date = resolve_date(date, conn=conn)
@@ -122,14 +151,18 @@ def register(app: typer.Typer) -> None:
 
                 pb = PlanBuilder()
                 console.print(
-                    Panel(pb.preview(plan), title="Research Plan", border_style="blue")
+                    Panel(
+                        Text(sanitize_text(pb.preview(plan))),
+                        title="Research Plan",
+                        border_style="blue",
+                    )
                 )
 
             if isinstance(result, RefusalMessage):
-                refusal_text = Text(result.reason, style="yellow")
+                refusal_text = Text(sanitize_text(result.reason), style="yellow")
                 if result.suggestion:
                     refusal_text.append("\n\nSuggestion: ", style="dim")
-                    refusal_text.append(result.suggestion, style="dim")
+                    refusal_text.append(sanitize_text(result.suggestion), style="dim")
                 console.print(
                     Panel(
                         refusal_text,
@@ -141,16 +174,16 @@ def register(app: typer.Typer) -> None:
 
             assert isinstance(result, AssistantAnswer)
             answer_text = Text()
-            answer_text.append(result.summary + "\n\n", style="bold")
+            answer_text.append(sanitize_text(result.summary) + "\n\n", style="bold")
             answer_text.append("Basis: ", style="dim")
-            answer_text.append(result.basis + "\n")
+            answer_text.append(sanitize_text(result.basis) + "\n")
             if result.risks_caveats:
                 answer_text.append("Risks/caveats: ", style="dim yellow")
-                answer_text.append(result.risks_caveats + "\n")
+                answer_text.append(sanitize_text(result.risks_caveats) + "\n")
             if result.missing_data:
                 answer_text.append("\nMissing data:\n", style="dim red")
                 for item in result.missing_data:
-                    answer_text.append(f"  • {item}\n", style="red")
+                    answer_text.append(f"  • {sanitize_text(item)}\n", style="red")
             console.print(
                 Panel(answer_text, title="Research Answer", border_style="green")
             )
@@ -158,7 +191,7 @@ def register(app: typer.Typer) -> None:
             if trace:
                 console.print(
                     Panel(
-                        result.tool_trace_summary or "(no trace)",
+                        Text(sanitize_text(result.tool_trace_summary or "(no trace)")),
                         title="Tool Trace",
                         border_style="dim",
                     )
