@@ -181,14 +181,18 @@ def test_get_failed_stages_returns_recent_failures(conn) -> None:
     # Given: multiple runs with some failed stages
     for i in range(3):
         result = DailyMaintenanceResult(
-            status=MaintenanceRunStatus.PARTIAL if i > 0 else MaintenanceRunStatus.SUCCESS,
+            status=MaintenanceRunStatus.PARTIAL
+            if i > 0
+            else MaintenanceRunStatus.SUCCESS,
             requested_date="2026-07-17",
             resolved_date="2026-07-17",
             correlation_id=f"run-{i}",
             stages=(
                 MaintenanceStageResult(
                     name=f"stage_{i}",
-                    status=MaintenanceStageStatus.FAILED if i > 0 else MaintenanceStageStatus.SUCCESS,
+                    status=MaintenanceStageStatus.FAILED
+                    if i > 0
+                    else MaintenanceStageStatus.SUCCESS,
                     failures=(f"Error {i}",) if i > 0 else (),
                 ),
             ),
