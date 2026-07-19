@@ -100,10 +100,46 @@ class VietnamSessionCalendar:
                 remaining -= 1
         return current_date
 
+    def is_near_expiry(self, current_date: date, warning_days: int = 90) -> bool:
+        """Return whether the calendar is approaching its validity horizon.
+
+        Args:
+            current_date: The current operating date.
+            warning_days: Days before expiry to start warning (default 90).
+
+        Returns:
+            True if within warning_days of valid_through, False otherwise.
+        """
+        days_remaining = (self.valid_through - current_date).days
+        return 0 <= days_remaining <= warning_days
+
+    def get_coverage_status(self, current_date: date) -> dict[str, object]:
+        """Return calendar coverage metadata for operational visibility.
+
+        Returns:
+            Dictionary with version, valid range, sources, and expiry status.
+        """
+        days_remaining = (self.valid_through - current_date).days
+        is_expired = current_date > self.valid_through
+        near_expiry = self.is_near_expiry(current_date)
+
+        return {
+            "version": self.version,
+            "valid_from": self.valid_from.isoformat(),
+            "valid_through": self.valid_through.isoformat(),
+            "sources": list(self.sources),
+            "current_date": current_date.isoformat(),
+            "days_remaining": days_remaining if not is_expired else 0,
+            "is_expired": is_expired,
+            "near_expiry": near_expiry,
+            "status": ("EXPIRED" if is_expired else "WARNING" if near_expiry else "OK"),
+        }
+
     def _ensure_covered(self, market_date: date) -> None:
         if not self.valid_from <= market_date <= self.valid_through:
             raise CalendarCoverageError(
                 "Vietnam trading calendar does not cover "
                 f"{market_date.isoformat()}; supported range is "
-                f"{self.valid_from.isoformat()} through {self.valid_through.isoformat()}."
+                f"{self.valid_from.isoformat()} through {self.valid_through.isoformat()}. "
+                "Update the calendar with official holiday data for the operating year."
             )
