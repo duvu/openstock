@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
+from vnalpha.ingestion.index_provider_policy import (
+    is_index_symbol,
+    resolve_index_provider_conflict,
+)
+
 CANONICAL_VALIDATION_VERSION = "canonical_ohlcv_v1"
 
 
@@ -49,17 +54,44 @@ def validate_candidate(
 
     Passing observations for the same bar must agree across providers before
     the deterministically selected observation may enter canonical storage.
+
+    For market indices, conflicting providers are resolved using versioned
+    precedence policy rather than being rejected outright.
     """
 
     rules = list(_base_validation_rules(candidate))
     candidate_values = _ohlcv_values(candidate)
-    if any(
-        _is_independently_valid_passing_observation(peer)
-        and peer.provider != candidate.provider
-        and _ohlcv_values(peer) != candidate_values
-        for peer in peer_candidates
-    ):
-        rules.append(CanonicalValidationRule.PROVIDER_CONSISTENCY)
+
+    # Find conflicting peer providers
+    conflicting_peers = [
+        peer for peer in peer_candidates
+        if (_is_independently_valid_passing_observation(peer)
+            and peer.provider != candidate.provider
+            and _ohlcv_values(peer) != candidate_values)
+    ]
+
+    if conflicting_peers:
+        # For indices, check if conflict can be resolved by provider policy
+        if is_index_symbol(candidate.symbol):
+            all_providers = tuple(
+                {candidate.provider} | {p.provider for p in conflicting_peers if p.provider}
+            )
+            resolution = resolve_index_provider_conflict(candidate.symbol, all_providers)
+
+            # Only apply consistency rule if candidate is not the selected provider
+            if resolution and candidate.provider == resolution.selected_provider:
+                # Candidate is the preferred provider - no consistency error
+                pass
+            elif resolution and candidate.provider in resolution.rejected_providers:
+                # Candidate should be rejected in favor of preferred provider
+                rules.append(CanonicalValidationRule.PROVIDER_CONSISTENCY)
+            elif not resolution:
+                # No policy available - fall back to consistency rule
+                rules.append(CanonicalValidationRule.PROVIDER_CONSISTENCY)
+        else:
+            # Non-index: strict consistency required
+            rules.append(CanonicalValidationRule.PROVIDER_CONSISTENCY)
+
     return tuple(rules)
 
 
