@@ -267,7 +267,7 @@ def test_noop_run_is_persisted(conn) -> None:
     completed_at = datetime(2026, 7, 19, 8, 0, 1, tzinfo=timezone.utc)
 
     # When: persisting
-    run_id = persist_maintenance_run(
+    _ = persist_maintenance_run(
         conn,
         result,
         started_at=started_at,

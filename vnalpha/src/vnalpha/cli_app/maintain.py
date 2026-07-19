@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date as DateType, datetime, timezone
+from datetime import date as DateType
+from datetime import datetime, timezone
 
 import duckdb
 import typer
