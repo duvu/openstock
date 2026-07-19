@@ -204,8 +204,14 @@ class TestAskFunctional:
         import duckdb
 
         from vnalpha.cli_app import ask as ask_module
+        from vnalpha.warehouse.migrations import run_migrations
 
         connection = duckdb.connect()
+        run_migrations(conn=connection)
+        connection.execute(
+            "INSERT INTO daily_watchlist (date, rank, symbol) VALUES (?, 1, 'VCB')",
+            ["2026-07-15"],
+        )
         observed_dates: list[str | None] = []
         monkeypatch.setattr(
             "vnalpha.warehouse.connection.get_connection", lambda: connection

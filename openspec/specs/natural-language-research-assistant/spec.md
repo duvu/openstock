@@ -498,3 +498,39 @@ vnalpha cmd "..."
 - **GIVEN** Phase 5.9 is enabled
 - **WHEN** the user runs the Phase 5 fixture E2E tests
 - **THEN** the tests SHALL pass without regression
+
+---
+
+### Requirement: Current-symbol research dates shall use the versioned market session
+
+Current-symbol research SHALL resolve an omitted date or semantic `today` once
+in `Asia/Ho_Chi_Minh` to the latest configured Vietnam trading session on or
+before the current date. This policy SHALL apply to CLI ask, TUI defaults,
+assistant planning and persistence, deep readiness, `/analyze`,
+`/research-plan`, and `/setup-evidence`.
+
+An explicit ISO date SHALL remain explicit after validation. Current-symbol
+readiness SHALL own bounded provisioning for the resolved session and SHALL NOT
+replace an implicit current-session request with an older warehouse summary
+date. The generic `resolve_date` compatibility contract remains unchanged.
+Implicit resolution outside the versioned calendar coverage MUST fail closed.
+
+#### Scenario: Weekend current-symbol research uses the preceding session
+
+- **GIVEN** the Vietnam current date is Sunday `2026-07-19`
+- **WHEN** a current-symbol research surface receives no date or `today`
+- **THEN** the effective target date is Friday `2026-07-17`
+- **AND** planning, readiness, audit, persistence and remediation use that same date
+
+#### Scenario: Explicit non-session date remains explicit
+
+- **GIVEN** the user explicitly requests `2026-07-19`
+- **WHEN** current-symbol date resolution runs
+- **THEN** the effective target date remains `2026-07-19`
+
+#### Scenario: Calendar coverage is unavailable
+
+- **GIVEN** the implicit current date is outside the configured calendar range
+- **WHEN** current-symbol date resolution runs
+- **THEN** the surface returns a validation or fail-closed readiness result
+- **AND** no unconfigured weekday is claimed as a valid market session

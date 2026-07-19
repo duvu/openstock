@@ -898,6 +898,63 @@ def test_deep_command_paths_block_before_calling_the_deep_tool(
     assert [panel.title for panel in result.panels] == ["Data Readiness"]
 
 
+@pytest.mark.parametrize(
+    ("handler", "command"),
+    [
+        (analyze_handler, "/analyze FPT --date today"),
+        (research_plan_handler, "/research-plan FPT --date today"),
+        (setup_evidence_handler, "/setup-evidence FPT --date today"),
+    ],
+)
+def test_deep_slash_today_reaches_readiness_as_current_market_session(
+    monkeypatch, handler, command
+) -> None:
+    # Given: generic command normalization would resolve today to a Sunday.
+    observed_dates: list[str | None] = []
+    monkeypatch.setattr(
+        "vnalpha.commands.normalizers.resolve_date",
+        lambda _value: "2026-07-19",
+    )
+    monkeypatch.setattr(
+        "vnalpha.commands.handlers.research_workflow_common.resolve_market_session_date",
+        lambda _value: "2026-07-17",
+        raising=False,
+    )
+
+    def readiness_for(_conn, symbol, requested_date, **_kwargs):
+        observed_dates.append(requested_date)
+        return ReadinessResult(
+            symbol=symbol,
+            requested_date=requested_date,
+            resolved_date=requested_date or "unresolved",
+            artifacts=(),
+            actions=(),
+            warnings=(),
+            errors=("Blocked after date capture.",),
+            correlation_id="slash-today-date",
+        )
+
+    if handler is analyze_handler:
+        monkeypatch.setattr(
+            handler,
+            "ensure_current_symbol_ready",
+            lambda *args, **kwargs: _blocked_provisioning(
+                readiness_for(*args, **kwargs)
+            ),
+        )
+    else:
+        monkeypatch.setattr(handler, "ensure_deep_analysis_ready", readiness_for)
+    conn = duckdb.connect()
+    run_migrations(conn=conn)
+
+    # When: literal today enters through the real slash-command executor.
+    result = CommandExecutor(conn, surface="tui").execute(command)
+
+    # Then: readiness receives Friday rather than the generic Sunday value.
+    assert result.status is CommandStatus.FAILED
+    assert observed_dates == ["2026-07-17"]
+
+
 def test_tui_command_path_renders_blocked_readiness_without_calling_tool(
     monkeypatch,
 ) -> None:

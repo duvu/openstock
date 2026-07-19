@@ -96,8 +96,6 @@ def resolve_date(
 
     value = value.strip()
     try:
-        from datetime import date
-
         parsed = date.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(

@@ -106,6 +106,10 @@ class TestResolveMarketSessionDate:
         # Then: explicit historical semantics are preserved.
         assert result == "2026-07-19"
 
+    def test_implicit_date_outside_versioned_calendar_fails_closed(self) -> None:
+        with pytest.raises(ValueError, match="calendar"):
+            resolve_market_session_date(None, today=date(2027, 1, 1))
+
 
 class TestResolveDateWithConn:
     """Tests for DB-aware date resolution (task 11.3)."""

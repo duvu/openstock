@@ -212,6 +212,11 @@ Given `--date today` is passed to any CLI command
 When the command executes  
 Then `today` SHALL resolve to the current ISO date (YYYY-MM-DD).
 
+This generic Phase 5 rule does not override the current-symbol research policy
+in the natural-language research assistant specification. Deep assistant and
+slash research surfaces SHALL resolve `today` to the latest configured Vietnam
+market session so readiness can provision one consistent effective date.
+
 #### Scenario: invalid date rejected
 
 Given an invalid date string is passed to `--date`  

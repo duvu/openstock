@@ -54,6 +54,8 @@ class VietnamSessionCalendar:
         "https://www.gov.hnx.vn/vi-vn/chi-tiet-lich-nghi-gd-60021971.html",
         "https://www.gov.hnx.vn/vi-vn/chi-tiet-lich-nghi-gd-60022084.html",
     )
+    valid_from: date = date(2026, 1, 1)
+    valid_through: date = date(2026, 12, 31)
 
     def sessions(self, session_range: SessionRange) -> tuple[date, ...]:
         """Return inclusive sessions, excluding weekends and configured holidays."""
@@ -71,9 +73,20 @@ class VietnamSessionCalendar:
 
     def latest_session_on_or_before(self, market_date: date) -> date:
         """Return the latest configured session on or before a market date."""
+        if not self.valid_from <= market_date <= self.valid_through:
+            raise ValueError(
+                "Vietnam trading calendar does not cover "
+                f"{market_date.isoformat()}; supported range is "
+                f"{self.valid_from.isoformat()} through {self.valid_through.isoformat()}."
+            )
         current_date = market_date
         while not self.is_session(current_date):
             current_date -= timedelta(days=1)
+            if current_date < self.valid_from:
+                raise ValueError(
+                    "Vietnam trading calendar has no configured prior session for "
+                    f"{market_date.isoformat()}."
+                )
         return current_date
 
     def rewind_sessions(self, market_date: date, session_count: int) -> date:
