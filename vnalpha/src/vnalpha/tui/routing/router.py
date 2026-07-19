@@ -32,6 +32,7 @@ class TuiInputRouter:
         self,
         output_stream: OutputStream,
         target_date: str | None = None,
+        target_date_is_implicit: bool = False,
         on_busy_change: Callable[[bool], None] | None = None,
         status_bar: StatusBar | None = None,
         workspace: WorkspaceState | None = None,
@@ -59,6 +60,7 @@ class TuiInputRouter:
         self._lifecycle_hooks = LifecycleHooks(
             output_stream,
             target_date,
+            target_date_is_implicit,
             self._status_adapter,
             ui_dispatcher,
         )

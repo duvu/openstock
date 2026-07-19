@@ -528,9 +528,17 @@ Implicit resolution outside the versioned calendar coverage MUST fail closed.
 - **WHEN** current-symbol date resolution runs
 - **THEN** the effective target date remains `2026-07-19`
 
+#### Scenario: Non-current research retains generic date compatibility
+
+- **GIVEN** an assistant intent does not provision current-symbol research data
+- **WHEN** its effective date is resolved
+- **THEN** the existing generic `resolve_date` policy remains authoritative
+- **AND** the current-symbol calendar coverage gate is not applied
+
 #### Scenario: Calendar coverage is unavailable
 
 - **GIVEN** the implicit current date is outside the configured calendar range
 - **WHEN** current-symbol date resolution runs
 - **THEN** the surface returns a validation or fail-closed readiness result
-- **AND** no unconfigured weekday is claimed as a valid market session
+- **AND** the implicit current-symbol resolver does not claim an unconfigured weekday as a valid market session
+- **AND** generic historical calendar iteration retains its pre-existing compatibility behavior outside this current-symbol coverage gate

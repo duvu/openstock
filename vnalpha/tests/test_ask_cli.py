@@ -47,11 +47,11 @@ def _make_refusal():
     return refusal, plan
 
 
-def mock_ask_success(question, *, date=None, no_execute=False):
+def mock_ask_success(question, *, date=None, date_is_implicit=None, no_execute=False):
     return _make_answer()
 
 
-def mock_ask_refusal(question, *, date=None, no_execute=False):
+def mock_ask_refusal(question, *, date=None, date_is_implicit=None, no_execute=False):
     return _make_refusal()
 
 
@@ -212,20 +212,19 @@ class TestAskFunctional:
             "INSERT INTO daily_watchlist (date, rank, symbol) VALUES (?, 1, 'VCB')",
             ["2026-07-15"],
         )
-        observed_dates: list[str | None] = []
+        observed_dates: list[tuple[str | None, bool | None]] = []
         monkeypatch.setattr(
             "vnalpha.warehouse.connection.get_connection", lambda: connection
         )
         monkeypatch.setattr(
-            ask_module,
-            "resolve_market_session_date",
-            lambda _value: "2026-07-17",
-            raising=False,
+            ask_module, "resolve_date", lambda _value, conn: "2026-07-15"
         )
 
-        def record_date(question, *, date=None, no_execute=False):
+        def record_date(
+            question, *, date=None, date_is_implicit=None, no_execute=False
+        ):
             del question, no_execute
-            observed_dates.append(date)
+            observed_dates.append((date, date_is_implicit))
             return _make_answer()
 
         # When: `vnalpha ask` runs without an explicit --date.
@@ -237,15 +236,14 @@ class TestAskFunctional:
         finally:
             connection.close()
 
-        # Then: the assistant receives the resolved market session once.
+        # Then: CLI preserves its generic date and marks the implicit provenance.
         assert result.exit_code == 0
-        assert observed_dates == ["2026-07-17"]
+        assert observed_dates == [("2026-07-15", True)]
 
     def test_ask_calendar_coverage_failure_is_user_facing(self, monkeypatch) -> None:
         import duckdb
 
-        from vnalpha.cli_app import ask as ask_module
-        from vnalpha.ingestion.trading_calendar import CalendarCoverageError
+        from vnalpha.assistant.errors import AssistantInputValidationError
         from vnalpha.warehouse.migrations import run_migrations
 
         connection = duckdb.connect()
@@ -254,16 +252,14 @@ class TestAskFunctional:
             "vnalpha.warehouse.connection.get_connection", lambda: connection
         )
 
-        def fail_coverage(_value):
-            raise CalendarCoverageError("calendar coverage unavailable")
-
-        monkeypatch.setattr(
-            ask_module,
-            "resolve_market_session_date",
-            fail_coverage,
-        )
         try:
-            result = runner.invoke(app, ["ask", "Phân tích sâu mã VCB"])
+            with patch(
+                "vnalpha.assistant.app.AssistantApp.ask",
+                side_effect=AssistantInputValidationError(
+                    "calendar coverage unavailable"
+                ),
+            ):
+                result = runner.invoke(app, ["ask", "Phân tích sâu mã VCB"])
         finally:
             connection.close()
 
@@ -273,6 +269,7 @@ class TestAskFunctional:
 
     def test_ask_malformed_date_is_user_facing(self, monkeypatch) -> None:
         import duckdb
+        from rich.console import Console
 
         from vnalpha.warehouse.migrations import run_migrations
 
@@ -281,10 +278,27 @@ class TestAskFunctional:
         monkeypatch.setattr(
             "vnalpha.warehouse.connection.get_connection", lambda: connection
         )
+
+        class ForcedTerminalConsole(Console):
+            def __init__(self, *args, **kwargs):
+                super().__init__(
+                    *args,
+                    **kwargs,
+                    force_terminal=True,
+                    color_system="standard",
+                )
+
+        monkeypatch.setattr("rich.console.Console", ForcedTerminalConsole)
         try:
             result = runner.invoke(
                 app,
-                ["ask", "Phân tích sâu mã VCB", "--date", "not-a-date"],
+                [
+                    "ask",
+                    "Phân tích sâu mã VCB",
+                    "--date",
+                    "[link=https://example.invalid]bad[/link]",
+                ],
+                color=True,
             )
         finally:
             connection.close()
@@ -292,6 +306,7 @@ class TestAskFunctional:
         assert result.exit_code == 1
         assert "Assistant error:" in result.output
         assert "Unexpected error" not in result.output
+        assert "\x1b]8;" not in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -320,21 +335,22 @@ class TestTuiAskBinding:
         assert hasattr(TuiInputRouter, "_route_chat")
 
     def test_tui_default_target_uses_current_market_session(self, monkeypatch) -> None:
-        # Given: the current calendar day resolves to the previous market session.
+        # Given: the generic TUI target resolves to the current calendar day.
         from vnalpha.tui import app as tui_app_module
 
         monkeypatch.setattr(
             tui_app_module,
-            "resolve_market_session_date",
-            lambda _value: "2026-07-17",
+            "resolve_date",
+            lambda _value: "2026-07-19",
             raising=False,
         )
 
         # When: the TUI is created without --date.
         tui_app = tui_app_module.VnAlphaApp()
 
-        # Then: its shared command/chat target is the market session.
-        assert tui_app.target_date == "2026-07-17"
+        # Then: generic compatibility and implicit provenance are both retained.
+        assert tui_app.target_date == "2026-07-19"
+        assert tui_app.target_date_is_implicit is True
 
     def test_tui_calendar_coverage_failure_is_user_facing(self, monkeypatch) -> None:
         from vnalpha.ingestion.trading_calendar import CalendarCoverageError

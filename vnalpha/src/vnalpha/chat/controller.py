@@ -62,6 +62,7 @@ class ChatController:
         *,
         connection_factory: Callable | None = None,
         target_date: str | None = None,
+        target_date_is_implicit: bool = False,
         surface: str = "tui-chat",
         on_message: Callable[[str, str], None],
         on_trace: Callable[["TraceEvent"], None] | None = None,
@@ -71,6 +72,7 @@ class ChatController:
     ) -> None:
         self._connection_factory = connection_factory or _make_connection_factory()
         self._target_date = target_date
+        self._target_date_is_implicit = target_date_is_implicit
         self._surface = surface
         self._on_message = on_message
         self._on_trace = self._wrap_trace_with_persistence(on_trace)
@@ -821,6 +823,7 @@ class ChatController:
             return app.ask(
                 question,
                 date=self._target_date,
+                date_is_implicit=self._target_date_is_implicit,
                 no_execute=no_execute,
                 on_trace_event=self._on_trace,
                 workspace_context=workspace_context,
@@ -847,6 +850,7 @@ class ChatController:
                     current_user_prompt=question,
                     workspace_context=workspace_context,
                     date=self._target_date,
+                    date_is_implicit=self._target_date_is_implicit,
                     routing_session_id=self._chat_session_id,
                 )
             )

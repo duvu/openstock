@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from vnalpha.core.dates import resolve_market_session_date
+from vnalpha.core.dates import resolve_date
 from vnalpha.tui.responsive_layout import ResponsiveLayoutController
 
 if TYPE_CHECKING:
@@ -161,7 +161,10 @@ if _TEXTUAL_AVAILABLE:
         ):
             _load_dotenv()
             super().__init__(**kwargs)
-            self.target_date: str = resolve_market_session_date(date)
+            self.target_date: str = resolve_date(date)
+            self.target_date_is_implicit = (
+                date is None or date.strip().lower() == "today"
+            )
             self._router = None
             self._workspace: WorkspaceState | None = None
             self._layout_controller = ResponsiveLayoutController()
@@ -328,6 +331,7 @@ if _TEXTUAL_AVAILABLE:
             self._router = TuiInputRouter(
                 output_stream=output,
                 target_date=self.target_date,
+                target_date_is_implicit=self.target_date_is_implicit,
                 on_busy_change=_on_busy,
                 status_bar=status_bar,
                 workspace=self._workspace,
@@ -458,7 +462,10 @@ else:
             **kwargs,
         ):
             del logging_warning, clipboard
-            self.target_date: str = resolve_market_session_date(date)
+            self.target_date: str = resolve_date(date)
+            self.target_date_is_implicit = (
+                date is None or date.strip().lower() == "today"
+            )
 
         def run(self) -> None:
             raise ImportError("textual is required for the TUI")

@@ -349,6 +349,7 @@ class TestChatControllerPlanThenApprove:
         assistant_app.return_value.ask.assert_called_once_with(
             "show me watchlist",
             date=None,
+            date_is_implicit=False,
             no_execute=no_execute,
             on_trace_event=ctrl._on_trace,
             workspace_context="# Workspace Context\nstate",

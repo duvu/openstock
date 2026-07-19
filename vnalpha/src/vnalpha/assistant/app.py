@@ -133,6 +133,7 @@ class AssistantApp:
         user_prompt: str,
         *,
         date: str | None = None,
+        date_is_implicit: bool | None = None,
         no_execute: bool = False,
         on_trace_event: "Callable[[TraceEvent], None] | None" = None,
         chat_context: "ChatContext | None" = None,
@@ -145,6 +146,11 @@ class AssistantApp:
             workspace_context=workspace_context,
             chat_context=chat_context,
             date=date,
+            date_is_implicit=(
+                date is None or date.strip().lower() == "today"
+                if date_is_implicit is None
+                else date_is_implicit
+            ),
         )
         prepared = self.prepare(request)
         if isinstance(prepared, tuple):
@@ -222,6 +228,8 @@ class AssistantApp:
             effective_date = resolve_effective_target_date(
                 classified_date=classified_date,
                 request_date=request.date,
+                intent=intent_result.intent,
+                request_date_is_implicit=request.date_is_implicit,
             )
             intent_result.entities["date"] = effective_date
             request = replace(request, date=effective_date)

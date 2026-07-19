@@ -104,6 +104,7 @@ class AssistantRequest:
     workspace_context: str | None = None
     chat_context: "ChatContext | None" = None
     date: str | None = None
+    date_is_implicit: bool = False
     routing_session_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -117,6 +118,7 @@ class AssistantRequest:
             "workspace_context": self.workspace_context,
             "chat_context": context,
             "date": self.date,
+            "date_is_implicit": self.date_is_implicit,
             "routing_session_id": self.routing_session_id,
         }
 

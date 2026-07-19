@@ -4,7 +4,7 @@ from typing import Optional
 
 import typer
 
-from vnalpha.core.dates import resolve_market_session_date
+from vnalpha.core.dates import resolve_date
 from vnalpha.core.logging import set_correlation_id
 from vnalpha.observability.commands import command_lifecycle
 
@@ -54,9 +54,9 @@ def register(app: typer.Typer) -> None:
             run_migrations(conn=conn)
 
             try:
-                resolved_date = resolve_market_session_date(date)
+                resolved_date = resolve_date(date, conn=conn)
             except ValueError as exc:
-                error_console.print(f"[red]Assistant error: {exc}[/red]")
+                error_console.print(Text(f"Assistant error: {exc}", style="red"))
                 raise typer.Exit(code=1) from exc
 
             try:
@@ -64,7 +64,10 @@ def register(app: typer.Typer) -> None:
                 llm_client = LLMGatewayClient(llm_config)
                 assistant = AssistantApp(conn, surface="cli", llm_client=llm_client)
                 result, plan = assistant.ask(
-                    question, date=resolved_date, no_execute=no_execute
+                    question,
+                    date=resolved_date,
+                    date_is_implicit=(date is None or date.strip().lower() == "today"),
+                    no_execute=no_execute,
                 )
             except LLMConfigError as exc:
                 # Natural-language chat is unavailable; deterministic slash and

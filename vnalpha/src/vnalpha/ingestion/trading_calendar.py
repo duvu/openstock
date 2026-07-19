@@ -63,8 +63,6 @@ class VietnamSessionCalendar:
 
     def sessions(self, session_range: SessionRange) -> tuple[date, ...]:
         """Return inclusive sessions, excluding weekends and configured holidays."""
-        self._ensure_covered(session_range.start)
-        self._ensure_covered(session_range.end)
         sessions: list[date] = []
         current_date = session_range.start
         while current_date <= session_range.end:
@@ -75,7 +73,6 @@ class VietnamSessionCalendar:
 
     def is_session(self, market_date: date) -> bool:
         """Return whether the supplied date is a configured trading session."""
-        self._ensure_covered(market_date)
         return market_date.weekday() < 5 and market_date not in self.holidays
 
     def latest_session_on_or_before(self, market_date: date) -> date:
@@ -95,7 +92,6 @@ class VietnamSessionCalendar:
         """Return the first date in an inclusive trailing session overlap."""
         if session_count < 1:
             raise InvalidSessionOverlapError("Session overlap must be at least one.")
-        self._ensure_covered(market_date)
         current_date = market_date
         remaining = session_count - 1
         while remaining > 0:

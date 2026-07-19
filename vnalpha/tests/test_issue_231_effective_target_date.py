@@ -38,10 +38,15 @@ def _prepare(
     intent: str,
     entities: dict[str, object],
     request_date: str | None,
+    request_date_is_implicit: bool = False,
 ) -> PreparedAssistantTurn:
     client = FakeLLMClient(responses=[(_intent_response(intent, entities), {})])
     prepared = AssistantApp(conn, llm_client=client).prepare(
-        AssistantRequest(current_user_prompt="research request", date=request_date)
+        AssistantRequest(
+            current_user_prompt="research request",
+            date=request_date,
+            date_is_implicit=request_date_is_implicit,
+        )
     )
     assert isinstance(prepared, PreparedAssistantTurn)
     return prepared
@@ -188,6 +193,29 @@ def test_no_default_uses_current_market_session_before_planning(
     assert prepared.plan.steps[0].arguments["date"] == "2026-07-17"
 
 
+def test_pre_resolved_implicit_tui_date_uses_current_symbol_session(
+    conn, monkeypatch
+) -> None:
+    from vnalpha.assistant import effective_date as effective_date_module
+
+    monkeypatch.setattr(
+        effective_date_module,
+        "resolve_market_session_date",
+        lambda _value: "2026-07-17",
+    )
+
+    prepared = _prepare(
+        conn,
+        intent="deep_analyze_symbol",
+        entities={"date": None, "symbol": "VCB"},
+        request_date="2026-07-19",
+        request_date_is_implicit=True,
+    )
+
+    assert prepared.request.date == "2026-07-17"
+    assert prepared.plan.steps[0].arguments["date"] == "2026-07-17"
+
+
 def test_calendar_coverage_failure_is_typed_and_terminal(conn, monkeypatch) -> None:
     from vnalpha.assistant import effective_date as effective_date_module
     from vnalpha.ingestion.trading_calendar import CalendarCoverageError
@@ -201,7 +229,14 @@ def test_calendar_coverage_failure_is_typed_and_terminal(conn, monkeypatch) -> N
         fail_coverage,
     )
     client = FakeLLMClient(
-        responses=[(_intent_response("scan_candidates", {"date": None}), {})]
+        responses=[
+            (
+                _intent_response(
+                    "deep_analyze_symbol", {"date": None, "symbol": "FPT"}
+                ),
+                {},
+            )
+        ]
     )
 
     with pytest.raises(AssistantInputValidationError, match="calendar coverage"):
@@ -212,3 +247,34 @@ def test_calendar_coverage_failure_is_typed_and_terminal(conn, monkeypatch) -> N
     assert conn.execute("SELECT status FROM assistant_session").fetchone() == (
         "VALIDATION_ERROR",
     )
+
+
+def test_non_current_implicit_date_preserves_generic_resolution(
+    conn, monkeypatch
+) -> None:
+    from vnalpha.assistant import effective_date as effective_date_module
+
+    monkeypatch.setattr(
+        effective_date_module,
+        "resolve_date",
+        lambda _value: "2027-01-04",
+    )
+
+    def reject_market_resolution(_value):
+        raise AssertionError("non-current intent must not use market-session coverage")
+
+    monkeypatch.setattr(
+        effective_date_module,
+        "resolve_market_session_date",
+        reject_market_resolution,
+    )
+
+    prepared = _prepare(
+        conn,
+        intent="scan_candidates",
+        entities={"date": None},
+        request_date=None,
+    )
+
+    assert prepared.request.date == "2027-01-04"
+    assert prepared.plan.steps[0].arguments["date"] == "2027-01-04"

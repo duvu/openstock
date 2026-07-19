@@ -29,11 +29,13 @@ class LifecycleHooks:
         self,
         output: OutputStream,
         target_date: str | None,
+        target_date_is_implicit: bool,
         status: StatusAdapter,
         ui_dispatcher: Callable[[Callable[[], None]], None] | None,
     ) -> None:
         self._output = output
         self._target_date = target_date
+        self._target_date_is_implicit = target_date_is_implicit
         self._status = status
         self._ui_dispatcher = ui_dispatcher
 
@@ -79,6 +81,7 @@ class LifecycleHooks:
 
             return ChatController(
                 target_date=self._target_date,
+                target_date_is_implicit=self._target_date_is_implicit,
                 on_message=on_message,
                 on_trace=on_trace,
                 on_assistant_answer=on_assistant_answer,
