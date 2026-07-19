@@ -152,7 +152,7 @@ def create_llm_trace(
             trace_id,
             assistant_session_id,
             stage,
-            model,
+            sanitize_text(model) if model else None,
             _now(),
             _dump_redacted(input_summary) if input_summary else None,
         ],
@@ -185,7 +185,7 @@ def finish_llm_trace(
         [
             _now(),
             status,
-            resolved_model,
+            sanitize_text(resolved_model) if resolved_model else None,
             _dump_redacted(output_summary) if output_summary else None,
             _dump_redacted(usage) if usage else None,
             _dump_redacted(error) if error else None,

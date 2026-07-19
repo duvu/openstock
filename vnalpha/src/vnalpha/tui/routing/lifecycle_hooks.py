@@ -54,7 +54,7 @@ class LifecycleHooks:
                     target_date=self._target_date,
                 )
             finally:
-                connection.close()
+                self.close_connection(connection)
         except Exception:
             return None
 
@@ -130,7 +130,7 @@ class LifecycleHooks:
             )
         except Exception:
             if connection is not None:
-                connection.close()
+                self.close_connection(connection)
             return ExecutorResources(connection=None, executor=None)
 
     def dispatch_ui(self, callback: Callable[[], None]) -> None:
@@ -145,4 +145,9 @@ class LifecycleHooks:
 
     def close_connection(self, connection: DuckDBPyConnection | None) -> None:
         if connection is not None:
-            connection.close()
+            try:
+                connection.close()
+            except Exception as exc:
+                from vnalpha.observability.errors import capture_exception
+
+                capture_exception(exc)

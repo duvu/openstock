@@ -435,6 +435,31 @@ def test_preflight_cli_exits_nonzero_when_unavailable(monkeypatch) -> None:
     assert "slash commands remain usable" in result.stdout
 
 
+@pytest.mark.parametrize("json_flag", [False, True])
+def test_preflight_cli_redacts_dynamic_model(monkeypatch, json_flag: bool) -> None:
+    from typer.testing import CliRunner
+
+    from vnalpha.cli import app
+
+    private_fragment = "PREFLIGHT_MODEL_SECRET_28"
+    control = "\x1b]8;;https://example.invalid\x1b\\model\x1b]8;;\x1b\\"
+    hostile_model = f"verified password={private_fragment} {control}"
+    monkeypatch.setenv(
+        "VNALPHA_LLM_ENDPOINT", "https://gateway.example.test/v1/chat/completions"
+    )
+    monkeypatch.setenv("VNALPHA_MODEL_DEFAULT", hostile_model)
+    monkeypatch.setenv("VNALPHA_LLM_MODEL", hostile_model)
+    monkeypatch.setenv("VNALPHA_LLM_API_KEY", "")
+
+    args = ["preflight", "--json"] if json_flag else ["preflight"]
+    result = CliRunner().invoke(app, args)
+
+    assert result.exit_code == 1
+    assert private_fragment not in result.stdout
+    assert "\x1b]8;" not in result.stdout
+    assert "[REDACTED]" in result.stdout
+
+
 def test_preflight_cli_json_is_secret_free(monkeypatch) -> None:
     from typer.testing import CliRunner
 

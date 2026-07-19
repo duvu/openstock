@@ -34,6 +34,7 @@ from vnalpha.assistant.errors import (
     LLMResponseError,
     LLMTimeoutError,
 )
+from vnalpha.core.text_safety import redact_structure, sanitize_text
 
 # A minimal structured probe: the smallest strict json_schema request that
 # exercises the required JSON_SCHEMA capability end to end. It carries no user
@@ -108,6 +109,17 @@ class LLMPreflightResult:
     route: dict | None = field(default=None)
     error_type: str | None = None
     retry_after_seconds: int | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "detail", sanitize_text(self.detail))
+        if self.model is not None:
+            object.__setattr__(self, "model", sanitize_text(self.model))
+        if self.endpoint is not None:
+            object.__setattr__(self, "endpoint", sanitize_text(self.endpoint))
+        if self.route is not None:
+            object.__setattr__(self, "route", redact_structure(self.route))
+        if self.error_type is not None:
+            object.__setattr__(self, "error_type", sanitize_text(self.error_type))
 
     @property
     def ready(self) -> bool:

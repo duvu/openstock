@@ -415,6 +415,59 @@ class TestAskFunctional:
         assert "Assistant request failed. Check logs and retry." in result.output
         connection.close.assert_called_once_with()
 
+    def test_ask_date_resolution_runtime_error_is_generic_and_closes(self) -> None:
+        from unittest.mock import MagicMock
+
+        connection = MagicMock()
+        private_fragment = "DATE_RESOLVE_SECRET_52"
+        connection.execute.side_effect = RuntimeError(
+            f"warehouse path password={private_fragment}"
+        )
+        with (
+            patch(
+                "vnalpha.warehouse.connection.get_connection",
+                return_value=connection,
+            ),
+            patch("vnalpha.warehouse.migrations.run_migrations"),
+        ):
+            result = runner.invoke(app, ["ask", "Show watchlist"])
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "Traceback" not in result.output
+        assert "Assistant request failed. Check logs and retry." in result.output
+        connection.close.assert_called_once_with()
+
+    def test_ask_close_error_is_generic_and_returns_failure(self) -> None:
+        from unittest.mock import MagicMock
+
+        connection = MagicMock()
+        private_fragment = "CLOSE_SECRET_28"
+        connection.close.side_effect = RuntimeError(
+            f"warehouse path password={private_fragment}"
+        )
+        with (
+            patch(
+                "vnalpha.warehouse.connection.get_connection",
+                return_value=connection,
+            ),
+            patch("vnalpha.warehouse.migrations.run_migrations"),
+            patch(
+                "vnalpha.assistant.app.AssistantApp.ask",
+                side_effect=mock_ask_success,
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["ask", "Show watchlist", "--date", "2026-07-17"],
+            )
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "Traceback" not in result.output
+        assert "Assistant request failed. Check logs and retry." in result.output
+        connection.close.assert_called_once_with()
+
     def test_ask_invalid_explicit_date_fails_before_warehouse_open(self) -> None:
         with patch("vnalpha.warehouse.connection.get_connection") as get_connection:
             result = runner.invoke(
@@ -551,6 +604,24 @@ class TestTuiAskBinding:
 
         assert result.exit_code == 1
         assert "Error: calendar coverage unavailable" in result.output
+
+    def test_tui_invalid_date_error_is_redacted(self) -> None:
+        private_fragment = "TUI_DATE_SECRET_17"
+        control = "\x1b]8;;https://example.invalid\x1b\\click\x1b]8;;\x1b\\"
+
+        result = runner.invoke(
+            app,
+            [
+                "tui",
+                "--date",
+                f"bad password={private_fragment} {control}",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert private_fragment not in result.output
+        assert "\x1b]8;" not in result.output
+        assert "[REDACTED]" in result.output
 
     def test_assistant_screen_importable(self):
         """AssistantScreen must be importable (skip if textual not installed)."""

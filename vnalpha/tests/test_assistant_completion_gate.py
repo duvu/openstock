@@ -82,6 +82,42 @@ def test_assistant_llm_traces_store_model_and_usage(conn):
     assert all(json.loads(r[2])["prompt_tokens"] > 0 for r in rows)
 
 
+def test_llm_trace_models_are_redacted_before_persistence(conn):
+    from vnalpha.warehouse.assistant_repo import create_llm_trace, finish_llm_trace
+
+    private_fragment = "MODEL_SECRET_93"
+    hostile_model = (
+        f"route password={private_fragment} "
+        "\x1b]8;;https://example.invalid\x1b\\model\x1b]8;;\x1b\\"
+    )
+    created_trace = create_llm_trace(
+        conn,
+        assistant_session_id="assistant-created-model",
+        stage="classify",
+        model=hostile_model,
+    )
+    usage_trace = create_llm_trace(
+        conn,
+        assistant_session_id="assistant-usage-model",
+        stage="synthesize",
+    )
+    finish_llm_trace(
+        conn,
+        usage_trace,
+        status="SUCCESS",
+        usage={"model_route": {"model_id": hostile_model}},
+    )
+
+    rows = conn.execute(
+        "SELECT model FROM llm_trace WHERE llm_trace_id IN (?, ?) ORDER BY stage",
+        [created_trace, usage_trace],
+    ).fetchall()
+    stored = " ".join(row[0] for row in rows)
+    assert private_fragment not in stored
+    assert "\x1b]8;" not in stored
+    assert "[REDACTED]" in stored
+
+
 def test_no_execute_creates_no_tool_trace(conn):
     app = AssistantApp(conn, surface="cli", llm_client=_fake_scan_llm())
 

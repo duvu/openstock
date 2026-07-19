@@ -75,6 +75,13 @@ def register(app: typer.Typer) -> None:
                         conn.close()
                     except Exception as exc:
                         capture_exception(exc)
+                        error_console.print(
+                            Text(
+                                "Assistant request failed. Check logs and retry.",
+                                style="red",
+                            )
+                        )
+                        raise typer.Exit(code=1) from exc
 
                 ctx.call_on_close(close_connection)
                 run_migrations(conn=conn)
@@ -94,6 +101,15 @@ def register(app: typer.Typer) -> None:
                 public_error = sanitize_error_summary(exc)
                 error_console.print(
                     Text(f"Assistant error: {public_error}", style="red")
+                )
+                raise typer.Exit(code=1) from exc
+            except Exception as exc:
+                capture_exception(exc)
+                error_console.print(
+                    Text(
+                        "Assistant request failed. Check logs and retry.",
+                        style="red",
+                    )
                 )
                 raise typer.Exit(code=1) from exc
 

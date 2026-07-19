@@ -346,6 +346,30 @@ literal renderable. Test both properties independently: no active renderer
 spans or terminal controls, and no controlled private fragment in the final
 visible text, across CLI, current TUI, and legacy surfaces.
 
+## 32. Serialized JSON is sanitized as if it were plain text
+
+Sanitizing an already serialized JSON string cannot see sensitive keys and
+cannot remove terminal controls represented by JSON escape sequences. The
+stored text looks harmless, but decoding it restores the unsafe value.
+
+**Prevent it:** parse every JSON-bearing field, apply the canonical recursive
+redactor to the decoded structure, then serialize the redacted value. Reject
+malformed JSON before mutation. Test safety after reading the row and decoding
+the stored JSON, including nested sensitive keys and escaped terminal controls.
+
+## 33. Primary failures make teardown failures escape or disappear
+
+A cleanup call in an exception handler can replace the original failure, leak
+private teardown details, or prevent later resources from being released.
+Conversely, swallowing a close failure can let a command report success even
+though its required lifecycle did not complete.
+
+**Prevent it:** give every owned resource an independent, exception-safe
+cleanup path; capture teardown details privately and keep public output generic.
+Where successful close is part of the command contract, make close failure set
+the final result to failure. Test both primary-plus-close failure and multiple
+cleanup failures, and assert every cleanup attempt still occurs exactly once.
+
 # Mandatory checklist
 
 ## Before coding

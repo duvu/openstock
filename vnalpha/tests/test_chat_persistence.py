@@ -106,6 +106,56 @@ def test_update_chat_session_context(conn):
     assert stored == ctx
 
 
+def test_chat_json_fields_are_structurally_redacted(conn):
+    sid = create_chat_session(conn)
+    private_fragment = "SESSION_SECRET_123"
+    control = "\x1b]8;;https://example.invalid\x1b\\click\x1b]8;;\x1b\\"
+    hostile = json.dumps(
+        {
+            "session_id": private_fragment,
+            "nested": {"message": control},
+        }
+    )
+
+    update_chat_session_context(conn, sid, hostile)
+    mid = append_chat_message(
+        conn,
+        chat_session_id=sid,
+        role="assistant",
+        content="safe",
+        tool_trace_ids_json=hostile,
+        plan_json=hostile,
+        metadata_json=hostile,
+    )
+
+    context_json = conn.execute(
+        "SELECT context_json FROM chat_session WHERE chat_session_id = ?", [sid]
+    ).fetchone()[0]
+    row = conn.execute(
+        "SELECT tool_trace_ids_json, plan_json, metadata_json "
+        "FROM chat_message WHERE chat_message_id = ?",
+        [mid],
+    ).fetchone()
+    decoded = [json.loads(value) for value in (context_json, *row)]
+    assert all(value["session_id"] == "[REDACTED]" for value in decoded)
+    assert all("\x1b]8;" not in value["nested"]["message"] for value in decoded)
+
+
+def test_chat_json_fields_reject_malformed_json(conn):
+    sid = create_chat_session(conn)
+
+    with pytest.raises(ValueError, match="metadata_json must be valid JSON"):
+        append_chat_message(
+            conn,
+            chat_session_id=sid,
+            role="assistant",
+            content="safe",
+            metadata_json="{not-json password=PRIVATE_FRAGMENT}",
+        )
+
+    assert conn.execute("SELECT COUNT(*) FROM chat_message").fetchone()[0] == 0
+
+
 # ---------------------------------------------------------------------------
 # chat_message tests
 # ---------------------------------------------------------------------------
