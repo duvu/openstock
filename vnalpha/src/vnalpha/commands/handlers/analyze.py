@@ -79,6 +79,7 @@ def handle_analyze(parsed: ParsedCommand, conn=None, **kwargs):
             panels=[readiness_panel],
             warnings=[*provisioning.warnings, *provisioning.errors],
         )
+    date = readiness.resolved_date
     tool_executor = workflow_tool_executor(kwargs, title="/analyze")
     if isinstance(tool_executor, CommandResult):
         return tool_executor

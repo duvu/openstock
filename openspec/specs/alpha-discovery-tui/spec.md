@@ -1,6 +1,10 @@
 # Spec: Alpha Discovery TUI MVP
 
-## ADDED Requirements
+## Purpose
+
+Define the deterministic local alpha-discovery workflow and its research-only TUI.
+
+## Requirements
 
 ### Requirement: openstock orchestrates the local research system
 
@@ -200,7 +204,7 @@ Then rank, score, candidate class, and generated timestamp SHALL be stored.
 
 ---
 
-## CLARIFIED Requirements (gap closure)
+**Clarified requirements (gap closure)**
 
 ### Requirement: date handling is deterministic
 
@@ -275,7 +279,7 @@ Then it SHALL contain `scoring_version` (e.g., `v1.0`) and `generated_at` (ISO t
 
 ---
 
-## MODIFIED Requirements (Phase 5 Hardening)
+**Modified requirements (Phase 5 hardening)**
 
 ### Requirement: Phase 5 pipeline shall be executable through documented commands
 
@@ -508,7 +512,7 @@ And no command SHALL manage brokerage accounts or portfolios.
 
 ---
 
-## ADDED Requirements (Phase 5 Hardening)
+**Added requirements (Phase 5 hardening)**
 
 ### Requirement: Phase 5 shall expose a rich watchlist query object
 

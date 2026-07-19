@@ -30,6 +30,10 @@ class InvalidSessionOverlapError(ValueError):
     """Raised when a requested overlap cannot include a session."""
 
 
+class CalendarCoverageError(ValueError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class SessionRange:
     """Inclusive range of market dates to inspect."""
@@ -59,6 +63,8 @@ class VietnamSessionCalendar:
 
     def sessions(self, session_range: SessionRange) -> tuple[date, ...]:
         """Return inclusive sessions, excluding weekends and configured holidays."""
+        self._ensure_covered(session_range.start)
+        self._ensure_covered(session_range.end)
         sessions: list[date] = []
         current_date = session_range.start
         while current_date <= session_range.end:
@@ -69,21 +75,17 @@ class VietnamSessionCalendar:
 
     def is_session(self, market_date: date) -> bool:
         """Return whether the supplied date is a configured trading session."""
+        self._ensure_covered(market_date)
         return market_date.weekday() < 5 and market_date not in self.holidays
 
     def latest_session_on_or_before(self, market_date: date) -> date:
         """Return the latest configured session on or before a market date."""
-        if not self.valid_from <= market_date <= self.valid_through:
-            raise ValueError(
-                "Vietnam trading calendar does not cover "
-                f"{market_date.isoformat()}; supported range is "
-                f"{self.valid_from.isoformat()} through {self.valid_through.isoformat()}."
-            )
+        self._ensure_covered(market_date)
         current_date = market_date
         while not self.is_session(current_date):
             current_date -= timedelta(days=1)
             if current_date < self.valid_from:
-                raise ValueError(
+                raise CalendarCoverageError(
                     "Vietnam trading calendar has no configured prior session for "
                     f"{market_date.isoformat()}."
                 )
@@ -93,6 +95,7 @@ class VietnamSessionCalendar:
         """Return the first date in an inclusive trailing session overlap."""
         if session_count < 1:
             raise InvalidSessionOverlapError("Session overlap must be at least one.")
+        self._ensure_covered(market_date)
         current_date = market_date
         remaining = session_count - 1
         while remaining > 0:
@@ -100,3 +103,11 @@ class VietnamSessionCalendar:
             if self.is_session(current_date):
                 remaining -= 1
         return current_date
+
+    def _ensure_covered(self, market_date: date) -> None:
+        if not self.valid_from <= market_date <= self.valid_through:
+            raise CalendarCoverageError(
+                "Vietnam trading calendar does not cover "
+                f"{market_date.isoformat()}; supported range is "
+                f"{self.valid_from.isoformat()} through {self.valid_through.isoformat()}."
+            )

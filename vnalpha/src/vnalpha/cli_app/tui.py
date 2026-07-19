@@ -37,7 +37,12 @@ def tui(
             file_enabled=logging_result.file_enabled,
             console_enabled=logging_result.console_enabled,
         )
-        VnAlphaApp(date=date, logging_warning=logging_result.error_id).run()
+        try:
+            tui_app = VnAlphaApp(date=date, logging_warning=logging_result.error_id)
+        except ValueError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        tui_app.run()
 
 
 def register(app: typer.Typer) -> None:

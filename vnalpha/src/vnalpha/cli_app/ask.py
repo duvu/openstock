@@ -53,7 +53,11 @@ def register(app: typer.Typer) -> None:
             conn = get_connection()
             run_migrations(conn=conn)
 
-            resolved_date = resolve_market_session_date(date)
+            try:
+                resolved_date = resolve_market_session_date(date)
+            except ValueError as exc:
+                error_console.print(f"[red]Assistant error: {exc}[/red]")
+                raise typer.Exit(code=1) from exc
 
             try:
                 llm_config = LLMGatewayConfig.from_env()

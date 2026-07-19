@@ -241,6 +241,58 @@ class TestAskFunctional:
         assert result.exit_code == 0
         assert observed_dates == ["2026-07-17"]
 
+    def test_ask_calendar_coverage_failure_is_user_facing(self, monkeypatch) -> None:
+        import duckdb
+
+        from vnalpha.cli_app import ask as ask_module
+        from vnalpha.ingestion.trading_calendar import CalendarCoverageError
+        from vnalpha.warehouse.migrations import run_migrations
+
+        connection = duckdb.connect()
+        run_migrations(conn=connection)
+        monkeypatch.setattr(
+            "vnalpha.warehouse.connection.get_connection", lambda: connection
+        )
+
+        def fail_coverage(_value):
+            raise CalendarCoverageError("calendar coverage unavailable")
+
+        monkeypatch.setattr(
+            ask_module,
+            "resolve_market_session_date",
+            fail_coverage,
+        )
+        try:
+            result = runner.invoke(app, ["ask", "Phân tích sâu mã VCB"])
+        finally:
+            connection.close()
+
+        assert result.exit_code == 1
+        assert "Assistant error: calendar coverage unavailable" in result.output
+        assert "Unexpected error" not in result.output
+
+    def test_ask_malformed_date_is_user_facing(self, monkeypatch) -> None:
+        import duckdb
+
+        from vnalpha.warehouse.migrations import run_migrations
+
+        connection = duckdb.connect()
+        run_migrations(conn=connection)
+        monkeypatch.setattr(
+            "vnalpha.warehouse.connection.get_connection", lambda: connection
+        )
+        try:
+            result = runner.invoke(
+                app,
+                ["ask", "Phân tích sâu mã VCB", "--date", "not-a-date"],
+            )
+        finally:
+            connection.close()
+
+        assert result.exit_code == 1
+        assert "Assistant error:" in result.output
+        assert "Unexpected error" not in result.output
+
 
 # ---------------------------------------------------------------------------
 # TUI binding and screen tests
@@ -283,6 +335,21 @@ class TestTuiAskBinding:
 
         # Then: its shared command/chat target is the market session.
         assert tui_app.target_date == "2026-07-17"
+
+    def test_tui_calendar_coverage_failure_is_user_facing(self, monkeypatch) -> None:
+        from vnalpha.ingestion.trading_calendar import CalendarCoverageError
+        from vnalpha.tui import app as tui_app_module
+
+        class FailingTuiApp:
+            def __init__(self, **_kwargs):
+                raise CalendarCoverageError("calendar coverage unavailable")
+
+        monkeypatch.setattr(tui_app_module, "VnAlphaApp", FailingTuiApp)
+
+        result = runner.invoke(app, ["tui"])
+
+        assert result.exit_code == 1
+        assert "Error: calendar coverage unavailable" in result.output
 
     def test_assistant_screen_importable(self):
         """AssistantScreen must be importable (skip if textual not installed)."""

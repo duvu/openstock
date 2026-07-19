@@ -1,12 +1,18 @@
 from datetime import date
 
+import pytest
+
 from vnalpha.ingestion.ohlcv_gaps import (
     GapDetectionInput,
     LifecycleState,
     OHLCVGapKind,
     detect_ohlcv_gaps,
 )
-from vnalpha.ingestion.trading_calendar import SessionRange, VietnamSessionCalendar
+from vnalpha.ingestion.trading_calendar import (
+    CalendarCoverageError,
+    SessionRange,
+    VietnamSessionCalendar,
+)
 
 
 def test_sessions_exclude_weekends_and_configured_holidays() -> None:
@@ -24,6 +30,20 @@ def test_sessions_exclude_weekends_and_configured_holidays() -> None:
         date(2026, 9, 3),
         date(2026, 9, 4),
     )
+
+
+def test_calendar_queries_fail_closed_outside_versioned_coverage() -> None:
+    calendar = VietnamSessionCalendar()
+    unsupported = date(2027, 1, 4)
+
+    with pytest.raises(CalendarCoverageError):
+        calendar.is_session(unsupported)
+    with pytest.raises(CalendarCoverageError):
+        calendar.sessions(SessionRange(start=unsupported, end=unsupported))
+    with pytest.raises(CalendarCoverageError):
+        calendar.latest_session_on_or_before(unsupported)
+    with pytest.raises(CalendarCoverageError):
+        calendar.rewind_sessions(unsupported, 2)
 
 
 def test_gap_detector_reports_active_published_missing_session_as_true_gap() -> None:

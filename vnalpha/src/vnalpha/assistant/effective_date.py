@@ -29,7 +29,10 @@ def resolve_effective_target_date(
     requested = normalize_date_candidate(request_date)
     selected = classified if classified is not None else requested
     validate_date_candidate(selected)
-    return resolve_market_session_date(selected)
+    try:
+        return resolve_market_session_date(selected)
+    except ValueError as exc:
+        raise AssistantInputValidationError(str(exc)) from exc
 
 
 __all__ = [

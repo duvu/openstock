@@ -58,6 +58,7 @@ def handle_setup_evidence(parsed: ParsedCommand, conn=None, **kwargs):
                 panels=[readiness_panel],
                 warnings=[*readiness.warnings, *readiness.errors],
             )
+        date = readiness.resolved_date
         setup_type = _setup_type_for_symbol(tool_executor, normalized_token, date)
         extra_warnings.append(
             f"Resolved {normalize_symbol(requested_token)} to setup type {setup_type} from persisted analysis."

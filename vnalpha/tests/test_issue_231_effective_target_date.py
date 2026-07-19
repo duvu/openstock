@@ -186,3 +186,29 @@ def test_no_default_uses_current_market_session_before_planning(
     # Then: request and provisioning plan share the resolved market session.
     assert prepared.request.date == "2026-07-17"
     assert prepared.plan.steps[0].arguments["date"] == "2026-07-17"
+
+
+def test_calendar_coverage_failure_is_typed_and_terminal(conn, monkeypatch) -> None:
+    from vnalpha.assistant import effective_date as effective_date_module
+    from vnalpha.ingestion.trading_calendar import CalendarCoverageError
+
+    def fail_coverage(_value):
+        raise CalendarCoverageError("calendar coverage unavailable")
+
+    monkeypatch.setattr(
+        effective_date_module,
+        "resolve_market_session_date",
+        fail_coverage,
+    )
+    client = FakeLLMClient(
+        responses=[(_intent_response("scan_candidates", {"date": None}), {})]
+    )
+
+    with pytest.raises(AssistantInputValidationError, match="calendar coverage"):
+        AssistantApp(conn, llm_client=client).prepare(
+            AssistantRequest(current_user_prompt="research request")
+        )
+
+    assert conn.execute("SELECT status FROM assistant_session").fetchone() == (
+        "VALIDATION_ERROR",
+    )

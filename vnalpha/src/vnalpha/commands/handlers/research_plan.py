@@ -46,6 +46,7 @@ def handle_research_plan(parsed: ParsedCommand, conn=None, **kwargs):
             panels=[readiness_panel],
             warnings=[*readiness.warnings, *readiness.errors],
         )
+    date = readiness.resolved_date
     tool_executor = workflow_tool_executor(kwargs, title="/research-plan")
     if isinstance(tool_executor, CommandResult):
         return tool_executor

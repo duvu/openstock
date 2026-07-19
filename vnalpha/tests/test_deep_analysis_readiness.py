@@ -42,6 +42,7 @@ from vnalpha.data_provisioning.ensure_current_symbol import (
 )
 from vnalpha.observability.context import get_correlation_id
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
+from vnalpha.tools.models import ToolOutput
 from vnalpha.warehouse.migrations import run_migrations
 
 
@@ -953,6 +954,87 @@ def test_deep_slash_today_reaches_readiness_as_current_market_session(
     # Then: readiness receives Friday rather than the generic Sunday value.
     assert result.status is CommandStatus.FAILED
     assert observed_dates == ["2026-07-17"]
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_tool_names"),
+    [
+        ("/analyze FPT", ["analysis.deep_symbol"]),
+        ("/research-plan FPT", ["scenario.generate_research_plan"]),
+        (
+            "/setup-evidence FPT",
+            ["analysis.deep_symbol", "evidence.get_setup_history"],
+        ),
+    ],
+)
+def test_deep_slash_omitted_date_propagates_resolved_market_session(
+    monkeypatch, command, expected_tool_names
+) -> None:
+    # Given: readiness resolves an omitted Sunday date to the preceding session.
+    resolved_date = "2026-07-17"
+    readiness = ReadinessResult(
+        symbol="FPT",
+        requested_date=None,
+        resolved_date=resolved_date,
+        artifacts=(),
+        actions=(),
+        warnings=(),
+        errors=(),
+        correlation_id="slash-omitted-date",
+    )
+    monkeypatch.setattr(
+        analyze_handler,
+        "ensure_current_symbol_ready",
+        lambda _conn, _symbol, _date, **_kwargs: CurrentSymbolReadyResult(
+            symbol="FPT",
+            outcome=ProvisioningOutcome.READY,
+            correlation_id=readiness.correlation_id,
+            requested_date=None,
+            resolved_date=resolved_date,
+            actions=(),
+            reused_fresh_data=False,
+            refreshed=True,
+            warnings=(),
+            errors=(),
+            readiness=readiness,
+        ),
+    )
+    monkeypatch.setattr(
+        research_plan_handler,
+        "ensure_deep_analysis_ready",
+        lambda _conn, _symbol, _date: readiness,
+    )
+    monkeypatch.setattr(
+        setup_evidence_handler,
+        "ensure_deep_analysis_ready",
+        lambda _conn, _symbol, _date: readiness,
+    )
+    observed_calls: list[tuple[str, str | None]] = []
+
+    def call_tool(_executor, name, **kwargs):
+        observed_calls.append((name, kwargs.get("date")))
+        if name == "analysis.deep_symbol":
+            return ToolOutput(
+                data={
+                    "as_of_date": resolved_date,
+                    "candidate": {"setup_type": "BREAKOUT"},
+                }
+            )
+        return ToolOutput(data={"as_of_date": resolved_date})
+
+    monkeypatch.setattr(
+        "vnalpha.tools.executor.TracedLocalToolExecutor.call", call_tool
+    )
+    conn = duckdb.connect()
+    run_migrations(conn=conn)
+
+    # When: the real slash executor runs without a --date option.
+    result = CommandExecutor(conn, surface="cli").execute(command)
+
+    # Then: every downstream tool receives the exact readiness session, never None.
+    assert result.status is not CommandStatus.FAILED
+    assert [name for name, _date in observed_calls] == expected_tool_names
+    assert {date for _name, date in observed_calls} == {resolved_date}
 
 
 def test_tui_command_path_renders_blocked_readiness_without_calling_tool(
