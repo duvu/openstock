@@ -1,0 +1,26 @@
+# Tasks: chat data provisioning contract (issues #163, #175, #228 and #230)
+
+- [x] 1.1 Add `force_refresh` to the data-availability ensure engine and legacy wrapper.
+- [x] 1.2 Add `ensure_current_symbol_ready` typed operation and `CurrentSymbolReadyResult`.
+- [x] 1.3 Export the operation from `vnalpha.data_provisioning`.
+- [x] 1.4 Add the `data.ensure_current_symbol` tool capability, implementation and registration.
+- [x] 1.5 Replace the `fetch_data` refusal with an explicit provisioning step.
+- [x] 1.6 Prepend the explicit provisioning step to the deep-analysis plan.
+- [x] 1.7 Remove the hidden executor pre-step when a plan provisions explicitly; thread one correlation ID; fail closed on non-ready provisioning.
+- [x] 1.8 Exclude the provisioning tool from the groundedness claim/field contract.
+- [x] 1.9 Route `/analyze` through the shared operation.
+- [x] 1.10 Add focused tests (empty warehouse, fresh reuse, explicit refresh, partial failure, service unavailable, planner/executor trace, fail-closed, policy eligibility).
+- [x] 1.11 Update `docs/data-provisioning-commands.md`.
+- [x] 1.12 Record merged CI evidence for PR #168 and current focused regressions in `validation.md`.
+- [x] 1.13 Parse nullable, malformed, duplicate, empty, and oversized remediation payloads without crashing or emitting unbounded CLI/TUI content.
+- [x] 1.14 Add failing chat-boundary regressions for assistant tool failures, known validation, unexpected fallback, sanitization/bounds, `tool_failed` persistence and no duplicate generic message.
+- [x] 1.15 Map typed prepared-chat failures to their bounded public presentations without changing issue #228 stage/tool/correlation lifecycle behavior.
+- [x] 1.16 Run the focused chat/provisioning/lifecycle surface, strict OpenSpec validation and required repository gates; record exact outcomes in `validation.md`.
+- [x] 1.17 Preserve explicit public-failure provenance so arbitrary nested tool exceptions and ordinary tool errors remain generic and cannot leak internal detail.
+- [x] 1.18 Add red/green approval, legacy, real-executor and Rich-markup regressions; reuse typed presentation without duplicating semantic failure rows.
+- [x] 1.19 Add red/green legacy post-approval, real safe-plan approval dispatch, truncation- and composition-safe Rich escaping, protocol-valid quoted/short/scan-boundary credential redaction across public, database-summary and every file-backed error field, benign Bearer prose plus parsed IPv4/IPv6/query/punctuation endpoint compatibility, driver-qualified cropped-DSN coverage, canonical nested-key prefix/suffix handling, exception-scoped metadata-only persistence and assistant error-contract regressions; correct every reproduced defect and isolate affected tests from ambient localhost/default-warehouse state.
+- [x] 1.20 Recommit the corrected candidate and repeat full gates, exact-SHA review/runtime audit, GitHub Actions and PR/issue reconciliation. [evidence: merged PR #247, exact candidate `e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d`, required merge gate green, issues #231-#233 closed]
+- [x] 1.21 Resolve one effective target date across explicit request, request default, planner, tools, persistence and TUI/assistant output. [evidence: `vnalpha/tests/test_issue_231_effective_target_date.py`]
+- [x] 1.22 Preserve typed provider status/code/retryability/request correlation through vnstock, ingestion, warehouse and public diagnostics without raw bodies. [evidence: `vnalpha/tests/test_issue_232_provider_diagnostics.py`, `vnstock/tests/unit/service/test_*`]
+- [x] 1.23 Add bounded data-only symbol provisioning that avoids deep-analysis readiness and remains shared by CLI, slash and deterministic tools. [evidence: `vnalpha/tests/test_issue_233_data_only_fetch.py`]
+- [x] 1.24 Run the complete CLI/TUI/assistant/legacy/readiness/package matrix and attach exact-candidate evidence for issues #231-#233. [evidence: full `vnalpha` suite, 42 installed issue tests, 87 installed CLI/TUI/assistant/safety tests, and 60 package checks]

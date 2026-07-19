@@ -1,5 +1,15 @@
 # Validation: Symbol Knowledge Memory and Compaction
 
+Final implementation SHA: `e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d`
+
+| UTC timestamp | Commit SHA | Task/gate | Command or inspection | Exit | Result summary | Evidence artifact |
+|---|---|---|---|---:|---|---|
+| 2026-07-19T05:53:30Z | e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d | 0.1–0.6, 1.1–1.7, 2.1–2.8, 3.1–3.9, 4.1–4.9, 5.1–5.10, 6.1–6.10, 7.1–7.9, 8.1–8.10, 9.1–9.6, 10.1–10.12, 11.1–11.12, 12.1–12.6 | `make repo-hygiene` | 0 | Repository hygiene and the complete memory task/evidence matrix passed on the exact candidate | PR #247 and exact-candidate command transcript |
+| 2026-07-19T05:53:30Z | e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d | 11.7 | `make lint-vnalpha` | 0 | Ruff checks and formatting passed | exact-candidate command transcript |
+| 2026-07-19T05:53:30Z | e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d | 11.9 | `make test-vnalpha` | 0 | Complete vnalpha suite passed | exact-candidate command transcript and PR #247 CI |
+| 2026-07-19T05:53:30Z | e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d | 11.10 | `make verify-r4` | 0 | R4 regression suite passed | exact-candidate command transcript |
+| 2026-07-19T05:53:30Z | e4374cab1c4829d9d1b55afbeaec6f6bf7e1008d | 11.11 | `packaging/scripts/openstock-verify --ci` | 0 | Repository and package verification passed with no blocking failure | exact-candidate command transcript |
+
 ## Status
 
 ```text
