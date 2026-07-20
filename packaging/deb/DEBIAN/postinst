@@ -121,7 +121,10 @@ case "$1" in
     # 3. Establish one shared-state permission contract.
     # ------------------------------------------------------------------
     ensure_state_dir "${OPENSTOCK_STATE_DIR}" 0750
-    ensure_state_dir "${WAREHOUSE_DIR}" 0770
+    if [ -L "${WAREHOUSE_DIR}" ]; then
+      fail "refusing symlink state directory: ${WAREHOUSE_DIR}"
+    fi
+    install -d -m 0770 -o root -g openstock "${WAREHOUSE_DIR}"
     ensure_state_dir "${KNOWLEDGE_DIR}" 0770
     ensure_state_dir "${LOG_DIR}" 0770
     ensure_state_dir "${CONFIG_DIR}" 0750
@@ -143,8 +146,8 @@ case "$1" in
       [ -e "${helper}" ] && chmod 0755 "${helper}"
     done
 
-    chown root:openstock "${CONFIG_DIR}/vnalpha.env" || true
-    chmod 0640 "${CONFIG_DIR}/vnalpha.env" || true
+    chown root:openstock /etc/vnalpha/vnalpha.env || true
+    chmod 0640 /etc/vnalpha/vnalpha.env || true
 
     if command -v systemctl >/dev/null 2>&1; then
       systemctl daemon-reload || true
