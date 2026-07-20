@@ -31,7 +31,7 @@ class InvalidSessionOverlapError(ValueError):
 
 
 class CalendarCoverageError(ValueError):
-    pass
+    """Raised when a date lies outside the versioned calendar horizon."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +62,9 @@ class VietnamSessionCalendar:
     valid_through: date = date(2026, 12, 31)
 
     def sessions(self, session_range: SessionRange) -> tuple[date, ...]:
-        """Return inclusive sessions, excluding weekends and configured holidays."""
+        """Return inclusive sessions and fail closed outside calendar coverage."""
+        self._ensure_covered(session_range.start)
+        self._ensure_covered(session_range.end)
         sessions: list[date] = []
         current_date = session_range.start
         while current_date <= session_range.end:
@@ -72,7 +74,8 @@ class VietnamSessionCalendar:
         return tuple(sessions)
 
     def is_session(self, market_date: date) -> bool:
-        """Return whether the supplied date is a configured trading session."""
+        """Return whether a covered date is a configured trading session."""
+        self._ensure_covered(market_date)
         return market_date.weekday() < 5 and market_date not in self.holidays
 
     def latest_session_on_or_before(self, market_date: date) -> date:
@@ -90,39 +93,31 @@ class VietnamSessionCalendar:
 
     def rewind_sessions(self, market_date: date, session_count: int) -> date:
         """Return the first date in an inclusive trailing session overlap."""
+        self._ensure_covered(market_date)
         if session_count < 1:
             raise InvalidSessionOverlapError("Session overlap must be at least one.")
         current_date = market_date
         remaining = session_count - 1
         while remaining > 0:
             current_date -= timedelta(days=1)
+            if current_date < self.valid_from:
+                raise CalendarCoverageError(
+                    "Vietnam trading calendar cannot rewind "
+                    f"{session_count} sessions from {market_date.isoformat()}; "
+                    f"coverage starts at {self.valid_from.isoformat()}."
+                )
             if self.is_session(current_date):
                 remaining -= 1
         return current_date
 
     def is_near_expiry(self, current_date: date, warning_days: int = 90) -> bool:
-        """Return whether the calendar is approaching its validity horizon.
-
-        Args:
-            current_date: The current operating date.
-            warning_days: Days before expiry to start warning (default 90).
-
-        Returns:
-            True if within warning_days of valid_through, False otherwise.
-        """
         days_remaining = (self.valid_through - current_date).days
         return 0 <= days_remaining <= warning_days
 
     def get_coverage_status(self, current_date: date) -> dict[str, object]:
-        """Return calendar coverage metadata for operational visibility.
-
-        Returns:
-            Dictionary with version, valid range, sources, and expiry status.
-        """
         days_remaining = (self.valid_through - current_date).days
-        is_expired = current_date > self.valid_through
+        is_expired = not self.valid_from <= current_date <= self.valid_through
         near_expiry = self.is_near_expiry(current_date)
-
         return {
             "version": self.version,
             "valid_from": self.valid_from.isoformat(),
@@ -132,7 +127,7 @@ class VietnamSessionCalendar:
             "days_remaining": days_remaining if not is_expired else 0,
             "is_expired": is_expired,
             "near_expiry": near_expiry,
-            "status": ("EXPIRED" if is_expired else "WARNING" if near_expiry else "OK"),
+            "status": "EXPIRED" if is_expired else "WARNING" if near_expiry else "OK",
         }
 
     def _ensure_covered(self, market_date: date) -> None:
