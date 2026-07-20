@@ -229,4 +229,43 @@ def readiness(
                 typer.echo(f"  rejected: {', '.join(entry['rejection_reasons'])}")
 
 
+@app.command("proof")
+def proof(
+    sessions: int = typer.Option(
+        10, "--sessions", help="Required consecutive session count."
+    ),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Aggregate the persisted ledger into the issue #255 operational proof.
+
+    Reports whether the required number of distinct market sessions have been
+    persisted and summarises each. This reads the ledger truthfully; it does not
+    manufacture live operation. Exits non-zero when the required sessions are
+    not yet present, so it can gate a release check.
+    """
+    from vnalpha.maintenance.ledger import collect_operational_proof
+
+    conn = get_connection()
+    try:
+        report = collect_operational_proof(conn, required_sessions=sessions)
+    finally:
+        conn.close()
+
+    if json_output:
+        typer.echo(json.dumps(report, sort_keys=True))
+    else:
+        typer.echo(
+            f"Operational proof: {report['distinct_sessions_recorded']}/"
+            f"{report['required_sessions']} distinct sessions recorded"
+        )
+        typer.echo(f"  has_required_sessions: {report['has_required_sessions']}")
+        typer.echo(f"  session_dates: {', '.join(report['session_dates']) or '(none)'}")
+        if report["same_date_rerun_dates"]:
+            typer.echo(
+                f"  same-date reruns: {', '.join(report['same_date_rerun_dates'])}"
+            )
+    if not report["has_required_sessions"]:
+        raise typer.Exit(code=1)
+
+
 __all__ = ["app"]

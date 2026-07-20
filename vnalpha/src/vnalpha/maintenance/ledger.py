@@ -213,3 +213,75 @@ def get_maintenance_run_stages(
         }
         for row in rows
     ]
+
+
+def collect_operational_proof(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    required_sessions: int = 10,
+) -> dict[str, object]:
+    """Aggregate the maintenance ledger into the issue #255 proof report.
+
+    Collects the most recent distinct session runs (one per resolved date, the
+    latest invocation per date) and reports whether ``required_sessions``
+    consecutive persisted market sessions exist. This does NOT fabricate live
+    operation — it truthfully summarises whatever the ledger already recorded,
+    so an operator who has run the timer can produce the evidence with one
+    command. Same-date reruns are surfaced separately.
+    """
+    runs = conn.execute(
+        """
+        WITH ranked AS (
+            SELECT run_id, resolved_date, status, correlation_id,
+                   requested_symbol_count, successful_symbol_count,
+                   failed_symbol_count, software_version, calendar_version,
+                   duration_seconds, completed_at, source_policy,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY resolved_date ORDER BY completed_at DESC
+                   ) AS rn,
+                   COUNT(*) OVER (PARTITION BY resolved_date) AS invocations
+            FROM maintenance_run
+        )
+        SELECT run_id, resolved_date, status, correlation_id,
+               requested_symbol_count, successful_symbol_count,
+               failed_symbol_count, software_version, calendar_version,
+               duration_seconds, completed_at, source_policy, invocations
+        FROM ranked
+        WHERE rn = 1
+        ORDER BY resolved_date DESC
+        LIMIT ?
+        """,
+        [required_sessions],
+    ).fetchall()
+
+    sessions = [
+        {
+            "run_id": r[0],
+            "resolved_date": str(r[1]),
+            "status": r[2],
+            "correlation_id": r[3],
+            "requested_symbol_count": r[4],
+            "successful_symbol_count": r[5],
+            "failed_symbol_count": r[6],
+            "software_version": r[7],
+            "calendar_version": r[8],
+            "duration_seconds": r[9],
+            "completed_at": r[10].isoformat() if r[10] else None,
+            "source_policy": json.loads(r[11]) if r[11] else None,
+            "same_date_invocations": r[12],
+        }
+        for r in runs
+    ]
+    session_dates = [s["resolved_date"] for s in sessions]
+    same_date_reruns = [
+        s["resolved_date"] for s in sessions if s["same_date_invocations"] > 1
+    ]
+
+    return {
+        "required_sessions": required_sessions,
+        "distinct_sessions_recorded": len(sessions),
+        "has_required_sessions": len(sessions) >= required_sessions,
+        "session_dates": session_dates,
+        "same_date_rerun_dates": same_date_reruns,
+        "sessions": sessions,
+    }

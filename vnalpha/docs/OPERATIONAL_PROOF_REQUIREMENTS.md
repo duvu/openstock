@@ -55,13 +55,34 @@ vnalpha maintain daily --date 2026-07-17  # Rerun (no duplicates)
 - [ ] Current symbol analysis uses accumulated evidence
 - [ ] Report separates live vs fixture evidence
 
+### 6. One-command proof aggregation
+
+After the timer has run over the required sessions, aggregate the persisted
+ledger into the proof report with a single command:
+
+```bash
+# Human-readable summary (exits non-zero until 10 sessions are recorded)
+vnalpha maintain proof
+
+# Machine-readable evidence to attach to the closing PR
+vnalpha maintain proof --json > evidence/operational-proof.json
+```
+
+`maintain proof` reads the ledger truthfully: it collapses same-date reruns to
+one distinct session (flagging the reran dates), surfaces the latest invocation
+per date with status/symbol counts/source policy, and reports
+`has_required_sessions`. It never fabricates live operation.
+
 ## Evidence Submission
-1. Export ledger for 10 sessions: `vnalpha maintain status --json`
+1. Export the aggregated proof: `vnalpha maintain proof --json`
 2. Collect logs/diagnostics for any failures
 3. Document environment (OS, Python, calendar version)
 4. Attach to PR closing #255
 
 ## Notes
-- Cannot be automated in unit tests - requires real system operation
+- The 10 live consecutive sessions themselves cannot be produced or unit-tested:
+  they require real trading days and live providers on a supported host. The
+  operator owns running the timer; `maintain proof` makes assembling the
+  evidence turnkey once the sessions exist.
 - Partial failures are acceptable and demonstrate robustness
 - Lock contention should be gracefully handled
