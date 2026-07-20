@@ -21,8 +21,13 @@ def persist_maintenance_run(
     completed_at: datetime,
     software_version: str,
     calendar_version: str | None = None,
+    source_policy: dict[str, object] | None = None,
 ) -> str:
     """Persist one complete maintenance run and its stages to the ledger.
+
+    Args:
+        source_policy: Issue #253 resolved per-dataset source policy for the
+            datasets this run acquired (dataset -> {source, mode, ...}).
 
     Returns:
         run_id: The generated run identifier.
@@ -37,8 +42,9 @@ def persist_maintenance_run(
             run_id, correlation_id, requested_date, resolved_date, status,
             requested_symbol_count, successful_symbol_count, failed_symbol_count,
             started_at, completed_at, duration_seconds,
-            software_version, calendar_version, mutated, diagnostics_refs
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            software_version, calendar_version, mutated, diagnostics_refs,
+            source_policy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             run_id,
@@ -56,6 +62,7 @@ def persist_maintenance_run(
             calendar_version,
             result.mutated,
             json.dumps(list(result.diagnostics_refs)),
+            json.dumps(source_policy) if source_policy is not None else None,
         ],
     )
 
@@ -108,7 +115,8 @@ def get_latest_maintenance_run(
             run_id, correlation_id, requested_date, resolved_date, status,
             requested_symbol_count, successful_symbol_count, failed_symbol_count,
             started_at, completed_at, duration_seconds,
-            software_version, calendar_version, mutated, diagnostics_refs
+            software_version, calendar_version, mutated, diagnostics_refs,
+            source_policy
         FROM maintenance_run
         ORDER BY completed_at DESC
         LIMIT 1
@@ -134,6 +142,7 @@ def get_latest_maintenance_run(
         "calendar_version": row[12],
         "mutated": row[13],
         "diagnostics_refs": json.loads(row[14]) if row[14] else [],
+        "source_policy": json.loads(row[15]) if row[15] else None,
     }
 
 

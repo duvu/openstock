@@ -196,3 +196,130 @@ def test_resolved_source_preserves_rationale() -> None:
         "explicit" in explicit.rationale.lower()
         or "requested" in explicit.rationale.lower()
     )
+
+
+def test_readiness_degraded_when_only_explicit_provider(monkeypatch) -> None:
+    # Given: no auto-route data present but the explicit-only provider configured.
+    import duckdb
+
+    from vnalpha.data_availability import dataset_readiness
+
+    connection = duckdb.connect(":memory:")
+    connection.execute(
+        "CREATE TABLE canonical_ohlcv (provider VARCHAR, time TIMESTAMP, close DOUBLE)"
+    )
+    monkeypatch.setattr(
+        dataset_readiness, "_is_provider_configured", lambda provider: True
+    )
+    try:
+        result = dataset_readiness.check_dataset_readiness(connection, "equity.ohlcv")
+    finally:
+        connection.close()
+
+    # Then: process is alive but the auto data path is not usable -> DEGRADED,
+    # distinct from a hard NOT_READY.
+    assert result.status is DatasetReadinessStatus.DEGRADED
+    assert "fiinquantx" in result.explicit_providers
+    assert not result.auto_providers
+    assert "explicit-only" in (result.message or "")
+
+
+def test_maintenance_records_resolved_source_policy() -> None:
+    # Given: a persisted run with the resolved source policy attached (issue #253).
+    import duckdb
+
+    from vnalpha.cli_app.maintain import _resolve_source_policy
+    from vnalpha.maintenance.ledger import (
+        get_latest_maintenance_run,
+        persist_maintenance_run,
+    )
+    from vnalpha.maintenance.models import (
+        DailyMaintenanceResult,
+        MaintenanceRunStatus,
+        MaintenanceStageResult,
+        MaintenanceStageStatus,
+    )
+    from vnalpha.warehouse.migrations import run_migrations
+
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn, emit_observability=False)
+    result = DailyMaintenanceResult(
+        status=MaintenanceRunStatus.SUCCESS,
+        requested_date="2026-07-17",
+        resolved_date="2026-07-17",
+        correlation_id="policy-test",
+        stages=(
+            MaintenanceStageResult("resolve_session", MaintenanceStageStatus.SUCCESS),
+        ),
+        requested_symbols=("VCB",),
+        successful_symbols=("VCB",),
+        failed_symbols=(),
+        diagnostics_refs=(),
+        mutated=True,
+    )
+    from datetime import datetime, timezone
+
+    try:
+        persist_maintenance_run(
+            conn,
+            result,
+            started_at=datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 7, 17, 8, 1, tzinfo=timezone.utc),
+            software_version="test",
+            source_policy=_resolve_source_policy(None),
+        )
+        latest = get_latest_maintenance_run(conn)
+    finally:
+        conn.close()
+
+    policy = latest["source_policy"]
+    assert policy is not None
+    # reference.symbols never resolves to an explicit source; OHLCV auto-routes.
+    assert policy["reference.symbols"]["source"] is None
+    assert policy["reference.symbols"]["mode"] == "AUTO"
+    assert policy["equity.ohlcv"]["mode"] == "AUTO"
+
+
+def test_explicit_source_recorded_without_silent_fallback() -> None:
+    # Given: an explicit FiinQuantX source request for maintenance.
+    from vnalpha.cli_app.maintain import _resolve_source_policy
+
+    policy = _resolve_source_policy("fiinquantx")
+
+    # Then: OHLCV records the explicit source with fallback disabled.
+    assert policy["equity.ohlcv"]["source"] == "fiinquantx"
+    assert policy["equity.ohlcv"]["mode"] == "EXPLICIT"
+    assert policy["equity.ohlcv"]["fallback_allowed"] is False
+
+
+def test_cli_and_worker_resolve_same_policy() -> None:
+    # The CLI maintenance path and the shared resolver must agree (issue #253:
+    # CLI, service and worker resolve the same source policy).
+    from vnalpha.cli_app.maintain import _resolve_source_policy
+    from vnalpha.data_provisioning.source_policy import get_default_resolver
+
+    cli_policy = _resolve_source_policy(None)
+    resolver = get_default_resolver()
+    for dataset, recorded in cli_policy.items():
+        resolved = resolver.resolve(dataset)
+        assert recorded["source"] == resolved.source
+        assert recorded["mode"] == resolved.mode.value
+        assert recorded["fallback_allowed"] == resolved.fallback_allowed
+
+
+def test_maintain_readiness_cli_reports_datasets() -> None:
+    from typer.testing import CliRunner
+
+    from vnalpha.cli import app
+
+    result = CliRunner().invoke(app, ["maintain", "readiness", "--json"])
+    assert result.exit_code == 0
+    import json as _json
+
+    payload = _json.loads(result.stdout)
+    datasets = {d["dataset"] for d in payload["datasets"]}
+    assert "reference.symbols" in datasets
+    assert "equity.ohlcv" in datasets
+    # reference.symbols must never advertise FiinQuantX.
+    ref = next(d for d in payload["datasets"] if d["dataset"] == "reference.symbols")
+    assert "fiinquantx" not in ref["explicit_providers"]
