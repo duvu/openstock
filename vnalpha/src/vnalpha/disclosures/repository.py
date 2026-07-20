@@ -1,4 +1,4 @@
-"""Persistence + normalization + as-of queries for disclosures (issue #259)."""
+"""Persistence, normalization and historical as-of queries for disclosures."""
 
 from __future__ import annotations
 
@@ -33,14 +33,10 @@ class NormalizedEvent:
 
 
 def ingest_occurrence(
-    conn: duckdb.DuckDBPyConnection, occurrence: DisclosureOccurrence
+    conn: duckdb.DuckDBPyConnection,
+    occurrence: DisclosureOccurrence,
 ) -> str:
-    """Persist a raw disclosure occurrence, deduplicating identical copies.
-
-    Duplicate copies (same authority + reference + content hash) resolve to the
-    existing occurrence without losing the original; the raw payload is stored
-    as untrusted data. Returns the occurrence_id.
-    """
+    """Persist one immutable source occurrence; exact copies are idempotent."""
     content_hash = occurrence_content_hash(occurrence)
     existing = conn.execute(
         """
@@ -64,7 +60,7 @@ def ingest_occurrence(
             occurrence_id,
             occurrence.source_authority,
             occurrence.source_reference,
-            occurrence.symbol,
+            occurrence.symbol.upper(),
             content_hash,
             occurrence.published_at,
             occurrence.raw_title,
@@ -83,35 +79,46 @@ def normalize_event(
     event_id: str,
     event_date: str | None = None,
 ) -> NormalizedEvent:
-    """Normalize an occurrence into a symbol event.
-
-    Only occurrences from an approved official source become ``VERIFIED``;
-    anything else is stored ``QUARANTINED``. A revised disclosure for the same
-    ``event_id`` supersedes the prior revision immutably rather than
-    overwriting it. ``published_at`` (disclosure) and ``event_date`` (effective)
-    are kept distinct.
-    """
+    """Normalize one allowlisted event with immutable superseding revisions."""
     occurrence_id = ingest_occurrence(conn, occurrence)
     content_hash = occurrence_content_hash(occurrence)
-
     verification = (
         VerificationStatus.VERIFIED
         if is_approved_source(occurrence.source_authority)
         else VerificationStatus.QUARANTINED
     )
 
-    prior = conn.execute(
+    current = conn.execute(
         """
-        SELECT revision_id, revision_number FROM symbol_event
+        SELECT revision_id, revision_number, content_hash, event_type,
+               verification_status, published_at, event_date
+        FROM symbol_event
         WHERE event_id = ? AND canonical_status = 'CURRENT'
         ORDER BY revision_number DESC LIMIT 1
         """,
         [event_id],
     ).fetchone()
-    revision_number = (prior[1] + 1) if prior else 1
-    revision_id = f"evt_{uuid4().hex[:16]}"
-    revision_hash = content_hash
+    if (
+        current is not None
+        and current[2] == content_hash
+        and current[3] == event_type.value
+        and current[4] == verification.value
+        and str(current[5]) == occurrence.published_at
+        and (str(current[6]) if current[6] is not None else None) == event_date
+    ):
+        return NormalizedEvent(
+            revision_id=str(current[0]),
+            event_id=event_id,
+            symbol=occurrence.symbol.upper(),
+            event_type=event_type.value,
+            verification_status=verification.value,
+            published_at=occurrence.published_at,
+            event_date=event_date,
+            canonical_status="CURRENT",
+        )
 
+    revision_number = int(current[1]) + 1 if current else 1
+    revision_id = f"evt_{uuid4().hex[:16]}"
     conn.execute(
         """
         INSERT INTO symbol_event (
@@ -126,7 +133,7 @@ def normalize_event(
             revision_id,
             event_id,
             revision_number,
-            occurrence.symbol,
+            occurrence.symbol.upper(),
             event_type.value,
             verification.value,
             occurrence.published_at,
@@ -135,27 +142,27 @@ def normalize_event(
             occurrence.source_authority,
             occurrence_id,
             content_hash,
-            revision_hash,
-            prior[0] if prior else None,
+            content_hash,
+            current[0] if current else None,
             occurrence.raw_title,
             DISCLOSURES_CONTRACT_VERSION,
-            json.dumps({}),
+            json.dumps({"content_is_untrusted": True}),
         ],
     )
-    if prior is not None:
+    if current is not None:
         conn.execute(
             """
             UPDATE symbol_event
             SET canonical_status = 'SUPERSEDED', superseded_by_revision_id = ?
             WHERE revision_id = ?
             """,
-            [revision_id, prior[0]],
+            [revision_id, current[0]],
         )
     conn.commit()
     return NormalizedEvent(
         revision_id=revision_id,
         event_id=event_id,
-        symbol=occurrence.symbol,
+        symbol=occurrence.symbol.upper(),
         event_type=event_type.value,
         verification_status=verification.value,
         published_at=occurrence.published_at,
@@ -171,36 +178,50 @@ def as_of_events(
     *,
     verified_only: bool = True,
 ) -> list[dict[str, object]]:
-    """Return current symbol events published on or before the as-of date.
+    """Return the latest revision visible for each event by ``as_of_date``.
 
-    Future disclosures (``published_at > as_of_date``) can never leak into a
-    historical read. Only ``CURRENT`` revisions are returned so superseded
-    evidence does not reappear.
+    A revision published later may supersede the current view, but it cannot
+    erase the earlier revision from a historical read.
     """
-    query = """
-        SELECT event_id, event_type, verification_status, published_at,
-               event_date, issuer_reference, source_authority, title
-        FROM symbol_event
-        WHERE symbol = ? AND canonical_status = 'CURRENT'
-          AND published_at <= ?
-    """
-    params: list[object] = [symbol, as_of_date]
-    if verified_only:
-        query += " AND verification_status = 'VERIFIED'"
-    query += " ORDER BY published_at DESC, event_type"
-    rows = conn.execute(query, params).fetchall()
+    verification_filter = (
+        "AND verification_status = 'VERIFIED'" if verified_only else ""
+    )
+    rows = conn.execute(
+        f"""
+        WITH visible AS (
+            SELECT *,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY event_id
+                       ORDER BY published_at DESC, revision_number DESC
+                   ) AS rn
+            FROM symbol_event
+            WHERE symbol = ? AND published_at <= ?
+              {verification_filter}
+        )
+        SELECT revision_id, event_id, event_type, verification_status,
+               published_at, event_date, issuer_reference, source_authority,
+               title, content_hash, revision_number
+        FROM visible
+        WHERE rn = 1
+        ORDER BY published_at DESC, event_type, event_id
+        """,
+        [symbol.upper(), as_of_date],
+    ).fetchall()
     return [
         {
-            "event_id": r[0],
-            "event_type": r[1],
-            "verification_status": r[2],
-            "published_at": str(r[3]),
-            "event_date": str(r[4]) if r[4] is not None else None,
-            "issuer_reference": r[5],
-            "source_authority": r[6],
-            "title": r[7],
+            "revision_id": str(row[0]),
+            "event_id": row[1],
+            "event_type": row[2],
+            "verification_status": row[3],
+            "published_at": str(row[4]),
+            "event_date": str(row[5]) if row[5] is not None else None,
+            "issuer_reference": row[6],
+            "source_authority": row[7],
+            "title": row[8],
+            "content_hash": row[9],
+            "revision_number": row[10],
         }
-        for r in rows
+        for row in rows
     ]
 
 
