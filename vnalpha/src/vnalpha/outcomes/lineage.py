@@ -31,55 +31,68 @@ def persist_outcome_lineage(
         return 0
 
     universe = resolve_universe(conn, date.fromisoformat(watchlist_date))
+    ambiguous_symbols = set(universe.ambiguous_symbols)
     candidate_symbols = [str(row[0]) for row in rows]
     universe_payload = {
         "watchlist_date": watchlist_date,
         "resolver_version": universe.resolver_version,
         "symbols": {
-            symbol: _classification_payload(universe.get(symbol))
+            symbol: _classification_payload(
+                universe.get(symbol), ambiguous=symbol in ambiguous_symbols
+            )
             for symbol in sorted(candidate_symbols)
         },
     }
     eligible_universe_hash = _hash(universe_payload)
 
     updated = 0
-    for (
-        symbol,
-        policy_hash,
-        action_lineage_json,
-        price_basis,
-        adjustment_version,
-    ) in rows:
-        ranking_run_ref = f"{watchlist_date}:{policy_hash}" if policy_hash else None
-        factor_chain_hash = _hash(
-            {
-                "corporate_action_lineage": _safe_json(action_lineage_json, []),
-                "price_basis": price_basis or "UNKNOWN",
-                "adjustment_version": adjustment_version or "UNKNOWN",
-            }
-        )
-        conn.execute(
-            """
-            UPDATE candidate_outcome
-            SET ranking_run_ref = ?, eligible_universe_hash = ?,
-                factor_chain_hash = ?
-            WHERE symbol = ? AND watchlist_date = ? AND horizon_sessions = ?
-            """,
-            [
-                ranking_run_ref,
-                eligible_universe_hash,
-                factor_chain_hash,
-                symbol,
-                watchlist_date,
-                horizon_sessions,
-            ],
-        )
-        updated += 1
-    conn.commit()
+    transaction_started = False
+    try:
+        conn.execute("BEGIN TRANSACTION")
+        transaction_started = True
+        for (
+            symbol,
+            policy_hash,
+            action_lineage_json,
+            price_basis,
+            adjustment_version,
+        ) in rows:
+            ranking_run_ref = f"{watchlist_date}:{policy_hash}" if policy_hash else None
+            factor_chain_hash = _hash(
+                {
+                    "corporate_action_lineage": _safe_json(action_lineage_json, []),
+                    "price_basis": price_basis or "UNKNOWN",
+                    "adjustment_version": adjustment_version or "UNKNOWN",
+                }
+            )
+            conn.execute(
+                """
+                UPDATE candidate_outcome
+                SET ranking_run_ref = ?, eligible_universe_hash = ?,
+                    factor_chain_hash = ?
+                WHERE symbol = ? AND watchlist_date = ? AND horizon_sessions = ?
+                """,
+                [
+                    ranking_run_ref,
+                    eligible_universe_hash,
+                    factor_chain_hash,
+                    symbol,
+                    watchlist_date,
+                    horizon_sessions,
+                ],
+            )
+            updated += 1
+        conn.execute("COMMIT")
+    except BaseException:
+        if transaction_started:
+            conn.execute("ROLLBACK")
+        raise
     return updated
 
 
-def _classification_payload(classification) -> dict[str, object] | None:
+def _classification_payload(
+    classification, *, ambiguous: bool
+) -> dict[str, object] | None:
     if classification is None:
         return None
     return {
@@ -90,7 +103,7 @@ def _classification_payload(classification) -> dict[str, object] | None:
         "sector_code": classification.sector_code,
         "industry_code": classification.industry_code,
         "taxonomy_version": classification.taxonomy_version,
-        "ambiguous": classification.ambiguous,
+        "ambiguous": ambiguous,
     }
 
 

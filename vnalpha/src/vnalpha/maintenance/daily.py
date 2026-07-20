@@ -450,6 +450,7 @@ class DailyMaintenanceService:
         # Longest horizon bounds how far back a date can still have pending
         # outcomes worth maturing.
         from vnalpha.outcomes.evaluator import evaluate_watchlist_date
+        from vnalpha.outcomes.lineage import persist_outcome_lineage
         from vnalpha.outcomes.models import DEFAULT_HORIZONS
 
         max_horizon = max(DEFAULT_HORIZONS)
@@ -477,7 +478,7 @@ class DailyMaintenanceService:
                 "candidate_outcomes", MaintenanceStageStatus.SKIPPED
             )
 
-        evaluated = persisted = errors = 0
+        evaluated = persisted = errors = lineage_updated = 0
         for watchlist_date in dates:
             try:
                 result = evaluate_watchlist_date(self.conn, watchlist_date)
@@ -491,6 +492,24 @@ class DailyMaintenanceService:
             persisted += int(result.get("persisted", 0))
             errors += int(result.get("errors", 0))
 
+            # Stamp exact point-in-time ranking-run, eligible-universe and
+            # factor-chain lineage onto the freshly evaluated outcomes (#260).
+            # This is deterministic and idempotent: re-running recomputes the
+            # same hashes and overwrites the same rows.
+            for horizon in DEFAULT_HORIZONS:
+                try:
+                    lineage_updated += persist_outcome_lineage(
+                        self.conn, watchlist_date, horizon
+                    )
+                except (duckdb.Error, ValueError) as exc:
+                    errors += 1
+                    logger.warning(
+                        "outcome lineage failed for %s h%s: %s",
+                        watchlist_date,
+                        horizon,
+                        exc,
+                    )
+
         status = (
             MaintenanceStageStatus.PARTIAL if errors else MaintenanceStageStatus.SUCCESS
         )
@@ -501,6 +520,7 @@ class DailyMaintenanceService:
                 "dates_processed": len(dates),
                 "evaluated": evaluated,
                 "persisted": persisted,
+                "lineage_updated": lineage_updated,
                 "errors": errors,
             },
         )
