@@ -39,7 +39,64 @@ def build_canonical_cmd(
             ),
         )
         typer.echo(
-            f"Canonical build complete: {result.counts['upserted']} rows, {result.counts['rejected']} symbols rejected"
+            f"Canonical build complete: {result.counts['upserted']} rows, "
+            f"{result.counts['rejected']} symbols rejected"
+        )
+
+
+@app.command("adjustment-factors")
+def build_adjustment_factors_cmd(
+    limit: int = typer.Option(100, "--limit", min=1, max=10_000),
+) -> None:
+    """Derive factors and rebuild unresolved corporate-action ranges."""
+    set_correlation_id()
+    with command_lifecycle("build adjustment-factors"):
+        from vnalpha.corporate_actions.adjusted_prices import (
+            rebuild_pending_adjusted_ranges,
+        )
+        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.migrations import run_migrations
+
+        conn = get_connection()
+        try:
+            run_migrations(conn=conn)
+            results = rebuild_pending_adjusted_ranges(conn, limit=limit)
+        finally:
+            conn.close()
+        typer.echo(
+            f"Adjusted ranges rebuilt: {len(results)}; "
+            f"rows={sum(item.rows_written for item in results)}"
+        )
+
+
+@app.command("adjusted-ohlcv")
+def build_adjusted_ohlcv_cmd(
+    symbol: str = typer.Option(..., "--symbol"),
+    from_date: str | None = typer.Option(None, "--from"),
+    to_date: str | None = typer.Option(None, "--to"),
+) -> None:
+    """Build a bounded backward-adjusted OHLCV derived series."""
+    set_correlation_id()
+    with command_lifecycle("build adjusted-ohlcv"):
+        from vnalpha.corporate_actions.adjusted_prices import build_adjusted_ohlcv
+        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.migrations import run_migrations
+
+        conn = get_connection()
+        try:
+            run_migrations(conn=conn)
+            result = build_adjusted_ohlcv(
+                conn,
+                symbol,
+                from_date=from_date,
+                to_date=to_date,
+            )
+        finally:
+            conn.close()
+        typer.echo(
+            f"Adjusted OHLCV built: symbol={result.symbol} "
+            f"rows={result.rows_written} factors={result.factors_used} "
+            f"version={result.adjustment_version}"
         )
 
 
@@ -75,7 +132,8 @@ def build_features_cmd(
             ),
         )
         typer.echo(
-            f"Features built: {result.counts['built']} symbols, skipped: {result.counts['skipped']}"
+            f"Features built: {result.counts['built']} symbols, "
+            f"skipped: {result.counts['skipped']}"
         )
 
 
@@ -111,7 +169,8 @@ def build_sector_strength_cmd(
             conn, DataProvisioningRequest("build", "sector-strength", date=date)
         )
         typer.echo(
-            f"Sector strength built: {result.counts['sectors']} sectors ({result.status.value})"
+            f"Sector strength built: {result.counts['sectors']} sectors "
+            f"({result.status.value})"
         )
 
 
