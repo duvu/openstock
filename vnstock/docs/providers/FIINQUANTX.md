@@ -83,7 +83,7 @@ vnalpha sync ohlcv \
 ```
 
 ```bash
-curl -s "http://127.0.0.1:6900/v1/data?dataset=equity.ohlcv&symbol=FPT&start=2026-01-01&end=2026-01-31&interval=1D&source=FIINQUANTX" \
+curl -s "http://127.0.0.1:6900/v1/equity/ohlcv?symbol=FPT&start=2026-01-01&end=2026-01-31&interval=1D&source=FIINQUANTX" \
   | jq '.dataset, .meta.provider, .meta.source_method, .result[0] | {dataset:.}'
 ```
 
