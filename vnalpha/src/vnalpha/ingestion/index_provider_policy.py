@@ -1,4 +1,4 @@
-"""Versioned, auditable policy for conflicting index-provider observations."""
+"""Versioned policy for conflicting index-provider observations."""
 
 from __future__ import annotations
 
@@ -20,19 +20,10 @@ _POLICY_BY_FAMILY: dict[str, tuple[IndexProviderPreference, ...]] = {
         IndexProviderPreference.KBS,
         IndexProviderPreference.SSI,
     ),
-    "HNX": (
-        IndexProviderPreference.KBS,
-        IndexProviderPreference.VCI,
-        IndexProviderPreference.SSI,
-    ),
-    "UPCOM": (
-        IndexProviderPreference.KBS,
-        IndexProviderPreference.VCI,
-        IndexProviderPreference.SSI,
-    ),
+    "HNX": (),
+    "UPCOM": (),
 }
 
-# Backward-compatible default for callers/tests that inspect the original name.
 INDEX_PROVIDER_PRECEDENCE = _POLICY_BY_FAMILY["HOSE"]
 
 _INDEX_FAMILY = {
@@ -62,16 +53,17 @@ def resolve_index_provider_conflict(
     symbol: str,
     provider_candidates: tuple[str, ...],
 ) -> IndexConflictResolution | None:
-    normalized_symbol = symbol.strip().upper()
-    family = _INDEX_FAMILY.get(normalized_symbol)
+    family = _INDEX_FAMILY.get(symbol.strip().upper())
     if family is None:
         return None
-    normalized_providers = tuple(
+    precedence = _POLICY_BY_FAMILY[family]
+    if not precedence:
+        return None
+    normalized = tuple(
         provider.strip().lower() for provider in provider_candidates if provider
     )
-    precedence = _POLICY_BY_FAMILY[family]
     for preferred in precedence:
-        if preferred.value in normalized_providers:
+        if preferred.value in normalized:
             rejected = tuple(
                 provider
                 for provider in provider_candidates
@@ -83,10 +75,9 @@ def resolve_index_provider_conflict(
                 policy_version=INDEX_PROVIDER_POLICY_VERSION,
                 policy_family=family,
                 rationale=(
-                    f"{family} index-provider precedence selected "
-                    f"{preferred.value}; policy is deterministic and records all "
-                    "passing conflicting source observations without claiming "
-                    "generic cross-provider equality."
+                    "Issue #249 HOSE index precedence selected "
+                    f"{preferred.value}; canonical selection must retain all "
+                    "conflicting passing observations in its audit record."
                 ),
             )
     return None
