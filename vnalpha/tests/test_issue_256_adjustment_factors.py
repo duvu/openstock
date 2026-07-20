@@ -121,8 +121,12 @@ def test_rights_issue_with_invalid_inputs_raises() -> None:
 
 def test_adjustment_factor_apply_to_price() -> None:
     # Given: an adjustment factor for 2-for-1 split
-    from vnalpha.corporate_actions.adjustment_factors import AdjustmentFactor, AdjustmentType
     from datetime import date
+
+    from vnalpha.corporate_actions.adjustment_factors import (
+        AdjustmentFactor,
+        AdjustmentType,
+    )
 
     factor_obj = AdjustmentFactor(
         symbol="TEST",

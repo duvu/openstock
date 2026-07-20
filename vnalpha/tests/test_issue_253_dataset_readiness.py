@@ -36,7 +36,10 @@ def test_reference_symbols_readiness(conn) -> None:
 
     # Then: recognized as supported dataset
     assert result.dataset == "reference.symbols"
-    assert result.status in (DatasetReadinessStatus.READY, DatasetReadinessStatus.NOT_READY)
+    assert result.status in (
+        DatasetReadinessStatus.READY,
+        DatasetReadinessStatus.NOT_READY,
+    )
 
 
 def test_unsupported_dataset_returns_not_ready(conn) -> None:
@@ -161,9 +164,7 @@ def test_validate_free_providers_allowed() -> None:
 
     # When: validating free providers
     for source in ("vci", "kbs", "ssi"):
-        is_valid, reason = resolver.validate_source_for_dataset(
-            "equity.ohlcv", source
-        )
+        is_valid, reason = resolver.validate_source_for_dataset("equity.ohlcv", source)
         # Then: all allowed
         assert is_valid
 
@@ -191,4 +192,7 @@ def test_resolved_source_preserves_rationale() -> None:
     assert len(explicit.rationale) > 10
     assert len(configured.rationale) > 10
     assert "auto" in auto.rationale.lower() or "routing" in auto.rationale.lower()
-    assert "explicit" in explicit.rationale.lower() or "requested" in explicit.rationale.lower()
+    assert (
+        "explicit" in explicit.rationale.lower()
+        or "requested" in explicit.rationale.lower()
+    )
