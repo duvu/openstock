@@ -97,6 +97,8 @@ def test_all_tables_created(conn):
         "symbol_event",
         "ranking_evaluation_manifest",
         "ranking_evaluation_strategy",
+        "ranking_replay",
+        "ranking_replay_period",
     }
     assert expected == names
 
@@ -181,7 +183,7 @@ def test_run_migrations_idempotent(conn):
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
     assert (
-        len(tables) == 71
+        len(tables) == 73
     )  # + ranking_evaluation_manifest + ranking_evaluation_strategy (issue #261)
 
 

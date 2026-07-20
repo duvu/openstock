@@ -17,6 +17,7 @@ from vnalpha.warehouse.fundamentals_schema import ALL_DDL_FUNDAMENTALS
 from vnalpha.warehouse.ingestion_migrations import migrate_ingestion_run_outcome_columns
 from vnalpha.warehouse.maintenance_ledger_schema import ALL_DDL_MAINTENANCE_LEDGER
 from vnalpha.warehouse.ranking_evaluation_schema import ALL_DDL_RANKING_EVALUATION
+from vnalpha.warehouse.replay_schema import ALL_DDL_RANKING_REPLAY
 from vnalpha.warehouse.research_answer_schema import ALL_DDL_RESEARCH_ANSWER_AUDIT
 from vnalpha.warehouse.research_models_schema import ALL_DDL_RESEARCH_MODELS
 from vnalpha.warehouse.sandbox_migrations import (
@@ -119,6 +120,8 @@ def run_migrations(
     for ddl in ALL_DDL_DISCLOSURES:
         conn.execute(ddl)
     for ddl in ALL_DDL_RANKING_EVALUATION:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_RANKING_REPLAY:
         conn.execute(ddl)
     if emit_observability:
         logger.info("Warehouse migrations complete.")
