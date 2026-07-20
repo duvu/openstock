@@ -91,6 +91,46 @@ def download_corporate_actions(
     _run_corporate_actions(symbol=symbol, start=start, end=end, source=source)
 
 
+@status_app.command("fundamentals")
+def status_fundamentals(
+    symbol: str = typer.Argument(..., help="Equity symbol."),
+    as_of: str = typer.Option(..., "--as-of", help="As-of date (YYYY-MM-DD)."),
+    scope: str = typer.Option(
+        "CONSOLIDATED", "--scope", help="CONSOLIDATED or SEPARATE."
+    ),
+) -> None:
+    """Read the publication-aware fundamentals snapshot (issue #257).
+
+    Only facts published on or before ``--as-of`` are returned, so future
+    publications never leak into a historical read.
+    """
+    from dataclasses import asdict
+
+    from vnalpha.fundamentals import StatementScope, as_of_snapshot
+    from vnalpha.warehouse.connection import get_connection
+
+    try:
+        statement_scope = StatementScope(scope.upper())
+    except ValueError as exc:
+        raise typer.BadParameter("scope must be CONSOLIDATED or SEPARATE") from exc
+
+    conn = get_connection()
+    run_migrations(conn=conn)
+    snapshot = as_of_snapshot(
+        conn, symbol.upper(), as_of, statement_scope=statement_scope
+    )
+    typer.echo(
+        json.dumps(
+            {
+                "symbol": symbol.upper(),
+                "as_of": as_of,
+                "facts": [asdict(f) for f in snapshot],
+            },
+            sort_keys=True,
+        )
+    )
+
+
 @status_app.command("corporate-actions")
 def status_corporate_actions(
     symbol: str | None = typer.Argument(None, help="Optional equity symbol."),
