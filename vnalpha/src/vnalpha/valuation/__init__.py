@@ -1,9 +1,4 @@
-"""Derived valuation snapshots (issue #258).
-
-Reproducible stock and sector valuation from canonical price, publication-aware
-fundamentals (#257), explicit share data and point-in-time sector membership.
-No forecasting; every snapshot carries explicit lineage and caveats.
-"""
+"""Publication-aware valuation and verified share-count evidence."""
 
 from vnalpha.valuation.metrics import (
     ValuationInputs,
@@ -11,13 +6,23 @@ from vnalpha.valuation.metrics import (
     compute_valuation_metrics,
     percentile_rank,
 )
+from vnalpha.valuation.share_counts import (
+    ResolvedShareCount,
+    ShareCountFact,
+    resolve_share_count,
+    upsert_share_count_fact,
+)
 from vnalpha.valuation.snapshot import (
+    VALUATION_CONTRACT_VERSION,
     ValuationSnapshot,
     build_valuation_snapshot,
     get_valuation_snapshot,
 )
 
 __all__ = [
+    "VALUATION_CONTRACT_VERSION",
+    "ResolvedShareCount",
+    "ShareCountFact",
     "ValuationInputs",
     "ValuationMetrics",
     "ValuationSnapshot",
@@ -25,4 +30,6 @@ __all__ = [
     "compute_valuation_metrics",
     "get_valuation_snapshot",
     "percentile_rank",
+    "resolve_share_count",
+    "upsert_share_count_fact",
 ]
