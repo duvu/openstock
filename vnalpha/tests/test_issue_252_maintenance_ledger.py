@@ -285,6 +285,100 @@ def test_noop_run_is_persisted(conn) -> None:
     assert latest["mutated"] is False
 
 
+def test_same_date_reruns_create_separate_run_records(conn) -> None:
+    # Given: two invocations for the same resolved date.
+    def _result(correlation_id: str) -> DailyMaintenanceResult:
+        return DailyMaintenanceResult(
+            status=MaintenanceRunStatus.SUCCESS,
+            requested_date="2026-07-17",
+            resolved_date="2026-07-17",
+            correlation_id=correlation_id,
+            stages=(
+                MaintenanceStageResult(
+                    "incremental_ohlcv", MaintenanceStageStatus.SUCCESS
+                ),
+            ),
+            requested_symbols=("VCB",),
+            successful_symbols=("VCB",),
+            failed_symbols=(),
+            diagnostics_refs=(),
+            mutated=True,
+        )
+
+    started_at = datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc)
+
+    # When: the same date is processed twice (e.g. timer + manual rerun).
+    run_id_1 = persist_maintenance_run(
+        conn,
+        _result("first-run"),
+        started_at=started_at,
+        completed_at=datetime(2026, 7, 17, 8, 5, tzinfo=timezone.utc),
+        software_version="test",
+    )
+    run_id_2 = persist_maintenance_run(
+        conn,
+        _result("second-run"),
+        started_at=datetime(2026, 7, 17, 9, 0, tzinfo=timezone.utc),
+        completed_at=datetime(2026, 7, 17, 9, 4, tzinfo=timezone.utc),
+        software_version="test",
+    )
+
+    # Then: two distinct invocation records exist for the same date.
+    assert run_id_1 != run_id_2
+    count = conn.execute(
+        "SELECT COUNT(*) FROM maintenance_run WHERE resolved_date = ?",
+        ["2026-07-17"],
+    ).fetchone()[0]
+    assert count == 2
+    # And the ledger surfaces the most recent invocation as latest.
+    latest = get_latest_maintenance_run(conn)
+    assert latest["run_id"] == run_id_2
+    assert latest["correlation_id"] == "second-run"
+
+
+def test_partial_run_is_not_flattened_to_success(conn) -> None:
+    # Given: a partial run where one symbol failed but others succeeded.
+    result = DailyMaintenanceResult(
+        status=MaintenanceRunStatus.PARTIAL,
+        requested_date="2026-07-17",
+        resolved_date="2026-07-17",
+        correlation_id="partial-truthful",
+        stages=(
+            MaintenanceStageResult(
+                "incremental_ohlcv",
+                MaintenanceStageStatus.PARTIAL,
+                counts={"inserted": 40},
+                failures=("HPG: provider timeout",),
+                remediation=("Retry HPG on next session.",),
+            ),
+        ),
+        requested_symbols=("VCB", "FPT", "HPG"),
+        successful_symbols=("VCB", "FPT"),
+        failed_symbols=("HPG",),
+        diagnostics_refs=("diag-ref-1",),
+        mutated=True,
+    )
+
+    run_id = persist_maintenance_run(
+        conn,
+        result,
+        started_at=datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc),
+        completed_at=datetime(2026, 7, 17, 8, 3, tzinfo=timezone.utc),
+        software_version="test",
+    )
+
+    # Then: PARTIAL is preserved with successful symbols retained, not a false SUCCESS.
+    latest = get_latest_maintenance_run(conn)
+    assert latest["status"] == "PARTIAL"
+    assert latest["successful_symbol_count"] == 2
+    assert latest["failed_symbol_count"] == 1
+    # And the failing stage remains discoverable with sanitized diagnostics.
+    failed = get_failed_maintenance_stages(conn)
+    assert any(s["run_id"] == run_id and s["status"] == "PARTIAL" for s in failed)
+    stage = next(s for s in failed if s["run_id"] == run_id)
+    assert "HPG: provider timeout" in stage["failures"]
+
+
 def test_stage_counts_and_warnings_are_json_serialized(conn) -> None:
     # Given: a stage with complex counts and warnings
     result = DailyMaintenanceResult(
