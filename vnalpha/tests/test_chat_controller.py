@@ -62,6 +62,35 @@ def test_chat_local_commands_constant():
     assert CHAT_LOCAL_COMMANDS == expected
 
 
+def test_evaluate_plan_permissions_surfaces_refusal_reason():
+    """A refusal plan surfaces its actionable reason, not "no executable steps"."""
+    from vnalpha.assistant.models import AssistantPlan
+    from vnalpha.chat.controller import ChatController
+
+    ctrl = ChatController(on_message=lambda style, text: None, target_date="2026-07-07")
+    refusal_plan = AssistantPlan(
+        intent="deep_analyze_symbol",
+        steps=[],
+        refusal_reason="The deep_analyze_symbol workflow requires a symbol.",
+    )
+    message = ctrl._evaluate_plan_permissions(refusal_plan)
+    assert message == "Refused: The deep_analyze_symbol workflow requires a symbol."
+
+
+def test_evaluate_plan_permissions_generic_when_no_reason():
+    from vnalpha.assistant.models import AssistantPlan
+    from vnalpha.chat.controller import ChatController
+
+    ctrl = ChatController(on_message=lambda style, text: None, target_date="2026-07-07")
+    assert ctrl._evaluate_plan_permissions(None) == (
+        "Refused: the plan has no executable steps."
+    )
+    empty_plan = AssistantPlan(intent="deep_analyze_symbol", steps=[])
+    assert ctrl._evaluate_plan_permissions(empty_plan) == (
+        "Refused: the plan has no executable steps."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Section 2 — Task 2.2: Input classification
 # ---------------------------------------------------------------------------

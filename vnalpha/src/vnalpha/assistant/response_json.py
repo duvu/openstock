@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from vnalpha.assistant.errors import IntentClassificationError, SynthesisError
 from vnalpha.assistant.models import SUPPORTED_INTENTS, AssistantAnswer, IntentResult
@@ -10,6 +11,96 @@ INTENT_ALIASES = {
     "show_stock_info": "explain_symbol",
     "get_stock": "explain_symbol",
 }
+
+# Intents whose plan requires a concrete symbol. For these, if the classifier
+# omitted the symbol, deterministically recover it from the raw prompt so an
+# obvious ticker mention (e.g. "phan tich co phieu FPT") is not lost.
+_SYMBOL_REQUIRING_INTENTS = frozenset(
+    {
+        "explain_symbol",
+        "deep_analyze_symbol",
+        "review_symbol_sector_alignment",
+        "generate_research_scenario",
+        "show_lineage",
+        "compare_symbols",
+    }
+)
+
+# Vietnamese/English words that match the 2-4 uppercase-letter shape but are
+# never tickers; excluded from deterministic symbol recovery.
+_SYMBOL_STOPWORDS = frozenset(
+    {
+        "CP",  # cổ phiếu marker handled separately by the planner
+        "CK",  # chứng khoán marker
+        "MA",
+        "VN",
+        "USD",
+        "VND",
+        "PE",
+        "PB",
+        "EPS",
+        "ROE",
+        "ROA",
+        "AND",
+        "THE",
+        "FOR",
+        "WHY",
+        "HOW",
+        # Common non-diacritic Vietnamese function words that share the 3-letter
+        # ticker shape but are never symbols. Kept conservative: a recovered
+        # symbol is still validated downstream by data.ensure_current_symbol, so
+        # only unambiguous connectors are excluded here.
+        "CUA",
+        "VOI",
+        "CHO",
+        "NAO",
+        "HAY",
+        "XEM",
+    }
+)
+
+# Words that explicitly signal "the following token is a ticker". When present,
+# recovery trusts the token right after the cue even if it is not diacritic-safe.
+_TICKER_CUES = frozenset(
+    {"CP", "CK", "MA", "STOCK", "SYMBOL", "TICKER", "PHIEU", "MASP"}
+)
+
+# Whole alphabetic words only (bounded), so we never fragment a longer word
+# like "research" into a spurious 3-letter "ticker".
+_WORD_RE = re.compile(r"\b([A-Za-z]+)\b")
+
+
+def _recover_symbols_from_prompt(prompt: str) -> list[str]:
+    """Best-effort deterministic ticker recovery from the raw user prompt.
+
+    Prefers the token immediately following a ticker cue ("co phieu", "cp",
+    "ma", "stock", …). Only when no cue is present does it fall back to
+    3-letter tokens that were typed in uppercase in the original prompt (a
+    strong ticker signal). Conservative by design: it only supplements a
+    missing classifier symbol, never overrides one, and any recovered symbol is
+    still validated downstream.
+    """
+    raw_words = [match.group(1) for match in _WORD_RE.finditer(prompt)]
+    upper_words = [word.upper() for word in raw_words]
+
+    def _is_ticker_shaped(token: str) -> bool:
+        return len(token) == 3 and token.isalpha() and token not in _SYMBOL_STOPWORDS
+
+    cued: list[str] = []
+    for index, token in enumerate(upper_words):
+        if token in _TICKER_CUES and index + 1 < len(upper_words):
+            nxt = upper_words[index + 1]
+            if _is_ticker_shaped(nxt) and nxt not in cued:
+                cued.append(nxt)
+    if cued:
+        return cued
+
+    # No cue: only trust tokens the user typed in uppercase (e.g. "analyze HPG").
+    candidates: list[str] = []
+    for raw, token in zip(raw_words, upper_words, strict=True):
+        if raw.isupper() and _is_ticker_shaped(token) and token not in candidates:
+            candidates.append(token)
+    return candidates
 
 
 def strip_markdown_fence(text: str) -> str:
@@ -143,7 +234,6 @@ def parse_synthesis_response(response_text: str) -> AssistantAnswer:
 def parse_classifier_response(
     response_text: str, user_prompt: str = ""
 ) -> IntentResult:
-    _ = user_prompt
     data = parse_json_response(response_text, context="classifier")
 
     raw_intent = data.get("intent", "unsupported_or_unsafe")
@@ -158,6 +248,21 @@ def parse_classifier_response(
     entities = data.get("entities", {})
     if not isinstance(entities, dict):
         entities = {}
+
+    # Deterministic symbol recovery: if a symbol-requiring intent came back
+    # without a symbol, recover an obvious ticker from the raw prompt so an
+    # explicit mention (e.g. "phan tich co phieu FPT") still executes.
+    if intent in _SYMBOL_REQUIRING_INTENTS and user_prompt:
+        existing_symbols = entities.get("symbols")
+        has_symbols = isinstance(existing_symbols, list) and any(
+            str(item).strip() for item in existing_symbols
+        )
+        has_symbol = bool(str(entities.get("symbol") or "").strip())
+        if not has_symbols and not has_symbol:
+            recovered = _recover_symbols_from_prompt(user_prompt)
+            if recovered:
+                entities["symbols"] = recovered
+
     confidence_raw = data.get("confidence", 0.5)
     try:
         confidence = float(confidence_raw)
