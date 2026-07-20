@@ -40,17 +40,17 @@ jobs:
           cache: pip
           cache-dependency-path: vnalpha/pyproject.toml
 
-      - name: Install build prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends dpkg-dev python3-venv unzip
-          python -m pip install --quiet --disable-pip-version-check --upgrade pip setuptools wheel
-
       - name: Validate install source contract
         run: bash packaging/test/test_install_contract.sh
 
       - name: Validate legacy package tree contracts
         run: packaging/test/test_packaging.sh
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends dpkg-dev python3-venv unzip
+          python -m pip install --quiet --disable-pip-version-check --upgrade pip setuptools wheel
 
       - name: Build standalone Debian package
         run: |
