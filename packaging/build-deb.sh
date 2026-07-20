@@ -13,11 +13,12 @@
 # What this script does:
 #   1. Reads the version from vnalpha/pyproject.toml (or uses --version).
 #   2. Copies the package tree from packaging/deb/ into a staging directory.
-#   3. Pre-downloads Python wheels for vnalpha and its dependencies into
+#   3. Bundles supported operator helpers and the operator guide.
+#   4. Pre-downloads Python wheels for vnalpha and its dependencies into
 #      staging/opt/vnalpha/wheels/ for offline installation by postinst.
-#   4. Sets correct file permissions on launchers and DEBIAN scripts.
-#   5. Calls dpkg-deb --build to produce vnalpha_VERSION_amd64.deb.
-#   6. Runs dpkg-deb --info and dpkg -c to verify the resulting .deb.
+#   5. Sets correct file permissions on launchers and DEBIAN scripts.
+#   6. Calls dpkg-deb --build to produce vnalpha_VERSION_amd64.deb.
+#   7. Runs package structure checks on the resulting .deb.
 #
 # Prerequisites:
 #   - dpkg-deb (part of dpkg, available on Debian/Ubuntu)
@@ -40,6 +41,12 @@ DEB_TREE="${PACKAGING_DIR}/deb"
 OUTPUT_DIR="${PACKAGING_DIR}/dist"
 VNALPHA_SRC="${REPO_ROOT}/vnalpha"
 SKIP_WHEELS=false
+OPERATOR_SCRIPTS=(
+  openstock-verify
+  openstock-mvp1-start
+  openstock-backup-warehouse
+  openstock-restore-warehouse
+)
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -50,10 +57,12 @@ VERSION=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)
+      [[ $# -ge 2 ]] || { echo "build-deb.sh: --version requires a value" >&2; exit 1; }
       VERSION="$2"
       shift 2
       ;;
     --output-dir)
+      [[ $# -ge 2 ]] || { echo "build-deb.sh: --output-dir requires a value" >&2; exit 1; }
       OUTPUT_DIR="$2"
       shift 2
       ;;
@@ -77,7 +86,6 @@ done
 # ---------------------------------------------------------------------------
 
 if [[ -z "${VERSION}" ]]; then
-  # Extract version from pyproject.toml: version = "X.Y.Z"
   VERSION="$(grep -E '^version\s*=' "${VNALPHA_SRC}/pyproject.toml" \
     | head -1 \
     | sed -E 's/^version\s*=\s*"([^"]+)".*/\1/')"
@@ -85,6 +93,10 @@ fi
 
 if [[ -z "${VERSION}" ]]; then
   echo "build-deb.sh: ERROR — could not determine version from pyproject.toml" >&2
+  exit 1
+fi
+if [[ ! "${VERSION}" =~ ^[0-9A-Za-z.+~-]+$ ]]; then
+  echo "build-deb.sh: ERROR — invalid package version: ${VERSION}" >&2
   exit 1
 fi
 
@@ -98,9 +110,22 @@ STAGE_DIR="$(mktemp -d /tmp/vnalpha-deb-XXXXXX)"
 trap 'rm -rf "${STAGE_DIR}"' EXIT
 
 echo "build-deb.sh: Staging in ${STAGE_DIR}"
-
-# Copy the package tree
 cp -r "${DEB_TREE}/." "${STAGE_DIR}/"
+
+# Bundle the supported single-host operator surface so a package install does
+# not depend on copying files from a source checkout.
+mkdir -p "${STAGE_DIR}/usr/bin" "${STAGE_DIR}/usr/share/doc/vnalpha"
+for helper in "${OPERATOR_SCRIPTS[@]}"; do
+  helper_source="${PACKAGING_DIR}/scripts/${helper}"
+  if [[ ! -f "${helper_source}" ]]; then
+    echo "build-deb.sh: ERROR — missing operator helper: ${helper_source}" >&2
+    exit 1
+  fi
+  bash -n "${helper_source}"
+  install -m 0755 "${helper_source}" "${STAGE_DIR}/usr/bin/${helper}"
+done
+install -m 0644 "${PACKAGING_DIR}/docs/OPERATOR.md" \
+  "${STAGE_DIR}/usr/share/doc/vnalpha/OPERATOR.md"
 
 GIT_COMMIT="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || true)"
 if [[ ! "${GIT_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
@@ -119,20 +144,13 @@ printf 'version=%s\ncommit=%s\ntree_state=%s\n' \
   >"${STAGE_DIR}/opt/vnalpha/RELEASE"
 
 # ---------------------------------------------------------------------------
-# Update version in control file
+# Package metadata
 # ---------------------------------------------------------------------------
 
 sed -i "s/^Version:.*/Version: ${VERSION}/" "${STAGE_DIR}/DEBIAN/control"
-
-# ---------------------------------------------------------------------------
-# Calculate installed size (approximate, in KB)
-# ---------------------------------------------------------------------------
-
-# We set a placeholder in the control file; dpkg-deb will override with
-# the actual size. Update it to something realistic to avoid a warning.
 PAYLOAD_KB=1
 if [[ "${SKIP_WHEELS}" == false ]]; then
-  PAYLOAD_KB=60000  # ~60 MB estimate for venv with all deps
+  PAYLOAD_KB=60000
 fi
 sed -i "s/^Installed-Size:.*/Installed-Size: ${PAYLOAD_KB}/" \
   "${STAGE_DIR}/DEBIAN/control"
@@ -153,8 +171,6 @@ TARGET_WHEEL_PLATFORMS=(
   "manylinux2014_x86_64"
 )
 
-# Build the local project wheel independently because pip download of a local
-# project resolves dependencies but does not place the project wheel in the destination.
 python3 -m pip wheel \
   --quiet \
   --no-deps \
@@ -165,6 +181,10 @@ python3 -m pip wheel \
 if [[ "${SKIP_WHEELS}" == false ]]; then
   echo "build-deb.sh: Downloading CPython 3.10-3.12 wheels ..."
   VNALPHA_WHEEL="$(find "${WHEELS_DIR}" -maxdepth 1 -name 'vnalpha-*.whl' -print -quit)"
+  [[ -n "${VNALPHA_WHEEL}" ]] || {
+    echo "build-deb.sh: ERROR — local vnalpha wheel was not created" >&2
+    exit 1
+  }
   TARGET_WHEELS_DIR="${STAGE_DIR}/target-wheels"
   mkdir -p "${TARGET_WHEELS_DIR}"
   PLATFORM_ARGS=()
@@ -186,30 +206,31 @@ if [[ "${SKIP_WHEELS}" == false ]]; then
   rm -rf "${WHEELS_DIR}"
   mv "${TARGET_WHEELS_DIR}" "${WHEELS_DIR}"
 
-  WHEEL_COUNT="$(find "${WHEELS_DIR}" -name "*.whl" | wc -l)"
+  WHEEL_COUNT="$(find "${WHEELS_DIR}" -name '*.whl' | wc -l)"
   echo "build-deb.sh: Downloaded ${WHEEL_COUNT} wheels."
 else
-  echo "build-deb.sh: --offline: skipping wheel download."
+  echo "build-deb.sh: --offline: skipping dependency wheel download."
 fi
 
 # ---------------------------------------------------------------------------
 # Set file permissions
 # ---------------------------------------------------------------------------
 
-# DEBIAN scripts must be executable
 chmod 0755 "${STAGE_DIR}/DEBIAN/postinst"
 chmod 0755 "${STAGE_DIR}/DEBIAN/prerm"
 chmod 0755 "${STAGE_DIR}/DEBIAN/postrm"
-
-# Launchers must be executable
 chmod 0755 "${STAGE_DIR}/usr/bin/vnalpha"
 chmod 0755 "${STAGE_DIR}/usr/bin/vnalpha-poc"
-
+for helper in "${OPERATOR_SCRIPTS[@]}"; do
+  chmod 0755 "${STAGE_DIR}/usr/bin/${helper}"
+done
 chmod 0640 "${STAGE_DIR}/etc/vnalpha/vnalpha.env"
 chmod 0644 "${STAGE_DIR}/opt/vnalpha/RELEASE"
+chmod 0644 "${STAGE_DIR}/usr/lib/systemd/system/openstock-daily-pipeline.service"
+chmod 0644 "${STAGE_DIR}/usr/lib/systemd/system/openstock-daily-pipeline.timer"
 
 # ---------------------------------------------------------------------------
-# Build .deb
+# Build and validate .deb
 # ---------------------------------------------------------------------------
 
 mkdir -p "${OUTPUT_DIR}"
@@ -217,10 +238,6 @@ DEB_FILE="${OUTPUT_DIR}/vnalpha_${VERSION}_amd64.deb"
 
 echo "build-deb.sh: Running dpkg-deb --build ..."
 dpkg-deb --root-owner-group --build "${STAGE_DIR}" "${DEB_FILE}"
-
-# ---------------------------------------------------------------------------
-# Validate
-# ---------------------------------------------------------------------------
 
 echo ""
 echo "build-deb.sh: === Package info ==="
@@ -230,6 +247,21 @@ echo ""
 echo "build-deb.sh: === Package contents ==="
 dpkg -c "${DEB_FILE}"
 
+for entry in \
+  ./usr/bin/vnalpha \
+  ./usr/bin/openstock-verify \
+  ./usr/bin/openstock-mvp1-start \
+  ./usr/bin/openstock-backup-warehouse \
+  ./usr/bin/openstock-restore-warehouse \
+  ./usr/share/doc/vnalpha/OPERATOR.md \
+  ./opt/vnalpha/RELEASE
+ do
+  if ! dpkg -c "${DEB_FILE}" | grep -F "${entry}" >/dev/null; then
+    echo "build-deb.sh: ERROR — built package is missing ${entry}" >&2
+    exit 1
+  fi
+done
+
 echo ""
 echo "build-deb.sh: SUCCESS — ${DEB_FILE}"
 echo ""
@@ -237,7 +269,10 @@ echo "Install with:"
 echo "  sudo apt install -y '${DEB_FILE}'"
 echo "  # or: sudo dpkg -i '${DEB_FILE}' && sudo apt -f install"
 echo ""
-echo "Verify:"
-echo "  dpkg -s vnalpha"
-echo "  vnalpha --help"
-echo "  vnalpha-poc --help"
+echo "After install:"
+echo "  sudo usermod -aG openstock <operator>  # then start a new login session"
+echo "  vnalpha init"
+echo "  openstock-verify --mvp1"
+echo ""
+echo "The daily timer is installed but remains disabled until explicitly enabled:"
+echo "  sudo systemctl enable --now openstock-daily-pipeline.timer"
