@@ -122,14 +122,14 @@ def test_later_disclosure_revision_does_not_erase_historical_view() -> None:
     first_event = normalize_event(
         conn,
         first,
-        event_type=EventType.SHAREHOLDER_MEETING,
+        event_type=EventType.SHAREHOLDER_MEETING_OR_RESOLUTION,
         event_id="event-1",
         event_date="2026-07-20",
     )
     normalize_event(
         conn,
         second,
-        event_type=EventType.SHAREHOLDER_MEETING,
+        event_type=EventType.SHAREHOLDER_MEETING_OR_RESOLUTION,
         event_id="event-1",
         event_date="2026-07-21",
     )
