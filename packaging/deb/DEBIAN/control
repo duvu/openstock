@@ -12,6 +12,11 @@ Description: VnAlpha — Alpha discovery research CLI/TUI for Vietnamese equitie
  .
  This package installs a vendored Python virtual environment under
  /opt/vnalpha/venv so it does not interfere with system Python packages.
+ It also installs the supported verification, startup, backup and restore
+ helpers used by the single-host operating model.
+ .
+ Docker Engine, the vnstock-service image and the /opt/openstock Compose
+ deployment remain external prerequisites and are not installed automatically.
  .
  IMPORTANT: This package is for research observation only.
  It does not expose brokerage, order, account, portfolio, or trading
@@ -21,4 +26,4 @@ Description: VnAlpha — Alpha discovery research CLI/TUI for Vietnamese equitie
  User data (DuckDB warehouse) lives under /var/lib/openstock/warehouse
  and is NEVER removed on package upgrade or removal.
 Installed-Size: 1
-Homepage: https://github.com/openstock/openstock
+Homepage: https://github.com/duvu/openstock

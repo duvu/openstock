@@ -1,0 +1,116 @@
+name: vnalpha-debian-package
+
+on:
+  pull_request:
+    paths:
+      - "Makefile"
+      - "packaging/**"
+      - "vnalpha/pyproject.toml"
+      - "vnalpha/src/**"
+      - ".github/workflows/vnalpha-debian-package.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "Makefile"
+      - "packaging/**"
+      - "vnalpha/pyproject.toml"
+      - "vnalpha/src/**"
+      - ".github/workflows/vnalpha-debian-package.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vnalpha-debian-package-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  package:
+    name: Build and verify Debian package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: vnalpha/pyproject.toml
+
+      - name: Validate install source contract
+        shell: bash
+        run: |
+          set -o pipefail
+          bash packaging/test/test_install_contract.sh \
+            2>&1 | tee vnalpha-debian-package.log
+
+      - name: Validate required files and modes
+        env:
+          PACKAGING_TEST_GROUP: files
+        run: packaging/test/test_packaging.sh
+
+      - name: Validate shell syntax
+        env:
+          PACKAGING_TEST_GROUP: syntax
+        run: packaging/test/test_packaging.sh
+
+      - name: Validate Debian metadata
+        env:
+          PACKAGING_TEST_GROUP: metadata
+        run: packaging/test/test_packaging.sh
+
+      - name: Validate research boundary
+        env:
+          PACKAGING_TEST_GROUP: boundary
+        run: packaging/test/test_packaging.sh
+
+      - name: Validate state preservation
+        env:
+          PACKAGING_TEST_GROUP: state
+        run: packaging/test/test_packaging.sh
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends dpkg-dev python3-venv unzip
+          python -m pip install --quiet --disable-pip-version-check --upgrade pip setuptools wheel
+
+      - name: Build standalone Debian package
+        shell: bash
+        run: |
+          set -o pipefail
+          rm -rf packaging/dist-ci
+          mkdir -p packaging/dist-ci
+          packaging/build-deb.sh --output-dir packaging/dist-ci \
+            2>&1 | tee -a vnalpha-debian-package.log
+
+      - name: Validate built package and offline runtime
+        shell: bash
+        run: |
+          set -o pipefail
+          bash packaging/test/test_install_contract.sh \
+            packaging/dist-ci/vnalpha_*.deb \
+            2>&1 | tee -a vnalpha-debian-package.log
+
+      - name: Upload package diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnalpha-debian-package-log
+          path: vnalpha-debian-package.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload package artifact
+        if: success()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnalpha-debian-package
+          path: packaging/dist-ci/vnalpha_*.deb
+          if-no-files-found: warn
+          retention-days: 7

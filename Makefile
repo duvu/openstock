@@ -92,8 +92,10 @@ verify-r4: ## Run R4 chat-workspace acceptance tests (no network required)
 verify-vnalpha-package: ## Build and exercise a standalone Debian package
 	rm -rf /tmp/openstock-hardening-deb
 	mkdir -p /tmp/openstock-hardening-deb
+	bash ./packaging/test/test_install_contract.sh
+	./packaging/test/test_packaging.sh
 	./packaging/build-deb.sh --output-dir /tmp/openstock-hardening-deb
-	./packaging/test/test_packaging.sh /tmp/openstock-hardening-deb/vnalpha_*.deb
+	bash ./packaging/test/test_install_contract.sh /tmp/openstock-hardening-deb/vnalpha_*.deb
 
 eval-research-answers: ## Evaluate offline golden fixtures
 	cd vnalpha && PYTHONPATH=src python -c 'from vnalpha.cli import app; app()' eval research-answers --ci
@@ -129,5 +131,14 @@ build-vnalpha-deb: ## Build the vnalpha Debian package
 	./packaging/build-deb.sh
 
 verify-vnalpha-deb: ## Verify the vnalpha Debian package structure
-	./packaging/test/test_packaging.sh packaging/dist/vnalpha_*.deb 2>/dev/null || \
-		./packaging/test/test_packaging.sh
+	bash ./packaging/test/test_install_contract.sh
+	./packaging/test/test_packaging.sh
+	@found=0; \
+	for deb in packaging/dist/vnalpha_*.deb; do \
+		[ -f "$$deb" ] || continue; \
+		found=1; \
+		bash ./packaging/test/test_install_contract.sh "$$deb" || exit $$?; \
+	done; \
+	if [ "$$found" -eq 0 ]; then \
+		echo "No built package found under packaging/dist; source-tree checks only."; \
+	fi

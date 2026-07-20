@@ -1,81 +1,161 @@
 #!/bin/sh
 # postinst — vnalpha Debian package post-installation script
 #
-# Responsibilities:
-#   1. Create /opt/vnalpha/venv Python virtual environment.
-#   2. Install vnalpha and its runtime dependencies into the venv.
-#   3. Create /var/lib/openstock/warehouse directory with safe permissions
-#      if it does not already exist (NEVER removes it if it exists).
-#   4. Apply correct permissions to launchers and config.
-#
-# The venv is rebuilt on every install/upgrade so the package is always
-# self-consistent without requiring network access at runtime. The build
-# script (build-deb.sh) bundles the wheels into /opt/vnalpha/wheels/ so
-# this script can install offline using --find-links.
+# Installation contract:
+#   - build and validate a replacement venv before touching the active venv;
+#   - install from the bundled wheelhouse only (no target-host network fallback);
+#   - preserve research state while making shared state writable by openstock;
+#   - install systemd units disabled by default.
 
-set -e
+set -eu
 
-VNALPHA_VENV=/opt/vnalpha/venv
-VNALPHA_WHEELS=/opt/vnalpha/wheels
-WAREHOUSE_DIR=/var/lib/openstock/warehouse
+VNALPHA_ROOT=/opt/vnalpha
+VNALPHA_VENV=${VNALPHA_ROOT}/venv
+VNALPHA_WHEELS=${VNALPHA_ROOT}/wheels
+VNALPHA_RELEASE=${VNALPHA_ROOT}/RELEASE
+OPENSTOCK_STATE_DIR=/var/lib/openstock
+WAREHOUSE_DIR=${OPENSTOCK_STATE_DIR}/warehouse
+KNOWLEDGE_DIR=${OPENSTOCK_STATE_DIR}/knowledge
+LOG_DIR=/var/log/openstock
+CONFIG_DIR=/etc/vnalpha
+NEW_VENV=""
+OLD_VENV=${VNALPHA_ROOT}/venv.previous
+OLD_VENV_STAGED=false
+SMOKE_DIR=""
+
+fail() {
+  echo "vnalpha: ERROR — $*" >&2
+  exit 1
+}
+
+rollback_install() {
+  if [ "${OLD_VENV_STAGED}" = true ] && \
+     [ ! -e "${VNALPHA_VENV}" ] && \
+     [ -d "${OLD_VENV}" ]; then
+    mv "${OLD_VENV}" "${VNALPHA_VENV}" || true
+  fi
+  if [ -n "${NEW_VENV}" ] && [ -e "${NEW_VENV}" ]; then
+    rm -rf -- "${NEW_VENV}"
+  fi
+  if [ -n "${SMOKE_DIR}" ] && [ -d "${SMOKE_DIR}" ]; then
+    rm -rf -- "${SMOKE_DIR}"
+  fi
+}
+trap rollback_install 0
+trap 'exit 1' HUP INT TERM
+
+ensure_state_dir() {
+  path="$1"
+  mode="$2"
+  if [ -L "${path}" ]; then
+    fail "refusing symlink state directory: ${path}"
+  fi
+  install -d -m "${mode}" -o root -g openstock "${path}"
+}
+
+normalize_shared_tree() {
+  path="$1"
+  [ -d "${path}" ] || return 0
+  find "${path}" -xdev -type d -exec chgrp openstock {} + -exec chmod g+rwx,o-rwx {} +
+  find "${path}" -xdev -type f -exec chgrp openstock {} + -exec chmod g+rw,o-rwx {} +
+}
 
 case "$1" in
   configure)
     if ! getent group openstock >/dev/null 2>&1; then
       groupadd --system openstock
     fi
-    # ------------------------------------------------------------------
-    # 1. Create venv
-    # ------------------------------------------------------------------
-    echo "vnalpha: creating virtual environment at ${VNALPHA_VENV} ..."
 
-    # Remove stale venv on upgrade so we start clean, but keep the
-    # wheels directory which was placed there by the .deb payload.
+    # ------------------------------------------------------------------
+    # 1. Validate the immutable package inputs before changing the venv.
+    # ------------------------------------------------------------------
+    [ -d "${VNALPHA_WHEELS}" ] || \
+      fail "bundled wheel directory is missing at ${VNALPHA_WHEELS}; reinstall a complete package"
+    [ -f "${VNALPHA_RELEASE}" ] || \
+      fail "release metadata is missing at ${VNALPHA_RELEASE}"
+
+    PACKAGE_VERSION="$(sed -n 's/^version=//p' "${VNALPHA_RELEASE}" | head -1)"
+    case "${PACKAGE_VERSION}" in
+      ""|*[!0-9A-Za-z.+~-]*)
+        fail "invalid packaged version in ${VNALPHA_RELEASE}"
+        ;;
+    esac
+
+    APP_WHEEL="$(find "${VNALPHA_WHEELS}" -maxdepth 1 -type f -name 'vnalpha-*.whl' -print -quit)"
+    [ -n "${APP_WHEEL}" ] || \
+      fail "vnalpha application wheel is missing from ${VNALPHA_WHEELS}"
+
+    if [ -L "${VNALPHA_VENV}" ]; then
+      fail "refusing symlink virtual environment at ${VNALPHA_VENV}"
+    fi
+
+    # ------------------------------------------------------------------
+    # 2. Build a replacement venv offline and smoke-test it first.
+    # ------------------------------------------------------------------
+    NEW_VENV="${VNALPHA_ROOT}/venv.new.$$"
+    rm -rf -- "${NEW_VENV}"
+    echo "vnalpha: building replacement virtual environment at ${NEW_VENV} ..."
+    python3 -m venv "${NEW_VENV}"
+    "${NEW_VENV}/bin/pip" install \
+      --isolated \
+      --quiet \
+      --disable-pip-version-check \
+      --no-index \
+      --find-links "${VNALPHA_WHEELS}" \
+      "vnalpha==${PACKAGE_VERSION}"
+
+    SMOKE_DIR="$(mktemp -d /tmp/vnalpha-install-smoke.XXXXXX)"
+    VNALPHA_LOG_ROOT="${SMOKE_DIR}" \
+    VNALPHA_LOG_PATH="${SMOKE_DIR}/vnalpha.log" \
+      "${NEW_VENV}/bin/vnalpha" --help >/dev/null 2>&1 || \
+      fail "replacement vnalpha CLI failed its smoke check"
+    rm -rf -- "${SMOKE_DIR}"
+    SMOKE_DIR=""
+
+    # Swap only after the replacement has passed. The EXIT trap restores the
+    # prior venv if activation is interrupted between the two renames.
+    rm -rf -- "${OLD_VENV}"
     if [ -d "${VNALPHA_VENV}" ]; then
-      rm -rf "${VNALPHA_VENV}"
+      mv "${VNALPHA_VENV}" "${OLD_VENV}"
+      OLD_VENV_STAGED=true
     fi
-
-    python3 -m venv "${VNALPHA_VENV}"
-
-    # ------------------------------------------------------------------
-    # 2. Install vnalpha into the venv
-    # ------------------------------------------------------------------
-    echo "vnalpha: installing packages ..."
-
-    # Prefer pre-downloaded wheels (offline install). Fall back to PyPI
-    # only if the wheels directory is absent (development or CI scenario).
-    if [ -d "${VNALPHA_WHEELS}" ]; then
-      "${VNALPHA_VENV}/bin/pip" install \
-        --quiet \
-        --no-index \
-        --find-links "${VNALPHA_WHEELS}" \
-        vnalpha
+    if mv "${NEW_VENV}" "${VNALPHA_VENV}"; then
+      NEW_VENV=""
+      OLD_VENV_STAGED=false
+      rm -rf -- "${OLD_VENV}"
     else
-      echo "vnalpha: WARNING — wheels directory not found, falling back to PyPI."
-      "${VNALPHA_VENV}/bin/pip" install \
-        --quiet \
-        vnalpha
+      fail "could not activate the replacement virtual environment"
     fi
-
-    echo "vnalpha: venv ready."
+    echo "vnalpha: offline virtual environment ready for version ${PACKAGE_VERSION}."
 
     # ------------------------------------------------------------------
-    # 3. Ensure warehouse directory exists (NEVER delete if already there)
+    # 3. Establish one shared-state permission contract.
     # ------------------------------------------------------------------
-    if [ ! -d "${WAREHOUSE_DIR}" ]; then
-      echo "vnalpha: creating warehouse directory at ${WAREHOUSE_DIR} ..."
-      install -d -m 0755 "${WAREHOUSE_DIR}"
-    else
-      echo "vnalpha: warehouse directory already exists — preserving data."
+    ensure_state_dir "${OPENSTOCK_STATE_DIR}" 0750
+    if [ -L "${WAREHOUSE_DIR}" ]; then
+      fail "refusing symlink state directory: ${WAREHOUSE_DIR}"
     fi
-    install -d -m 0750 -o root -g openstock /var/log/openstock
+    install -d -m 0770 -o root -g openstock "${WAREHOUSE_DIR}"
+    ensure_state_dir "${KNOWLEDGE_DIR}" 0770
+    ensure_state_dir "${LOG_DIR}" 0770
+    ensure_state_dir "${CONFIG_DIR}" 0750
 
-    # ------------------------------------------------------------------
-    # 4. Permissions
-    # ------------------------------------------------------------------
-    # Launchers must be executable (also set in build-deb.sh, belt-and-suspenders)
+    # Preserve all state, but repair group access for existing installations so
+    # systemd writers and host CLI/TUI operators use the same DuckDB/knowledge.
+    normalize_shared_tree "${WAREHOUSE_DIR}"
+    normalize_shared_tree "${KNOWLEDGE_DIR}"
+    normalize_shared_tree "${LOG_DIR}"
+
     chmod 0755 /usr/bin/vnalpha || true
     chmod 0755 /usr/bin/vnalpha-poc || true
+    for helper in \
+      /usr/bin/openstock-verify \
+      /usr/bin/openstock-mvp1-start \
+      /usr/bin/openstock-backup-warehouse \
+      /usr/bin/openstock-restore-warehouse
+    do
+      [ -e "${helper}" ] && chmod 0755 "${helper}"
+    done
 
     chown root:openstock /etc/vnalpha/vnalpha.env || true
     chmod 0640 /etc/vnalpha/vnalpha.env || true
@@ -85,10 +165,16 @@ case "$1" in
     fi
 
     echo "vnalpha: installation complete."
+    echo "vnalpha: the daily timer remains disabled until explicitly enabled."
+    echo "vnalpha: add interactive operators to the openstock group, then start a new login session:"
+    echo "  sudo usermod -aG openstock <operator>"
+    echo "vnalpha: initialize and verify with:"
+    echo "  vnalpha init"
+    echo "  openstock-verify --mvp1"
     ;;
 
   abort-upgrade|abort-remove|abort-deconfigure)
-    # Nothing to do on rollback
+    # The previous venv and research state remain untouched on rollback.
     ;;
 
   *)
