@@ -423,3 +423,118 @@ def test_stage_counts_and_warnings_are_json_serialized(conn) -> None:
     assert stages[0]["counts"]["quarantined"] == 5
     assert "Low coverage" in stages[0]["warnings"]
     assert "Stale data detected" in stages[0]["warnings"]
+
+
+def _result(status=MaintenanceRunStatus.SUCCESS, *, stages=None, corr="atomic"):
+    return DailyMaintenanceResult(
+        status=status,
+        requested_date="2026-07-17",
+        resolved_date="2026-07-17",
+        correlation_id=corr,
+        stages=stages
+        if stages is not None
+        else (
+            MaintenanceStageResult("resolve_session", MaintenanceStageStatus.SUCCESS),
+            MaintenanceStageResult("incremental_ohlcv", MaintenanceStageStatus.SUCCESS),
+        ),
+        requested_symbols=("VCB",),
+        successful_symbols=("VCB",),
+        failed_symbols=(),
+        diagnostics_refs=(),
+        mutated=True,
+    )
+
+
+def test_stage_persistence_failure_rolls_back_the_whole_run(conn, monkeypatch) -> None:
+    # Given: stage persistence raises after the run row has been inserted.
+    from vnalpha.maintenance import ledger as ledger_module
+
+    call_count = {"n": 0}
+    original = ledger_module._persist_stage_run
+
+    def exploding_stage(conn_, run_id, stage, order):
+        call_count["n"] += 1
+        if call_count["n"] == 2:  # fail while writing the second stage
+            raise RuntimeError("injected stage write failure")
+        return original(conn_, run_id, stage, order)
+
+    monkeypatch.setattr(ledger_module, "_persist_stage_run", exploding_stage)
+
+    # When: persisting a run that fails mid-write.
+    with pytest.raises(RuntimeError, match="injected stage write failure"):
+        persist_maintenance_run(
+            conn,
+            _result(corr="rollback-test"),
+            started_at=datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 7, 17, 8, 1, tzinfo=timezone.utc),
+            software_version="test",
+        )
+
+    # Then: no run row and no stage rows are committed — never a false success.
+    assert get_latest_maintenance_run(conn) is None
+    run_count = conn.execute("SELECT COUNT(*) FROM maintenance_run").fetchone()[0]
+    stage_count = conn.execute("SELECT COUNT(*) FROM maintenance_stage_run").fetchone()[
+        0
+    ]
+    assert run_count == 0
+    assert stage_count == 0
+
+
+class _SimulatedCrash(BaseException):
+    """A BaseException (like KeyboardInterrupt/SystemExit) to prove the ledger
+    rolls back even on non-``Exception`` interruptions, without aborting the
+    pytest run the way a real KeyboardInterrupt would."""
+
+
+def test_crash_before_completion_leaves_no_committed_record(conn, monkeypatch) -> None:
+    # A crash before the transaction commits must leave the connection with no
+    # committed run and no open transaction that would corrupt later writes.
+    from vnalpha.maintenance import ledger as ledger_module
+
+    def explode(conn_, run_id, stage, order):
+        raise _SimulatedCrash("simulated crash mid-persist")
+
+    original = ledger_module._persist_stage_run
+    monkeypatch.setattr(ledger_module, "_persist_stage_run", explode)
+    with pytest.raises(_SimulatedCrash):
+        persist_maintenance_run(
+            conn,
+            _result(corr="crash-test"),
+            started_at=datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 7, 17, 8, 1, tzinfo=timezone.utc),
+            software_version="test",
+        )
+    assert get_latest_maintenance_run(conn) is None
+
+    # And: a subsequent successful persist works (no dangling transaction).
+    monkeypatch.setattr(ledger_module, "_persist_stage_run", original)
+    run_id = persist_maintenance_run(
+        conn,
+        _result(corr="after-crash"),
+        started_at=datetime(2026, 7, 17, 9, 0, tzinfo=timezone.utc),
+        completed_at=datetime(2026, 7, 17, 9, 1, tzinfo=timezone.utc),
+        software_version="test",
+    )
+    latest = get_latest_maintenance_run(conn)
+    assert latest is not None
+    assert latest["run_id"] == run_id
+    assert latest["correlation_id"] == "after-crash"
+
+
+def test_committed_run_persists_run_and_all_stages_together(conn) -> None:
+    # A committed run is complete: the run row and every declared stage row are
+    # present together (atomic all-or-nothing write).
+    run_id = persist_maintenance_run(
+        conn,
+        _result(corr="atomic-commit"),
+        started_at=datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc),
+        completed_at=datetime(2026, 7, 17, 8, 1, tzinfo=timezone.utc),
+        software_version="test",
+    )
+    run_count = conn.execute("SELECT COUNT(*) FROM maintenance_run").fetchone()[0]
+    stages = get_maintenance_run_stages(conn, run_id)
+    assert run_count == 1
+    assert [stage["stage_name"] for stage in stages] == [
+        "resolve_session",
+        "incremental_ohlcv",
+    ]
