@@ -108,8 +108,8 @@ def calculate_rights_issue_factor(
     # Theoretical ex-rights price formula
     total_shares = Decimal(rights_ratio_old + rights_ratio_new)
     total_value = (
-        Decimal(rights_ratio_old) * price_before +
-        Decimal(rights_ratio_new) * subscription_price
+        Decimal(rights_ratio_old) * price_before
+        + Decimal(rights_ratio_new) * subscription_price
     )
     ex_rights_price = total_value / total_shares
 

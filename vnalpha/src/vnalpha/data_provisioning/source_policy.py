@@ -114,7 +114,9 @@ class SourcePolicyResolver:
         return ResolvedSource(
             dataset=dataset,
             source=self.default_source,
-            mode=SourceSelectionMode.AUTO if not self.default_source else SourceSelectionMode.CONFIGURED,
+            mode=SourceSelectionMode.AUTO
+            if not self.default_source
+            else SourceSelectionMode.CONFIGURED,
             fallback_allowed=True,
             rationale="No specific policy, using defaults",
         )
