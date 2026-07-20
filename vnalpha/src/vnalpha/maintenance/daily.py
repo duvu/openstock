@@ -6,6 +6,7 @@ from datetime import date as DateType
 import duckdb
 
 from vnalpha.core.dates import resolve_date
+from vnalpha.core.logging import get_logger
 from vnalpha.data_availability.checks import compute_lookback_start
 from vnalpha.data_availability.policy import DEFAULT_POLICY
 from vnalpha.data_provisioning.service import (
@@ -45,6 +46,7 @@ _PLANNED_STAGES = (
     "canonical",
     "features",
     "score_watchlist",
+    "candidate_outcomes",
     "market_regime",
     "sector_strength",
     "group_context",
@@ -52,6 +54,8 @@ _PLANNED_STAGES = (
     "entity_memory",
 )
 _MAX_SYMBOL_SCOPE = 500
+
+logger = get_logger("maintenance.daily")
 
 
 class DailyMaintenanceService:
@@ -379,6 +383,8 @@ class DailyMaintenanceService:
                 )
             )
 
+        stages.append(self._mature_candidate_outcomes(resolved_date))
+
         for name, artifact in (
             ("market_regime", "market-regime"),
             ("sector_strength", "sector-strength"),
@@ -431,6 +437,72 @@ class DailyMaintenanceService:
             tuple(sorted(failed)),
             stages,
             executed,
+        )
+
+    def _mature_candidate_outcomes(self, resolved_date: str) -> MaintenanceStageResult:
+        """Idempotently mature forward outcomes for recent watchlist dates (#260).
+
+        Re-evaluates the trailing window of watchlist dates so horizons that
+        have become mature (enough sessions now exist) are completed, while
+        still-immature horizons remain PENDING rather than failed. The
+        underlying evaluator upserts, so repeated runs never duplicate rows.
+        """
+        # Longest horizon bounds how far back a date can still have pending
+        # outcomes worth maturing.
+        from vnalpha.outcomes.evaluator import evaluate_watchlist_date
+        from vnalpha.outcomes.models import DEFAULT_HORIZONS
+
+        max_horizon = max(DEFAULT_HORIZONS)
+        try:
+            rows = self.conn.execute(
+                """
+                SELECT DISTINCT date::VARCHAR AS watchlist_date
+                FROM daily_watchlist
+                WHERE date <= ?
+                ORDER BY watchlist_date DESC
+                LIMIT ?
+                """,
+                [resolved_date, max_horizon + 5],
+            ).fetchall()
+        except duckdb.Error as exc:
+            return MaintenanceStageResult(
+                "candidate_outcomes",
+                MaintenanceStageStatus.FAILED,
+                failures=(str(exc),),
+            )
+
+        dates = [str(r[0]) for r in rows]
+        if not dates:
+            return MaintenanceStageResult(
+                "candidate_outcomes", MaintenanceStageStatus.SKIPPED
+            )
+
+        evaluated = persisted = errors = 0
+        for watchlist_date in dates:
+            try:
+                result = evaluate_watchlist_date(self.conn, watchlist_date)
+            except (duckdb.Error, ValueError) as exc:
+                errors += 1
+                logger.warning(
+                    "outcome maturation failed for %s: %s", watchlist_date, exc
+                )
+                continue
+            evaluated += int(result.get("evaluated", 0))
+            persisted += int(result.get("persisted", 0))
+            errors += int(result.get("errors", 0))
+
+        status = (
+            MaintenanceStageStatus.PARTIAL if errors else MaintenanceStageStatus.SUCCESS
+        )
+        return MaintenanceStageResult(
+            "candidate_outcomes",
+            status,
+            counts={
+                "dates_processed": len(dates),
+                "evaluated": evaluated,
+                "persisted": persisted,
+                "errors": errors,
+            },
         )
 
 
