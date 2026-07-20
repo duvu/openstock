@@ -12,6 +12,7 @@ from vnalpha.core.logging import get_logger
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.corporate_action_schema import ALL_DDL_CORPORATE_ACTIONS
+from vnalpha.warehouse.disclosure_schema import ALL_DDL_DISCLOSURES
 from vnalpha.warehouse.fundamentals_schema import ALL_DDL_FUNDAMENTALS
 from vnalpha.warehouse.ingestion_migrations import migrate_ingestion_run_outcome_columns
 from vnalpha.warehouse.maintenance_ledger_schema import ALL_DDL_MAINTENANCE_LEDGER
@@ -113,6 +114,8 @@ def run_migrations(
     for ddl in ALL_DDL_FUNDAMENTALS:
         conn.execute(ddl)
     for ddl in ALL_DDL_VALUATION:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_DISCLOSURES:
         conn.execute(ddl)
     if emit_observability:
         logger.info("Warehouse migrations complete.")
