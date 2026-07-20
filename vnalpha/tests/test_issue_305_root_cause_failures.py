@@ -90,6 +90,25 @@ def test_classify_failure_maps_stable_categories() -> None:
         )
         == "SCORE_INPUT_MISSING"
     )
+    # Provider connectivity is classified before generic markers.
+    assert (
+        classify_failure(
+            EnsureDataAction.BENCHMARK_SYNCED,
+            RuntimeError("Cannot connect to vnstock-service at http://x"),
+        )
+        == "PROVIDER_UNREACHABLE"
+    )
+    # A postcondition that reports the data did not reach the session maps to a
+    # meaningful category rather than a bare postcondition failure.
+    assert (
+        classify_failure(
+            EnsureDataAction.OHLCV_SYNCED,
+            RuntimeError(
+                "OHLCV did not reach 2026-07-20: latest available raw bar is none"
+            ),
+        )
+        == "SESSION_DATA_UNAVAILABLE"
+    )
 
 
 def test_dataset_and_subject_symbol_are_stage_specific() -> None:
@@ -223,6 +242,41 @@ def test_no_failure_returns_none() -> None:
         )
     )
     assert _first_actionable_failure(result) is None
+
+
+def test_not_ready_without_failed_action_surfaces_core_artifact_error(conn) -> None:
+    # When no provisioning stage explicitly failed but a required core artifact
+    # is not ready (e.g. a stale benchmark), the specific artifact error must be
+    # surfaced instead of the generic wrapper.
+    def fake_ensure(_c, symbol, date):
+        # All actions "succeed" but the result is not ready and carries no
+        # failed action outcome — the historical generic-message trigger.
+        result = EnsureDataResult(
+            symbol=symbol,
+            target_date=date or "2026-07-20",
+            status=EnsureDataStatus.PARTIAL,
+        )
+        result.action_outcomes.append(
+            EnsureDataActionOutcome(
+                action=EnsureDataAction.BENCHMARK_SYNCED,
+                status=EnsureDataActionStatus.SUCCESS,
+            )
+        )
+        result.benchmark_bars = 0  # benchmark not available -> artifact failed
+        result.canonical_bars = 400
+        result.symbol_known = True
+        result.core_evidence_evaluated = True
+        return result
+
+    service = DeepAnalysisReadinessService(ensure=fake_ensure)
+    readiness = service.ensure_ready(
+        DeepAnalysisReadinessRequest(conn, "FPT", "2026-07-20")
+    )
+    assert not readiness.is_ready
+    joined = " ".join(readiness.errors)
+    # A specific, non-generic reason is surfaced.
+    assert "could not be made ready" not in joined
+    assert readiness.errors  # some actionable error is present
 
 
 def test_readiness_reports_requested_and_effective_date(conn) -> None:

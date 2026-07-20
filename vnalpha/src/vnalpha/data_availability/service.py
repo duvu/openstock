@@ -308,7 +308,7 @@ def _run_actions(
             after = _snapshot(request)
             if not _action_postcondition_satisfied(action, request, after):
                 raise RuntimeError(
-                    f"{action.value} postcondition was not satisfied after reload."
+                    _postcondition_failure_detail(action, request, after)
                 )
         finally:
             _ELAPSED[action] = (perf_counter() - started) * 1000.0
@@ -339,6 +339,50 @@ def _run_actions(
             )
         )
     result.warnings.extend(_legacy_warning(warning) for warning in warnings)
+
+
+def _postcondition_failure_detail(
+    action: EnsureDataAction,
+    request: NormalizedEnsureRequest,
+    snapshot: EnsureDataSnapshot,
+) -> str:
+    """Explain why an action's postcondition failed, in actionable terms.
+
+    Reports the observed-vs-target session state so the surfaced root cause
+    names the real gap (e.g. data did not reach the requested session) rather
+    than a generic "postcondition not satisfied" message (issue #305).
+    """
+    target = snapshot.target_date
+    match action:
+        case EnsureDataAction.OHLCV_SYNCED:
+            return (
+                f"OHLCV did not reach {target}: latest available raw bar is "
+                f"{snapshot.latest_raw_bar_date or 'none'} "
+                f"({snapshot.raw_ohlcv_bars} bars). The provider returned no data "
+                "for the requested session (provider unavailable or session not "
+                "yet published)."
+            )
+        case EnsureDataAction.CANONICAL_BUILT:
+            return (
+                f"Canonical OHLCV did not reach {target}: latest canonical bar is "
+                f"{snapshot.latest_canonical_bar_date or 'none'}."
+            )
+        case (
+            EnsureDataAction.BENCHMARK_SYNCED
+            | EnsureDataAction.BENCHMARK_CANONICAL_BUILT
+        ):
+            return (
+                f"Benchmark {request.policy.benchmark} did not reach {target}: "
+                f"latest benchmark bar is "
+                f"{snapshot.latest_benchmark_bar_date or 'none'} "
+                f"({snapshot.benchmark_bars} bars)."
+            )
+        case EnsureDataAction.FEATURES_BUILT:
+            return f"Feature snapshot for {target} could not be built or validated."
+        case EnsureDataAction.SCORED:
+            return f"Candidate score for {target} is missing or stale after scoring."
+        case _:
+            return f"{action.value} postcondition was not satisfied after reload."
 
 
 def _action_postcondition_satisfied(
