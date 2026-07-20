@@ -80,6 +80,32 @@ def calculate_dividend_factor(
     return (price_before - dividend_per_share) / price_before
 
 
+def calculate_stock_dividend_factor(
+    dividend_shares: int,
+    base_shares: int,
+) -> Decimal:
+    """Calculate adjustment factor for a stock dividend or bonus-share issue.
+
+    A stock dividend / bonus issue distributes ``dividend_shares`` new shares
+    for every ``base_shares`` held, with no cash paid. The historical price is
+    scaled down by the dilution ratio.
+
+    Args:
+        dividend_shares: New shares distributed per ``base_shares`` held.
+        base_shares: Existing shares required to receive the distribution.
+
+    Returns:
+        Adjustment factor ``base / (base + dividend)``.
+
+    Example:
+        10% stock dividend: dividend_shares=1, base_shares=10 → factor≈0.909
+        Historical $110 becomes $100 after adjustment.
+    """
+    if dividend_shares <= 0 or base_shares <= 0:
+        raise ValueError("Share counts must be positive")
+    return Decimal(base_shares) / Decimal(base_shares + dividend_shares)
+
+
 def calculate_rights_issue_factor(
     rights_ratio_new: int,
     rights_ratio_old: int,
@@ -114,3 +140,77 @@ def calculate_rights_issue_factor(
     ex_rights_price = total_value / total_shares
 
     return ex_rights_price / price_before
+
+
+def build_adjustment_factor(
+    *,
+    symbol: str,
+    action_date: date,
+    adjustment_type: AdjustmentType,
+    params: dict[str, object],
+) -> AdjustmentFactor:
+    """Build a deterministic, versioned adjustment factor for any supported action.
+
+    Dispatches to the type-specific calculator so callers derive factors for all
+    six supported action types through one contract. The result is fully
+    determined by ``(adjustment_type, params)`` and carries an explicit version,
+    so repeated calls with identical inputs produce identical factors.
+
+    Args:
+        symbol: The affected symbol.
+        action_date: The ex/effective date the factor applies from.
+        adjustment_type: One of the supported :class:`AdjustmentType` values.
+        params: Numeric parameters required by the specific action type.
+
+    Raises:
+        ValueError: If a required parameter is missing or the action type is
+            unsupported.
+    """
+
+    def _dec(key: str) -> Decimal:
+        if key not in params:
+            raise ValueError(f"Missing required parameter {key!r}")
+        return Decimal(str(params[key]))
+
+    def _int(key: str) -> int:
+        if key not in params:
+            raise ValueError(f"Missing required parameter {key!r}")
+        return int(params[key])  # type: ignore[arg-type]
+
+    if adjustment_type in (AdjustmentType.SPLIT, AdjustmentType.REVERSE_SPLIT):
+        old_shares = _int("old_shares")
+        new_shares = _int("new_shares")
+        factor = calculate_split_factor(old_shares, new_shares)
+        numerator, denominator = new_shares, old_shares
+    elif adjustment_type in (
+        AdjustmentType.STOCK_DIVIDEND,
+        AdjustmentType.BONUS_SHARES,
+    ):
+        dividend_shares = _int("dividend_shares")
+        base_shares = _int("base_shares")
+        factor = calculate_stock_dividend_factor(dividend_shares, base_shares)
+        numerator, denominator = base_shares, base_shares + dividend_shares
+    elif adjustment_type is AdjustmentType.CASH_DIVIDEND:
+        factor = calculate_dividend_factor(
+            _dec("price_before"), _dec("dividend_per_share")
+        )
+        numerator = denominator = None
+    elif adjustment_type is AdjustmentType.RIGHTS_ISSUE:
+        factor = calculate_rights_issue_factor(
+            _int("rights_ratio_new"),
+            _int("rights_ratio_old"),
+            _dec("subscription_price"),
+            _dec("price_before"),
+        )
+        numerator = denominator = None
+    else:  # pragma: no cover - enum is exhaustive
+        raise ValueError(f"Unsupported adjustment type {adjustment_type!r}")
+
+    return AdjustmentFactor(
+        symbol=symbol,
+        action_date=action_date,
+        adjustment_type=adjustment_type,
+        factor=factor,
+        numerator=numerator,
+        denominator=denominator,
+    )
