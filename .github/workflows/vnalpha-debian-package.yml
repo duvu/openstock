@@ -41,10 +41,18 @@ jobs:
           cache-dependency-path: vnalpha/pyproject.toml
 
       - name: Validate install source contract
-        run: bash packaging/test/test_install_contract.sh
+        shell: bash
+        run: |
+          set -o pipefail
+          bash packaging/test/test_install_contract.sh \
+            2>&1 | tee vnalpha-debian-package.log
 
       - name: Validate legacy package tree contracts
-        run: packaging/test/test_packaging.sh
+        shell: bash
+        run: |
+          set -o pipefail
+          packaging/test/test_packaging.sh \
+            2>&1 | tee -a vnalpha-debian-package.log
 
       - name: Install build prerequisites
         run: |
@@ -53,10 +61,13 @@ jobs:
           python -m pip install --quiet --disable-pip-version-check --upgrade pip setuptools wheel
 
       - name: Build standalone Debian package
+        shell: bash
         run: |
+          set -o pipefail
           rm -rf /tmp/openstock-hardening-deb
           mkdir -p /tmp/openstock-hardening-deb
-          packaging/build-deb.sh --output-dir /tmp/openstock-hardening-deb
+          packaging/build-deb.sh --output-dir /tmp/openstock-hardening-deb \
+            2>&1 | tee -a vnalpha-debian-package.log
 
       - name: Validate built package and offline runtime
         shell: bash
@@ -64,7 +75,7 @@ jobs:
           set -o pipefail
           bash packaging/test/test_install_contract.sh \
             /tmp/openstock-hardening-deb/vnalpha_*.deb \
-            2>&1 | tee vnalpha-debian-package.log
+            2>&1 | tee -a vnalpha-debian-package.log
 
       - name: Upload package diagnostics
         if: always()
