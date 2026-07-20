@@ -308,6 +308,31 @@ def check() -> tuple[str, ...]:
             "/home/beou",
         )
 
+    # Issue #254: FiinQuantX docs must route canonical endpoints and the default
+    # provider registry inventory must agree with what it actually registers.
+    _forbid(
+        errors,
+        "vnstock/docs/providers/FIINQUANTX.md",
+        "/v1/data?dataset=",
+    )
+    _require(
+        errors,
+        "vnstock/docs/providers/FIINQUANTX.md",
+        "/v1/equity/ohlcv?symbol=",
+    )
+    _forbid(
+        errors,
+        "vnstock/vnstock/core/runtime/bootstrap.py",
+        "seven built-in",
+        "all seven providers registered",
+    )
+    _require(
+        errors,
+        "vnstock/vnstock/core/runtime/bootstrap.py",
+        "all eight providers registered",
+        "**FIINQUANTX**",
+    )
+
     _check_active_changes(errors)
     _check_ci_gate_contract(errors)
     _check_live_roadmap_contract(errors)

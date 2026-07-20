@@ -176,3 +176,78 @@ def test_coverage_error_message_includes_update_instructions() -> None:
     error_msg = str(exc_info.value)
     assert "Update the calendar with official holiday data" in error_msg
     assert "for the operating year" in error_msg
+
+
+def test_maintenance_fails_closed_beyond_calendar_horizon() -> None:
+    # Given: a maintenance request for a date beyond the calendar horizon.
+    import duckdb
+
+    from vnalpha.maintenance.daily import (
+        DailyMaintenanceRequest,
+        DailyMaintenanceService,
+        MaintenanceRunStatus,
+    )
+    from vnalpha.warehouse.migrations import run_migrations
+
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn, emit_observability=False)
+    try:
+        result = DailyMaintenanceService(conn).run(
+            DailyMaintenanceRequest(date="2027-03-02")  # beyond valid_through
+        )
+    finally:
+        conn.close()
+
+    # Then: it fails closed as NOOP with an actionable calendar warning,
+    # never silently treating the future weekday as a normal session.
+    assert result.status is MaintenanceRunStatus.NOOP
+    assert result.mutated is False
+    stage = result.stages[0]
+    assert stage.name == "resolve_session"
+    assert any("does not cover" in w for w in stage.warnings)
+    assert any("Update the Vietnam trading calendar" in r for r in stage.remediation)
+
+
+def test_maintenance_warns_near_calendar_expiry(monkeypatch) -> None:
+    # Given: an in-horizon session date close to the calendar's expiry.
+    import duckdb
+
+    from vnalpha.maintenance.daily import (
+        DailyMaintenanceRequest,
+        DailyMaintenanceService,
+    )
+    from vnalpha.warehouse.migrations import run_migrations
+
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn, emit_observability=False)
+    try:
+        # 2026-12-30 is a Wednesday within 90 days of 2026-12-31.
+        result = DailyMaintenanceService(conn).run(
+            DailyMaintenanceRequest(date="2026-12-30")
+        )
+    finally:
+        conn.close()
+
+    session_stage = next(s for s in result.stages if s.name == "resolve_session")
+    assert any("expires on 2026-12-31" in w for w in session_stage.warnings)
+
+
+def test_preflight_cli_reports_calendar_version_and_validity(monkeypatch) -> None:
+    from typer.testing import CliRunner
+
+    from vnalpha.cli import app
+
+    # Force the assistant route to fail fast so the CLI still emits the calendar
+    # section without contacting a live provider.
+    monkeypatch.setenv("VNALPHA_LLM_ENDPOINT", "http://127.0.0.1:1/v1/chat/completions")
+    monkeypatch.setenv("VNALPHA_LLM_API_KEY", "")
+    monkeypatch.setenv("VNALPHA_LLM_TIMEOUT", "1")
+    monkeypatch.setenv("VNALPHA_LLM_MAX_RETRIES", "0")
+
+    result = CliRunner().invoke(app, ["preflight", "--json"])
+
+    # Preflight exits non-zero on the unavailable LLM route, but the JSON payload
+    # must carry the calendar version, source-of-truth validity horizon and status.
+    assert '"trading_calendar"' in result.stdout
+    assert VietnamSessionCalendar().version in result.stdout
+    assert "2026-12-31" in result.stdout

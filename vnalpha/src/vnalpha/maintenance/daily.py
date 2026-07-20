@@ -77,6 +77,37 @@ class DailyMaintenanceService:
         market_date = DateType.fromisoformat(resolved_date)
         correlation_id = _correlation_id()
         requested_symbols = _normalize_symbols(request.symbols)
+        coverage = self.calendar.get_coverage_status(market_date)
+        if coverage["is_expired"]:
+            # Beyond the supported calendar horizon: fail closed rather than
+            # silently treating every future weekday as a valid session (#254).
+            return DailyMaintenanceResult(
+                status=MaintenanceRunStatus.NOOP,
+                requested_date=request.date,
+                resolved_date=resolved_date,
+                correlation_id=correlation_id,
+                stages=(
+                    MaintenanceStageResult(
+                        "resolve_session",
+                        MaintenanceStageStatus.SKIPPED,
+                        warnings=(
+                            f"Trading calendar {coverage['version']} does not cover "
+                            f"{resolved_date}; supported through "
+                            f"{coverage['valid_through']}.",
+                        ),
+                        remediation=(
+                            "Update the Vietnam trading calendar with official "
+                            "holiday data for the operating year before maintaining "
+                            "dates beyond its validity horizon.",
+                        ),
+                    ),
+                ),
+                requested_symbols=requested_symbols,
+                successful_symbols=(),
+                failed_symbols=(),
+                diagnostics_refs=(),
+                mutated=False,
+            )
         if not self.calendar.is_session(market_date):
             return DailyMaintenanceResult(
                 status=MaintenanceRunStatus.NOOP,
@@ -127,8 +158,21 @@ class DailyMaintenanceService:
         requested_symbols: tuple[str, ...],
     ) -> DailyMaintenanceResult:
         service = self.provisioning_factory(self.conn)
+        coverage = self.calendar.get_coverage_status(market_date)
+        session_warnings: tuple[str, ...] = ()
+        if coverage["near_expiry"]:
+            session_warnings = (
+                f"Trading calendar {coverage['version']} expires on "
+                f"{coverage['valid_through']} ({coverage['days_remaining']} days "
+                "remaining); refresh it with official holiday data for the next "
+                "operating year.",
+            )
         stages = [
-            MaintenanceStageResult("resolve_session", MaintenanceStageStatus.SUCCESS)
+            MaintenanceStageResult(
+                "resolve_session",
+                MaintenanceStageStatus.SUCCESS,
+                warnings=session_warnings,
+            )
         ]
         executed: list[DataProvisioningResult] = []
         if _has_current_symbol_snapshot(self.conn, market_date):

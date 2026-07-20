@@ -22,15 +22,44 @@ def register(app: typer.Typer) -> None:
         set_correlation_id()
         with command_lifecycle("preflight"):
             import json as _json
+            from datetime import date as _date
 
             from vnalpha.assistant.preflight import run_llm_preflight
+            from vnalpha.ingestion.trading_calendar import VietnamSessionCalendar
 
             result = run_llm_preflight()
             status = result.to_status_dict()
 
+            calendar = VietnamSessionCalendar()
+            calendar_status = calendar.get_coverage_status(_date.today())
+
             if as_json:
-                typer.echo(_json.dumps(status, sort_keys=True))
+                typer.echo(
+                    _json.dumps(
+                        {
+                            "assistant_llm_route": status,
+                            "trading_calendar": calendar_status,
+                        },
+                        sort_keys=True,
+                    )
+                )
             else:
+                typer.echo(
+                    f"Trading calendar: {calendar_status['status']} "
+                    f"(version={calendar_status['version']}, "
+                    f"valid_through={calendar_status['valid_through']}, "
+                    f"days_remaining={calendar_status['days_remaining']})"
+                )
+                if calendar_status["status"] == "WARNING":
+                    typer.echo(
+                        "  note:     calendar approaches its validity horizon; "
+                        "refresh official holiday data for the next operating year."
+                    )
+                elif calendar_status["status"] == "EXPIRED":
+                    typer.echo(
+                        "  note:     calendar is beyond its validity horizon; "
+                        "maintenance fails closed until it is updated."
+                    )
                 marker = "READY" if result.ready else "UNAVAILABLE"
                 typer.echo(f"Assistant LLM route: {marker} ({result.code.value})")
                 typer.echo(f"  detail:   {result.detail}")

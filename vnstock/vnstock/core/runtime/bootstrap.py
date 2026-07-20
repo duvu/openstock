@@ -2,7 +2,7 @@
 Bootstrap helpers for PluginRuntime default configuration.
 
 Provides ``default_plugin_registry()`` which creates a fresh PluginRegistry
-with all seven built-in Phase 2 provider plugins registered.
+with all eight built-in provider plugins registered.
 
 Usage::
 
@@ -30,9 +30,11 @@ def default_plugin_registry() -> PluginRegistry:
     - **FMARKET** — FMarket fund platform (fund data only)
     - **MSN** — MSN Money market data (experimental)
     - **FMP** — Financial Modeling Prep API (requires FMP_API_KEY)
+    - **FIINQUANTX** — licensed FiinQuantX SDK (explicit-source only; requires
+      SDK, credentials and acknowledgement)
 
     Returns:
-        A new :class:`PluginRegistry` with all seven providers registered.
+        A new :class:`PluginRegistry` with all eight providers registered.
     """
     # Lazy imports avoid circular imports and pay import cost only on first use.
     from vnstock.providers.dnse.plugin import DNSEProviderPlugin
