@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime
 
@@ -11,6 +12,10 @@ from vnalpha.ingestion.canonical_validation import (
     CANONICAL_VALIDATION_VERSION,
     CanonicalCandidate,
     CanonicalValidationRule,
+)
+from vnalpha.ingestion.index_provider_policy import (
+    is_index_symbol,
+    resolve_index_provider_conflict,
 )
 
 RawCandidateRow = tuple[
@@ -35,7 +40,6 @@ def load_ranked_candidates(
     interval: str,
 ) -> tuple[CanonicalCandidate, ...]:
     """Load raw candidates in the established deterministic preference order."""
-
     symbol_filter = "AND symbol = ?" if symbol is not None else ""
     params = [interval] + ([symbol] if symbol is not None else [])
     rows = conn.execute(
@@ -59,13 +63,10 @@ def load_ranked_candidates(
             symbol,
             time,
             interval,
+            CASE WHEN price_basis = 'RAW_UNADJUSTED' THEN 0 ELSE 1 END,
             CASE
-                WHEN price_basis = 'RAW_UNADJUSTED' THEN 0
-                ELSE 1
-            END,
-            CASE
-                WHEN LOWER(TRIM(COALESCE(quality_status, ''))) IN ('pass', 'success') THEN 0
-                ELSE 1
+                WHEN LOWER(TRIM(COALESCE(quality_status, ''))) IN ('pass', 'success')
+                THEN 0 ELSE 1
             END,
             CASE
                 WHEN fetched_at IS NOT NULL THEN fetched_at
@@ -75,11 +76,7 @@ def load_ranked_candidates(
         """,
         params,
     ).fetchall()
-    candidates: list[CanonicalCandidate] = []
-    for row in rows:
-        raw_row: RawCandidateRow = row
-        candidates.append(CanonicalCandidate(*raw_row))
-    return tuple(candidates)
+    return tuple(CanonicalCandidate(*row) for row in rows)
 
 
 def persist_quarantine(
@@ -88,7 +85,6 @@ def persist_quarantine(
     rules: tuple[CanonicalValidationRule, ...],
 ) -> None:
     """Persist legacy and provider/run-keyed evidence for an invalid candidate."""
-
     invalid_values = {
         "open": candidate.open,
         "high": candidate.high,
@@ -152,18 +148,133 @@ def persist_quarantine(
     )
 
 
+def _passing_bar_candidates(
+    conn: duckdb.DuckDBPyConnection,
+    candidate: CanonicalCandidate,
+) -> list[dict[str, object]]:
+    rows = conn.execute(
+        """
+        SELECT provider, open, high, low, close, volume, ingestion_run_id,
+               CASE
+                   WHEN UPPER(TRIM(COALESCE(provider, ''))) = 'FIINQUANTX'
+                   THEN price_basis
+                   ELSE COALESCE(price_basis, 'RAW_UNADJUSTED')
+               END AS resolved_basis
+        FROM market_ohlcv_raw
+        WHERE symbol = ?
+          AND UPPER(interval) = UPPER(?)
+          AND CASE WHEN UPPER(interval) = '1D'
+                   THEN CAST(CAST(time AS DATE) AS TIMESTAMP)
+                   ELSE time END = ?
+          AND LOWER(TRIM(COALESCE(quality_status, ''))) IN ('pass', 'success')
+        ORDER BY LOWER(provider), ingestion_run_id
+        """,
+        [candidate.symbol, candidate.interval, candidate.timestamp],
+    ).fetchall()
+    return [
+        {
+            "provider": str(row[0] or "").lower(),
+            "open": row[1],
+            "high": row[2],
+            "low": row[3],
+            "close": row[4],
+            "volume": row[5],
+            "ingestion_run_id": row[6],
+            "price_basis": row[7],
+        }
+        for row in rows
+        if row[0]
+    ]
+
+
+def persist_selection_audit(
+    conn: duckdb.DuckDBPyConnection,
+    candidate: CanonicalCandidate,
+) -> str | None:
+    """Persist the evidence and policy used for a conflicting index selection."""
+    if not is_index_symbol(candidate.symbol) or not candidate.provider:
+        return None
+    observations = _passing_bar_candidates(conn, candidate)
+    providers = tuple(dict.fromkeys(str(item["provider"]) for item in observations))
+    values = {
+        (
+            item["open"],
+            item["high"],
+            item["low"],
+            item["close"],
+            item["volume"],
+        )
+        for item in observations
+    }
+    if len(providers) < 2 or len(values) < 2:
+        return None
+    resolution = resolve_index_provider_conflict(candidate.symbol, providers)
+    if resolution is None:
+        return None
+    if candidate.provider.strip().lower() != resolution.selected_provider:
+        return None
+
+    payload = {
+        "symbol": candidate.symbol,
+        "time": candidate.timestamp.isoformat(),
+        "interval": candidate.interval,
+        "observations": observations,
+        "selected_provider": resolution.selected_provider,
+        "rejected_providers": list(resolution.rejected_providers),
+        "policy_version": resolution.policy_version,
+        "policy_family": resolution.policy_family,
+        "policy_rationale": resolution.rationale,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    content_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    audit_id = f"canonical-selection-{content_hash[:24]}"
+    conn.execute(
+        """
+        INSERT INTO canonical_selection_audit (
+            audit_id, symbol, time, interval, candidate_providers_json,
+            selected_provider, rejected_providers_json, candidate_values_json,
+            policy_version, policy_family, policy_rationale,
+            evidence_refs_json, content_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (audit_id) DO NOTHING
+        """,
+        [
+            audit_id,
+            candidate.symbol,
+            candidate.timestamp,
+            candidate.interval,
+            json.dumps(list(providers)),
+            resolution.selected_provider,
+            json.dumps(list(resolution.rejected_providers)),
+            json.dumps(observations, sort_keys=True, default=str),
+            resolution.policy_version,
+            resolution.policy_family,
+            resolution.rationale,
+            json.dumps(
+                [
+                    f"market_ohlcv_raw:{item['ingestion_run_id']}:{item['provider']}"
+                    for item in observations
+                ]
+            ),
+            content_hash,
+        ],
+    )
+    return audit_id
+
+
 def upsert_canonical(
     conn: duckdb.DuckDBPyConnection,
     candidate: CanonicalCandidate,
 ) -> None:
-    """Persist one validated raw candidate as the canonical bar."""
-
+    """Persist one validated candidate with optional selection provenance."""
+    selection_audit_id = persist_selection_audit(conn, candidate)
     conn.execute(
         """
         INSERT INTO canonical_ohlcv
             (symbol, time, interval, open, high, low, close, volume,
-             selected_provider, price_basis, quality_status, ingestion_run_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             selected_provider, price_basis, quality_status, ingestion_run_id,
+             selection_audit_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (symbol, time, interval) DO UPDATE SET
             open = excluded.open,
             high = excluded.high,
@@ -173,7 +284,8 @@ def upsert_canonical(
             selected_provider = excluded.selected_provider,
             price_basis = excluded.price_basis,
             quality_status = excluded.quality_status,
-            ingestion_run_id = excluded.ingestion_run_id
+            ingestion_run_id = excluded.ingestion_run_id,
+            selection_audit_id = excluded.selection_audit_id
         """,
         [
             candidate.symbol,
@@ -188,6 +300,7 @@ def upsert_canonical(
             candidate.price_basis,
             candidate.quality_status,
             candidate.ingestion_run_id,
+            selection_audit_id,
         ],
     )
 
@@ -196,13 +309,8 @@ def delete_canonical_bar(
     conn: duckdb.DuckDBPyConnection,
     candidate: CanonicalCandidate,
 ) -> None:
-    """Remove a formerly canonical bar when its selected candidate is invalid."""
-
     conn.execute(
-        """
-        DELETE FROM canonical_ohlcv
-        WHERE symbol = ? AND time = ? AND interval = ?
-        """,
+        "DELETE FROM canonical_ohlcv WHERE symbol = ? AND time = ? AND interval = ?",
         [candidate.symbol, candidate.timestamp, candidate.interval],
     )
 
@@ -212,15 +320,6 @@ def delete_stray_intraday_canonical_rows(
     symbol: str | None,
     interval: str,
 ) -> int:
-    """Remove daily canonical rows whose timestamp is not midnight.
-
-    Every current daily-bar write lands at midnight (candidates are grouped by
-    trading date). A row with a non-midnight time-of-day predates that
-    normalization — a duplicate the promotion loop above never re-selects — so
-    it is always safe to remove; the correct midnight row for its date has
-    already been written earlier in this same build. Returns the deleted count.
-    """
-
     symbol_filter = "AND symbol = ?" if symbol is not None else ""
     params: list[str] = [interval] + ([symbol] if symbol is not None else [])
     result = conn.execute(
@@ -238,10 +337,17 @@ def resolve_quarantines(
     conn: duckdb.DuckDBPyConnection,
     candidate: CanonicalCandidate,
 ) -> None:
-    """Record which valid canonical observation resolved quarantined evidence."""
-
+    row = conn.execute(
+        """
+        SELECT selection_audit_id FROM canonical_ohlcv
+        WHERE symbol = ? AND time = ? AND interval = ?
+        """,
+        [candidate.symbol, candidate.timestamp, candidate.interval],
+    ).fetchone()
     resolution_ref = (
-        f"canonical:{candidate.ingestion_run_id}:{candidate.provider or ''}"
+        f"canonical-selection:{row[0]}"
+        if row and row[0]
+        else f"canonical:{candidate.ingestion_run_id}:{candidate.provider or ''}"
     )
     conn.execute(
         """
@@ -263,8 +369,6 @@ def count_canonical_rows(
     symbol: str | None,
     interval: str,
 ) -> int:
-    """Count canonical bars inside the caller's requested scope."""
-
     count_filter = "AND symbol = ?" if symbol is not None else ""
     count_params = [interval] + ([symbol] if symbol is not None else [])
     row = conn.execute(
