@@ -150,12 +150,13 @@ if run_group state; then
   printf '\n=== State preservation and opt-in scheduling ===\n'
   POSTINST="${DEB_TREE}/DEBIAN/postinst"
   POSTRM="${DEB_TREE}/DEBIAN/postrm"
-  if grep -v '^#' "$POSTINST" | grep -Eq 'rm.*(/var/lib/openstock|WAREHOUSE_DIR)'; then
+  RM_STATE_PATTERN='(^|[[:space:]])rm[[:space:]].*(/var/lib/openstock|WAREHOUSE_DIR)'
+  if grep -v '^#' "$POSTINST" | grep -Eq "$RM_STATE_PATTERN"; then
     fail "postinst never removes research state"
   else
     ok "postinst never removes research state"
   fi
-  if grep -v '^#' "$POSTRM" | grep -Eq 'rm.*(/var/lib/openstock|WAREHOUSE_DIR)'; then
+  if grep -v '^#' "$POSTRM" | grep -Eq "$RM_STATE_PATTERN"; then
     fail "postrm never removes research state"
   else
     ok "postrm never removes research state"
