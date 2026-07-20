@@ -220,14 +220,34 @@ def _validate_evidence(
         raise MemoryIngestionError(
             "Numeric memory evidence requires unit and semantic meaning."
         )
-    if not repository.has_persisted_evidence(
+    persisted = repository.has_persisted_evidence(
         evidence.source_ref,
         evidence.symbol,
         evidence.as_of_date,
         evidence.claim_type,
         evidence.predicate,
         evidence.value,
-    ):
+    )
+    if not persisted and source_kind in {
+        "fundamental_fact",
+        "valuation_snapshot",
+        "symbol_event",
+        "candidate_outcome",
+    }:
+        from vnalpha.symbol_memory.research_evidence import (
+            matches_persisted_research_evidence,
+        )
+
+        persisted = matches_persisted_research_evidence(
+            repository.connection,
+            evidence.source_ref,
+            evidence.symbol,
+            evidence.as_of_date,
+            evidence.claim_type,
+            evidence.predicate,
+            evidence.value,
+        )
+    if not persisted:
         raise MemoryIngestionError(
             "Memory evidence does not match a persisted validated artifact."
         )
