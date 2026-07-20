@@ -31,10 +31,6 @@
 
 set -euo pipefail
 
-# ---------------------------------------------------------------------------
-# Defaults
-# ---------------------------------------------------------------------------
-
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGING_DIR="${REPO_ROOT}/packaging"
 DEB_TREE="${PACKAGING_DIR}/deb"
@@ -47,10 +43,6 @@ OPERATOR_SCRIPTS=(
   openstock-backup-warehouse
   openstock-restore-warehouse
 )
-
-# ---------------------------------------------------------------------------
-# Argument parsing
-# ---------------------------------------------------------------------------
 
 VERSION=""
 
@@ -81,10 +73,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# ---------------------------------------------------------------------------
-# Version resolution
-# ---------------------------------------------------------------------------
-
 if [[ -z "${VERSION}" ]]; then
   VERSION="$(grep -E '^version\s*=' "${VNALPHA_SRC}/pyproject.toml" \
     | head -1 \
@@ -102,18 +90,12 @@ fi
 
 echo "build-deb.sh: Building vnalpha version ${VERSION}"
 
-# ---------------------------------------------------------------------------
-# Staging area
-# ---------------------------------------------------------------------------
-
 STAGE_DIR="$(mktemp -d /tmp/vnalpha-deb-XXXXXX)"
 trap 'rm -rf "${STAGE_DIR}"' EXIT
 
 echo "build-deb.sh: Staging in ${STAGE_DIR}"
 cp -r "${DEB_TREE}/." "${STAGE_DIR}/"
 
-# Bundle the supported single-host operator surface so a package install does
-# not depend on copying files from a source checkout.
 mkdir -p "${STAGE_DIR}/usr/bin" "${STAGE_DIR}/usr/share/doc/vnalpha"
 for helper in "${OPERATOR_SCRIPTS[@]}"; do
   helper_source="${PACKAGING_DIR}/scripts/${helper}"
@@ -143,10 +125,6 @@ printf 'version=%s\ncommit=%s\ntree_state=%s\n' \
   "${VERSION}" "${GIT_COMMIT}" "${TREE_STATE}" \
   >"${STAGE_DIR}/opt/vnalpha/RELEASE"
 
-# ---------------------------------------------------------------------------
-# Package metadata
-# ---------------------------------------------------------------------------
-
 sed -i "s/^Version:.*/Version: ${VERSION}/" "${STAGE_DIR}/DEBIAN/control"
 PAYLOAD_KB=1
 if [[ "${SKIP_WHEELS}" == false ]]; then
@@ -154,10 +132,6 @@ if [[ "${SKIP_WHEELS}" == false ]]; then
 fi
 sed -i "s/^Installed-Size:.*/Installed-Size: ${PAYLOAD_KB}/" \
   "${STAGE_DIR}/DEBIAN/control"
-
-# ---------------------------------------------------------------------------
-# Pre-download wheels (bundled offline install)
-# ---------------------------------------------------------------------------
 
 WHEELS_DIR="${STAGE_DIR}/opt/vnalpha/wheels"
 mkdir -p "${WHEELS_DIR}"
@@ -212,10 +186,6 @@ else
   echo "build-deb.sh: --offline: skipping dependency wheel download."
 fi
 
-# ---------------------------------------------------------------------------
-# Set file permissions
-# ---------------------------------------------------------------------------
-
 chmod 0755 "${STAGE_DIR}/DEBIAN/postinst"
 chmod 0755 "${STAGE_DIR}/DEBIAN/prerm"
 chmod 0755 "${STAGE_DIR}/DEBIAN/postrm"
@@ -228,10 +198,6 @@ chmod 0640 "${STAGE_DIR}/etc/vnalpha/vnalpha.env"
 chmod 0644 "${STAGE_DIR}/opt/vnalpha/RELEASE"
 chmod 0644 "${STAGE_DIR}/usr/lib/systemd/system/openstock-daily-pipeline.service"
 chmod 0644 "${STAGE_DIR}/usr/lib/systemd/system/openstock-daily-pipeline.timer"
-
-# ---------------------------------------------------------------------------
-# Build and validate .deb
-# ---------------------------------------------------------------------------
 
 mkdir -p "${OUTPUT_DIR}"
 DEB_FILE="${OUTPUT_DIR}/vnalpha_${VERSION}_amd64.deb"
@@ -255,8 +221,8 @@ for entry in \
   ./usr/bin/openstock-restore-warehouse \
   ./usr/share/doc/vnalpha/OPERATOR.md \
   ./opt/vnalpha/RELEASE
- do
-  if ! dpkg -c "${DEB_FILE}" | grep -F "${entry}" >/dev/null; then
+do
+  if ! dpkg -c "${DEB_FILE}" | awk '{print $NF}' | grep -Fx "${entry}" >/dev/null; then
     echo "build-deb.sh: ERROR — built package is missing ${entry}" >&2
     exit 1
   fi
