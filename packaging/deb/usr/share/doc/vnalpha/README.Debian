@@ -1,0 +1,37 @@
+vnalpha Debian package install and upgrade
+===========================================
+
+This package installs the host-native vnalpha CLI/TUI, an offline Python venv,
+verification/startup/backup/restore helpers, and disabled-by-default daily
+maintenance units. It does not install Docker Engine, credentials, a
+vnstock-service image or the external /opt/openstock Compose deployment.
+
+Install and initialize:
+
+  sudo apt install -y ./vnalpha_<version>_amd64.deb
+  sudo usermod -aG openstock "$USER"
+  # Start a new login session, then:
+  vnalpha init
+  openstock-verify --mvp1
+
+The timer remains disabled until explicitly enabled:
+
+  sudo systemctl enable --now openstock-daily-pipeline.timer
+
+Upgrades are offline and transactional. A replacement venv is built from the
+bundled wheelhouse with --no-index and must pass a CLI smoke test before the
+active venv is replaced. A missing or incomplete wheel bundle fails closed.
+
+Research state is preserved under:
+
+  /var/lib/openstock/warehouse
+  /var/lib/openstock/knowledge
+  /var/log/openstock
+
+These paths use root:openstock ownership and group-write permissions. The daily
+service runs as root with primary group openstock and UMask=0007.
+
+FiinQuantX and LLM credentials remain disabled/empty by default. The installer
+never enables commercial approvals or scheduled execution automatically.
+
+See /usr/share/doc/vnalpha/OPERATOR.md for the complete operating guide.
