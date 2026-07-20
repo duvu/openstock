@@ -47,12 +47,30 @@ jobs:
           bash packaging/test/test_install_contract.sh \
             2>&1 | tee vnalpha-debian-package.log
 
-      - name: Validate legacy package tree contracts
-        shell: bash
-        run: |
-          set -o pipefail
-          packaging/test/test_packaging.sh \
-            2>&1 | tee -a vnalpha-debian-package.log
+      - name: Validate required files and modes
+        env:
+          PACKAGING_TEST_GROUP: files
+        run: packaging/test/test_packaging.sh
+
+      - name: Validate shell syntax
+        env:
+          PACKAGING_TEST_GROUP: syntax
+        run: packaging/test/test_packaging.sh
+
+      - name: Validate Debian metadata
+        env:
+          PACKAGING_TEST_GROUP: metadata
+        run: packaging/test/test_packaging.sh
+
+      - name: Validate research boundary
+        env:
+          PACKAGING_TEST_GROUP: boundary
+        run: packaging/test/test_packaging.sh
+
+      - name: Validate state preservation
+        env:
+          PACKAGING_TEST_GROUP: state
+        run: packaging/test/test_packaging.sh
 
       - name: Install build prerequisites
         run: |
