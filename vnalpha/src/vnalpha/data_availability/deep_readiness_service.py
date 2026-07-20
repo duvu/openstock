@@ -104,9 +104,15 @@ class DeepAnalysisReadinessService:
             if artifact.error is not None
         )
         if not result.is_ready and not errors:
-            # Preserve the first actionable root cause from the failed stage
-            # instead of flattening it into a generic wrapper (issue #305).
-            root_cause = _first_actionable_failure(result)
+            # Preserve the first actionable root cause instead of flattening it
+            # into a generic wrapper (issue #305). Prefer a failed provisioning
+            # stage; otherwise fall back to the first blocking core artifact
+            # whose evidence is not ready (e.g. a stale benchmark that every
+            # action "succeeded" on but that still did not reach the target
+            # session).
+            root_cause = _first_actionable_failure(result) or _first_blocking_artifact(
+                core_artifacts
+            )
             errors = (
                 (root_cause,)
                 if root_cause is not None
@@ -235,6 +241,30 @@ def _first_actionable_failure(result: EnsureDataResult) -> str | None:
                 f"Deep-analysis preparation failed at stage {outcome.action.value} "
                 f"(dataset={dataset}, symbol={symbol}, category={category}): {cause}"
             )
+    return None
+
+
+def _first_blocking_artifact(artifacts: tuple) -> str | None:
+    """Summarize the first blocking core artifact that is not ready.
+
+    Used when provisioning reports no explicitly failed stage but a required
+    artifact (e.g. the benchmark) still has an error/error_code — so the user
+    sees the specific dataset, effective date and reason rather than a generic
+    wrapper (issue #305).
+    """
+    for artifact in artifacts:
+        if not getattr(artifact, "blocking", True):
+            continue
+        error = getattr(artifact, "error", None)
+        if not error:
+            continue
+        dataset = getattr(artifact, "name", "unknown")
+        code = getattr(artifact, "error_code", None) or "UNAVAILABLE"
+        effective = getattr(artifact, "resolved_date", None) or "unknown"
+        return (
+            f"Deep-analysis preparation incomplete for {dataset} "
+            f"(effective_date={effective}, category={code}): {error}"
+        )
     return None
 
 

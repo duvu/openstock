@@ -41,18 +41,27 @@ _MESSAGE_MARKERS: tuple[tuple[str, str], ...] = (
     ("no raw", "NO_RAW_ROWS"),
     ("does not support", "PROVIDER_UNSUPPORTED_DATASET"),
     ("not support index", "PROVIDER_UNSUPPORTED_DATASET"),
+    # Provider connectivity/timeouts — checked before generic markers so an
+    # outage is not misreported as a bare postcondition failure.
+    ("cannot connect", "PROVIDER_UNREACHABLE"),
+    ("connection", "PROVIDER_UNREACHABLE"),
+    ("timeout", "PROVIDER_UNREACHABLE"),
+    ("timed out", "PROVIDER_UNREACHABLE"),
     ("schema", "CANONICAL_SCHEMA_INVALID"),
     ("quarantine", "CANONICAL_SCHEMA_INVALID"),
+    ("did not reach", "SESSION_DATA_UNAVAILABLE"),
+    ("returned no data", "SESSION_DATA_UNAVAILABLE"),
+    ("provider unavailable", "SESSION_DATA_UNAVAILABLE"),
     ("benchmark", "BENCHMARK_JOIN_EMPTY"),
     ("lookback", "INSUFFICIENT_LOOKBACK"),
     ("insufficient", "INSUFFICIENT_LOOKBACK"),
     ("no row", "SCORE_INPUT_MISSING"),
     ("produced no", "SCORE_INPUT_MISSING"),
-    ("postcondition", "POSTCONDITION_UNSATISFIED"),
     ("credential", "PROVIDER_AUTH_MISSING"),
     ("auth", "PROVIDER_AUTH_MISSING"),
     ("not a completed", "SESSION_NOT_COMPLETED"),
     ("calendar", "SESSION_NOT_COMPLETED"),
+    ("postcondition", "POSTCONDITION_UNSATISFIED"),
 )
 
 _ACTION_DEFAULT_CATEGORY = {
