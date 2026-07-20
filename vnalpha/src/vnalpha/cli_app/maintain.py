@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
-from datetime import date as DateType
 from datetime import datetime, timezone
 
 import duckdb
@@ -16,6 +14,7 @@ from vnalpha.maintenance.daily import (
     MaintenanceRunStatus,
 )
 from vnalpha.maintenance.ledger import persist_maintenance_run
+from vnalpha.maintenance.software_identity import resolve_software_identity
 from vnalpha.observability.context import set_correlation_id
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.migrations import run_migrations
@@ -33,14 +32,11 @@ def daily(
     dry_run: bool = typer.Option(False, "--dry-run"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Run one maintenance invocation and persist every non-dry-run result."""
     requested_symbols = _parse_symbols(symbols)
-    resolved_date = resolve_date(date)
-    is_session = VietnamSessionCalendar().is_session(
-        DateType.fromisoformat(resolved_date)
-    )
-    conn = _maintenance_connection(ephemeral=dry_run or not is_session)
+    conn = _maintenance_connection(ephemeral=dry_run)
     try:
-        if not dry_run and is_session:
+        if not dry_run:
             run_migrations(conn=conn)
         set_correlation_id()
         started_at = datetime.now(timezone.utc)
@@ -54,18 +50,18 @@ def daily(
         )
         completed_at = datetime.now(timezone.utc)
 
-        # Persist to ledger for real sessions (not dry-run or NOOP)
-        if not dry_run and result.status != MaintenanceRunStatus.NOOP:
-            python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-            software_version = f"python-{python_version}"
-            calendar_version = VietnamSessionCalendar().version
+        if not dry_run:
+            identity = resolve_software_identity()
             persist_maintenance_run(
                 conn,
                 result,
                 started_at=started_at,
                 completed_at=completed_at,
-                software_version=software_version,
-                calendar_version=calendar_version,
+                software_version=identity.display,
+                package_version=identity.package_version,
+                source_commit=identity.source_commit,
+                tree_state=identity.tree_state,
+                calendar_version=VietnamSessionCalendar().version,
                 source_policy=_resolve_source_policy(source),
             )
 
@@ -88,17 +84,18 @@ def daily(
 
 
 def _resolve_source_policy(requested_source: str | None) -> dict[str, object]:
-    """Resolve the per-dataset source policy for the datasets maintenance acquires.
-
-    Records the resolved policy in the ledger so an operator can later answer
-    which source each canonical dataset was routed to (issue #253). CLI, service
-    and worker all resolve through the same shared ``SourcePolicyResolver``.
-    """
+    """Resolve and record the per-dataset source policy for this invocation."""
     from vnalpha.data_provisioning.source_policy import get_default_resolver
 
     resolver = get_default_resolver()
     normalized = requested_source.strip().lower() if requested_source else None
-    datasets = ("reference.symbols", "equity.ohlcv", "index.ohlcv")
+    datasets = (
+        "reference.symbols",
+        "equity.ohlcv",
+        "index.ohlcv",
+        "reference.index_membership_snapshot",
+        "reference.sector_membership_snapshot",
+    )
     policy: dict[str, object] = {}
     for dataset in datasets:
         resolved = resolver.resolve(dataset, requested_source=normalized)
@@ -106,6 +103,7 @@ def _resolve_source_policy(requested_source: str | None) -> dict[str, object]:
             "source": resolved.source,
             "mode": resolved.mode.value,
             "fallback_allowed": resolved.fallback_allowed,
+            "rationale": resolved.rationale,
         }
     return policy
 
@@ -154,9 +152,15 @@ def status(
                 typer.echo(f"  Date: {latest['resolved_date']}")
                 typer.echo(f"  Completed: {latest['completed_at']}")
                 typer.echo(
-                    f"  Symbols: {latest['successful_symbol_count']}/{latest['requested_symbol_count']} successful"
+                    f"  Symbols: {latest['successful_symbol_count']}/"
+                    f"{latest['requested_symbol_count']} successful"
                 )
                 typer.echo(f"  Duration: {latest['duration_seconds']:.1f}s")
+                typer.echo(
+                    "  Software: "
+                    f"{latest.get('package_version') or latest['software_version']} "
+                    f"commit={latest.get('source_commit') or 'unknown'}"
+                )
             else:
                 typer.echo("No maintenance runs found.")
 
@@ -165,7 +169,8 @@ def status(
                 for stage in failed_stages:
                     typer.echo(
                         f"  {stage['stage_name']} ({stage['status']}) "
-                        f"- {stage['resolved_date']} - {len(stage['failures'])} failures"
+                        f"- {stage['resolved_date']} - "
+                        f"{len(stage['failures'])} failures"
                     )
     finally:
         conn.close()
@@ -175,12 +180,7 @@ def status(
 def readiness(
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Report per-dataset readiness and the resolved source policy (issue #253).
-
-    This is dataset readiness, not process liveness: unlike ``/healthz`` it
-    distinguishes a live process from a usable data path and shows which
-    providers can serve each canonical dataset under the resolved policy.
-    """
+    """Report per-dataset readiness and the resolved source policy."""
     from vnalpha.data_availability.dataset_readiness import check_dataset_readiness
     from vnalpha.data_provisioning.source_policy import get_default_resolver
 
@@ -188,8 +188,8 @@ def readiness(
         "reference.symbols",
         "equity.ohlcv",
         "index.ohlcv",
-        "index.membership",
-        "sector.membership",
+        "reference.index_membership_snapshot",
+        "reference.sector_membership_snapshot",
     )
     resolver = get_default_resolver()
     conn = get_connection()
@@ -234,20 +234,21 @@ def proof(
     sessions: int = typer.Option(
         10, "--sessions", help="Required consecutive session count."
     ),
+    rerun_dates: int = typer.Option(
+        2, "--rerun-dates", help="Required number of dates with a same-date rerun."
+    ),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Aggregate the persisted ledger into the issue #255 operational proof.
-
-    Reports whether the required number of distinct market sessions have been
-    persisted and summarises each. This reads the ledger truthfully; it does not
-    manufacture live operation. Exits non-zero when the required sessions are
-    not yet present, so it can gate a release check.
-    """
+    """Validate persisted ledger evidence for issue #255."""
     from vnalpha.maintenance.ledger import collect_operational_proof
 
     conn = get_connection()
     try:
-        report = collect_operational_proof(conn, required_sessions=sessions)
+        report = collect_operational_proof(
+            conn,
+            required_sessions=sessions,
+            required_rerun_dates=rerun_dates,
+        )
     finally:
         conn.close()
 
@@ -256,14 +257,26 @@ def proof(
     else:
         typer.echo(
             f"Operational proof: {report['distinct_sessions_recorded']}/"
-            f"{report['required_sessions']} distinct sessions recorded"
+            f"{report['required_sessions']} sessions"
         )
-        typer.echo(f"  has_required_sessions: {report['has_required_sessions']}")
-        typer.echo(f"  session_dates: {', '.join(report['session_dates']) or '(none)'}")
-        if report["same_date_rerun_dates"]:
+        typer.echo(
+            f"  consecutive_market_sessions: "
+            f"{report['consecutive_market_sessions']}"
+        )
+        typer.echo(f"  identity_complete: {report['identity_complete']}")
+        typer.echo(
+            f"  source_policy_complete: {report['source_policy_complete']}"
+        )
+        typer.echo(
+            f"  same-date reruns: {len(report['same_date_rerun_dates'])}/"
+            f"{report['required_rerun_dates']}"
+        )
+        if report["missing_session_dates"]:
             typer.echo(
-                f"  same-date reruns: {', '.join(report['same_date_rerun_dates'])}"
+                f"  missing sessions: {', '.join(report['missing_session_dates'])}"
             )
+        if report["calendar_error"]:
+            typer.echo(f"  calendar error: {report['calendar_error']}")
     if not report["has_required_sessions"]:
         raise typer.Exit(code=1)
 
