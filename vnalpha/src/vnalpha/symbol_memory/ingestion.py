@@ -29,6 +29,10 @@ _TRUSTED_EVIDENCE_SOURCE_KINDS = frozenset(
         "candidate_score",
         "feature_snapshot",
         "canonical_ohlcv",
+        "fundamental_fact",
+        "valuation_snapshot",
+        "symbol_event",
+        "candidate_outcome",
         "research_market_regime_snapshot",
         "research_symbol_level_snapshot",
         "research_setup_analysis",
@@ -179,7 +183,8 @@ class SymbolMemoryIngestionService:
 
 
 def _validate_evidence(
-    evidence: MemoryEvidence, repository: SymbolMemoryRepository
+    evidence: MemoryEvidence,
+    repository: SymbolMemoryRepository,
 ) -> None:
     if not isinstance(evidence.observed_at, datetime) or not isinstance(
         evidence.as_of_date, date
@@ -192,7 +197,9 @@ def _validate_evidence(
     source_kind, separator, source_identifier = evidence.source_ref.partition(":")
     source_kind = source_kind.strip().lower()
     source_tokens = frozenset(
-        token for token in re.split(r"[^a-z0-9]+", evidence.source_ref.lower()) if token
+        token
+        for token in re.split(r"[^a-z0-9]+", evidence.source_ref.lower())
+        if token
     )
     if _UNTRUSTED_SOURCE_TOKENS & source_tokens:
         raise MemoryIngestionError(

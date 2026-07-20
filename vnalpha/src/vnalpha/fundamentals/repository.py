@@ -1,4 +1,4 @@
-"""Persistence + as-of queries for fundamentals (issue #257)."""
+"""Persistence and publication-aware as-of queries for fundamentals."""
 
 from __future__ import annotations
 
@@ -23,17 +23,12 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class AsOfFact:
-    """A fundamentals snapshot row resolved as of a requested date.
-
-    Carries the identity + material values plus the two derived ratios, all
-    reproducible from the canonical fact.
-    """
-
     symbol: str
     fiscal_year: int
     fiscal_period: str
     statement_scope: str
     published_at: str
+    available_from: str
     period_end_date: str
     audit_status: str
     currency: str
@@ -47,7 +42,10 @@ class AsOfFact:
     operating_cash_flow: float | None
     roe: float | None
     debt_to_equity: float | None
+    revision_id: str
     revision_number: int
+    source_reference: str
+    content_hash: str
     is_stale: bool
     caveats: tuple[str, ...]
 
@@ -56,17 +54,9 @@ def upsert_fundamental_fact(
     conn: duckdb.DuckDBPyConnection,
     fact: FundamentalFact,
 ) -> str:
-    """Persist one fundamental fact revision idempotently.
-
-    Re-ingesting an identical (fact_id, revision_number) with the same content
-    is a no-op. A higher revision_number supersedes the prior current revision
-    for the same fact_id without mutating it (immutable restatements).
-
-    Returns the revision_id of the stored (or already-present) revision.
-    """
+    """Persist one immutable fact revision idempotently."""
     content_hash = fact_content_hash(fact)
     available_from = fact.available_from or f"{fact.published_at}T00:00:00+07:00"
-
     existing = conn.execute(
         """
         SELECT revision_id, content_hash
@@ -76,8 +66,6 @@ def upsert_fundamental_fact(
         [fact.fact_id, fact.revision_number],
     ).fetchone()
     if existing is not None:
-        # Idempotent: identical content -> return; conflicting content is a
-        # fail-closed error because a revision is immutable once written.
         if existing[1] != content_hash:
             raise ValueError(
                 f"revision {fact.fact_id}#{fact.revision_number} already exists "
@@ -86,9 +74,6 @@ def upsert_fundamental_fact(
         return str(existing[0])
 
     revision_id = f"fund_{uuid4().hex[:16]}"
-    revision_hash = fact_content_hash(fact)  # revision identity = content here
-
-    # Supersede the prior current revision of this fact, if any.
     prior = conn.execute(
         """
         SELECT revision_id FROM fundamental_fact
@@ -97,7 +82,6 @@ def upsert_fundamental_fact(
         """,
         [fact.fact_id],
     ).fetchone()
-
     conn.execute(
         """
         INSERT INTO fundamental_fact (
@@ -136,7 +120,7 @@ def upsert_fundamental_fact(
             fact.source_reference,
             fact.source_authority,
             content_hash,
-            revision_hash,
+            content_hash,
             prior[0] if prior else None,
             FUNDAMENTALS_CONTRACT_VERSION,
             json.dumps({}),
@@ -159,11 +143,11 @@ def get_fact_revisions(
     conn: duckdb.DuckDBPyConnection,
     fact_id: str,
 ) -> list[dict[str, object]]:
-    """Return all revisions for a fact in ascending revision order."""
     rows = conn.execute(
         """
         SELECT revision_id, revision_number, canonical_status, published_at,
-               content_hash, supersedes_revision_id, superseded_by_revision_id
+               available_from, content_hash, supersedes_revision_id,
+               superseded_by_revision_id
         FROM fundamental_fact
         WHERE fact_id = ?
         ORDER BY revision_number
@@ -172,15 +156,16 @@ def get_fact_revisions(
     ).fetchall()
     return [
         {
-            "revision_id": r[0],
-            "revision_number": r[1],
-            "canonical_status": r[2],
-            "published_at": r[3],
-            "content_hash": r[4],
-            "supersedes_revision_id": r[5],
-            "superseded_by_revision_id": r[6],
+            "revision_id": row[0],
+            "revision_number": row[1],
+            "canonical_status": row[2],
+            "published_at": str(row[3]),
+            "available_from": str(row[4]),
+            "content_hash": row[5],
+            "supersedes_revision_id": row[6],
+            "superseded_by_revision_id": row[7],
         }
-        for r in rows
+        for row in rows
     ]
 
 
@@ -192,14 +177,11 @@ def as_of_snapshot(
     statement_scope: StatementScope = StatementScope.CONSOLIDATED,
     stale_after_days: int = 400,
 ) -> list[AsOfFact]:
-    """Build the publication-aware as-of fundamentals snapshot for a symbol.
+    """Return the latest revision whose evidence was available by the as-of day.
 
-    Only facts with ``published_at <= as_of_date`` are considered, so a fact
-    published after the requested date can never leak into historical analysis.
-    For each (fiscal_year, fiscal_period) the latest-published, highest-revision
-    fact within the requested scope wins (restatements available by the date
-    supersede earlier ones). Consolidated and separate values never mix: the
-    query is scoped to one ``statement_scope``.
+    ``available_from`` rather than fiscal period end or publication label controls
+    visibility. The end of the requested calendar day is used for date-only
+    callers; later revisions cannot erase the revision visible on an earlier day.
     """
     rows = conn.execute(
         """
@@ -207,32 +189,34 @@ def as_of_snapshot(
             SELECT *,
                    ROW_NUMBER() OVER (
                        PARTITION BY fiscal_year, fiscal_period
-                       ORDER BY published_at DESC, revision_number DESC
+                       ORDER BY available_from DESC, revision_number DESC
                    ) AS rn
             FROM fundamental_fact
             WHERE symbol = ?
               AND statement_scope = ?
-              AND published_at <= ?
+              AND available_from < CAST(? AS DATE) + INTERVAL 1 DAY
         )
         SELECT symbol, fiscal_year, fiscal_period, statement_scope,
-               published_at, period_end_date, audit_status, currency, unit,
-               revenue, net_income, eps, total_assets, total_equity,
-               total_liabilities, operating_cash_flow, revision_number
+               published_at, available_from, period_end_date, audit_status,
+               currency, unit, revenue, net_income, eps, total_assets,
+               total_equity, total_liabilities, operating_cash_flow,
+               revision_id, revision_number, source_reference, content_hash
         FROM visible
         WHERE rn = 1
         ORDER BY fiscal_year DESC, fiscal_period DESC
         """,
-        [symbol, statement_scope.value, as_of_date],
+        [symbol.upper(), statement_scope.value, as_of_date],
     ).fetchall()
 
     snapshot: list[AsOfFact] = []
-    for r in rows:
+    for row in rows:
         (
             sym,
-            fy,
-            fp,
+            fiscal_year,
+            fiscal_period,
             scope,
             published_at,
+            available_from,
             period_end_date,
             audit_status,
             currency,
@@ -244,8 +228,11 @@ def as_of_snapshot(
             total_equity,
             total_liabilities,
             operating_cash_flow,
+            revision_id,
             revision_number,
-        ) = r
+            source_reference,
+            content_hash,
+        ) = row
         caveats: list[str] = []
         is_stale = _days_between(str(period_end_date), as_of_date) > stale_after_days
         if is_stale:
@@ -258,10 +245,11 @@ def as_of_snapshot(
         snapshot.append(
             AsOfFact(
                 symbol=sym,
-                fiscal_year=fy,
-                fiscal_period=fp,
+                fiscal_year=fiscal_year,
+                fiscal_period=fiscal_period,
                 statement_scope=scope,
                 published_at=str(published_at),
+                available_from=str(available_from),
                 period_end_date=str(period_end_date),
                 audit_status=audit_status,
                 currency=currency,
@@ -274,8 +262,13 @@ def as_of_snapshot(
                 total_liabilities=total_liabilities,
                 operating_cash_flow=operating_cash_flow,
                 roe=compute_roe(net_income, total_equity),
-                debt_to_equity=compute_debt_to_equity(total_liabilities, total_equity),
+                debt_to_equity=compute_debt_to_equity(
+                    total_liabilities, total_equity
+                ),
+                revision_id=str(revision_id),
                 revision_number=revision_number,
+                source_reference=str(source_reference),
+                content_hash=str(content_hash),
                 is_stale=is_stale,
                 caveats=tuple(caveats),
             )
