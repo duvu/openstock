@@ -8,7 +8,10 @@ Type=oneshot
 WorkingDirectory=/var/lib/openstock
 EnvironmentFile=-/etc/vnalpha/vnalpha.env
 Environment=VNALPHA_LOG_ROOT=/var/log/openstock
-UMask=0077
+# Keep root ownership for host maintenance while making DuckDB, knowledge,
+# logs and the stable lock inode accessible to approved openstock operators.
+Group=openstock
+UMask=0007
 ExecStart=/usr/bin/flock -n -E 75 /run/openstock-pipeline.lock /usr/bin/vnalpha maintain daily --date today --json
 SuccessExitStatus=3
 TimeoutStartSec=4h
