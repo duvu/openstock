@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Final, List, Optional
 
 FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION: Final = (
-    "candidate-outcome-forward-return-v1"
+    "candidate-outcome-forward-return-v2"
 )
 OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION: Final = (
     "outcome-evaluation-assumptions-v1"
@@ -37,8 +37,6 @@ OUTCOME_EVALUATION_ASSUMPTIONS_HASH: Final = hashlib.sha256(
 
 
 class OutcomeStatus(str, Enum):
-    """Status of a candidate outcome evaluation."""
-
     COMPLETE = "COMPLETE"
     PENDING = "PENDING"
     PARTIAL = "PARTIAL"
@@ -75,7 +73,6 @@ SCORE_BUCKETS = [
 
 
 def assign_score_bucket(score: Optional[float]) -> str:
-    """Return bucket label for a score value."""
     if score is None:
         return "0.00-0.40"
     if score >= 0.90:
@@ -95,8 +92,6 @@ def assign_score_bucket(score: Optional[float]) -> str:
 
 @dataclass
 class CandidateOutcomeRecord:
-    """Row from candidate_outcome table."""
-
     symbol: str
     watchlist_date: str
     horizon_sessions: int
@@ -123,7 +118,6 @@ class CandidateOutcomeRecord:
     required_bars: Optional[int] = None
     computed_at: Optional[str] = None
     error_json: Optional[str] = None
-    # Versioning / traceability
     evaluation_run_id: Optional[str] = None
     evaluator_version: Optional[str] = None
     metric_policy_version: Optional[str] = None
@@ -133,6 +127,7 @@ class CandidateOutcomeRecord:
     benchmark_price_basis: str = "UNKNOWN"
     adjustment_methodology: str = "UNKNOWN"
     adjustment_version: str = "UNKNOWN"
+    factor_chain_hash: Optional[str] = None
     action_overlap_status: str = "NOT_EVALUATED"
     invalidation_reason: Optional[str] = None
     corporate_action_lineage_json: str = "[]"
@@ -140,12 +135,12 @@ class CandidateOutcomeRecord:
     scoring_policy_version: Optional[str] = None
     scoring_policy_hash: Optional[str] = None
     scoring_policy_status: Optional[str] = None
+    ranking_run_ref: Optional[str] = None
+    eligible_universe_hash: Optional[str] = None
 
 
 @dataclass
 class WatchlistOutcomeRecord:
-    """Row from watchlist_outcome table."""
-
     watchlist_date: str
     horizon_sessions: int
     candidate_count: Optional[int] = None
@@ -162,7 +157,6 @@ class WatchlistOutcomeRecord:
     hit_rate: Optional[float] = None
     failure_rate: Optional[float] = None
     computed_at: Optional[str] = None
-    # Versioning / traceability
     evaluation_run_id: Optional[str] = None
     evaluator_version: Optional[str] = None
     metric_policy_version: Optional[str] = None
@@ -178,8 +172,6 @@ class WatchlistOutcomeRecord:
 
 @dataclass
 class ScoreBucketPerformanceRecord:
-    """Row from score_bucket_performance table."""
-
     as_of_date: str
     horizon_sessions: int
     score_bucket: str
@@ -191,7 +183,6 @@ class ScoreBucketPerformanceRecord:
     failure_rate: Optional[float] = None
     avg_max_drawdown: Optional[float] = None
     computed_at: Optional[str] = None
-    # Versioning / traceability
     evaluation_run_id: Optional[str] = None
     evaluator_version: Optional[str] = None
     metric_policy_version: Optional[str] = None
@@ -207,8 +198,6 @@ class ScoreBucketPerformanceRecord:
 
 @dataclass
 class SetupTypePerformanceRecord:
-    """Row from setup_type_performance table."""
-
     as_of_date: str
     horizon_sessions: int
     setup_type: str
@@ -220,7 +209,6 @@ class SetupTypePerformanceRecord:
     failure_rate: Optional[float] = None
     avg_max_drawdown: Optional[float] = None
     computed_at: Optional[str] = None
-    # Versioning / traceability
     evaluation_run_id: Optional[str] = None
     evaluator_version: Optional[str] = None
     metric_policy_version: Optional[str] = None
@@ -236,8 +224,6 @@ class SetupTypePerformanceRecord:
 
 @dataclass
 class RiskFlagPerformanceRecord:
-    """Row from risk_flag_performance table."""
-
     as_of_date: str
     horizon_sessions: int
     risk_flag: str
@@ -249,7 +235,6 @@ class RiskFlagPerformanceRecord:
     failure_rate: Optional[float] = None
     avg_max_drawdown: Optional[float] = None
     computed_at: Optional[str] = None
-    # Versioning / traceability
     evaluation_run_id: Optional[str] = None
     evaluator_version: Optional[str] = None
     metric_policy_version: Optional[str] = None
@@ -261,3 +246,22 @@ class RiskFlagPerformanceRecord:
     scoring_policy_version: Optional[str] = None
     scoring_policy_hash: Optional[str] = None
     scoring_policy_status: Optional[str] = None
+
+
+__all__ = [
+    "DEFAULT_HORIZONS",
+    "FORWARD_OUTCOME_MEASUREMENT_CONTRACT_VERSION",
+    "OUTCOME_EVALUATION_ASSUMPTIONS_CONTRACT_VERSION",
+    "OUTCOME_EVALUATION_ASSUMPTIONS_HASH",
+    "OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD",
+    "OUTCOME_EVALUATION_ASSUMPTIONS_PAYLOAD_JSON",
+    "CandidateOutcomeRecord",
+    "HypothesisOutcomeSummary",
+    "OutcomeStatus",
+    "RiskFlagPerformanceRecord",
+    "SCORE_BUCKETS",
+    "ScoreBucketPerformanceRecord",
+    "SetupTypePerformanceRecord",
+    "WatchlistOutcomeRecord",
+    "assign_score_bucket",
+]
