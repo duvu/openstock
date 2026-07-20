@@ -1,6 +1,9 @@
 name: diagnose-pr294-ruff
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - agent/fix-p0-ops
