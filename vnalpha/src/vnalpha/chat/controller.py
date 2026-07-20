@@ -467,7 +467,14 @@ class ChatController:
             return error_text
 
     def _evaluate_plan_permissions(self, plan: "AssistantPlan | None") -> str | None:
-        if plan is None or not plan.steps:
+        if plan is None:
+            return "Refused: the plan has no executable steps."
+        if not plan.steps:
+            # A refusal plan carries the actual, actionable reason (e.g. the
+            # workflow requires a symbol). Surface it instead of the generic
+            # "no executable steps" message.
+            if plan.refusal_reason:
+                return f"Refused: {plan.refusal_reason}"
             return "Refused: the plan has no executable steps."
 
         if is_safe_plan(plan):
