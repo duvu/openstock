@@ -168,5 +168,9 @@ def test_research_tables_declare_basis_lineage_columns() -> None:
         for table in ("feature_snapshot", "candidate_score", "daily_watchlist")
     }
     for table_columns in columns.values():
-        assert {"price_basis", "adjustment_version", "factor_chain_hash"} <= table_columns
+        assert {
+            "price_basis",
+            "adjustment_version",
+            "factor_chain_hash",
+        } <= table_columns
     conn.close()

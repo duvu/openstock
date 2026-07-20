@@ -262,9 +262,7 @@ def as_of_snapshot(
                 total_liabilities=total_liabilities,
                 operating_cash_flow=operating_cash_flow,
                 roe=compute_roe(net_income, total_equity),
-                debt_to_equity=compute_debt_to_equity(
-                    total_liabilities, total_equity
-                ),
+                debt_to_equity=compute_debt_to_equity(total_liabilities, total_equity),
                 revision_id=str(revision_id),
                 revision_number=revision_number,
                 source_reference=str(source_reference),

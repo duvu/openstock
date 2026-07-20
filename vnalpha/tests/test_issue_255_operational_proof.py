@@ -34,7 +34,32 @@ def conn() -> duckdb.DuckDBPyConnection:
     connection.close()
 
 
-def _persist(conn, date, *, status=MaintenanceRunStatus.SUCCESS, hour=8, corr=None):
+# Ten consecutive Vietnamese trading sessions (VietnamSessionCalendar) used to
+# build a genuinely provable ledger window in tests.
+_CONSECUTIVE_SESSIONS = (
+    "2026-01-05",
+    "2026-01-06",
+    "2026-01-07",
+    "2026-01-08",
+    "2026-01-09",
+    "2026-01-12",
+    "2026-01-13",
+    "2026-01-14",
+    "2026-01-15",
+    "2026-01-16",
+)
+
+
+def _persist(
+    conn,
+    date,
+    *,
+    status=MaintenanceRunStatus.SUCCESS,
+    hour=8,
+    corr=None,
+    identity=False,
+    source_policy=None,
+):
     result = DailyMaintenanceResult(
         status=status,
         requested_date=date,
@@ -55,7 +80,30 @@ def _persist(conn, date, *, status=MaintenanceRunStatus.SUCCESS, hour=8, corr=No
         started_at=datetime(2026, 1, 1, hour, 0, tzinfo=timezone.utc),
         completed_at=datetime(2026, 1, 1, hour, 5, tzinfo=timezone.utc),
         software_version="test",
+        package_version="1.0.0" if identity else None,
+        source_commit="deadbeef" if identity else None,
+        calendar_version="vn-2026" if identity else None,
+        source_policy=source_policy,
     )
+
+
+def _persist_provable_window(conn):
+    """Seed a fully provable 10-session window: consecutive real sessions with
+    complete software identity, resolved source policy, and two same-date
+    reruns (matching the #255 acceptance evidence contract)."""
+    policy = {"equity.ohlcv": {"source": None, "mode": "AUTO"}}
+    for index, day in enumerate(_CONSECUTIVE_SESSIONS):
+        _persist(conn, day, identity=True, source_policy=policy)
+        # Two of the sessions receive a same-date manual rerun.
+        if index < 2:
+            _persist(
+                conn,
+                day,
+                hour=9,
+                corr=f"rerun-{day}",
+                identity=True,
+                source_policy=policy,
+            )
 
 
 def test_empty_ledger_is_not_proven(conn) -> None:
@@ -66,11 +114,16 @@ def test_empty_ledger_is_not_proven(conn) -> None:
 
 
 def test_ten_distinct_sessions_are_proven(conn) -> None:
-    for day in range(5, 15):  # 10 distinct dates
-        _persist(conn, f"2026-01-{day:02d}")
+    # A fully provable window: 10 consecutive real trading sessions with
+    # complete identity, resolved source policy and two same-date reruns.
+    _persist_provable_window(conn)
     report = collect_operational_proof(conn, required_sessions=10)
     assert report["distinct_sessions_recorded"] == 10
     assert report["has_required_sessions"] is True
+    assert report["consecutive_market_sessions"] is True
+    assert report["identity_complete"] is True
+    assert report["source_policy_complete"] is True
+    assert len(report["same_date_rerun_dates"]) >= 2
     assert len(report["sessions"]) == 10
 
 

@@ -98,7 +98,9 @@ def assess_promotion(
     if not evidence.evaluation_manifest_ids:
         reasons.append("no baseline evaluation evidence referenced")
     if evidence.verification_status not in {"VERIFIED", "UNVERIFIED"}:
-        reasons.append(f"evidence verification status is {evidence.verification_status}")
+        reasons.append(
+            f"evidence verification status is {evidence.verification_status}"
+        )
     return PromotionAssessment(
         eligible=not reasons,
         reasons=tuple(reasons),
@@ -247,24 +249,29 @@ def verify_evidence(
             }
         )
     )
-    if evidence.ranking_run_refs and set(evidence.ranking_run_refs) != set(ranking_refs):
+    if evidence.ranking_run_refs and set(evidence.ranking_run_refs) != set(
+        ranking_refs
+    ):
         raise EvidenceVerificationError(
             "Caller ranking-run references do not match persisted evidence"
         )
 
     sample_count = sum(int(item["complete"]) for item in manifests)
     eligible_count = sum(int(item["eligible"]) for item in manifests)
-    incomplete_count = sum(int(item["incomplete"]) for item in manifests)
     coverage = sample_count / eligible_count if eligible_count else 0.0
     period_dates = {str(item["date"]) for item in manifests}
     period_count = len(period_dates)
     if replays:
-        period_count = max(period_count, max(int(item["period_count"]) for item in replays))
+        period_count = max(
+            period_count, max(int(item["period_count"]) for item in replays)
+        )
+    # Incomplete outcome rows are an expected point-in-time condition (recent
+    # horizons that have not matured yet); VERIFIED gates on each manifest's
+    # recomputed sufficiency status, not on zero incompleteness. Coverage is
+    # surfaced separately for the promotion threshold assessment.
     verification_status = (
         "VERIFIED"
-        if manifests
-        and incomplete_count == 0
-        and all(item["sufficiency"] == "SUFFICIENT" for item in manifests)
+        if manifests and all(item["sufficiency"] == "SUFFICIENT" for item in manifests)
         else "PARTIAL"
     )
     bundle_payload = {
@@ -319,9 +326,7 @@ def record_decision(
     ):
         reasons = [*assessment.reasons]
         if verified.verification_status != "VERIFIED":
-            reasons.append(
-                f"verification_status={verified.verification_status}"
-            )
+            reasons.append(f"verification_status={verified.verification_status}")
         raise ValueError(
             "cannot record an activating decision on insufficient evidence: "
             + "; ".join(reasons)

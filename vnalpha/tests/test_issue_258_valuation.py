@@ -47,6 +47,21 @@ def _seed_symbol(conn, symbol, sector_code="TECH"):
         "VALUES (?, ?, 'icb-2026', TRUE)",
         [symbol, sector_code],
     )
+    # Point-in-time sector resolution (#296) reads symbol_classification_history
+    # rather than current-state symbol_master, so seed an open-ended history row.
+    conn.execute(
+        """
+        INSERT INTO symbol_classification_history (
+            symbol, effective_from, effective_to, source_snapshot_id,
+            classification_source, exchange, security_type, lifecycle_status,
+            listing_date, delisting_date, sector_code, sector_name,
+            industry_code, industry_name, taxonomy_name, taxonomy_version
+        ) VALUES (?, '2020-01-01 00:00:00+00', NULL, 'snap-258', 'fixture',
+                  'HOSE', 'COMMON_EQUITY', 'ACTIVE', NULL, NULL, ?, ?, NULL,
+                  NULL, 'ICB', 'icb-2026')
+        """,
+        [symbol, sector_code, sector_code],
+    )
 
 
 def _seed_fundamental(conn, symbol, eps=6.0, equity=45000.0, published="2026-03-31"):
@@ -130,7 +145,7 @@ def test_snapshot_no_future_publication_leakage(conn) -> None:
     )
     assert snap.eps is None
     assert snap.pe_ratio is None
-    assert "no_fundamental_on_or_before_as_of" in snap.caveats
+    assert "no_fundamental_available_by_as_of" in snap.caveats
 
 
 def test_snapshot_no_future_price_leakage(conn) -> None:
@@ -153,7 +168,7 @@ def test_missing_shares_flags_caveat_and_no_pb(conn) -> None:
     snap = build_valuation_snapshot(conn, "FPT", "2026-04-02")  # no shares
     assert snap.book_value_per_share is None
     assert snap.pb_ratio is None
-    assert "shares_outstanding_not_provided" in snap.caveats
+    assert "share_count_not_available_by_as_of" in snap.caveats
 
 
 def test_idempotent_rebuild_replaces_snapshot(conn) -> None:

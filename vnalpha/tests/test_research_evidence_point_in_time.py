@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import duckdb
 
-from vnalpha.disclosures import DisclosureOccurrence, EventType, as_of_events, normalize_event
+from vnalpha.disclosures import (
+    DisclosureOccurrence,
+    EventType,
+    as_of_events,
+    normalize_event,
+)
 from vnalpha.fundamentals import (
     AuditStatus,
     FundamentalFact,
@@ -78,7 +83,9 @@ def _classification(
     )
 
 
-def _price(conn: duckdb.DuckDBPyConnection, symbol: str, day: str, close: float) -> None:
+def _price(
+    conn: duckdb.DuckDBPyConnection, symbol: str, day: str, close: float
+) -> None:
     conn.execute(
         """
         INSERT INTO canonical_ohlcv (

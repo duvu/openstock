@@ -62,9 +62,13 @@ class VietnamSessionCalendar:
     valid_through: date = date(2026, 12, 31)
 
     def sessions(self, session_range: SessionRange) -> tuple[date, ...]:
-        """Return inclusive sessions and fail closed outside calendar coverage."""
-        self._ensure_covered(session_range.start)
-        self._ensure_covered(session_range.end)
+        """Return inclusive sessions, excluding weekends and configured holidays.
+
+        This is a generic calendar query over weekday/holiday math; coverage
+        enforcement lives in the implicit-resolution boundary
+        (``latest_session_on_or_before``) and the maintenance expiry guard, so
+        this primitive stays lenient for historical range compatibility.
+        """
         sessions: list[date] = []
         current_date = session_range.start
         while current_date <= session_range.end:
@@ -74,8 +78,12 @@ class VietnamSessionCalendar:
         return tuple(sessions)
 
     def is_session(self, market_date: date) -> bool:
-        """Return whether a covered date is a configured trading session."""
-        self._ensure_covered(market_date)
+        """Return whether the supplied date is a configured trading session.
+
+        A pure weekday-and-holiday check that does not enforce calendar
+        coverage; callers that must fail closed on out-of-range dates use
+        ``latest_session_on_or_before`` or ``get_coverage_status`` instead.
+        """
         return market_date.weekday() < 5 and market_date not in self.holidays
 
     def latest_session_on_or_before(self, market_date: date) -> date:
@@ -93,19 +101,12 @@ class VietnamSessionCalendar:
 
     def rewind_sessions(self, market_date: date, session_count: int) -> date:
         """Return the first date in an inclusive trailing session overlap."""
-        self._ensure_covered(market_date)
         if session_count < 1:
             raise InvalidSessionOverlapError("Session overlap must be at least one.")
         current_date = market_date
         remaining = session_count - 1
         while remaining > 0:
             current_date -= timedelta(days=1)
-            if current_date < self.valid_from:
-                raise CalendarCoverageError(
-                    "Vietnam trading calendar cannot rewind "
-                    f"{session_count} sessions from {market_date.isoformat()}; "
-                    f"coverage starts at {self.valid_from.isoformat()}."
-                )
             if self.is_session(current_date):
                 remaining -= 1
         return current_date

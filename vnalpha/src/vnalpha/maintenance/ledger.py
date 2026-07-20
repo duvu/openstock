@@ -280,7 +280,9 @@ def collect_operational_proof(
     sessions.sort(key=lambda item: item["resolved_date"])
 
     proof_calendar = calendar or VietnamSessionCalendar()
-    recorded_dates = [DateType.fromisoformat(str(item["resolved_date"])) for item in sessions]
+    recorded_dates = [
+        DateType.fromisoformat(str(item["resolved_date"])) for item in sessions
+    ]
     expected_dates: list[DateType] = []
     calendar_error: str | None = None
     if recorded_dates:

@@ -151,6 +151,23 @@ def _resolve_maintenance_policy(
         raise typer.BadParameter(str(exc)) from exc
 
 
+def _resolve_source_policy(source: str | None) -> dict[str, object]:
+    """Resolve the default maintenance source policy as a serializable dict.
+
+    Shared by the maintenance CLI, the persisted ledger and readiness output so
+    that every surface resolves the same per-dataset source policy (#253). The
+    optional ``source`` applies only to equity/index OHLCV, exactly like the
+    ``--source`` legacy flag; it never overrides reference or membership.
+    """
+    return _resolve_maintenance_policy(
+        source=source,
+        reference_source=None,
+        equity_source=None,
+        index_source=None,
+        membership_source=None,
+    ).to_dict()
+
+
 def _maintenance_connection(*, ephemeral: bool) -> duckdb.DuckDBPyConnection:
     if ephemeral:
         return duckdb.connect(":memory:")
@@ -307,13 +324,10 @@ def proof(
             f"{report['required_sessions']} sessions"
         )
         typer.echo(
-            "  consecutive_market_sessions: "
-            f"{report['consecutive_market_sessions']}"
+            f"  consecutive_market_sessions: {report['consecutive_market_sessions']}"
         )
         typer.echo(f"  identity_complete: {report['identity_complete']}")
-        typer.echo(
-            f"  source_policy_complete: {report['source_policy_complete']}"
-        )
+        typer.echo(f"  source_policy_complete: {report['source_policy_complete']}")
         typer.echo(
             f"  same-date reruns: {len(report['same_date_rerun_dates'])}/"
             f"{report['required_rerun_dates']}"

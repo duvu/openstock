@@ -150,9 +150,7 @@ def build_adjustment_factor(
     }:
         dividend_shares = _int("dividend_shares")
         base_shares = _int("base_shares")
-        price_multiplier = calculate_stock_dividend_factor(
-            dividend_shares, base_shares
-        )
+        price_multiplier = calculate_stock_dividend_factor(dividend_shares, base_shares)
         numerator, denominator = base_shares, base_shares + dividend_shares
     elif adjustment_type is AdjustmentType.CASH_DIVIDEND:
         price_multiplier = calculate_dividend_factor(

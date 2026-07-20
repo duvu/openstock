@@ -93,12 +93,21 @@ def test_all_tables_created(conn):
         "maintenance_stage_run",
         "fundamental_fact",
         "valuation_snapshot",
+        "valuation_snapshot_revision",
+        "share_count_fact",
         "disclosure_raw_occurrence",
         "symbol_event",
+        "adjusted_ohlcv",
+        "adjustment_factor",
+        "canonical_selection_audit",
         "ranking_evaluation_manifest",
         "ranking_evaluation_strategy",
+        "ranking_evaluation_manifest_v2",
+        "ranking_evaluation_strategy_v2",
         "ranking_replay",
         "ranking_replay_period",
+        "ranking_replay_v2",
+        "ranking_replay_period_v2",
         "ranking_policy_decision",
     }
     assert expected == names
@@ -184,8 +193,8 @@ def test_run_migrations_idempotent(conn):
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
     assert (
-        len(tables) == 74
-    )  # + ranking_evaluation_manifest + ranking_evaluation_strategy (issue #261)
+        len(tables) == 83
+    )  # + adjusted-price, valuation-revision, share-count and v2 ranking/replay schemas
 
 
 def test_get_watchlist_empty(conn):

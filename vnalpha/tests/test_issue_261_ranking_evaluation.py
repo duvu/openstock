@@ -88,7 +88,18 @@ def _seed_outcome(
             risk_quality_score = excluded.risk_quality_score,
             scoring_policy_hash = excluded.scoring_policy_hash
         """,
-        [symbol, day, 1.0 / rank, component, component, component, component, component, component, policy_hash],
+        [
+            symbol,
+            day,
+            1.0 / rank,
+            component,
+            component,
+            component,
+            component,
+            component,
+            component,
+            policy_hash,
+        ],
     )
     conn.execute(
         """
@@ -147,9 +158,17 @@ def test_baselines_use_identical_population_but_distinct_rankings(conn) -> None:
     }
     assert strategies["unfiltered"].sample_count == 15
     assert strategies["packaged"].sample_count == 5
-    assert strategies["packaged"].selected_symbols != strategies["momentum_only"].selected_symbols
-    assert strategies["equal_component"].selected_symbols != strategies["momentum_only"].selected_symbols
-    assert all(strategy.sector_concentration is not None for strategy in strategies.values())
+    assert (
+        strategies["packaged"].selected_symbols
+        != strategies["momentum_only"].selected_symbols
+    )
+    assert (
+        strategies["equal_component"].selected_symbols
+        != strategies["momentum_only"].selected_symbols
+    )
+    assert all(
+        strategy.sector_concentration is not None for strategy in strategies.values()
+    )
 
 
 def test_incomplete_outcomes_are_explicit_partial_not_silently_dropped(conn) -> None:
@@ -184,16 +203,22 @@ def test_content_addressed_manifest_changes_only_when_evidence_changes(conn) -> 
     first = evaluate_ranking_run(conn, "2026-01-05", horizon=20, top_n=5)
     repeated = evaluate_ranking_run(conn, "2026-01-05", horizon=20, top_n=5)
     assert first.manifest_id == repeated.manifest_id
-    assert conn.execute(
-        "SELECT COUNT(*) FROM ranking_evaluation_manifest_v2"
-    ).fetchone()[0] == 1
+    assert (
+        conn.execute("SELECT COUNT(*) FROM ranking_evaluation_manifest_v2").fetchone()[
+            0
+        ]
+        == 1
+    )
 
     _seed_outcome(conn, "NEW", rank=20, excess=0.02)
     changed = evaluate_ranking_run(conn, "2026-01-05", horizon=20, top_n=5)
     assert changed.manifest_id != first.manifest_id
-    assert conn.execute(
-        "SELECT COUNT(*) FROM ranking_evaluation_manifest_v2"
-    ).fetchone()[0] == 2
+    assert (
+        conn.execute("SELECT COUNT(*) FROM ranking_evaluation_manifest_v2").fetchone()[
+            0
+        ]
+        == 2
+    )
     fetched = get_ranking_evaluation(conn, changed.manifest_id)
     assert fetched is not None
     assert fetched["dataset_hash"] == changed.dataset_hash

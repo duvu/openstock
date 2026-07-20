@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from vnalpha.corporate_actions.adjustment_factors import (
-    ADJUSTMENT_FACTOR_VERSION,
     AdjustmentFactor,
     AdjustmentType,
 )
@@ -94,9 +91,9 @@ def derive_factor_for_revision(
         if subscription_value <= 0 or reference_value <= 0:
             raise ValueError("Rights-issue prices must be positive")
         adjustment_type = AdjustmentType.RIGHTS_ISSUE
-        theoretical_ex_price = (
-            reference_value + ratio_value * subscription_value
-        ) / (Decimal(1) + ratio_value)
+        theoretical_ex_price = (reference_value + ratio_value * subscription_value) / (
+            Decimal(1) + ratio_value
+        )
         price_multiplier = theoretical_ex_price / reference_value
     else:
         raise UnsupportedAdjustmentAction(
@@ -239,7 +236,7 @@ def build_adjusted_ohlcv(
         SELECT time, open, high, low, close, volume,
                ingestion_run_id, selected_provider
         FROM canonical_ohlcv
-        WHERE {' AND '.join(conditions)}
+        WHERE {" AND ".join(conditions)}
         ORDER BY time
         """,
         params,
@@ -278,17 +275,15 @@ def build_adjusted_ohlcv(
             price_multiplier *= Decimal(str(factor[2]))
             volume_multiplier *= Decimal(str(factor[3]))
             factor_hashes.append(str(factor[4]))
-        chain_hash = hashlib.sha256(
-            "|".join(factor_hashes).encode("utf-8")
-        ).hexdigest()
+        chain_hash = hashlib.sha256("|".join(factor_hashes).encode("utf-8")).hexdigest()
 
-        def _price(value: object) -> float | None:
-            return None if value is None else float(Decimal(str(value)) * price_multiplier)
+        def _price(
+            value: object, multiplier: Decimal = price_multiplier
+        ) -> float | None:
+            return None if value is None else float(Decimal(str(value)) * multiplier)
 
         adjusted_volume = (
-            None
-            if bar[5] is None
-            else float(Decimal(str(bar[5])) * volume_multiplier)
+            None if bar[5] is None else float(Decimal(str(bar[5])) * volume_multiplier)
         )
         conn.execute(
             """

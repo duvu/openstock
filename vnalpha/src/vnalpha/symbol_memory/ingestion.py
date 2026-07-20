@@ -197,9 +197,7 @@ def _validate_evidence(
     source_kind, separator, source_identifier = evidence.source_ref.partition(":")
     source_kind = source_kind.strip().lower()
     source_tokens = frozenset(
-        token
-        for token in re.split(r"[^a-z0-9]+", evidence.source_ref.lower())
-        if token
+        token for token in re.split(r"[^a-z0-9]+", evidence.source_ref.lower()) if token
     )
     if _UNTRUSTED_SOURCE_TOKENS & source_tokens:
         raise MemoryIngestionError(
