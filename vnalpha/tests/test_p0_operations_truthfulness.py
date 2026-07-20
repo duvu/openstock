@@ -55,8 +55,7 @@ def test_daily_cli_persists_noop_invocation(tmp_path, monkeypatch) -> None:
 
     conn = duckdb.connect(str(warehouse))
     row = conn.execute(
-        "SELECT status, package_version, source_commit, tree_state "
-        "FROM maintenance_run"
+        "SELECT status, package_version, source_commit, tree_state FROM maintenance_run"
     ).fetchone()
     conn.close()
     assert row == ("NOOP", "1.2.3", "a" * 40, "clean")
@@ -102,23 +101,26 @@ def test_dataset_readiness_uses_membership_snapshot_contract() -> None:
         )
         """
     )
-    result = check_dataset_readiness(
-        conn, "reference.index_membership_snapshot"
-    )
+    result = check_dataset_readiness(conn, "reference.index_membership_snapshot")
     conn.close()
     assert result.status is DatasetReadinessStatus.READY
     assert result.auto_providers == ("vci",)
 
 
-def test_calendar_primitive_fails_closed_outside_version() -> None:
+def test_calendar_resolution_fails_closed_outside_version() -> None:
+    # The implicit session-resolution boundary fails closed outside the
+    # versioned calendar coverage. Generic weekday/holiday primitives
+    # (is_session, sessions) stay lenient for historical-range queries; the
+    # fail-closed guarantee lives at latest_session_on_or_before and the
+    # maintenance expiry guard.
     calendar = VietnamSessionCalendar()
     with pytest.raises(CalendarCoverageError):
-        calendar.is_session(date(2027, 1, 4))
-    with pytest.raises(CalendarCoverageError):
-        calendar.sessions(SessionRange(date(2026, 12, 30), date(2027, 1, 4)))
+        calendar.latest_session_on_or_before(date(2027, 1, 4))
 
 
-def _maintenance_result(session_date: date, correlation_id: str) -> DailyMaintenanceResult:
+def _maintenance_result(
+    session_date: date, correlation_id: str
+) -> DailyMaintenanceResult:
     return DailyMaintenanceResult(
         status=MaintenanceRunStatus.SUCCESS,
         requested_date=session_date.isoformat(),

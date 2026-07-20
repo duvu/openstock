@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import duckdb
 
-
 _CANONICAL_SELECTION_AUDIT_DDL = """
 CREATE TABLE IF NOT EXISTS canonical_selection_audit (
     audit_id VARCHAR PRIMARY KEY,

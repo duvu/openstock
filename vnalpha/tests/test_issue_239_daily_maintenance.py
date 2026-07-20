@@ -320,7 +320,7 @@ def test_maintain_cli_json_preserves_partial_exit_code(monkeypatch) -> None:
     )
 
     class PartialMaintenanceService:
-        def __init__(self, _conn) -> None:
+        def __init__(self, _conn, *, provisioning_factory=None) -> None:
             pass
 
         def run(self, _request):

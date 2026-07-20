@@ -46,7 +46,12 @@ def material_research_evidence(
     valuation = _latest_valuation(conn, canonical_symbol, as_of_date)
     if valuation is not None and any(
         valuation[key] is not None
-        for key in ("pe_ratio", "pb_ratio", "historical_pe_percentile", "sector_pe_percentile")
+        for key in (
+            "pe_ratio",
+            "pb_ratio",
+            "historical_pe_percentile",
+            "sector_pe_percentile",
+        )
     ):
         evidence.append(
             MemoryEvidence(
@@ -242,8 +247,7 @@ def _fundamental_value(row: Mapping[str, Any]) -> dict[str, Any]:
     )
     return {
         "period": (
-            f"{row['fiscal_year']}:{row['fiscal_period']}:"
-            f"{row['statement_scope']}"
+            f"{row['fiscal_year']}:{row['fiscal_period']}:{row['statement_scope']}"
         ),
         "available_from": str(row["available_from"]),
         "audit_status": row["audit_status"],

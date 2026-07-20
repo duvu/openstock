@@ -112,18 +112,17 @@ def _get_dataset_provider_map() -> dict[str, dict[str, ProviderAvailability]]:
         "reference.symbols": {
             "vci": ProviderAvailability.AUTO_ROUTE,
             "kbs": ProviderAvailability.AUTO_ROUTE,
-            "ssi": ProviderAvailability.AUTO_ROUTE,
         },
         "equity.ohlcv": {
             "vci": ProviderAvailability.AUTO_ROUTE,
             "kbs": ProviderAvailability.AUTO_ROUTE,
-            "ssi": ProviderAvailability.AUTO_ROUTE,
+            "dnse": ProviderAvailability.AUTO_ROUTE,
+            "tcbs": ProviderAvailability.AUTO_ROUTE,
             "fiinquantx": ProviderAvailability.EXPLICIT_ONLY,
         },
         "index.ohlcv": {
             "vci": ProviderAvailability.AUTO_ROUTE,
             "kbs": ProviderAvailability.AUTO_ROUTE,
-            "ssi": ProviderAvailability.AUTO_ROUTE,
             "fiinquantx": ProviderAvailability.EXPLICIT_ONLY,
         },
         "reference.index_membership_snapshot": {
@@ -187,11 +186,38 @@ def _has_usable_warehouse_evidence(
     return bool(row and row[0] > 0)
 
 
+def _is_provider_configured(provider: str) -> bool:
+    """Return whether an explicit-only provider is fully configured to run.
+
+    Isolated as a seam so readiness for the explicit-only path can be evaluated
+    (and tested) independently of the auto-route warehouse evidence.
+    """
+    if provider != "fiinquantx":
+        return False
+    if importlib.util.find_spec("fiinquantx") is None:
+        return False
+    try:
+        version = importlib.metadata.version("fiinquantx")
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    if version != "0.1.64":
+        return False
+    if not os.getenv("FIINQUANT_USERNAME") or not os.getenv("FIINQUANT_PASSWORD"):
+        return False
+    return os.getenv("VNSTOCK_FIINQUANTX_LICENSED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
 def _explicit_provider_readiness(provider: str, dataset: str) -> tuple[bool, str]:
     if provider != "fiinquantx":
         return False, "unsupported_explicit_provider"
     if dataset == "reference.symbols":
         return False, "unsupported_dataset"
+    if _is_provider_configured(provider):
+        return True, "ready"
     if importlib.util.find_spec("fiinquantx") is None:
         return False, "sdk_missing"
     try:

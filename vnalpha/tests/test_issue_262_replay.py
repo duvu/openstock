@@ -115,7 +115,11 @@ def test_identical_inputs_reproduce_identical_results(conn) -> None:
     assert first.result_hash == second.result_hash
     assert first.dataset_hash == second.dataset_hash
     assert first.period_count == 2
-    assert first.total_return == pytest.approx((1 + first.periods[0].period_excess_return) * (1 + first.periods[1].period_excess_return) - 1)
+    assert first.total_return == pytest.approx(
+        (1 + first.periods[0].period_excess_return)
+        * (1 + first.periods[1].period_excess_return)
+        - 1
+    )
 
 
 def test_future_data_contamination_fails_closed(conn) -> None:
@@ -240,12 +244,12 @@ def test_persisted_read_agrees_and_event_ledger_is_present(conn) -> None:
 def test_cost_reduces_compounded_return(conn) -> None:
     _seed_period(conn, "2026-01-05", prefix="S")
     _seed_period(conn, "2026-01-06", prefix="T")
-    common = dict(
-        start_date="2026-01-05",
-        end_date="2026-01-31",
-        horizon_sessions=20,
-        top_n=3,
-    )
+    common = {
+        "start_date": "2026-01-05",
+        "end_date": "2026-01-31",
+        "horizon_sessions": 20,
+        "top_n": 3,
+    }
     free = run_replay(conn, ReplaySpec(**common, cost_bps=0.0), persist=False)
     costly = run_replay(conn, ReplaySpec(**common, cost_bps=100.0), persist=False)
     assert costly.total_return is not None and free.total_return is not None

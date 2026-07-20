@@ -123,7 +123,9 @@ def _load_rows(
     candidates: list[_Candidate] = []
     for row in rows:
         components = [float(value) for value in row[6:12] if value is not None]
-        classification = resolve_symbol_classification(conn, str(row[0]), watchlist_date)
+        classification = resolve_symbol_classification(
+            conn, str(row[0]), watchlist_date
+        )
         candidates.append(
             _Candidate(
                 symbol=str(row[0]),
@@ -132,7 +134,9 @@ def _load_rows(
                 max_gain=float(row[3]) if row[3] is not None else None,
                 max_drawdown=float(row[4]) if row[4] is not None else None,
                 momentum=float(row[5]) if row[5] is not None else None,
-                equal_component_score=(sum(components) / len(components)) if components else None,
+                equal_component_score=(sum(components) / len(components))
+                if components
+                else None,
                 sector=classification.sector_code if classification else None,
                 computed_at=str(row[12]) if row[12] is not None else None,
                 outcome_status=str(row[13]),
@@ -263,9 +267,7 @@ def _metrics(
     )
 
 
-def _market_regime(
-    conn: duckdb.DuckDBPyConnection, watchlist_date: str
-) -> str | None:
+def _market_regime(conn: duckdb.DuckDBPyConnection, watchlist_date: str) -> str | None:
     tables = {
         row[0]
         for row in conn.execute(
@@ -288,7 +290,11 @@ def _market_regime(
             (name for name in ("as_of_date", "date") if name in columns), None
         )
         regime_column = next(
-            (name for name in ("regime", "regime_label", "market_regime") if name in columns),
+            (
+                name
+                for name in ("regime", "regime_label", "market_regime")
+                if name in columns
+            ),
             None,
         )
         if date_column and regime_column:
@@ -332,17 +338,20 @@ def evaluate_ranking_run(
     if scoring_policy_id and scoring_policy_id != observed_policy_id:
         raise RankingEvaluationError("Requested policy id does not match source rows")
     if scoring_policy_version and scoring_policy_version != observed_policy_version:
-        raise RankingEvaluationError("Requested policy version does not match source rows")
+        raise RankingEvaluationError(
+            "Requested policy version does not match source rows"
+        )
 
     complete = [
         row
         for row in rows
-        if row.outcome_status == "COMPLETE"
-        and row.excess_return == row.excess_return
+        if row.outcome_status == "COMPLETE" and row.excess_return == row.excess_return
     ]
     incomplete_count = len(rows) - len(complete)
     if complete:
-        price_basis = _one_identity({row.price_basis for row in complete}, "price_basis")
+        price_basis = _one_identity(
+            {row.price_basis for row in complete}, "price_basis"
+        )
         adjustment_version = _one_identity(
             {row.adjustment_version for row in complete}, "adjustment_version"
         )

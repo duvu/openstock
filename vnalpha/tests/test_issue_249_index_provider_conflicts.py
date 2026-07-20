@@ -81,9 +81,7 @@ def test_hnx_and_upcom_do_not_inherit_hose_precedence() -> None:
 
 def test_no_resolution_for_equity_or_unknown_providers() -> None:
     assert resolve_index_provider_conflict("VCB", ("vci", "kbs")) is None
-    assert resolve_index_provider_conflict(
-        "VNINDEX", ("unknown1", "unknown2")
-    ) is None
+    assert resolve_index_provider_conflict("VNINDEX", ("unknown1", "unknown2")) is None
 
 
 def test_vnindex_preferred_candidate_passes_and_peer_is_rejected() -> None:
@@ -210,9 +208,10 @@ def test_canonical_index_conflict_persists_exact_selection_audit() -> None:
     assert len(audit[6]) == 64
 
     upsert_canonical(conn, selected)
-    assert conn.execute(
-        "SELECT COUNT(*) FROM canonical_selection_audit"
-    ).fetchone()[0] == 1
+    assert (
+        conn.execute("SELECT COUNT(*) FROM canonical_selection_audit").fetchone()[0]
+        == 1
+    )
     conn.close()
 
 
@@ -233,7 +232,8 @@ def test_non_index_canonical_bar_has_no_selection_audit() -> None:
     assert conn.execute(
         "SELECT selection_audit_id FROM canonical_ohlcv WHERE symbol = 'VCB'"
     ).fetchone() == (None,)
-    assert conn.execute(
-        "SELECT COUNT(*) FROM canonical_selection_audit"
-    ).fetchone()[0] == 0
+    assert (
+        conn.execute("SELECT COUNT(*) FROM canonical_selection_audit").fetchone()[0]
+        == 0
+    )
     conn.close()

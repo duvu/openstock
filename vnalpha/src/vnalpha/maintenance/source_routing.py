@@ -29,7 +29,9 @@ class MaintenanceSourcePolicy:
     index_membership: ResolvedSource
     sector_membership: ResolvedSource
 
-    def source_for_request(self, request: DataProvisioningRequest) -> ResolvedSource | None:
+    def source_for_request(
+        self, request: DataProvisioningRequest
+    ) -> ResolvedSource | None:
         operation = request.operation.strip().lower()
         artifact = request.artifact.strip().lower()
         if operation == "download" and artifact == "symbols":
@@ -118,7 +120,9 @@ class RoutedDataProvisioningService:
 
     def execute(self, request: DataProvisioningRequest) -> DataProvisioningResult:
         resolved = self.policy.source_for_request(request)
-        routed = request if resolved is None else replace(request, source=resolved.source)
+        routed = (
+            request if resolved is None else replace(request, source=resolved.source)
+        )
         return self.delegate.execute(routed)
 
 

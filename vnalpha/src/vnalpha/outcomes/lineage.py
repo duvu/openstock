@@ -43,10 +43,14 @@ def persist_outcome_lineage(
     eligible_universe_hash = _hash(universe_payload)
 
     updated = 0
-    for symbol, policy_hash, action_lineage_json, price_basis, adjustment_version in rows:
-        ranking_run_ref = (
-            f"{watchlist_date}:{policy_hash}" if policy_hash else None
-        )
+    for (
+        symbol,
+        policy_hash,
+        action_lineage_json,
+        price_basis,
+        adjustment_version,
+    ) in rows:
+        ranking_run_ref = f"{watchlist_date}:{policy_hash}" if policy_hash else None
         factor_chain_hash = _hash(
             {
                 "corporate_action_lineage": _safe_json(action_lineage_json, []),

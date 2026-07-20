@@ -162,11 +162,21 @@ def test_validate_free_providers_allowed() -> None:
     # Given: a resolver
     resolver = SourcePolicyResolver()
 
-    # When: validating free providers
-    for source in ("vci", "kbs", "ssi"):
+    # When: validating the real registered free providers (SSI is not a
+    # registered provider and must never validate).
+    for source in ("vci", "kbs", "dnse", "tcbs"):
         is_valid, reason = resolver.validate_source_for_dataset("equity.ohlcv", source)
         # Then: all allowed
         assert is_valid
+
+
+def test_validate_unregistered_source_rejected() -> None:
+    # SSI has no registered provider plugin, so it must fail validation for
+    # every dataset (issue #253: remove unsupported SSI assumptions).
+    resolver = SourcePolicyResolver()
+    is_valid, reason = resolver.validate_source_for_dataset("equity.ohlcv", "ssi")
+    assert not is_valid
+    assert "ssi" in reason.lower()
 
 
 def test_default_resolver_has_auto_routing() -> None:
