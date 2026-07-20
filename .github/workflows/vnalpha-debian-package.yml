@@ -46,11 +46,25 @@ jobs:
           sudo apt-get install --yes --no-install-recommends dpkg-dev python3-venv unzip
           python -m pip install --quiet --disable-pip-version-check --upgrade pip setuptools wheel
 
-      - name: Verify standalone package
+      - name: Validate install source contract
+        run: bash packaging/test/test_install_contract.sh
+
+      - name: Validate legacy package tree contracts
+        run: packaging/test/test_packaging.sh
+
+      - name: Build standalone Debian package
+        run: |
+          rm -rf /tmp/openstock-hardening-deb
+          mkdir -p /tmp/openstock-hardening-deb
+          packaging/build-deb.sh --output-dir /tmp/openstock-hardening-deb
+
+      - name: Validate built package and offline runtime
         shell: bash
         run: |
           set -o pipefail
-          make verify-vnalpha-package 2>&1 | tee vnalpha-debian-package.log
+          bash packaging/test/test_install_contract.sh \
+            /tmp/openstock-hardening-deb/vnalpha_*.deb \
+            2>&1 | tee vnalpha-debian-package.log
 
       - name: Upload package diagnostics
         if: always()
