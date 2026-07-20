@@ -91,6 +91,7 @@ def test_all_tables_created(conn):
         "group_context_snapshot",
         "maintenance_run",
         "maintenance_stage_run",
+        "fundamental_fact",
     }
     assert expected == names
 
@@ -174,7 +175,7 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 65  # Updated for maintenance_run and maintenance_stage_run
+    assert len(tables) == 66  # + fundamental_fact (issue #257)
 
 
 def test_get_watchlist_empty(conn):
