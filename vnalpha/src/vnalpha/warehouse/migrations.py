@@ -31,6 +31,7 @@ from vnalpha.warehouse.schema import (
     ALL_DDL_RESEARCH_AUTOMATION,
 )
 from vnalpha.warehouse.symbol_memory_schema import ALL_DDL_SYMBOL_MEMORY
+from vnalpha.warehouse.valuation_schema import ALL_DDL_VALUATION
 
 logger = get_logger("warehouse.migrations")
 
@@ -110,6 +111,8 @@ def run_migrations(
         conn.execute(ddl)
     _migrate_maintenance_run_columns(conn)
     for ddl in ALL_DDL_FUNDAMENTALS:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_VALUATION:
         conn.execute(ddl)
     if emit_observability:
         logger.info("Warehouse migrations complete.")
