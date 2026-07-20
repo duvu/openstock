@@ -20,18 +20,25 @@ LOG_DIR=/var/log/openstock
 CONFIG_DIR=/etc/vnalpha
 NEW_VENV=""
 OLD_VENV=${VNALPHA_ROOT}/venv.previous
+OLD_VENV_STAGED=false
 
 fail() {
   echo "vnalpha: ERROR — $*" >&2
   exit 1
 }
 
-cleanup_new_venv() {
+rollback_install() {
+  if [ "${OLD_VENV_STAGED}" = true ] && \
+     [ ! -e "${VNALPHA_VENV}" ] && \
+     [ -d "${OLD_VENV}" ]; then
+    mv "${OLD_VENV}" "${VNALPHA_VENV}" || true
+  fi
   if [ -n "${NEW_VENV}" ] && [ -e "${NEW_VENV}" ]; then
     rm -rf -- "${NEW_VENV}"
   fi
 }
-trap cleanup_new_venv 0 HUP INT TERM
+trap rollback_install 0
+trap 'exit 1' HUP INT TERM
 
 ensure_state_dir() {
   path="$1"
@@ -94,19 +101,18 @@ case "$1" in
     "${NEW_VENV}/bin/vnalpha" --help >/dev/null 2>&1 || \
       fail "replacement vnalpha CLI failed its smoke check"
 
-    # Swap only after the replacement has passed. Restore the prior venv if
-    # the final rename fails for any reason.
+    # Swap only after the replacement has passed. The EXIT trap restores the
+    # prior venv if activation is interrupted between the two renames.
     rm -rf -- "${OLD_VENV}"
     if [ -d "${VNALPHA_VENV}" ]; then
       mv "${VNALPHA_VENV}" "${OLD_VENV}"
+      OLD_VENV_STAGED=true
     fi
     if mv "${NEW_VENV}" "${VNALPHA_VENV}"; then
       NEW_VENV=""
+      OLD_VENV_STAGED=false
       rm -rf -- "${OLD_VENV}"
     else
-      if [ -d "${OLD_VENV}" ] && [ ! -e "${VNALPHA_VENV}" ]; then
-        mv "${OLD_VENV}" "${VNALPHA_VENV}" || true
-      fi
       fail "could not activate the replacement virtual environment"
     fi
     echo "vnalpha: offline virtual environment ready for version ${PACKAGE_VERSION}."
