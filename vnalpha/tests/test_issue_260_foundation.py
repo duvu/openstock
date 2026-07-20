@@ -1,6 +1,6 @@
-"""Placeholder tests for issue #260"""
+"""Placeholder test module."""
+
 
 def test_issue_260_foundation():
-    # Foundation created - full implementation per issue requirements
-    assert True
-
+    """Keep the placeholder importable until issue implementation replaces it."""
+    assert 1 == 1
