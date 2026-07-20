@@ -95,6 +95,8 @@ def test_all_tables_created(conn):
         "valuation_snapshot",
         "disclosure_raw_occurrence",
         "symbol_event",
+        "ranking_evaluation_manifest",
+        "ranking_evaluation_strategy",
     }
     assert expected == names
 
@@ -178,7 +180,7 @@ def test_run_migrations_idempotent(conn):
     """Migrations can be run multiple times safely."""
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 69  # + disclosure_raw_occurrence + symbol_event (issue #259)
+    assert len(tables) == 71  # + ranking_evaluation_manifest + ranking_evaluation_strategy (issue #261)
 
 
 def test_get_watchlist_empty(conn):
