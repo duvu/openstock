@@ -9,6 +9,7 @@ from vnalpha.cli_app import (
     log,
     maintain,
     preflight,
+    replay,
     score,
     shortlist,
     tui,
@@ -29,6 +30,7 @@ app.add_typer(sync_app, name="sync")
 app.add_typer(build_app, name="build")
 app.add_typer(data.app, name="data")
 app.add_typer(maintain.app, name="maintain")
+app.add_typer(replay.app, name="replay")
 app.add_typer(warehouse.app, name="warehouse")
 init.register(app)
 score.register(app)
