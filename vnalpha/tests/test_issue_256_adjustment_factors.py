@@ -8,6 +8,7 @@ from vnalpha.corporate_actions.adjustment_factors import (
     calculate_dividend_factor,
     calculate_rights_issue_factor,
     calculate_split_factor,
+    calculate_stock_dividend_factor,
 )
 
 
@@ -143,3 +144,99 @@ def test_adjustment_factor_apply_to_price() -> None:
 
     # Then: price doubles (becomes $200 in new shares)
     assert adjusted == Decimal("200")
+
+
+def test_stock_dividend_factor() -> None:
+    # Given: a 10% stock dividend (1 new share for every 10 held).
+    factor = calculate_stock_dividend_factor(dividend_shares=1, base_shares=10)
+
+    # Then: historical price scales by 10/11.
+    assert factor == Decimal(10) / Decimal(11)
+    assert (Decimal("110") * factor).quantize(Decimal("0.01")) == Decimal("100.00")
+
+
+def test_bonus_shares_use_same_dilution_math() -> None:
+    # A 1-for-1 bonus issue halves the historical price.
+    factor = calculate_stock_dividend_factor(dividend_shares=1, base_shares=1)
+    assert factor == Decimal("0.5")
+
+
+def test_stock_dividend_rejects_non_positive() -> None:
+    with pytest.raises(ValueError):
+        calculate_stock_dividend_factor(dividend_shares=0, base_shares=10)
+    with pytest.raises(ValueError):
+        calculate_stock_dividend_factor(dividend_shares=1, base_shares=0)
+
+
+def test_build_adjustment_factor_dispatches_all_six_types() -> None:
+    from datetime import date
+
+    from vnalpha.corporate_actions.adjustment_factors import (
+        AdjustmentType,
+        build_adjustment_factor,
+    )
+
+    cases = {
+        AdjustmentType.SPLIT: {"old_shares": 1, "new_shares": 2},
+        AdjustmentType.REVERSE_SPLIT: {"old_shares": 2, "new_shares": 1},
+        AdjustmentType.STOCK_DIVIDEND: {"dividend_shares": 1, "base_shares": 10},
+        AdjustmentType.BONUS_SHARES: {"dividend_shares": 1, "base_shares": 1},
+        AdjustmentType.CASH_DIVIDEND: {
+            "price_before": "100",
+            "dividend_per_share": "2",
+        },
+        AdjustmentType.RIGHTS_ISSUE: {
+            "rights_ratio_new": 1,
+            "rights_ratio_old": 5,
+            "subscription_price": "50",
+            "price_before": "100",
+        },
+    }
+    for action_type, params in cases.items():
+        result = build_adjustment_factor(
+            symbol="FPT",
+            action_date=date(2026, 7, 17),
+            adjustment_type=action_type,
+            params=params,
+        )
+        assert result.adjustment_type is action_type
+        assert result.factor > 0
+        assert result.version == "adjustment_v1"
+
+
+def test_build_adjustment_factor_is_deterministic_and_idempotent() -> None:
+    from datetime import date
+
+    from vnalpha.corporate_actions.adjustment_factors import (
+        AdjustmentType,
+        build_adjustment_factor,
+    )
+
+    kwargs = {
+        "symbol": "FPT",
+        "action_date": date(2026, 7, 17),
+        "adjustment_type": AdjustmentType.SPLIT,
+        "params": {"old_shares": 2, "new_shares": 3},
+    }
+    first = build_adjustment_factor(**kwargs)
+    second = build_adjustment_factor(**kwargs)
+    # Same identity and same factor: repeated derivation never drifts.
+    assert first == second
+    assert first.factor == Decimal(3) / Decimal(2)
+
+
+def test_build_adjustment_factor_missing_param_fails_closed() -> None:
+    from datetime import date
+
+    from vnalpha.corporate_actions.adjustment_factors import (
+        AdjustmentType,
+        build_adjustment_factor,
+    )
+
+    with pytest.raises(ValueError, match="Missing required parameter"):
+        build_adjustment_factor(
+            symbol="FPT",
+            action_date=date(2026, 7, 17),
+            adjustment_type=AdjustmentType.SPLIT,
+            params={"old_shares": 1},  # new_shares missing
+        )
