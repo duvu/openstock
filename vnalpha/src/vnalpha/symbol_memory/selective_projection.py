@@ -22,6 +22,7 @@ from vnalpha.symbol_memory.lifecycle import SymbolMemoryLifecycleService
 from vnalpha.symbol_memory.models import ClaimStatus, MemoryClaim
 from vnalpha.symbol_memory.paths import normalize_symbol
 from vnalpha.symbol_memory.repository import SymbolMemoryRepository
+from vnalpha.symbol_memory.research_evidence import material_research_evidence
 from vnalpha.warehouse.symbol_lifecycle import get_symbol_taxonomy_as_of
 
 
@@ -165,7 +166,7 @@ def _validated_evidences(
     correlation_id: str,
 ) -> tuple[MemoryEvidence, ...]:
     observed_at = datetime.now(UTC)
-    evidences = []
+    evidences: list[MemoryEvidence] = []
     taxonomy = get_symbol_taxonomy_as_of(conn, symbol, as_of_date)
     if taxonomy is not None:
         evidences.append(
@@ -204,6 +205,14 @@ def _validated_evidences(
                 )
             )
         )
+    evidences.extend(
+        material_research_evidence(
+            conn,
+            symbol,
+            as_of_date=as_of_date,
+            correlation_id=correlation_id,
+        )
+    )
     return tuple(evidences)
 
 
@@ -229,14 +238,34 @@ def _invalid_source_refs(
         if claim.status is not ClaimStatus.ACTIVE or claim.as_of_date is None:
             continue
         for source_ref in claim.source_refs:
-            if not repository.has_persisted_evidence(
+            valid = repository.has_persisted_evidence(
                 source_ref,
                 claim.symbol,
                 claim.as_of_date,
                 claim.claim_type,
                 claim.predicate,
                 claim.value,
-            ):
+            )
+            if not valid and source_ref.partition(":")[0] in {
+                "fundamental_fact",
+                "valuation_snapshot",
+                "symbol_event",
+                "candidate_outcome",
+            }:
+                from vnalpha.symbol_memory.research_evidence import (
+                    matches_persisted_research_evidence,
+                )
+
+                valid = matches_persisted_research_evidence(
+                    repository.connection,
+                    source_ref,
+                    claim.symbol,
+                    claim.as_of_date,
+                    claim.claim_type,
+                    claim.predicate,
+                    claim.value,
+                )
+            if not valid:
                 invalid.add(source_ref)
     return invalid
 
