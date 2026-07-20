@@ -1,27 +1,34 @@
-"""Per-dataset source policy resolver for issue #253.
-
-Resolves source selection per dataset rather than using one ambiguous global
-source. Explicit source requests never fall back silently.
-"""
+"""Explicit per-dataset provider source policy."""
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from enum import Enum
 
 
 class SourceSelectionMode(str, Enum):
-    """How a source was selected."""
+    AUTO = "AUTO"
+    EXPLICIT = "EXPLICIT"
+    CONFIGURED = "CONFIGURED"
 
-    AUTO = "AUTO"  # Automatic provider selection
-    EXPLICIT = "EXPLICIT"  # User-specified source
-    CONFIGURED = "CONFIGURED"  # Configuration file default
+
+_DATASET_ALIASES = {
+    "index.membership": "reference.index_membership_snapshot",
+    "sector.membership": "reference.sector_membership_snapshot",
+}
+
+_DATASET_CONFIG_KEYS = {
+    "reference.symbols": "OPENSTOCK_REFERENCE_SOURCE",
+    "equity.ohlcv": "OPENSTOCK_EQUITY_OHLCV_SOURCE",
+    "index.ohlcv": "OPENSTOCK_INDEX_OHLCV_SOURCE",
+    "reference.index_membership_snapshot": "OPENSTOCK_MEMBERSHIP_SOURCE",
+    "reference.sector_membership_snapshot": "OPENSTOCK_MEMBERSHIP_SOURCE",
+}
 
 
 @dataclass(frozen=True, slots=True)
 class ResolvedSource:
-    """Result of source policy resolution."""
-
     dataset: str
     source: str | None
     mode: SourceSelectionMode
@@ -29,22 +36,24 @@ class ResolvedSource:
     rationale: str
 
 
+class InvalidSourceForDataset(ValueError):
+    pass
+
+
 class SourcePolicyResolver:
-    """Resolves source selection per dataset with explicit policy."""
+    """Resolve one provider policy independently for each canonical dataset."""
 
     def __init__(
         self,
         *,
-        default_source: str | None = None,
+        configured_sources: dict[str, str] | None = None,
         allow_auto_fallback: bool = True,
     ) -> None:
-        """Initialize resolver with global defaults.
-
-        Args:
-            default_source: Global default source if any
-            allow_auto_fallback: Whether to allow automatic provider fallback
-        """
-        self.default_source = default_source
+        self.configured_sources = {
+            _canonical_dataset(dataset): source.strip().lower()
+            for dataset, source in (configured_sources or {}).items()
+            if source and source.strip()
+        }
         self.allow_auto_fallback = allow_auto_fallback
 
     def resolve(
@@ -52,110 +61,117 @@ class SourcePolicyResolver:
         dataset: str,
         requested_source: str | None = None,
     ) -> ResolvedSource:
-        """Resolve source for a specific dataset.
+        canonical_dataset = _canonical_dataset(dataset)
 
-        Args:
-            dataset: Dataset identifier (e.g., 'equity.ohlcv')
-            requested_source: User-requested source, if any
-
-        Returns:
-            ResolvedSource with selection mode and fallback policy
-        """
-        # Explicit source request - no fallback
         if requested_source is not None:
+            source = requested_source.strip().lower()
+            valid, reason = self.validate_source_for_dataset(canonical_dataset, source)
+            if not valid:
+                raise InvalidSourceForDataset(reason)
             return ResolvedSource(
-                dataset=dataset,
-                source=requested_source,
+                dataset=canonical_dataset,
+                source=source,
                 mode=SourceSelectionMode.EXPLICIT,
                 fallback_allowed=False,
-                rationale=f"User requested {requested_source} explicitly",
+                rationale=f"Explicit source {source}: {reason}",
             )
 
-        # Dataset-specific policy
-        if dataset == "reference.symbols":
-            # Reference data: auto-route only, never FiinQuantX
-            return ResolvedSource(
-                dataset=dataset,
-                source=None,
-                mode=SourceSelectionMode.AUTO,
-                fallback_allowed=True,
-                rationale="Reference data uses auto-routing across free providers",
+        configured = self.configured_sources.get(canonical_dataset)
+        if configured:
+            valid, reason = self.validate_source_for_dataset(
+                canonical_dataset, configured
             )
-
-        elif dataset in ("equity.ohlcv", "index.ohlcv"):
-            # OHLCV: auto-route or use default
-            if self.default_source:
-                return ResolvedSource(
-                    dataset=dataset,
-                    source=self.default_source,
-                    mode=SourceSelectionMode.CONFIGURED,
-                    fallback_allowed=self.allow_auto_fallback,
-                    rationale=f"Default source {self.default_source} with fallback={self.allow_auto_fallback}",
+            if not valid:
+                raise InvalidSourceForDataset(
+                    f"Configured source {configured!r} is invalid for "
+                    f"{canonical_dataset}: {reason}"
                 )
             return ResolvedSource(
-                dataset=dataset,
+                dataset=canonical_dataset,
+                source=configured,
+                mode=SourceSelectionMode.CONFIGURED,
+                fallback_allowed=(
+                    self.allow_auto_fallback and configured != "fiinquantx"
+                ),
+                rationale=f"Configured source {configured}: {reason}",
+            )
+
+        if canonical_dataset == "reference.symbols":
+            return ResolvedSource(
+                dataset=canonical_dataset,
                 source=None,
                 mode=SourceSelectionMode.AUTO,
                 fallback_allowed=True,
-                rationale="Auto-routing enabled for OHLCV",
+                rationale="Reference universe auto-routes only across supported free providers",
             )
 
-        elif dataset in ("index.membership", "sector.membership"):
-            # Membership: VCI only (official exchange data)
+        if canonical_dataset in {"equity.ohlcv", "index.ohlcv"}:
             return ResolvedSource(
-                dataset=dataset,
+                dataset=canonical_dataset,
+                source=None,
+                mode=SourceSelectionMode.AUTO,
+                fallback_allowed=True,
+                rationale="OHLCV uses runtime auto-routing; licensed providers remain explicit-only",
+            )
+
+        if canonical_dataset in {
+            "reference.index_membership_snapshot",
+            "reference.sector_membership_snapshot",
+        }:
+            return ResolvedSource(
+                dataset=canonical_dataset,
                 source="vci",
                 mode=SourceSelectionMode.CONFIGURED,
                 fallback_allowed=False,
-                rationale="Membership data requires official VCI source",
+                rationale="Membership defaults to the configured reference provider",
             )
 
-        # Unknown dataset: auto with fallback
-        return ResolvedSource(
-            dataset=dataset,
-            source=self.default_source,
-            mode=SourceSelectionMode.AUTO
-            if not self.default_source
-            else SourceSelectionMode.CONFIGURED,
-            fallback_allowed=True,
-            rationale="No specific policy, using defaults",
-        )
+        raise InvalidSourceForDataset(f"Unsupported canonical dataset {dataset!r}")
 
     def validate_source_for_dataset(
         self,
         dataset: str,
         source: str,
     ) -> tuple[bool, str]:
-        """Validate if a source is allowed for a dataset.
+        canonical_dataset = _canonical_dataset(dataset)
+        normalized_source = source.strip().lower()
 
-        Returns:
-            (is_valid, reason)
-        """
-        # FiinQuantX restrictions
-        if source == "fiinquantx":
-            if dataset == "reference.symbols":
-                return (
-                    False,
-                    "FiinQuantX cannot be used for reference.symbols",
-                )
-            if dataset in ("equity.ohlcv", "index.ohlcv"):
-                return (True, "FiinQuantX supports OHLCV as explicit-only")
-            return (
-                False,
-                f"FiinQuantX does not support dataset {dataset}",
-            )
+        if normalized_source == "fiinquantx":
+            if canonical_dataset == "reference.symbols":
+                return False, "FiinQuantX does not provide the full symbol universe"
+            if canonical_dataset in {
+                "equity.ohlcv",
+                "index.ohlcv",
+                "reference.index_membership_snapshot",
+                "reference.sector_membership_snapshot",
+            }:
+                return True, "FiinQuantX supports this dataset as explicit-only"
+            return False, f"FiinQuantX does not support {canonical_dataset}"
 
-        # Free providers (vci, kbs, ssi) support all current datasets
-        if source in ("vci", "kbs", "ssi"):
-            return (True, f"{source} supports {dataset}")
+        if normalized_source in {"vci", "kbs", "ssi"}:
+            return True, f"{normalized_source} is an allowed runtime provider"
 
-        # Unknown source
-        return (False, f"Unknown source {source}")
+        return False, f"Unknown source {source!r}"
+
+
+def _canonical_dataset(dataset: str) -> str:
+    normalized = dataset.strip().lower()
+    return _DATASET_ALIASES.get(normalized, normalized)
 
 
 def get_default_resolver() -> SourcePolicyResolver:
-    """Return the default production source policy resolver."""
-    return SourcePolicyResolver(
-        default_source=None,  # Auto-routing by default
-        allow_auto_fallback=True,
-    )
+    configured = {
+        dataset: value
+        for dataset, env_name in _DATASET_CONFIG_KEYS.items()
+        if (value := os.getenv(env_name, "").strip())
+    }
+    return SourcePolicyResolver(configured_sources=configured)
+
+
+__all__ = [
+    "InvalidSourceForDataset",
+    "ResolvedSource",
+    "SourcePolicyResolver",
+    "SourceSelectionMode",
+    "get_default_resolver",
+]
