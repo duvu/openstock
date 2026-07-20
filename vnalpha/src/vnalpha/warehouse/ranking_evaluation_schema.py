@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-# Legacy tables remain readable for compatibility.
+CANDIDATE_OUTCOME_RANKING_RUN_REF_DDL = """
+ALTER TABLE candidate_outcome ADD COLUMN IF NOT EXISTS ranking_run_ref VARCHAR
+"""
+CANDIDATE_OUTCOME_UNIVERSE_HASH_DDL = """
+ALTER TABLE candidate_outcome ADD COLUMN IF NOT EXISTS eligible_universe_hash VARCHAR
+"""
+CANDIDATE_OUTCOME_FACTOR_CHAIN_DDL = """
+ALTER TABLE candidate_outcome ADD COLUMN IF NOT EXISTS factor_chain_hash VARCHAR
+"""
+
 RANKING_EVALUATION_MANIFEST_DDL = """
 CREATE TABLE IF NOT EXISTS ranking_evaluation_manifest (
     manifest_id VARCHAR PRIMARY KEY,
@@ -106,6 +115,9 @@ ON ranking_evaluation_manifest_v2(watchlist_date, scoring_policy_hash, horizon_s
 """
 
 ALL_DDL_RANKING_EVALUATION = (
+    CANDIDATE_OUTCOME_RANKING_RUN_REF_DDL,
+    CANDIDATE_OUTCOME_UNIVERSE_HASH_DDL,
+    CANDIDATE_OUTCOME_FACTOR_CHAIN_DDL,
     RANKING_EVALUATION_MANIFEST_DDL,
     RANKING_EVALUATION_STRATEGY_DDL,
     RANKING_EVALUATION_MANIFEST_V2_DDL,
