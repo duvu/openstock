@@ -104,7 +104,14 @@ class DeepAnalysisReadinessService:
             if artifact.error is not None
         )
         if not result.is_ready and not errors:
-            errors = ("Required deep-analysis data could not be made ready.",)
+            # Preserve the first actionable root cause from the failed stage
+            # instead of flattening it into a generic wrapper (issue #305).
+            root_cause = _first_actionable_failure(result)
+            errors = (
+                (root_cause,)
+                if root_cause is not None
+                else ("Required deep-analysis data could not be made ready.",)
+            )
         readiness = ReadinessResult(
             symbol=result.symbol,
             requested_date=request.requested_date,
@@ -207,6 +214,28 @@ def ensure_deep_analysis_ready(
             sector_strength_requirement,
         )
     )
+
+
+def _first_actionable_failure(result: EnsureDataResult) -> str | None:
+    """Summarize the first failed stage, retaining its stage and sanitized cause.
+
+    The top-level error summarizes the failure but keeps the failed stage name,
+    affected dataset/symbol and sanitized root cause, so the message is
+    actionable rather than a static full-pipeline wrapper (issue #305).
+    """
+    from vnalpha.data_availability.models import EnsureDataActionStatus
+
+    for outcome in result.action_outcomes:
+        if outcome.status is EnsureDataActionStatus.FAILED:
+            dataset = outcome.dataset or "unknown"
+            symbol = outcome.symbol or result.symbol
+            category = outcome.failure_category or "PROVISIONING_FAILED"
+            cause = outcome.root_cause or "no additional detail"
+            return (
+                f"Deep-analysis preparation failed at stage {outcome.action.value} "
+                f"(dataset={dataset}, symbol={symbol}, category={category}): {cause}"
+            )
+    return None
 
 
 def _sanitized_warnings(warnings: list[str]) -> tuple[str, ...]:

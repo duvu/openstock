@@ -67,13 +67,31 @@ class ProvisioningOutcome(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class ProvisioningAction:
-    """One provisioning action surfaced on the trace."""
+    """One provisioning action surfaced on the trace.
+
+    When the action FAILED, it also carries the affected dataset/symbol, the
+    stable failure category and the sanitized root cause so the trace preserves
+    the actual failed stage rather than a generic message (issue #305).
+    """
 
     action: str
     status: str
+    dataset: str | None = None
+    symbol: str | None = None
+    failure_category: str | None = None
+    root_cause: str | None = None
 
     def to_dict(self) -> dict[str, str]:
-        return {"action": self.action, "status": self.status}
+        payload = {"action": self.action, "status": self.status}
+        if self.dataset is not None:
+            payload["dataset"] = self.dataset
+        if self.symbol is not None:
+            payload["symbol"] = self.symbol
+        if self.failure_category is not None:
+            payload["failure_category"] = self.failure_category
+        if self.root_cause is not None:
+            payload["root_cause"] = self.root_cause
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,7 +313,14 @@ def _actions_from_readiness(
             label = _ACTION_LABELS.get(
                 outcome.action.value, outcome.action.value.lower()
             )
-            action = ProvisioningAction(action=label, status=outcome.status.value)
+            action = ProvisioningAction(
+                action=label,
+                status=outcome.status.value,
+                dataset=getattr(outcome, "dataset", None),
+                symbol=getattr(outcome, "symbol", None),
+                failure_category=getattr(outcome, "failure_category", None),
+                root_cause=getattr(outcome, "root_cause", None),
+            )
             if action not in seen:
                 seen.append(action)
         return tuple(seen)

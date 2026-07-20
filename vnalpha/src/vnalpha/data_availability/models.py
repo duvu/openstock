@@ -37,6 +37,31 @@ class EnsureDataActionStatus(str, Enum):
 class EnsureDataActionOutcome:
     action: EnsureDataAction
     status: EnsureDataActionStatus
+    # Structured failure detail for issue #305: when an action FAILS, preserve
+    # the first actionable root cause instead of flattening it into a generic
+    # message. All fields stay optional so SUCCESS/SKIPPED outcomes are unchanged.
+    dataset: str | None = None
+    symbol: str | None = None
+    failure_category: str | None = None
+    root_cause: str | None = None
+    elapsed_ms: float | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "action": self.action.value,
+            "status": self.status.value,
+        }
+        if self.dataset is not None:
+            payload["dataset"] = self.dataset
+        if self.symbol is not None:
+            payload["symbol"] = self.symbol
+        if self.failure_category is not None:
+            payload["failure_category"] = self.failure_category
+        if self.root_cause is not None:
+            payload["root_cause"] = self.root_cause
+        if self.elapsed_ms is not None:
+            payload["elapsed_ms"] = self.elapsed_ms
+        return payload
 
 
 class DataArtifact(str, Enum):
