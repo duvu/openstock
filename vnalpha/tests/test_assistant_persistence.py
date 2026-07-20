@@ -47,7 +47,7 @@ def test_migrations_create_assistant_and_llm_tables(conn):
 def test_migrations_idempotent(conn):
     run_migrations(conn=conn)  # second run
     tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 73  # + fundamental_fact (issue #257)
+    assert len(tables) == 74  # + fundamental_fact (issue #257)
 
 
 def test_assistant_session_projections_redact_nested_dynamic_content(conn):
