@@ -13,7 +13,6 @@ from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.corporate_action_schema import ALL_DDL_CORPORATE_ACTIONS
 from vnalpha.warehouse.fundamentals_schema import ALL_DDL_FUNDAMENTALS
-from vnalpha.warehouse.valuation_schema import ALL_DDL_VALUATION
 from vnalpha.warehouse.ingestion_migrations import migrate_ingestion_run_outcome_columns
 from vnalpha.warehouse.maintenance_ledger_schema import ALL_DDL_MAINTENANCE_LEDGER
 from vnalpha.warehouse.research_answer_schema import ALL_DDL_RESEARCH_ANSWER_AUDIT
@@ -32,6 +31,7 @@ from vnalpha.warehouse.schema import (
     ALL_DDL_RESEARCH_AUTOMATION,
 )
 from vnalpha.warehouse.symbol_memory_schema import ALL_DDL_SYMBOL_MEMORY
+from vnalpha.warehouse.valuation_schema import ALL_DDL_VALUATION
 
 logger = get_logger("warehouse.migrations")
 
