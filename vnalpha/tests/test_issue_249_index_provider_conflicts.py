@@ -1,241 +1,239 @@
-"""Tests for issue #249: Resolve VNINDEX provider conflicts."""
+"""Tests for issue #249 index-provider conflict handling and auditability."""
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
+import duckdb
+
+from vnalpha.ingestion.canonical_storage import upsert_canonical
 from vnalpha.ingestion.canonical_validation import (
     CanonicalCandidate,
     CanonicalValidationRule,
     validate_candidate,
 )
 from vnalpha.ingestion.index_provider_policy import (
+    INDEX_PROVIDER_POLICY_VERSION,
     is_index_symbol,
     resolve_index_provider_conflict,
 )
+from vnalpha.warehouse.migrations import run_migrations
 
 
-def test_vnindex_is_recognized_as_index() -> None:
-    # Given: the VNINDEX symbol
-    # When: checking if it's an index
-    # Then: it is correctly identified
+def _candidate(
+    symbol: str,
+    provider: str,
+    *,
+    open_value: float,
+    high: float = 1803.14,
+    low: float = 1780.30,
+    close: float = 1787.45,
+    volume: float = 436669396.0,
+    run_id: str = "test-run",
+    timestamp: datetime | None = None,
+) -> CanonicalCandidate:
+    return CanonicalCandidate(
+        symbol=symbol,
+        timestamp=timestamp or datetime(2026, 7, 17, 9, 0),
+        interval="1D",
+        open=open_value,
+        high=high,
+        low=low,
+        close=close,
+        volume=volume,
+        provider=provider,
+        price_basis="RAW_UNADJUSTED",
+        quality_status="PASS",
+        ingestion_run_id=run_id,
+    )
+
+
+def test_index_recognition_is_explicit() -> None:
     assert is_index_symbol("VNINDEX")
-    assert is_index_symbol("vnindex")
-    assert is_index_symbol(" VNINDEX ")
-
-
-def test_regular_equity_is_not_index() -> None:
-    # Given: regular equity symbols
-    # When: checking if they're indices
-    # Then: they are not identified as indices
+    assert is_index_symbol(" vn30 ")
+    assert is_index_symbol("HNXINDEX")
+    assert is_index_symbol("UPCOMINDEX")
     assert not is_index_symbol("VCB")
-    assert not is_index_symbol("FPT")
-    assert not is_index_symbol("HPG")
 
 
-def test_vci_has_priority_over_kbs_for_vnindex() -> None:
-    # Given: conflicting VCI and KBS providers for VNINDEX
-    # When: resolving the conflict
+def test_hose_policy_resolves_exact_issue_249_conflict() -> None:
     resolution = resolve_index_provider_conflict("VNINDEX", ("vci", "kbs"))
-
-    # Then: VCI is selected as authoritative
     assert resolution is not None
     assert resolution.selected_provider == "vci"
-    assert "kbs" in resolution.rejected_providers
+    assert resolution.rejected_providers == ("kbs",)
+    assert resolution.policy_family == "HOSE"
+    assert resolution.policy_version == INDEX_PROVIDER_POLICY_VERSION
+    assert "audit" in resolution.rationale.lower()
 
 
-def test_kbs_is_used_when_vci_unavailable() -> None:
-    # Given: only KBS and SSI available
-    # When: resolving the conflict
+def test_hose_policy_falls_to_next_registered_candidate() -> None:
     resolution = resolve_index_provider_conflict("VNINDEX", ("kbs", "ssi"))
-
-    # Then: KBS is selected as next priority
     assert resolution is not None
     assert resolution.selected_provider == "kbs"
-    assert "ssi" in resolution.rejected_providers
+    assert resolution.rejected_providers == ("ssi",)
 
 
-def test_no_resolution_for_non_index_symbols() -> None:
-    # Given: a regular equity with multiple providers
-    # When: attempting to resolve
-    resolution = resolve_index_provider_conflict("VCB", ("vci", "kbs"))
-
-    # Then: no resolution is available
-    assert resolution is None
+def test_hnx_and_upcom_do_not_inherit_hose_precedence() -> None:
+    assert resolve_index_provider_conflict("HNXINDEX", ("vci", "kbs")) is None
+    assert resolve_index_provider_conflict("UPCOMINDEX", ("vci", "kbs")) is None
 
 
-def test_no_resolution_when_no_preferred_provider_available() -> None:
-    # Given: only unknown providers
-    # When: attempting to resolve
-    resolution = resolve_index_provider_conflict("VNINDEX", ("unknown1", "unknown2"))
-
-    # Then: no resolution is available
-    assert resolution is None
+def test_no_resolution_for_equity_or_unknown_providers() -> None:
+    assert resolve_index_provider_conflict("VCB", ("vci", "kbs")) is None
+    assert resolve_index_provider_conflict(
+        "VNINDEX", ("unknown1", "unknown2")
+    ) is None
 
 
-def test_vnindex_vci_passes_despite_kbs_conflict() -> None:
-    # Given: the exact issue #249 scenario - VCI and KBS have different O/H/L
-    vci_candidate = CanonicalCandidate(
-        symbol="VNINDEX",
-        timestamp=datetime(2026, 7, 17, 9, 0),
-        interval="1d",
-        open=1801.89,
-        high=1803.14,
-        low=1780.30,
-        close=1787.45,
-        volume=436669396.0,
-        provider="vci",
-        price_basis="RAW_UNADJUSTED",
-        quality_status="PASS",
-        ingestion_run_id="test-run",
-    )
-
-    kbs_candidate = CanonicalCandidate(
-        symbol="VNINDEX",
-        timestamp=datetime(2026, 7, 17, 9, 0),
-        interval="1d",
-        open=1804.24,
+def test_vnindex_preferred_candidate_passes_and_peer_is_rejected() -> None:
+    vci = _candidate("VNINDEX", "vci", open_value=1801.89, run_id="vci-run")
+    kbs = _candidate(
+        "VNINDEX",
+        "kbs",
+        open_value=1804.24,
         high=1804.24,
         low=1779.58,
-        close=1787.45,
-        volume=436669396.0,
-        provider="kbs",
-        price_basis="RAW_UNADJUSTED",
-        quality_status="PASS",
-        ingestion_run_id="test-run",
+        run_id="kbs-run",
     )
-
-    # When: validating VCI candidate with KBS as peer
-    rules = validate_candidate(vci_candidate, peer_candidates=(kbs_candidate,))
-
-    # Then: VCI passes without provider consistency error
-    assert CanonicalValidationRule.PROVIDER_CONSISTENCY not in rules
-
-
-def test_vnindex_kbs_fails_with_vci_conflict() -> None:
-    # Given: KBS as candidate with VCI as competing provider
-    kbs_candidate = CanonicalCandidate(
-        symbol="VNINDEX",
-        timestamp=datetime(2026, 7, 17, 9, 0),
-        interval="1d",
-        open=1804.24,
-        high=1804.24,
-        low=1779.58,
-        close=1787.45,
-        volume=436669396.0,
-        provider="kbs",
-        price_basis="RAW_UNADJUSTED",
-        quality_status="PASS",
-        ingestion_run_id="test-run",
+    assert CanonicalValidationRule.PROVIDER_CONSISTENCY not in validate_candidate(
+        vci, peer_candidates=(kbs,)
     )
-
-    vci_candidate = CanonicalCandidate(
-        symbol="VNINDEX",
-        timestamp=datetime(2026, 7, 17, 9, 0),
-        interval="1d",
-        open=1801.89,
-        high=1803.14,
-        low=1780.30,
-        close=1787.45,
-        volume=436669396.0,
-        provider="vci",
-        price_basis="RAW_UNADJUSTED",
-        quality_status="PASS",
-        ingestion_run_id="test-run",
+    assert CanonicalValidationRule.PROVIDER_CONSISTENCY in validate_candidate(
+        kbs, peer_candidates=(vci,)
     )
-
-    # When: validating KBS candidate with VCI as peer
-    rules = validate_candidate(kbs_candidate, peer_candidates=(vci_candidate,))
-
-    # Then: KBS fails with provider consistency error (VCI takes precedence)
-    assert CanonicalValidationRule.PROVIDER_CONSISTENCY in rules
 
 
 def test_regular_equity_still_requires_strict_consistency() -> None:
-    # Given: two providers with different values for a regular stock
-    vci_candidate = CanonicalCandidate(
-        symbol="VCB",
-        timestamp=datetime(2026, 7, 17, 9, 0),
-        interval="1d",
-        open=100.0,
+    vci = _candidate(
+        "VCB",
+        "vci",
+        open_value=100.0,
         high=102.0,
         low=99.0,
         close=101.0,
-        volume=1000000.0,
-        provider="vci",
-        price_basis="RAW_UNADJUSTED",
-        quality_status="PASS",
-        ingestion_run_id="test-run",
+        volume=1_000_000,
     )
-
-    kbs_candidate = CanonicalCandidate(
-        symbol="VCB",
-        timestamp=datetime(2026, 7, 17, 9, 0),
-        interval="1d",
-        open=100.5,  # Different from VCI
+    kbs = _candidate(
+        "VCB",
+        "kbs",
+        open_value=100.5,
         high=102.0,
         low=99.0,
         close=101.0,
-        volume=1000000.0,
-        provider="kbs",
-        price_basis="RAW_UNADJUSTED",
-        quality_status="PASS",
-        ingestion_run_id="test-run",
+        volume=1_000_000,
+    )
+    assert CanonicalValidationRule.PROVIDER_CONSISTENCY in validate_candidate(
+        vci, peer_candidates=(kbs,)
+    )
+    assert CanonicalValidationRule.PROVIDER_CONSISTENCY in validate_candidate(
+        kbs, peer_candidates=(vci,)
     )
 
-    # When: validating either candidate
-    vci_rules = validate_candidate(vci_candidate, peer_candidates=(kbs_candidate,))
-    kbs_rules = validate_candidate(kbs_candidate, peer_candidates=(vci_candidate,))
 
-    # Then: both fail with provider consistency error (no policy for equities)
-    assert CanonicalValidationRule.PROVIDER_CONSISTENCY in vci_rules
-    assert CanonicalValidationRule.PROVIDER_CONSISTENCY in kbs_rules
-
-
-def test_vnindex_passes_when_providers_agree() -> None:
-    # Given: VCI and KBS with identical OHLCV
-    vci_candidate = CanonicalCandidate(
-        symbol="VNINDEX",
-        timestamp=datetime(2026, 7, 17, 9, 0),
-        interval="1d",
-        open=1787.45,
-        high=1803.14,
-        low=1780.30,
-        close=1787.45,
-        volume=436669396.0,
-        provider="vci",
-        price_basis="RAW_UNADJUSTED",
-        quality_status="PASS",
-        ingestion_run_id="test-run",
+def test_agreeing_index_providers_need_no_selection_audit() -> None:
+    vci = _candidate("VNINDEX", "vci", open_value=1787.45)
+    kbs = _candidate("VNINDEX", "kbs", open_value=1787.45)
+    assert CanonicalValidationRule.PROVIDER_CONSISTENCY not in validate_candidate(
+        vci, peer_candidates=(kbs,)
     )
 
-    kbs_candidate = CanonicalCandidate(
-        symbol="VNINDEX",
-        timestamp=datetime(2026, 7, 17, 9, 0),
-        interval="1d",
-        open=1787.45,
-        high=1803.14,
-        low=1780.30,
-        close=1787.45,
-        volume=436669396.0,
-        provider="kbs",
-        price_basis="RAW_UNADJUSTED",
-        quality_status="PASS",
-        ingestion_run_id="test-run",
+
+def test_canonical_index_conflict_persists_exact_selection_audit() -> None:
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn, emit_observability=False)
+    conn.executemany(
+        """
+        INSERT INTO market_ohlcv_raw (
+            ingestion_run_id, symbol, time, interval, open, high, low, close,
+            volume, provider, price_basis, quality_status, fetched_at
+        ) VALUES (?, 'VNINDEX', ?, '1D', ?, ?, ?, 1787.45, 436669396,
+                  ?, 'RAW_UNADJUSTED', 'PASS', current_timestamp)
+        """,
+        [
+            (
+                "vci-run",
+                "2026-07-17 09:00:00",
+                1801.89,
+                1803.14,
+                1780.30,
+                "VCI",
+            ),
+            (
+                "kbs-run",
+                "2026-07-17 10:00:00",
+                1804.24,
+                1804.24,
+                1779.58,
+                "KBS",
+            ),
+        ],
     )
+    selected = _candidate(
+        "VNINDEX",
+        "vci",
+        open_value=1801.89,
+        run_id="vci-run",
+        timestamp=datetime(2026, 7, 17),
+    )
+    upsert_canonical(conn, selected)
 
-    # When: validating with agreement
-    rules = validate_candidate(vci_candidate, peer_candidates=(kbs_candidate,))
+    canonical = conn.execute(
+        """
+        SELECT selected_provider, selection_audit_id
+        FROM canonical_ohlcv WHERE symbol = 'VNINDEX'
+        """
+    ).fetchone()
+    assert canonical[0].lower() == "vci"
+    assert canonical[1]
 
-    # Then: no provider consistency error
-    assert CanonicalValidationRule.PROVIDER_CONSISTENCY not in rules
+    audit = conn.execute(
+        """
+        SELECT selected_provider, rejected_providers_json,
+               candidate_values_json, policy_version, policy_family,
+               evidence_refs_json, content_hash
+        FROM canonical_selection_audit WHERE audit_id = ?
+        """,
+        [canonical[1]],
+    ).fetchone()
+    assert audit[0] == "vci"
+    assert json.loads(audit[1]) == ["kbs"]
+    observations = json.loads(audit[2])
+    assert {item["provider"] for item in observations} == {"vci", "kbs"}
+    assert {item["ingestion_run_id"] for item in observations} == {
+        "vci-run",
+        "kbs-run",
+    }
+    assert audit[3] == INDEX_PROVIDER_POLICY_VERSION
+    assert audit[4] == "HOSE"
+    assert len(json.loads(audit[5])) == 2
+    assert len(audit[6]) == 64
+
+    upsert_canonical(conn, selected)
+    assert conn.execute(
+        "SELECT COUNT(*) FROM canonical_selection_audit"
+    ).fetchone()[0] == 1
+    conn.close()
 
 
-def test_policy_version_is_tracked() -> None:
-    # Given: a conflict resolution
-    resolution = resolve_index_provider_conflict("VNINDEX", ("vci", "kbs"))
-
-    # Then: policy version is recorded for auditability
-    assert resolution is not None
-    assert resolution.policy_version == "index_provider_v1"
-    assert "precedence" in resolution.rationale.lower()
+def test_non_index_canonical_bar_has_no_selection_audit() -> None:
+    conn = duckdb.connect(":memory:")
+    run_migrations(conn=conn, emit_observability=False)
+    candidate = _candidate(
+        "VCB",
+        "vci",
+        open_value=100.0,
+        high=102.0,
+        low=99.0,
+        close=101.0,
+        volume=1_000_000,
+        timestamp=datetime(2026, 7, 17),
+    )
+    upsert_canonical(conn, candidate)
+    assert conn.execute(
+        "SELECT selection_audit_id FROM canonical_ohlcv WHERE symbol = 'VCB'"
+    ).fetchone() == (None,)
+    assert conn.execute(
+        "SELECT COUNT(*) FROM canonical_selection_audit"
+    ).fetchone()[0] == 0
+    conn.close()

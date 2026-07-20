@@ -1,81 +1,93 @@
-"""Versioned policy for resolving conflicting index provider observations.
-
-When multiple independently-passing providers report different OHLCV values for
-the same index bar, this module defines the auditable selection policy.
-"""
+"""Versioned policy for conflicting index-provider observations."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
 
-INDEX_PROVIDER_POLICY_VERSION = "index_provider_v1"
+INDEX_PROVIDER_POLICY_VERSION = "index_provider_v2_family_scoped"
 
 
 class IndexProviderPreference(str, Enum):
-    """Provider preference for Vietnamese market indices."""
-
-    VCI = "vci"  # Priority 1: VCI (HOSE official data provider)
-    KBS = "kbs"  # Priority 2: KBS Securities
-    SSI = "ssi"  # Priority 3: SSI Securities
+    VCI = "vci"
+    KBS = "kbs"
+    SSI = "ssi"
 
 
-# Versioned provider precedence for Vietnamese indices
-# Rationale: VCI is the official data provider for HOSE (Ho Chi Minh Stock Exchange)
-# and is used as the authoritative source for VNINDEX
-INDEX_PROVIDER_PRECEDENCE = (
-    IndexProviderPreference.VCI,
-    IndexProviderPreference.KBS,
-    IndexProviderPreference.SSI,
-)
+_POLICY_BY_FAMILY: dict[str, tuple[IndexProviderPreference, ...]] = {
+    "HOSE": (
+        IndexProviderPreference.VCI,
+        IndexProviderPreference.KBS,
+        IndexProviderPreference.SSI,
+    ),
+    "HNX": (),
+    "UPCOM": (),
+}
+
+INDEX_PROVIDER_PRECEDENCE = _POLICY_BY_FAMILY["HOSE"]
+
+_INDEX_FAMILY = {
+    "VNINDEX": "HOSE",
+    "VN30": "HOSE",
+    "HNXINDEX": "HNX",
+    "HNX30": "HNX",
+    "UPCOM": "UPCOM",
+    "UPCOMINDEX": "UPCOM",
+}
 
 
 @dataclass(frozen=True, slots=True)
 class IndexConflictResolution:
-    """Result of resolving conflicting index observations."""
-
     selected_provider: str
     rejected_providers: tuple[str, ...]
-    policy_version: str = INDEX_PROVIDER_POLICY_VERSION
-    rationale: str = "Provider precedence for Vietnamese market indices"
+    policy_version: str
+    policy_family: str
+    rationale: str
 
 
 def is_index_symbol(symbol: str) -> bool:
-    """Return whether a symbol represents a market index."""
-    normalized = symbol.strip().upper()
-    return normalized in {
-        "VNINDEX",  # Ho Chi Minh Stock Exchange Index
-        "VN30",  # VN30 Index
-        "HNXINDEX",  # Hanoi Stock Exchange Index
-        "HNX30",  # HNX30 Index
-        "UPCOM",  # UPCOM Index
-    }
+    return symbol.strip().upper() in _INDEX_FAMILY
 
 
 def resolve_index_provider_conflict(
     symbol: str,
     provider_candidates: tuple[str, ...],
 ) -> IndexConflictResolution | None:
-    """Resolve conflicting providers for an index using versioned precedence.
-
-    Returns:
-        IndexConflictResolution if a provider can be selected, None if no
-        resolution is available (e.g., non-index symbol or no preferred provider).
-    """
-    if not is_index_symbol(symbol):
+    family = _INDEX_FAMILY.get(symbol.strip().upper())
+    if family is None:
         return None
-
-    normalized_providers = tuple(p.strip().lower() for p in provider_candidates)
-
-    # Select the highest-precedence provider that appears in candidates
-    for preferred in INDEX_PROVIDER_PRECEDENCE:
-        if preferred.value in normalized_providers:
+    precedence = _POLICY_BY_FAMILY[family]
+    if not precedence:
+        return None
+    normalized = tuple(
+        provider.strip().lower() for provider in provider_candidates if provider
+    )
+    for preferred in precedence:
+        if preferred.value in normalized:
             rejected = tuple(
-                p for p in provider_candidates if p.strip().lower() != preferred.value
+                provider
+                for provider in provider_candidates
+                if provider and provider.strip().lower() != preferred.value
             )
             return IndexConflictResolution(
                 selected_provider=preferred.value,
                 rejected_providers=rejected,
+                policy_version=INDEX_PROVIDER_POLICY_VERSION,
+                policy_family=family,
+                rationale=(
+                    "Issue #249 HOSE index precedence selected "
+                    f"{preferred.value}; canonical selection must retain all "
+                    "conflicting passing observations in its audit record."
+                ),
             )
-
     return None
+
+
+__all__ = [
+    "INDEX_PROVIDER_POLICY_VERSION",
+    "INDEX_PROVIDER_PRECEDENCE",
+    "IndexConflictResolution",
+    "IndexProviderPreference",
+    "is_index_symbol",
+    "resolve_index_provider_conflict",
+]
