@@ -970,8 +970,18 @@ def test_deep_slash_today_reaches_readiness_as_current_market_session(
 def test_deep_slash_omitted_date_propagates_resolved_market_session(
     monkeypatch, command, expected_tool_names
 ) -> None:
-    # Given: readiness resolves an omitted Sunday date to the preceding session.
+    # Given: readiness resolves an omitted implicit date to the preceding session.
+    # Pin the market-session resolver so the assertion is independent of the
+    # wall clock (the executor injects the implicit "today" token, which the
+    # handler resolves via research_workflow_common.resolve_market_session_date).
     resolved_date = "2026-07-17"
+    from vnalpha.commands.handlers import research_workflow_common
+
+    monkeypatch.setattr(
+        research_workflow_common,
+        "resolve_market_session_date",
+        lambda _value: resolved_date,
+    )
     readiness = ReadinessResult(
         symbol="FPT",
         requested_date=None,
