@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS maintenance_run (
     correlation_id VARCHAR NOT NULL,
     requested_date VARCHAR,
     resolved_date VARCHAR NOT NULL,
-    status VARCHAR NOT NULL,  -- SUCCESS, PARTIAL, FAILED, NOOP
+    status VARCHAR NOT NULL,  -- SUCCESS, PARTIAL, FAILED, NOOP, LOCK_CONTENDED
     requested_symbol_count INTEGER NOT NULL,
     successful_symbol_count INTEGER NOT NULL,
     failed_symbol_count INTEGER NOT NULL,
@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS maintenance_run (
     completed_at TIMESTAMP NOT NULL,
     duration_seconds DOUBLE NOT NULL,
     software_version VARCHAR NOT NULL,
+    package_version VARCHAR,
+    source_commit VARCHAR,
+    tree_state VARCHAR,
     calendar_version VARCHAR,
     mutated BOOLEAN NOT NULL DEFAULT FALSE,
     diagnostics_refs JSON,
@@ -44,19 +47,16 @@ CREATE TABLE IF NOT EXISTS maintenance_stage_run (
 );
 """
 
-# Index for querying latest runs
 DDL_MAINTENANCE_RUN_IDX_COMPLETED_AT = """
 CREATE INDEX IF NOT EXISTS idx_maintenance_run_completed_at
 ON maintenance_run(completed_at DESC);
 """
 
-# Index for querying failed runs
 DDL_MAINTENANCE_RUN_IDX_STATUS = """
 CREATE INDEX IF NOT EXISTS idx_maintenance_run_status
 ON maintenance_run(status, completed_at DESC);
 """
 
-# Index for querying stages by run
 DDL_MAINTENANCE_STAGE_RUN_IDX_RUN = """
 CREATE INDEX IF NOT EXISTS idx_maintenance_stage_run_run_id
 ON maintenance_stage_run(run_id, stage_order);
