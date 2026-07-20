@@ -58,7 +58,7 @@ require_grep 'venv\.new\.\$\$' "$POSTINST" "postinst builds a temporary replacem
 require_grep 'bin/vnalpha.*--help' "$POSTINST" "postinst smoke-tests the replacement CLI"
 require_grep 'OLD_VENV_STAGED=true' "$POSTINST" "postinst records rollback state before activation"
 require_grep 'mv.*NEW_VENV.*VNALPHA_VENV' "$POSTINST" "postinst swaps the venv only after validation"
-require_grep 'ensure_state_dir.*WAREHOUSE_DIR.*0770' "$POSTINST" "warehouse directory is root:openstock and group-writable"
+require_grep 'install.*0770.*WAREHOUSE_DIR|ensure_state_dir.*WAREHOUSE_DIR.*0770' "$POSTINST" "warehouse directory is root:openstock and group-writable"
 require_grep 'ensure_state_dir.*KNOWLEDGE_DIR.*0770' "$POSTINST" "knowledge directory is root:openstock and group-writable"
 require_grep 'ensure_state_dir.*LOG_DIR.*0770' "$POSTINST" "log directory is root:openstock and group-writable"
 reject_grep 'systemctl[[:space:]]+enable|systemctl[[:space:]]+start.*openstock-daily-pipeline' "$POSTINST" "postinst does not enable or start the daily timer"
