@@ -21,6 +21,7 @@ CONFIG_DIR=/etc/vnalpha
 NEW_VENV=""
 OLD_VENV=${VNALPHA_ROOT}/venv.previous
 OLD_VENV_STAGED=false
+SMOKE_DIR=""
 
 fail() {
   echo "vnalpha: ERROR — $*" >&2
@@ -35,6 +36,9 @@ rollback_install() {
   fi
   if [ -n "${NEW_VENV}" ] && [ -e "${NEW_VENV}" ]; then
     rm -rf -- "${NEW_VENV}"
+  fi
+  if [ -n "${SMOKE_DIR}" ] && [ -d "${SMOKE_DIR}" ]; then
+    rm -rf -- "${SMOKE_DIR}"
   fi
 }
 trap rollback_install 0
@@ -93,13 +97,20 @@ case "$1" in
     echo "vnalpha: building replacement virtual environment at ${NEW_VENV} ..."
     python3 -m venv "${NEW_VENV}"
     "${NEW_VENV}/bin/pip" install \
+      --isolated \
       --quiet \
       --disable-pip-version-check \
       --no-index \
       --find-links "${VNALPHA_WHEELS}" \
       "vnalpha==${PACKAGE_VERSION}"
-    "${NEW_VENV}/bin/vnalpha" --help >/dev/null 2>&1 || \
+
+    SMOKE_DIR="$(mktemp -d /tmp/vnalpha-install-smoke.XXXXXX)"
+    VNALPHA_LOG_ROOT="${SMOKE_DIR}" \
+    VNALPHA_LOG_PATH="${SMOKE_DIR}/vnalpha.log" \
+      "${NEW_VENV}/bin/vnalpha" --help >/dev/null 2>&1 || \
       fail "replacement vnalpha CLI failed its smoke check"
+    rm -rf -- "${SMOKE_DIR}"
+    SMOKE_DIR=""
 
     # Swap only after the replacement has passed. The EXIT trap restores the
     # prior venv if activation is interrupted between the two renames.
