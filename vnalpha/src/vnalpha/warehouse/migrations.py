@@ -107,6 +107,7 @@ def run_migrations(
     _migrate_assistant_prompt_columns(conn)
     for ddl in ALL_DDL_MAINTENANCE_LEDGER:
         conn.execute(ddl)
+    _migrate_maintenance_run_columns(conn)
     if emit_observability:
         logger.info("Warehouse migrations complete.")
         try:
@@ -115,6 +116,13 @@ def run_migrations(
             log_migration_success("warehouse")
         except Exception:  # noqa: BLE001
             pass
+
+
+def _migrate_maintenance_run_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add issue #253 resolved-source-policy column to existing ledgers."""
+    conn.execute(
+        "ALTER TABLE maintenance_run ADD COLUMN IF NOT EXISTS source_policy JSON"
+    )
 
 
 def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:

@@ -93,10 +93,23 @@ def check_dataset_readiness(
         elif availability == ProviderAvailability.UNAVAILABLE:
             rejections.append(f"{provider}_unavailable")
 
-    # Determine overall status
-    if auto or explicit:
+    # Determine overall status with a three-way distinction (issue #253):
+    #   READY      — at least one auto-route provider has usable recent data.
+    #   DEGRADED   — the process is alive and providers are configured, but no
+    #                auto-route provider currently has usable data; the dataset
+    #                is only reachable through an explicit-only provider or is
+    #                waiting on ingestion. This is distinct from a hard failure.
+    #   NOT_READY  — no provider can serve the dataset at all.
+    if auto:
         status = DatasetReadinessStatus.READY
         message = None
+    elif explicit:
+        # Only licensed explicit-only providers remain; auto path is not usable.
+        status = DatasetReadinessStatus.DEGRADED
+        message = (
+            f"{dataset} is reachable only through explicit-only providers "
+            f"({', '.join(explicit)}); auto-route data is unavailable."
+        )
     elif rejections:
         status = DatasetReadinessStatus.NOT_READY
         message = f"No providers available for {dataset}"

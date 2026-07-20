@@ -66,6 +66,7 @@ def daily(
                 completed_at=completed_at,
                 software_version=software_version,
                 calendar_version=calendar_version,
+                source_policy=_resolve_source_policy(source),
             )
 
         payload = result.to_dict()
@@ -84,6 +85,29 @@ def daily(
             raise typer.Exit(code=3)
     finally:
         conn.close()
+
+
+def _resolve_source_policy(requested_source: str | None) -> dict[str, object]:
+    """Resolve the per-dataset source policy for the datasets maintenance acquires.
+
+    Records the resolved policy in the ledger so an operator can later answer
+    which source each canonical dataset was routed to (issue #253). CLI, service
+    and worker all resolve through the same shared ``SourcePolicyResolver``.
+    """
+    from vnalpha.data_provisioning.source_policy import get_default_resolver
+
+    resolver = get_default_resolver()
+    normalized = requested_source.strip().lower() if requested_source else None
+    datasets = ("reference.symbols", "equity.ohlcv", "index.ohlcv")
+    policy: dict[str, object] = {}
+    for dataset in datasets:
+        resolved = resolver.resolve(dataset, requested_source=normalized)
+        policy[dataset] = {
+            "source": resolved.source,
+            "mode": resolved.mode.value,
+            "fallback_allowed": resolved.fallback_allowed,
+        }
+    return policy
 
 
 def _maintenance_connection(*, ephemeral: bool) -> duckdb.DuckDBPyConnection:
@@ -145,6 +169,64 @@ def status(
                     )
     finally:
         conn.close()
+
+
+@app.command("readiness")
+def readiness(
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Report per-dataset readiness and the resolved source policy (issue #253).
+
+    This is dataset readiness, not process liveness: unlike ``/healthz`` it
+    distinguishes a live process from a usable data path and shows which
+    providers can serve each canonical dataset under the resolved policy.
+    """
+    from vnalpha.data_availability.dataset_readiness import check_dataset_readiness
+    from vnalpha.data_provisioning.source_policy import get_default_resolver
+
+    datasets = (
+        "reference.symbols",
+        "equity.ohlcv",
+        "index.ohlcv",
+        "index.membership",
+        "sector.membership",
+    )
+    resolver = get_default_resolver()
+    conn = get_connection()
+    try:
+        report = []
+        for dataset in datasets:
+            result = check_dataset_readiness(conn, dataset)
+            resolved = resolver.resolve(dataset)
+            report.append(
+                {
+                    "dataset": dataset,
+                    "status": result.status.value,
+                    "auto_providers": list(result.auto_providers),
+                    "explicit_providers": list(result.explicit_providers),
+                    "rejection_reasons": list(result.rejection_reasons),
+                    "resolved_source": resolved.source,
+                    "selection_mode": resolved.mode.value,
+                    "fallback_allowed": resolved.fallback_allowed,
+                    "message": result.message,
+                }
+            )
+    finally:
+        conn.close()
+
+    if json_output:
+        typer.echo(json.dumps({"datasets": report}, sort_keys=True))
+    else:
+        for entry in report:
+            typer.echo(
+                f"{entry['dataset']}: {entry['status']} "
+                f"(source={entry['resolved_source'] or 'auto'}, "
+                f"mode={entry['selection_mode']})"
+            )
+            if entry["explicit_providers"]:
+                typer.echo(f"  explicit-only: {', '.join(entry['explicit_providers'])}")
+            if entry["rejection_reasons"]:
+                typer.echo(f"  rejected: {', '.join(entry['rejection_reasons'])}")
 
 
 __all__ = ["app"]

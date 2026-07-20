@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS maintenance_run (
     calendar_version VARCHAR,
     mutated BOOLEAN NOT NULL DEFAULT FALSE,
     diagnostics_refs JSON,
+    source_policy JSON,  -- issue #253: resolved per-dataset source policy
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
