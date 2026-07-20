@@ -14,10 +14,11 @@ CREATE TABLE IF NOT EXISTS canonical_selection_audit (
     rejected_providers_json VARCHAR NOT NULL,
     candidate_values_json VARCHAR NOT NULL,
     policy_version VARCHAR NOT NULL,
+    policy_family VARCHAR NOT NULL,
     policy_rationale VARCHAR NOT NULL,
     evidence_refs_json VARCHAR NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp,
-    UNIQUE(symbol, time, interval, policy_version)
+    content_hash VARCHAR NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp
 )
 """
 
@@ -43,6 +44,14 @@ def migrate_ingestion_run_outcome_columns(
             f"ALTER TABLE ingestion_run ADD COLUMN IF NOT EXISTS {column} {column_type}"
         )
     conn.execute(_CANONICAL_SELECTION_AUDIT_DDL)
+    for column, column_type in (
+        ("policy_family", "VARCHAR"),
+        ("content_hash", "VARCHAR"),
+    ):
+        conn.execute(
+            "ALTER TABLE canonical_selection_audit "
+            f"ADD COLUMN IF NOT EXISTS {column} {column_type}"
+        )
     conn.execute(
         "ALTER TABLE canonical_ohlcv "
         "ADD COLUMN IF NOT EXISTS selection_audit_id VARCHAR"
