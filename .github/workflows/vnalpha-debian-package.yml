@@ -82,9 +82,9 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          rm -rf /tmp/openstock-hardening-deb
-          mkdir -p /tmp/openstock-hardening-deb
-          packaging/build-deb.sh --output-dir /tmp/openstock-hardening-deb \
+          rm -rf packaging/dist-ci
+          mkdir -p packaging/dist-ci
+          packaging/build-deb.sh --output-dir packaging/dist-ci \
             2>&1 | tee -a vnalpha-debian-package.log
 
       - name: Validate built package and offline runtime
@@ -92,7 +92,7 @@ jobs:
         run: |
           set -o pipefail
           bash packaging/test/test_install_contract.sh \
-            /tmp/openstock-hardening-deb/vnalpha_*.deb \
+            packaging/dist-ci/vnalpha_*.deb \
             2>&1 | tee -a vnalpha-debian-package.log
 
       - name: Upload package diagnostics
@@ -110,6 +110,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vnalpha-debian-package
-          path: /tmp/openstock-hardening-deb/vnalpha_*.deb
+          path: packaging/dist-ci/vnalpha_*.deb
           if-no-files-found: error
           retention-days: 7
