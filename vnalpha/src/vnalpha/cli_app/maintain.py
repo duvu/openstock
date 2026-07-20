@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 import duckdb
 import typer
 
-from vnalpha.core.dates import resolve_date
 from vnalpha.ingestion.trading_calendar import VietnamSessionCalendar
 from vnalpha.maintenance.daily import (
     DailyMaintenanceRequest,
@@ -15,6 +14,11 @@ from vnalpha.maintenance.daily import (
 )
 from vnalpha.maintenance.ledger import persist_maintenance_run
 from vnalpha.maintenance.software_identity import resolve_software_identity
+from vnalpha.maintenance.source_routing import (
+    MaintenanceSourcePolicy,
+    RoutedDataProvisioningService,
+    resolve_maintenance_source_policy,
+)
 from vnalpha.observability.context import set_correlation_id
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.migrations import run_migrations
@@ -28,23 +32,66 @@ def daily(
     symbols: str | None = typer.Option(
         None, "--symbols", help="Comma-separated bounded equity symbols."
     ),
-    source: str | None = typer.Option(None, "--source", help="Preferred provider."),
+    source: str | None = typer.Option(
+        None,
+        "--source",
+        help=(
+            "Legacy OHLCV source applied only to equity and index OHLCV. "
+            "It never overrides symbol-reference or membership sources."
+        ),
+    ),
+    reference_source: str | None = typer.Option(
+        None,
+        "--reference-source",
+        help="Explicit source for reference.symbols.",
+    ),
+    equity_source: str | None = typer.Option(
+        None,
+        "--equity-source",
+        help="Explicit source for equity.ohlcv.",
+    ),
+    index_source: str | None = typer.Option(
+        None,
+        "--index-source",
+        help="Explicit source for index.ohlcv.",
+    ),
+    membership_source: str | None = typer.Option(
+        None,
+        "--membership-source",
+        help="Explicit source for index/sector membership snapshots.",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Run one maintenance invocation and persist every non-dry-run result."""
+    """Run one maintenance invocation with independent dataset source policy."""
     requested_symbols = _parse_symbols(symbols)
+    policy = _resolve_maintenance_policy(
+        source=source,
+        reference_source=reference_source,
+        equity_source=equity_source,
+        index_source=index_source,
+        membership_source=membership_source,
+    )
     conn = _maintenance_connection(ephemeral=dry_run)
     try:
         if not dry_run:
             run_migrations(conn=conn)
         set_correlation_id()
         started_at = datetime.now(timezone.utc)
-        result = DailyMaintenanceService(conn).run(
+        service = DailyMaintenanceService(
+            conn,
+            provisioning_factory=lambda routed_conn: RoutedDataProvisioningService(
+                routed_conn,
+                policy,
+            ),
+        )
+        result = service.run(
             DailyMaintenanceRequest(
                 date=date,
                 symbols=requested_symbols,
-                source=source,
+                # The routed adapter owns source selection. Passing a single source
+                # here would reintroduce the cross-dataset ambiguity fixed by #253.
+                source=None,
                 dry_run=dry_run,
             )
         )
@@ -62,10 +109,11 @@ def daily(
                 source_commit=identity.source_commit,
                 tree_state=identity.tree_state,
                 calendar_version=VietnamSessionCalendar().version,
-                source_policy=_resolve_source_policy(source),
+                source_policy=policy.to_dict(),
             )
 
         payload = result.to_dict()
+        payload["source_policy"] = policy.to_dict()
         if json_output:
             typer.echo(json.dumps(payload, sort_keys=True))
         else:
@@ -83,29 +131,24 @@ def daily(
         conn.close()
 
 
-def _resolve_source_policy(requested_source: str | None) -> dict[str, object]:
-    """Resolve and record the per-dataset source policy for this invocation."""
-    from vnalpha.data_provisioning.source_policy import get_default_resolver
-
-    resolver = get_default_resolver()
-    normalized = requested_source.strip().lower() if requested_source else None
-    datasets = (
-        "reference.symbols",
-        "equity.ohlcv",
-        "index.ohlcv",
-        "reference.index_membership_snapshot",
-        "reference.sector_membership_snapshot",
-    )
-    policy: dict[str, object] = {}
-    for dataset in datasets:
-        resolved = resolver.resolve(dataset, requested_source=normalized)
-        policy[dataset] = {
-            "source": resolved.source,
-            "mode": resolved.mode.value,
-            "fallback_allowed": resolved.fallback_allowed,
-            "rationale": resolved.rationale,
-        }
-    return policy
+def _resolve_maintenance_policy(
+    *,
+    source: str | None,
+    reference_source: str | None,
+    equity_source: str | None,
+    index_source: str | None,
+    membership_source: str | None,
+) -> MaintenanceSourcePolicy:
+    try:
+        return resolve_maintenance_source_policy(
+            legacy_ohlcv_source=source,
+            reference_source=reference_source,
+            equity_source=equity_source,
+            index_source=index_source,
+            membership_source=membership_source,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 def _maintenance_connection(*, ephemeral: bool) -> duckdb.DuckDBPyConnection:
@@ -180,7 +223,7 @@ def status(
 def readiness(
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Report per-dataset readiness and the resolved source policy."""
+    """Report per-dataset readiness and the default resolved source policy."""
     from vnalpha.data_availability.dataset_readiness import check_dataset_readiness
     from vnalpha.data_provisioning.source_policy import get_default_resolver
 
@@ -232,10 +275,14 @@ def readiness(
 @app.command("proof")
 def proof(
     sessions: int = typer.Option(
-        10, "--sessions", help="Required consecutive session count."
+        10,
+        "--sessions",
+        help="Required consecutive session count.",
     ),
     rerun_dates: int = typer.Option(
-        2, "--rerun-dates", help="Required number of dates with a same-date rerun."
+        2,
+        "--rerun-dates",
+        help="Required number of dates with a same-date rerun.",
     ),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
@@ -260,7 +307,7 @@ def proof(
             f"{report['required_sessions']} sessions"
         )
         typer.echo(
-            f"  consecutive_market_sessions: "
+            "  consecutive_market_sessions: "
             f"{report['consecutive_market_sessions']}"
         )
         typer.echo(f"  identity_complete: {report['identity_complete']}")
