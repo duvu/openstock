@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING, Final
 
 import duckdb
@@ -17,6 +18,12 @@ from vnalpha.data_availability.actions import (
 )
 from vnalpha.data_availability.cache import evaluate_cache_eligibility
 from vnalpha.data_availability.dates import normalize_optional_date
+from vnalpha.data_availability.failure_classification import (
+    classify_failure,
+    dataset_for_action,
+    sanitize_root_cause,
+    subject_symbol,
+)
 from vnalpha.data_availability.lock import EnsureLock
 from vnalpha.data_availability.models import (
     EnsureDataAction,
@@ -52,6 +59,12 @@ _PROVISION_ACTIONS: Final[tuple[EnsureDataAction, ...]] = (
     EnsureDataAction.BENCHMARK_SYNCED,
     EnsureDataAction.BENCHMARK_CANONICAL_BUILT,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _ActionFailure:
+    category: str
+    root_cause: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,20 +291,29 @@ def _run_actions(
     dependencies: EnsureDependencies,
     result: EnsureDataResult,
 ) -> None:
-    failed: list[EnsureDataAction] = []
+    failures: dict[EnsureDataAction, _ActionFailure] = {}
 
     def on_failure(action: EnsureDataAction, error: Exception) -> None:
-        failed.append(action)
+        failures[action] = _ActionFailure(
+            category=classify_failure(action, error),
+            root_cause=sanitize_root_cause(error),
+        )
         log_action_failure(action, request.symbol, error)
 
     def run_and_verify(action: EnsureDataAction) -> None:
         before = _snapshot(request)
-        execute_action(action, _action_context(request, before, dependencies))
-        after = _snapshot(request)
-        if not _action_postcondition_satisfied(action, request, after):
-            raise RuntimeError(
-                f"{action.value} postcondition was not satisfied after reload."
-            )
+        started = perf_counter()
+        try:
+            execute_action(action, _action_context(request, before, dependencies))
+            after = _snapshot(request)
+            if not _action_postcondition_satisfied(action, request, after):
+                raise RuntimeError(
+                    f"{action.value} postcondition was not satisfied after reload."
+                )
+        finally:
+            _ELAPSED[action] = (perf_counter() - started) * 1000.0
+
+    _ELAPSED: dict[EnsureDataAction, float] = {}
 
     completed, warnings = execute_planned_actions(
         actions,
@@ -299,17 +321,23 @@ def _run_actions(
         on_failure,
     )
     result.actions_taken.extend(completed)
-    result.action_outcomes.extend(
-        EnsureDataActionOutcome(
-            action=action,
-            status=(
-                EnsureDataActionStatus.FAILED
-                if action in failed
-                else EnsureDataActionStatus.SUCCESS
-            ),
+    for action in actions:
+        failure = failures.get(action)
+        result.action_outcomes.append(
+            EnsureDataActionOutcome(
+                action=action,
+                status=(
+                    EnsureDataActionStatus.FAILED
+                    if failure is not None
+                    else EnsureDataActionStatus.SUCCESS
+                ),
+                dataset=dataset_for_action(action),
+                symbol=subject_symbol(action, request.symbol, request.policy.benchmark),
+                failure_category=failure.category if failure else None,
+                root_cause=failure.root_cause if failure else None,
+                elapsed_ms=_ELAPSED.get(action),
+            )
         )
-        for action in actions
-    )
     result.warnings.extend(_legacy_warning(warning) for warning in warnings)
 
 
