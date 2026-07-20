@@ -32,47 +32,65 @@ def persist_maintenance_run(
     calendar_version: str | None = None,
     source_policy: dict[str, object] | None = None,
 ) -> str:
-    """Persist one complete maintenance invocation and its ordered stages."""
+    """Persist one complete maintenance invocation and its ordered stages.
+
+    The run row and all of its stage rows are written inside a single explicit
+    transaction so the ledger is atomic: a crash or error before completion
+    rolls the whole invocation back, leaving either a complete record or no
+    committed record at all. A partially written run — for example a run row
+    with a ``SUCCESS`` status but missing stages — can never be observed.
+    """
     run_id = f"maint_{uuid4().hex[:12]}"
     duration_seconds = (completed_at - started_at).total_seconds()
 
-    conn.execute(
-        """
-        INSERT INTO maintenance_run (
-            run_id, correlation_id, requested_date, resolved_date, status,
-            requested_symbol_count, successful_symbol_count, failed_symbol_count,
-            started_at, completed_at, duration_seconds,
-            software_version, package_version, source_commit, tree_state,
-            calendar_version, mutated, diagnostics_refs, source_policy
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        [
-            run_id,
-            result.correlation_id,
-            result.requested_date,
-            result.resolved_date,
-            result.status.value,
-            len(result.requested_symbols),
-            len(result.successful_symbols),
-            len(result.failed_symbols),
-            started_at,
-            completed_at,
-            duration_seconds,
-            software_version,
-            package_version,
-            source_commit,
-            tree_state,
-            calendar_version,
-            result.mutated,
-            json.dumps(list(result.diagnostics_refs)),
-            json.dumps(source_policy) if source_policy is not None else None,
-        ],
-    )
+    transaction_started = False
+    try:
+        conn.execute("BEGIN TRANSACTION")
+        transaction_started = True
+        conn.execute(
+            """
+            INSERT INTO maintenance_run (
+                run_id, correlation_id, requested_date, resolved_date, status,
+                requested_symbol_count, successful_symbol_count,
+                failed_symbol_count, started_at, completed_at, duration_seconds,
+                software_version, package_version, source_commit, tree_state,
+                calendar_version, mutated, diagnostics_refs, source_policy
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                run_id,
+                result.correlation_id,
+                result.requested_date,
+                result.resolved_date,
+                result.status.value,
+                len(result.requested_symbols),
+                len(result.successful_symbols),
+                len(result.failed_symbols),
+                started_at,
+                completed_at,
+                duration_seconds,
+                software_version,
+                package_version,
+                source_commit,
+                tree_state,
+                calendar_version,
+                result.mutated,
+                json.dumps(list(result.diagnostics_refs)),
+                json.dumps(source_policy) if source_policy is not None else None,
+            ],
+        )
 
-    for order, stage in enumerate(result.stages, start=1):
-        _persist_stage_run(conn, run_id, stage, order)
+        for order, stage in enumerate(result.stages, start=1):
+            _persist_stage_run(conn, run_id, stage, order)
 
-    conn.commit()
+        conn.execute("COMMIT")
+    except BaseException:
+        # Roll back on any failure, including operator interruption
+        # (KeyboardInterrupt/SystemExit), so an aborted write never leaves a
+        # partial or falsely-successful run committed.
+        if transaction_started:
+            conn.execute("ROLLBACK")
+        raise
     return run_id
 
 
