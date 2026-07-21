@@ -68,4 +68,11 @@ def test_every_research_intent_is_supported_by_classifier(
     result = classifier.classify(prompt)
 
     assert result.intent == intent
-    assert result.entities == entities
+    # Symbol-requiring intents canonicalize {"symbol":"FPT"} to the single
+    # representation {"symbol":"FPT","symbols":["FPT"]} (issue #315); other
+    # entities pass through unchanged.
+    if "symbol" in entities:
+        expected = {**entities, "symbols": [entities["symbol"]]}
+    else:
+        expected = entities
+    assert result.entities == expected

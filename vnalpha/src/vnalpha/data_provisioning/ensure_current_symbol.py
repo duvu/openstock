@@ -24,6 +24,11 @@ from enum import Enum
 
 import duckdb
 
+from vnalpha.core.symbols import (
+    INVALID_SYMBOL_FORMAT,
+    SymbolFormatError,
+    validate_ticker,
+)
 from vnalpha.data_availability.deep_readiness_models import (
     ContextRequirement,
     ReadinessResult,
@@ -163,8 +168,18 @@ def ensure_current_symbol_ready(
         A typed :class:`CurrentSymbolReadyResult`.
     """
 
-    normalized_symbol = symbol.upper().strip()
     active_correlation_id = _bind_correlation_id(correlation_id)
+
+    # Reject a malformed ticker before acquiring the writer lock or touching the
+    # warehouse (issue #315). The rejection is a typed INVALID_SYMBOL_FORMAT
+    # failure kept distinct from the downstream SYMBOL_NOT_FOUND membership
+    # failure, and no serialized value is ever passed on as a literal ticker.
+    try:
+        normalized_symbol = validate_ticker(symbol)
+    except SymbolFormatError as exc:
+        return _malformed_symbol_result(
+            symbol, requested_date, refresh, active_correlation_id, str(exc)
+        )
 
     def _ensure(
         ensure_conn: duckdb.DuckDBPyConnection,
@@ -234,6 +249,52 @@ def ensure_current_symbol_ready(
         },
     )
     return result
+
+
+def _malformed_symbol_result(
+    symbol: str,
+    requested_date: str | None,
+    refresh: bool,
+    correlation_id: str,
+    detail: str,
+) -> CurrentSymbolReadyResult:
+    """Build a typed FAILED result for a malformed ticker (INVALID_SYMBOL_FORMAT).
+
+    Surfaced before any lock/warehouse work so the syntax failure never reaches
+    provisioning and stays distinct from a SYMBOL_NOT_FOUND membership failure.
+    """
+    log_audit(
+        "CURRENT_SYMBOL_PROVISIONING_COMPLETED",
+        f"Current-symbol provisioning rejected malformed ticker {symbol!r}.",
+        status="FAILED",
+        level="ERROR",
+        extra={
+            "symbol": symbol,
+            "outcome": ProvisioningOutcome.FAILED.value,
+            "failure_category": INVALID_SYMBOL_FORMAT,
+            "correlation_id": correlation_id,
+        },
+    )
+    return CurrentSymbolReadyResult(
+        symbol=symbol if isinstance(symbol, str) else str(symbol),
+        outcome=ProvisioningOutcome.FAILED,
+        correlation_id=correlation_id,
+        requested_date=requested_date,
+        resolved_date=requested_date or "unresolved",
+        actions=(
+            ProvisioningAction(
+                action="validate_symbol",
+                status="FAILED",
+                symbol=symbol if isinstance(symbol, str) else None,
+                failure_category=INVALID_SYMBOL_FORMAT,
+                root_cause=detail,
+            ),
+        ),
+        reused_fresh_data=False,
+        refreshed=False,
+        warnings=(),
+        errors=(detail,),
+    )
 
 
 def _bind_correlation_id(correlation_id: str | None) -> str:

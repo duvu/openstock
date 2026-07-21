@@ -3,8 +3,13 @@ from __future__ import annotations
 import json
 import re
 
-from vnalpha.assistant.errors import IntentClassificationError, SynthesisError
+from vnalpha.assistant.errors import (
+    AssistantInputValidationError,
+    IntentClassificationError,
+    SynthesisError,
+)
 from vnalpha.assistant.models import SUPPORTED_INTENTS, AssistantAnswer, IntentResult
+from vnalpha.core.symbols import SymbolFormatError, apply_canonical_symbols
 
 INTENT_ALIASES = {
     "get_stock_info": "explain_symbol",
@@ -249,19 +254,26 @@ def parse_classifier_response(
     if not isinstance(entities, dict):
         entities = {}
 
-    # Deterministic symbol recovery: if a symbol-requiring intent came back
-    # without a symbol, recover an obvious ticker from the raw prompt so an
-    # explicit mention (e.g. "phan tich co phieu FPT") still executes.
-    if intent in _SYMBOL_REQUIRING_INTENTS and user_prompt:
-        existing_symbols = entities.get("symbols")
-        has_symbols = isinstance(existing_symbols, list) and any(
-            str(item).strip() for item in existing_symbols
-        )
-        has_symbol = bool(str(entities.get("symbol") or "").strip())
-        if not has_symbols and not has_symbol:
+    # Canonicalize the symbol entities into a single representation before the
+    # planner ever sees them (issue #315). This collapses JSON-valid-but-wrong
+    # shapes ({"symbol": ["FPT"]}, {"symbol": "['FPT']"}, …) into
+    # {"symbol": "FPT", "symbols": ["FPT"]} and rejects malformed shapes as a
+    # typed INVALID_SYMBOL_FORMAT failure, so no arbitrary value is stringified
+    # into a ticker literal downstream.
+    if intent in _SYMBOL_REQUIRING_INTENTS:
+        try:
+            canonical = apply_canonical_symbols(entities)
+        except SymbolFormatError as exc:
+            raise AssistantInputValidationError(str(exc)) from exc
+
+        # Deterministic symbol recovery runs ONLY when the classifier supplied
+        # no canonical symbol, so an explicit mention (e.g. "phan tich co phieu
+        # FPT") still executes without overriding a real classifier symbol.
+        if canonical.primary_symbol is None and user_prompt:
             recovered = _recover_symbols_from_prompt(user_prompt)
             if recovered:
                 entities["symbols"] = recovered
+                apply_canonical_symbols(entities)
 
     confidence_raw = data.get("confidence", 0.5)
     try:

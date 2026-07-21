@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import duckdb
 
+from vnalpha.core.symbols import SymbolFormatError, validate_ticker
 from vnalpha.data_availability.deep_readiness_models import ContextRequirement
 from vnalpha.data_provisioning.ensure_current_symbol import (
     ProvisioningOutcome,
@@ -40,9 +41,19 @@ def ensure_current_symbol(
     if not isinstance(symbol, str) or not symbol.strip():
         raise ToolExecutionError("data.ensure_current_symbol requires 'symbol'.")
 
+    # Reject a malformed ticker as a typed syntax failure BEFORE any lock,
+    # warehouse lookup or provisioning work (issue #315). This keeps
+    # INVALID_SYMBOL_FORMAT strictly distinct from the membership failure
+    # SYMBOL_NOT_FOUND surfaced later by the data layer, and guarantees a
+    # serialized value like "['FPT']" never reaches the warehouse as a literal.
+    try:
+        canonical_symbol = validate_ticker(symbol)
+    except SymbolFormatError as exc:
+        raise ToolExecutionError(str(exc)) from exc
+
     result = ensure_current_symbol_ready(
         conn,
-        symbol,
+        canonical_symbol,
         date,
         refresh=bool(refresh),
         data_only=data_only,

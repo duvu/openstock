@@ -23,7 +23,9 @@ def test_parse_classifier_response_embedded_json() -> None:
         'payload: {"intent":"explain_symbol","entities":{"symbol":"FPT"}}'
     )
     assert parsed.intent == "explain_symbol"
-    assert parsed.entities == {"symbol": "FPT"}
+    # Symbol-requiring intents are canonicalized to the single representation
+    # {"symbol":"FPT","symbols":["FPT"]} (issue #315).
+    assert parsed.entities == {"symbol": "FPT", "symbols": ["FPT"]}
 
 
 def test_parse_json_response_recovers_embedded_object() -> None:
@@ -56,9 +58,10 @@ def test_symbol_recovery_does_not_override_classifier_symbol() -> None:
         '{"intent":"deep_analyze_symbol","entities":{"symbol":"VNM"}}',
         user_prompt="phan tich fpt",
     )
-    # An explicitly classified symbol is never overridden by recovery.
+    # An explicitly classified symbol is never overridden by recovery, and it
+    # is canonicalized to the single representation (issue #315).
     assert parsed.entities.get("symbol") == "VNM"
-    assert "symbols" not in parsed.entities
+    assert parsed.entities.get("symbols") == ["VNM"]
 
 
 def test_symbol_recovery_skips_non_symbol_intents() -> None:

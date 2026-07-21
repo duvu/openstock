@@ -10,20 +10,31 @@ from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
 from vnalpha.assistant.research_automation_plans import (
     RESEARCH_AUTOMATION_PLAN_BUILDERS,
 )
+from vnalpha.core.symbols import SymbolFormatError, canonicalize_symbol_entities
 
 
 def _resolve_symbol(entities: dict) -> str:
-    symbols = entities.get("symbols", [])
-    if symbols:
-        return _resolve_symbol_from_tokens([str(item) for item in symbols])
-    return str(entities.get("symbol", "")).strip().upper()
+    """Return the single canonical primary ticker, or "" when none resolves.
+
+    Uses the shared normalizer (issue #315, rule #7) so equivalent classifier
+    shapes yield the same tool arguments. A malformed shape that somehow reaches
+    the planner resolves to no symbol, which drives a typed missing-symbol
+    refusal rather than a wrong literal.
+    """
+    try:
+        canonical = canonicalize_symbol_entities(entities)
+    except SymbolFormatError:
+        return ""
+    return canonical.primary_symbol or ""
 
 
-def _resolve_symbol_from_tokens(symbols: list[str]) -> str:
-    normalized = [str(token).strip().upper() for token in symbols if str(token).strip()]
-    if len(normalized) >= 2 and normalized[0] in {"CP", "CK"}:
-        return normalized[1]
-    return normalized[0] if normalized else ""
+def _resolve_symbols(entities: dict) -> list[str]:
+    """Return all canonical tickers, preserving order (multi-symbol intents)."""
+    try:
+        canonical = canonicalize_symbol_entities(entities)
+    except SymbolFormatError:
+        return []
+    return list(canonical.symbols)
 
 
 def _step(tool: str, args: dict, purpose: str, permission: str) -> ToolPlanStep:
@@ -89,9 +100,7 @@ def _build_filter_plan(entities: dict) -> AssistantPlan:
 
 
 def _build_compare_plan(entities: dict) -> AssistantPlan:
-    symbols = [
-        str(item).strip().upper() for item in entities.get("symbols", []) if item
-    ]
+    symbols = _resolve_symbols(entities)
     args = _date_args(entities, symbols=symbols)
     quality_tool = (
         "quality.get_many_status" if len(symbols) > 1 else "quality.get_status"
