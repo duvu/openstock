@@ -25,8 +25,9 @@ changes:
       worker core (#324) are implemented; bounded stage interruption and
       shutdown proof remain incomplete. Commits
       85caa5da2481822c84cbac45594feb94abad9176 and
-      079c32dfa3d59fd9bb345d5b730a0112035c2d45 add durable lifecycle and
-      active-stage lease safety; queue-backed application behavior remains
+      079c32dfa3d59fd9bb345d5b730a0112035c2d45 and
+      031aef766584d14493b3835dc65baf69705098e3 add durable lifecycle,
+      active-stage lease safety and canonical provisioner locking; queue-backed application behavior remains
       incomplete.
 
   consolidate-authoritative-test-suite:
