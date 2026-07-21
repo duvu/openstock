@@ -41,6 +41,14 @@ The system SHALL classify artifacts as `READY`, `STALE`, `MISSING` or `INVALID` 
 ### Requirement: Repairability SHALL be source-aware
 The readiness report SHALL combine warehouse state with source policy, provider capability, authentication readiness, persistence permission and bounded remediation availability.
 
+| Warehouse evidence | Source and persistence status | Proposed action | Repairable |
+| --- | --- | --- | --- |
+| Raw OHLCV is absent or stale | An eligible, persistence-approved provider is available | Bounded target or benchmark sync | Yes |
+| Raw OHLCV exactly covers the missing trading sessions | N/A | Bounded canonical promotion only | Yes |
+| Canonical OHLCV is valid but ranking derivatives are absent | Required upstream canonical evidence is ready or repairable | Build features or score symbol | Yes |
+| Provider is unavailable, unapproved, or FiinQuantX lacks explicit readiness | N/A | None | No |
+| Historical request, invalid persisted evidence, optional artifact, or checks-only policy | N/A | None | No |
+
 #### Scenario: A required artifact has no eligible source
 - **WHEN** a required artifact is missing
 - **AND** no approved source or local deterministic build can produce it
