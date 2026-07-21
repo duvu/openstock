@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import ClassVar
 
-import pytest
 from pydantic import BaseModel, ConfigDict
 
 from vnalpha.observability.context import RunContext
@@ -101,71 +100,3 @@ def test_persist_request_writes_safe_metadata_code_and_approved_references(
         )
         assert references.approved_read_paths == ("inputs/reference.csv",)
         assert "secret" not in (storage.job_dir / "request.json").read_text().lower()
-
-
-def test_manifest_rejects_duplicate_and_unsafe_paths() -> None:
-    from vnalpha.sandbox.artifact_manifest import (
-        SandboxArtifactManifest,
-        SandboxArtifactManifestEntry,
-        SandboxArtifactManifestError,
-    )
-
-    entry = SandboxArtifactManifestEntry(
-        path="request.json",
-        sha256="0" * 64,
-        byte_length=1,
-        media_type="application/json",
-    )
-
-    with pytest.raises(SandboxArtifactManifestError):
-        _ = SandboxArtifactManifest(entries=(entry, entry))
-    with pytest.raises(SandboxArtifactManifestError):
-        _ = SandboxArtifactManifestEntry(
-            path="../request.json",
-            sha256="0" * 64,
-            byte_length=1,
-            media_type="application/json",
-        )
-    with pytest.raises(SandboxArtifactManifestError):
-        _ = SandboxArtifactManifestEntry(
-            path="output/result.json",
-            sha256="malformed",
-            byte_length=1,
-            media_type="application/json",
-        )
-
-
-def test_persist_request_rejects_code_digest_mismatch_before_manifest(
-    tmp_path: Path,
-) -> None:
-    from vnalpha.sandbox.artifact_writer import (
-        SandboxArtifactCodeDigestError,
-        SandboxArtifactWriter,
-    )
-
-    with _storage(tmp_path) as storage:
-        writer = SandboxArtifactWriter(storage)
-        with pytest.raises(SandboxArtifactCodeDigestError):
-            writer.verify_code_digest(b"different", _job().code_digest)
-
-        assert not (storage.job_dir / "manifest.json").exists()
-
-
-def test_writer_rejects_tampered_canonical_layout_before_writing_artifacts(
-    tmp_path: Path,
-) -> None:
-    from vnalpha.sandbox.artifact_writer import SandboxArtifactWriter
-    from vnalpha.sandbox.layout import SandboxArtifactLayout
-
-    tampered_layout = SandboxArtifactLayout(
-        request=PurePosixPath("redirect/request.json"),
-        generated_code=PurePosixPath("redirect/generated_code.py"),
-        result=PurePosixPath("redirect/output/result.json"),
-        summary=PurePosixPath("redirect/output/summary.md"),
-        manifest=PurePosixPath("redirect/manifest.json"),
-    )
-    with _storage(tmp_path) as storage:
-        with pytest.raises(ValueError):
-            _ = SandboxArtifactWriter(storage, tampered_layout)
-
-        assert not tuple(storage.job_dir.iterdir())

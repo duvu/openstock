@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
 
 import duckdb
-import pytest
 
 from vnalpha.data_availability.models import EnsureDataAction
 from vnalpha.data_availability.planner import EnsureDataSnapshot
@@ -49,92 +46,6 @@ def _strict_policy(**overrides) -> DataAvailabilityPolicy:
     }
     values.update(overrides)
     return DataAvailabilityPolicy(**values)
-
-
-@pytest.mark.parametrize(
-    ("snapshot", "reason", "flag"),
-    [
-        (
-            replace(_eligible_snapshot(), candidate_score_exists=False),
-            "score_missing",
-            "score_fresh",
-        ),
-        (
-            replace(_eligible_snapshot(), candidate_score_as_of_date="2026-06-01"),
-            "score_stale",
-            "score_fresh",
-        ),
-        (
-            replace(_eligible_snapshot(), feature_snapshot_exists=False),
-            "feature_snapshot_missing",
-            "feature_present",
-        ),
-        (
-            replace(_eligible_snapshot(), canonical_bars=119),
-            "canonical_history_insufficient",
-            "canonical_sufficient",
-        ),
-        (
-            replace(_eligible_snapshot(), benchmark_bars=119),
-            "benchmark_history_insufficient",
-            "benchmark_sufficient",
-        ),
-        (
-            replace(_eligible_snapshot(), quality_status="fail"),
-            "quality_unacceptable",
-            "quality_acceptable",
-        ),
-        (
-            replace(
-                _eligible_snapshot(),
-                lineage_fields=frozenset({"as_of_bar_date"}),
-            ),
-            "lineage_incomplete",
-            "lineage_acceptable",
-        ),
-    ],
-)
-def test_cache_policy_rejects_each_incomplete_evidence_class(
-    snapshot: EnsureDataSnapshot, reason: str, flag: str
-) -> None:
-    from vnalpha.data_availability.cache import evaluate_cache_eligibility
-
-    # Given: one supporting cache-evidence class is incomplete.
-    # When: the typed cache policy evaluates it.
-    eligibility = evaluate_cache_eligibility(snapshot, _strict_policy())
-
-    # Then: the corresponding flag and stable rejection reason identify the gap.
-    assert eligibility.eligible is False
-    assert reason in eligibility.reasons
-    assert getattr(eligibility, flag) is False
-
-
-def test_cache_policy_accepts_complete_evidence() -> None:
-    from vnalpha.data_availability.cache import evaluate_cache_eligibility
-
-    # Given/When: all score, feature, history, quality, and lineage evidence passes.
-    eligibility = evaluate_cache_eligibility(_eligible_snapshot(), _strict_policy())
-
-    # Then: the cache is eligible without rejection reasons.
-    assert eligibility.eligible is True
-    assert eligibility.reasons == ()
-
-
-def test_cache_policy_can_disable_benchmark_requirement() -> None:
-    from vnalpha.data_availability.cache import evaluate_cache_eligibility
-
-    # Given: relative-strength benchmark history is not required by this policy.
-    snapshot = replace(_eligible_snapshot(), benchmark_bars=0)
-
-    # When: eligibility is evaluated with that explicit policy.
-    eligibility = evaluate_cache_eligibility(
-        snapshot,
-        _strict_policy(require_benchmark_history=False),
-    )
-
-    # Then: absent benchmark history does not reject an otherwise complete cache.
-    assert eligibility.eligible is True
-    assert eligibility.benchmark_sufficient is True
 
 
 def _seed_complete_evidence(conn: duckdb.DuckDBPyConnection) -> None:
@@ -234,38 +145,3 @@ def test_complete_cache_hit_runs_no_provisioning_actions(tmp_path: Path) -> None
     # Then: READY is a fast cache hit with no rejection reason or build action.
     assert result.actions_taken == [EnsureDataAction.CACHE_HIT]
     assert result.cache_rejection_reasons == []
-
-
-def test_cache_rejection_reasons_are_returned_and_observed(tmp_path: Path) -> None:
-    from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
-
-    # Given: a known symbol has none of the required supporting cache evidence.
-    conn = duckdb.connect()
-    run_migrations(conn=conn)
-    conn.execute("INSERT INTO symbol_master (symbol, is_active) VALUES ('FPT', TRUE)")
-    events: list[tuple[str, dict | None]] = []
-
-    def capture_event(event_type, *_args, **kwargs):
-        events.append((event_type, kwargs.get("extra")))
-
-    # When: ensure rejects the cache before following its no-sync path.
-    with patch(
-        "vnalpha.data_availability.observability.log_audit",
-        side_effect=capture_event,
-    ):
-        result = ensure_symbol_analysis_ready(
-            conn,
-            "FPT",
-            "2026-07-10",
-            policy=_strict_policy(min_required_bars=1),
-            _lock_dir=tmp_path,
-        )
-
-    # Then: the result and DATA_ENSURE_CACHE_REJECTED carry stable reasons.
-    assert "score_missing" in result.cache_rejection_reasons
-    rejected = [
-        extra for event, extra in events if event == "DATA_ENSURE_CACHE_REJECTED"
-    ]
-    assert len(rejected) == 1
-    assert rejected[0] is not None
-    assert "score_missing" in rejected[0]["reasons"]

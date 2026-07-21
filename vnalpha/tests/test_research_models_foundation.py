@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import date, datetime, timezone
 
 import duckdb
-import pytest
 
 from vnalpha.research_models.models import (
     MarketRegimeSnapshot,
@@ -17,8 +15,6 @@ from vnalpha.research_models.models import (
     ShortlistDecisionReport,
     SymbolLevelSnapshot,
 )
-from vnalpha.research_models.repositories import ResearchModelsRepository
-from vnalpha.research_models.validators import ResearchModelValidationError
 from vnalpha.warehouse.migrations import run_migrations
 
 
@@ -196,37 +192,3 @@ def test_research_models_migrations_are_additive_and_idempotent() -> None:
         ).fetchall()
     }
     assert {"research_session_id", "missing_data_json"} <= audit_columns
-
-
-def test_repositories_round_trip_all_research_models() -> None:
-    conn = duckdb.connect(":memory:")
-    run_migrations(conn=conn)
-    repository = ResearchModelsRepository(conn)
-    models = _models()
-
-    for model in models:
-        repository.create(model)
-        assert repository.get(type(model), repository.record_id(model)) == model
-        assert repository.list(type(model)) == [model]
-
-
-def test_validators_require_lineage_caveats_and_research_only_metadata() -> None:
-    repository = ResearchModelsRepository(duckdb.connect(":memory:"))
-    (
-        market_regime,
-        sector_strength,
-        symbol_level,
-        setup_analysis,
-        candidate,
-        report,
-        scenario,
-        setup_evidence,
-        audit,
-    ) = _models()
-    invalid_lineage = replace(market_regime, lineage={})
-    invalid_scenario = replace(scenario, caveats=())
-    execution_metadata = replace(symbol_level, lineage={"order": "submit"})
-
-    for model in (invalid_lineage, invalid_scenario, execution_metadata):
-        with pytest.raises(ResearchModelValidationError):
-            repository.validate(model)

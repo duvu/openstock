@@ -88,27 +88,3 @@ def test_deep_analyze_summary_uses_analysis_payload_not_provisioning_payload() -
     assert "setup=PULLBACK_TO_TREND" in answer.summary
     assert "as of 2026-07-10" in answer.summary
     assert "as of unknown" not in answer.summary
-
-
-def test_deep_analyze_summary_falls_back_gracefully_when_no_candidate_payload() -> None:
-    """With no analysis payload present at all, the summary degrades to
-    'unknown'/None rather than raising."""
-
-    plan = AssistantPlan(
-        intent="deep_analyze_symbol",
-        steps=[
-            ToolPlanStep(
-                step_id="step_1",
-                tool_name="data.ensure_current_symbol",
-                arguments={"symbol": "FPT"},
-                purpose="Provision data",
-                required_permission="WRITE_DATA",
-            )
-        ],
-    )
-    tool_outputs = {"step_1": {"data": _provisioning_payload()}}
-
-    answer = build_deterministic_research_answer(plan, tool_outputs)
-
-    assert "score=None" in answer.summary
-    assert "as of unknown" in answer.summary

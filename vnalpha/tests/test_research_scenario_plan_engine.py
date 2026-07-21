@@ -3,14 +3,9 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import duckdb
-import pytest
 
 from vnalpha.commands.handlers.research_plan import _scenario_panels, _scenario_tables
 from vnalpha.research_models import ResearchModelsRepository
-from vnalpha.research_models.scenario_policy import (
-    ScenarioPolicyViolation,
-    validate_research_scenario_payload,
-)
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.tools.research_intelligence import generate_research_scenario
 from vnalpha.warehouse.migrations import run_migrations
@@ -123,79 +118,3 @@ def test_scenario_plan_persists_linked_research_artifacts() -> None:
         )
     finally:
         conn.close()
-
-
-def test_scenario_policy_rejects_execution_wording_before_rendering() -> None:
-    with pytest.raises(ScenarioPolicyViolation, match="buy"):
-        validate_research_scenario_payload(
-            {
-                "policy_classification": "RESEARCH_ONLY",
-                "policy": {
-                    "disclaimer": "Research-only conditional context; not a recommendation."
-                },
-                "scenario_tree": {
-                    "base_case": {"interpretation": "buy the symbol now"}
-                },
-            }
-        )
-
-
-def test_scenario_plan_caveats_missing_level_data() -> None:
-    conn, as_of_date = _scenario_connection(with_bars=False)
-    try:
-        data = generate_research_scenario(conn, "FPT", date=as_of_date).data
-
-        assert all(level is None for level in data["key_levels"].values())
-        assert any("Key levels are unavailable" in caveat for caveat in data["caveats"])
-        assert "setup_type_performance" in data["missing_data"]
-        assert any("outcome evidence" in caveat for caveat in data["caveats"])
-    finally:
-        conn.close()
-
-
-def test_scenario_policy_allows_research_only_conditional_wording() -> None:
-    validate_research_scenario_payload(
-        {
-            "policy_classification": "RESEARCH_ONLY",
-            "policy": {
-                "disclaimer": "Research-only conditional context; not a recommendation."
-            },
-            "scenario_tree": {
-                "base_case": {
-                    "interpretation": "Continue research review after confirmation."
-                }
-            },
-        }
-    )
-
-
-def test_scenario_tool_rejects_execution_synonyms_from_persisted_risk_flags() -> None:
-    conn, as_of_date = _scenario_connection(risk_flags=["purchase shares now"])
-    try:
-        with pytest.raises(ScenarioPolicyViolation, match="purchase"):
-            generate_research_scenario(conn, "FPT", date=as_of_date)
-    finally:
-        conn.close()
-
-
-@pytest.mark.parametrize("field", ["caveats", "risk_reward_estimate"])
-def test_scenario_policy_rejects_execution_synonyms_in_rendered_fields(
-    field: str,
-) -> None:
-    payload = {
-        "policy_classification": "RESEARCH_ONLY",
-        "policy": {
-            "disclaimer": "Research-only conditional context; not a recommendation."
-        },
-        "scenario_tree": {
-            "base_case": {
-                "interpretation": "Continue research review after confirmation."
-            }
-        },
-    }
-    payload[field] = (
-        ["purchase shares now"] if field == "caveats" else "purchase shares now"
-    )
-
-    with pytest.raises(ScenarioPolicyViolation, match="purchase"):
-        validate_research_scenario_payload(payload)

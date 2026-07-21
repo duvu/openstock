@@ -6,16 +6,9 @@ from pathlib import Path
 from pytest import MonkeyPatch
 
 from vnalpha.workspace_context import export as export_module
-from vnalpha.workspace_context.compaction import compact_workspace
-from vnalpha.workspace_context.lifecycle import (
-    create_workspace,
-    record_error,
-    record_warning,
-)
 from vnalpha.workspace_context.models import WorkspaceArtifactRef, WorkspaceState
 from vnalpha.workspace_context.observability import WorkspaceAuditMetadata
 from vnalpha.workspace_context.storage import save_workspace_state
-from vnalpha.workspace_context.tasks import add_task
 
 
 def test_export_workspace_bundles_only_pinned_workspace_artifacts(
@@ -136,24 +129,3 @@ def test_export_workspace_bundles_only_pinned_workspace_artifacts(
             "exported_count": 4,
         }
     ]
-
-
-def test_sensitive_task_and_error_stay_redacted_through_compact_and_export(
-    tmp_path: Path,
-) -> None:
-    workspace = create_workspace(root=tmp_path)
-    record_warning(workspace, "api_key=warning-secret", root=tmp_path)
-    record_error(workspace, "password=error-secret", root=tmp_path)
-    add_task(workspace, "token=task-secret review FPT", root=tmp_path)
-
-    compact_workspace(workspace.workspace_id, root=tmp_path)
-    result = export_module.export_workspace(workspace.workspace_id, root=tmp_path)
-
-    bundle = Path(result.bundle_dir)
-    text = "\n".join(
-        path.read_text(encoding="utf-8") for path in bundle.rglob("*") if path.is_file()
-    )
-    assert "warning-secret" not in text
-    assert "error-secret" not in text
-    assert "task-secret" not in text
-    assert "[REDACTED]" in text

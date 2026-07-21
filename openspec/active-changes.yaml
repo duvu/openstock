@@ -11,6 +11,20 @@ policy:
 
 changes:
 
+  consolidate-authoritative-test-suite:
+    status: partial
+    github_issues: [348]
+    roadmap_state: scheduled
+    summary: >-
+      Enforce a 60-second development loop and consolidate the repository to a
+      checked 180–220 authoritative contract inventory (hard cap 250), with
+      duplicate execution, test and checker removal plus isolated DuckDB reuse.
+    evidence: >-
+      Issue #348 owns the normative policy, spec-first gate, phased execution
+      plan and before/after acceptance evidence. Initial routing, aggregate
+      de-duplication and fixture work are implemented; inventory consolidation
+      and final evidence remain incomplete.
+
   validate-daily-equity-ranking:
     status: partial
     github_issues: [196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206]

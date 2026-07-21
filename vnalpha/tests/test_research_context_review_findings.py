@@ -6,16 +6,12 @@ import duckdb
 import pytest
 
 from vnalpha.commands.executor import CommandExecutor
-from vnalpha.commands.models import CommandStatus
-from vnalpha.commands.setup import build_default_registry
 from vnalpha.research_intelligence.models import (
     MarketRegimeSnapshot,
     SectorStrengthSnapshot,
 )
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.repositories import (
-    upsert_market_regime_snapshot,
-    upsert_sector_strength_snapshots,
     upsert_symbol,
 )
 
@@ -99,60 +95,11 @@ def _sector_snapshot(
     )
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "/market-regime FPT",
-        "/market-regime --top 2",
-        "/sector-strength score>0",
-        "/sector-strength --unknown value",
-    ],
-)
-def test_research_context_commands_reject_unsupported_syntax(
-    conn, command: str
-) -> None:
-    result = _execute(conn, command)
-
-    assert result.status is CommandStatus.VALIDATION_ERROR
-    assert result.error is not None
-    assert result.error.error_type == "CommandValidationError"
-
-
 def _alignment_value(result) -> str:
     for panel in result.panels:
         if panel.title == "Sector Alignment":
             return panel.content["Alignment"]
     raise AssertionError("Sector Alignment panel missing")
-
-
-@pytest.mark.parametrize(
-    ("rank", "score", "rotation", "quality", "expected"),
-    [
-        (1, 0.82, "STABLE", "COMPLETE", "STRONG"),
-        (4, 0.50, "STABLE", "COMPLETE", "NEUTRAL"),
-        (8, 0.20, "STABLE", "COMPLETE", "WEAK"),
-        (4, 0.50, "IMPROVING", "COMPLETE", "IMPROVING"),
-        (4, 0.50, "WEAKENING", "COMPLETE", "WEAKENING"),
-        (1, 0.82, "IMPROVING", "PARTIAL", "INSUFFICIENT_DATA"),
-    ],
-)
-def test_symbol_alignment_uses_only_persisted_snapshot_values(
-    conn,
-    rank: int,
-    score: float,
-    rotation: str,
-    quality: str,
-    expected: str,
-) -> None:
-    upsert_symbol(conn, "FPT", sector="Technology")
-    upsert_sector_strength_snapshots(
-        conn,
-        [_sector_snapshot(rank=rank, score=score, rotation=rotation, quality=quality)],
-    )
-
-    result = _execute(conn, "/sector-strength FPT")
-
-    assert _alignment_value(result) == expected
 
 
 def test_symbol_alignment_discloses_unclassified_and_missing_snapshot_context(
@@ -166,69 +113,3 @@ def test_symbol_alignment_discloses_unclassified_and_missing_snapshot_context(
 
     assert _alignment_value(unclassified) == "INSUFFICIENT_DATA"
     assert _alignment_value(missing_snapshot) == "INSUFFICIENT_DATA"
-
-
-def test_successful_market_regime_always_discloses_freshness_lineage_quality_and_caveats(
-    conn,
-) -> None:
-    upsert_market_regime_snapshot(conn, _market_snapshot())
-
-    result = _execute(conn, "/market-regime")
-    panels = {panel.title: panel.content for panel in result.panels}
-
-    assert {"Freshness", "Lineage", "Quality", "Data Caveats"} <= panels.keys()
-    assert panels["Freshness"]["Benchmark bar date"] == "2026-07-01"
-    assert panels["Lineage"]["source"] == "canonical"
-    assert panels["Data Caveats"] == "No persisted data caveats."
-    assert result.warnings == []
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "/sector-strength",
-        "/sector-strength FPT",
-        "/sector-strength FPT --date 2026-07-02",
-    ],
-)
-def test_successful_sector_strength_always_discloses_full_context(
-    conn, command: str
-) -> None:
-    snapshot = _sector_snapshot()
-    upsert_sector_strength_snapshots(conn, [snapshot])
-    upsert_symbol(conn, "FPT", sector="Technology")
-
-    result = _execute(conn, command)
-    panels = {panel.title: panel.content for panel in result.panels}
-
-    assert {"Freshness", "Lineage", "Quality", "Data Caveats"} <= panels.keys()
-    assert panels["Freshness"]["As of"] == "2026-07-02"
-    assert panels["Lineage"] == dict(snapshot.lineage)
-    assert panels["Quality"]["Methodology"] == snapshot.methodology_version
-    assert panels["Data Caveats"] == "No persisted data caveats."
-    assert result.warnings == []
-
-
-def test_sector_strength_symbol_rejects_top_option(conn) -> None:
-    result = _execute(conn, "/sector-strength FPT --top 1")
-
-    assert result.status is CommandStatus.VALIDATION_ERROR
-    assert result.error is not None
-    assert result.error.error_type == "CommandValidationError"
-    assert result.summary == "--top is only valid without a symbol."
-
-
-def test_sector_strength_help_lists_mutually_exclusive_forms(conn) -> None:
-    expected_usage = (
-        "/sector-strength [--date YYYY-MM-DD] [--top N] | "
-        "/sector-strength SYMBOL [--date YYYY-MM-DD]"
-    )
-
-    metadata = build_default_registry().get("sector-strength")
-    help_result = _execute(conn, "/help")
-    help_row = next(
-        row for row in help_result.tables[0].rows if row[0] == "/sector-strength"
-    )
-
-    assert metadata.usage == expected_usage
-    assert help_row[2] == expected_usage

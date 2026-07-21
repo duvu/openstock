@@ -8,9 +8,11 @@ PROJECT ?= vnalpha
 
 .PHONY: help up-vnstock down-vnstock login-vnstock validate-compose \
         sync features score tui mvp1-start verify-mvp1 install-vnalpha \
-        lint-vnalpha test-loop test-vnalpha \
-        eval-research-answers eval-research-runtime verify-hardening verify-r0 \
-        verify-r2-ci verify-r4 repo-hygiene verify-repo-consistency \
+        lint-vnalpha test-vnalpha test-vnalpha-data \
+        test-vnalpha-research test-vnalpha-application \
+        test-loop \
+        eval-research-answers eval-research-runtime verify-hardening \
+        verify-r2-ci repo-hygiene verify-repo-consistency \
         verify-vnalpha-package build-vnalpha-deb verify-vnalpha-deb
 
 help: ## Show this help message
@@ -75,30 +77,21 @@ test-loop: ## Run one owning contract test with a hard 60-second limit: TEST=pat
 	@case "$(PROJECT)" in vnalpha|vnstock) ;; *) echo "PROJECT must be vnalpha or vnstock"; exit 2;; esac
 	@timeout 60s sh -c 'cd "$(PROJECT)" && pytest -q --maxfail=1 "$(TEST)"'
 
-test-vnalpha: ## Run the complete vnalpha suite; final-candidate/release use only
-	cd vnalpha && pytest -q
+test-vnalpha: ## Run the canonical complete vnalpha suite; final-candidate/release use only
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py; else python ../scripts/run-test-suite.py; fi
 
-# Legacy bounded suites remain callable for diagnosis only. Do not chain them with the full suite.
-verify-r0: ## Run the legacy offline R0 diagnostic subset
-	cd vnalpha && pytest -q \
-		tests/test_phase5_e2e.py \
-		tests/test_features.py \
-		tests/test_warehouse.py \
-		tests/test_command_warehouse.py \
-		tests/test_r0_gaps.py
+test-vnalpha-data: ## Run canonical vnalpha data coverage
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --domain data; else python ../scripts/run-test-suite.py --domain data; fi
+
+test-vnalpha-research: ## Run canonical vnalpha research coverage
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --domain research; else python ../scripts/run-test-suite.py --domain research; fi
+
+test-vnalpha-application: ## Run canonical vnalpha application coverage
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --domain application; else python ../scripts/run-test-suite.py --domain application; fi
 
 verify-r2-ci: ## Run static R2 deployment verification
 	packaging/tests/test_daily_pipeline_units.sh
 	packaging/scripts/openstock-verify --ci
-
-verify-r4: ## Run the legacy R4 diagnostic subset
-	cd vnalpha && pytest -q \
-		tests/test_r4_permissions.py \
-		tests/test_r4_session.py \
-		tests/test_r4_trace.py \
-		tests/test_r4_clear.py \
-		tests/test_r4_persistence.py \
-		tests/test_r4_controller_persistence.py
 
 verify-vnalpha-package: ## Build and exercise a standalone Debian package
 	rm -rf /tmp/openstock-hardening-deb
@@ -120,8 +113,9 @@ verify-hardening: ## Release-only validation; never use in the inner edit-test l
 	$(MAKE) verify-repo-consistency
 	$(MAKE) validate-compose
 	$(MAKE) lint-vnalpha
+	packaging/tests/test_daily_pipeline_units.sh
 	$(MAKE) test-vnalpha
-	$(MAKE) verify-r2-ci
+	packaging/scripts/openstock-verify --ci
 	$(MAKE) verify-vnalpha-package
 	$(MAKE) eval-research-answers
 	$(MAKE) eval-research-runtime

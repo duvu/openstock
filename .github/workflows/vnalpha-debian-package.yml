@@ -6,6 +6,7 @@ on:
       - "Makefile"
       - "packaging/**"
       - "vnalpha/pyproject.toml"
+      - "vnalpha/uv.lock"
       - ".github/workflows/vnalpha-debian-package.yml"
   push:
     branches:
@@ -14,6 +15,7 @@ on:
       - "Makefile"
       - "packaging/**"
       - "vnalpha/pyproject.toml"
+      - "vnalpha/uv.lock"
       - ".github/workflows/vnalpha-debian-package.yml"
   workflow_dispatch:
 

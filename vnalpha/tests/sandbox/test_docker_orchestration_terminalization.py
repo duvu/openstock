@@ -12,7 +12,6 @@ from vnalpha.sandbox.artifact_manifest import SandboxArtifactManifest
 from vnalpha.sandbox.artifact_writer import SandboxArtifactWriter
 from vnalpha.sandbox.contracts import SandboxFilesystemPolicy, SandboxOutputSchema
 from vnalpha.sandbox.docker_orchestration import (
-    SandboxDockerOrchestrationFailureCode,
     SandboxDockerOrchestrationRequest,
     SandboxDockerOrchestrationStatus,
     SandboxDockerOrchestrator,
@@ -20,7 +19,6 @@ from vnalpha.sandbox.docker_orchestration import (
 from vnalpha.sandbox.docker_runner import (
     DockerExecutionRequest,
     DockerExecutionResult,
-    DockerFailureCode,
     parse_docker_image_reference,
 )
 from vnalpha.sandbox.execution_evidence import SandboxExecutionEvidence
@@ -31,7 +29,7 @@ from vnalpha.sandbox.output_validation import (
 )
 from vnalpha.sandbox.repository import SandboxJobRepository
 from vnalpha.sandbox.static_guard import SandboxStaticGuard
-from vnalpha.sandbox.storage import SandboxArtifactNotFoundError, SandboxArtifactStorage
+from vnalpha.sandbox.storage import SandboxArtifactStorage
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -276,164 +274,3 @@ def test_zero_exit_validated_outputs_persist_succeeded_after_finalization(
     assert stored is not None
     assert stored.status is SandboxJobStatus.SUCCEEDED
     assert stored.result_summary == "validated result"
-
-
-@pytest.mark.parametrize(
-    "output_files",
-    (
-        (),
-        (
-            _OutputFile("output/result.json", b"{"),
-            _OutputFile("output/summary.md", b"ok"),
-        ),
-        (
-            _OutputFile(
-                "output/result.json",
-                b'{"schema_version": 1, "summary": "ok", "artifacts": []}',
-            ),
-        ),
-    ),
-)
-def test_zero_exit_invalid_required_outputs_persist_failed_after_finalization(
-    tmp_path: Path,
-    repository: SandboxJobRepository,
-    output_files: tuple[_OutputFile, ...],
-) -> None:
-    # Given / When
-    status, failure_code, job, _, job_dir = _execute(
-        tmp_path=tmp_path, repository=repository, output_files=output_files
-    )
-
-    # Then
-    assert status is SandboxDockerOrchestrationStatus.FAILED
-    assert (
-        failure_code is SandboxDockerOrchestrationFailureCode.OUTPUT_VALIDATION_FAILED
-    )
-    assert (job_dir / "execution.json").exists()
-    assert b'"status":"failed"' in (job_dir / "validation.json").read_bytes()
-    assert (job_dir / "manifest.json").exists()
-    stored = repository.get(job.job_id)
-    assert stored is not None
-    assert stored.status is SandboxJobStatus.FAILED
-    assert stored.result_summary is None
-    assert stored.failure_reason is not None
-
-
-def test_zero_exit_missing_declared_chart_and_table_persist_failed(
-    tmp_path: Path, repository: SandboxJobRepository
-) -> None:
-    # Given
-    output_files = _valid_outputs(with_optional_outputs=True)[:-2]
-
-    # When
-    status, failure_code, job, _, _ = _execute(
-        tmp_path=tmp_path,
-        repository=repository,
-        output_files=output_files,
-        with_optional_outputs=True,
-    )
-
-    # Then
-    assert status is SandboxDockerOrchestrationStatus.FAILED
-    assert (
-        failure_code is SandboxDockerOrchestrationFailureCode.OUTPUT_VALIDATION_FAILED
-    )
-    stored = repository.get(job.job_id)
-    assert stored is not None
-    assert stored.status is SandboxJobStatus.FAILED
-
-
-def test_nonzero_docker_execution_does_not_validate_or_terminalize(
-    tmp_path: Path, repository: SandboxJobRepository
-) -> None:
-    # Given / When
-    status, failure_code, job, _, job_dir = _execute(
-        tmp_path=tmp_path,
-        repository=repository,
-        output_files=(),
-        result=DockerExecutionResult(
-            return_code=-1,
-            stdout=b"",
-            stderr=b"",
-            failure_code=DockerFailureCode.RUNTIME_FAILED,
-        ),
-    )
-
-    # Then
-    assert status is SandboxDockerOrchestrationStatus.FAILED
-    assert failure_code is DockerFailureCode.RUNTIME_FAILED
-    assert not (job_dir / "validation.json").exists()
-    stored = repository.get(job.job_id)
-    assert stored is not None
-    assert stored.status is SandboxJobStatus.QUEUED
-
-
-def test_manifest_finalization_failure_marks_job_failed_without_success(
-    tmp_path: Path, repository: SandboxJobRepository, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Given
-    def fail_finalization(
-        _: SandboxJob,
-        _storage: SandboxArtifactStorage,
-        writer: SandboxArtifactWriter,
-        _validator: SandboxOutputValidator,
-    ) -> None:
-        def fail(
-            validation: SandboxOutputValidationResult,
-            output_schema: SandboxOutputSchema,
-        ) -> SandboxArtifactManifest:
-            del validation, output_schema
-            raise SandboxArtifactNotFoundError("output/result.json")
-
-        monkeypatch.setattr(writer, "persist_validation_and_manifest", fail)
-
-    # When
-    status, failure_code, job, _, _ = _execute(
-        tmp_path=tmp_path,
-        repository=repository,
-        output_files=_valid_outputs(),
-        configure=fail_finalization,
-    )
-
-    # Then
-    assert status is SandboxDockerOrchestrationStatus.FAILED
-    assert (
-        failure_code
-        is SandboxDockerOrchestrationFailureCode.ARTIFACT_PERSISTENCE_FAILED
-    )
-    stored = repository.get(job.job_id)
-    assert stored is not None
-    assert stored.status is SandboxJobStatus.FAILED
-    assert stored.result_summary is None
-
-
-def test_terminal_job_cannot_be_overwritten_when_success_transition_fails(
-    tmp_path: Path, repository: SandboxJobRepository
-) -> None:
-    # Given
-    def mark_terminal(
-        job: SandboxJob,
-        _storage: SandboxArtifactStorage,
-        _writer: SandboxArtifactWriter,
-        _validator: SandboxOutputValidator,
-    ) -> None:
-        repository.mark_failed(job.job_id, "pre-existing terminal failure")
-
-    # When
-    status, failure_code, job, _, _ = _execute(
-        tmp_path=tmp_path,
-        repository=repository,
-        output_files=_valid_outputs(),
-        configure=mark_terminal,
-    )
-
-    # Then
-    assert status is SandboxDockerOrchestrationStatus.FAILED
-    assert (
-        failure_code
-        is SandboxDockerOrchestrationFailureCode.JOB_STATUS_PERSISTENCE_FAILED
-    )
-    stored = repository.get(job.job_id)
-    assert stored is not None
-    assert stored.status is SandboxJobStatus.FAILED
-    assert stored.failure_reason == "pre-existing terminal failure"

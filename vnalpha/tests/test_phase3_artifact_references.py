@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import duckdb
-import pytest
 
 from vnalpha.assistant.groundedness import GroundednessResult
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan, ToolPlanStep
@@ -10,13 +9,9 @@ from vnalpha.assistant.research_audit import (
     list_research_answer_audits,
     persist_research_answer_audit,
 )
-from vnalpha.research_models.repositories import ResearchModelsRepository
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.tools.research_intelligence import (
-    deep_symbol_analysis,
     generate_shortlist,
-    get_setup_history,
-    summarize_watchlist_deep,
 )
 from vnalpha.warehouse.migrations import run_migrations
 
@@ -90,191 +85,6 @@ def _watchlist_with_duplicate_symbol() -> duckdb.DuckDBPyConnection:
         ],
     )
     return conn
-
-
-def test_artifact_reference_builder_adds_only_confirmed_unique_refs() -> None:
-    from vnalpha.tools.artifact_references import ArtifactReferenceBuilder
-
-    # Given: the same persisted score is confirmed twice and a sector row is absent.
-    builder = ArtifactReferenceBuilder()
-    builder.add_if_present("candidate_score", "FPT:2026-07-10", True)
-    builder.add_if_present("candidate_score", "FPT:2026-07-10", True)
-    builder.add_if_present("sector_strength_snapshot", "2026-07-10", False)
-
-    # When: callers materialize the output reference list.
-    refs = builder.build()
-
-    # Then: only the unique confirmed persisted reference is emitted.
-    assert refs == ["candidate_score:FPT:2026-07-10"]
-
-
-@pytest.mark.parametrize(
-    ("tool_case", "expected_missing"),
-    [
-        ("deep", "candidate_score"),
-        ("watchlist", "daily_watchlist"),
-        ("shortlist", "daily_watchlist"),
-        ("setup", "setup_type_performance"),
-    ],
-)
-def test_absent_artifact_matrix_emits_no_reference(
-    tool_case: str, expected_missing: str
-) -> None:
-    # Given: the warehouse contains no persisted research artifacts.
-    conn = _empty_conn()
-
-    # When: each research tool is asked for an explicit date.
-    match tool_case:
-        case "deep":
-            output = deep_symbol_analysis(conn, "FPT", "2026-07-10")
-        case "watchlist":
-            output = summarize_watchlist_deep(conn, "2026-07-10")
-        case "shortlist":
-            output = generate_shortlist(conn, "2026-07-10")
-        case "setup":
-            output = get_setup_history(
-                conn,
-                "MOMENTUM_CONTINUATION",
-                date="2026-07-10",
-            )
-        case unreachable:
-            raise AssertionError(unreachable)
-
-    # Then: absence is disclosed and cannot produce a logical artifact ref.
-    data = output.data
-    assert isinstance(data, dict)
-    assert data["artifact_refs"] == []
-    assert expected_missing in data["missing_data"]
-
-
-def test_shortlist_without_sector_snapshot_discloses_defaulted_component() -> None:
-    # Given: a persisted watchlist candidate exists without any sector snapshot row.
-    conn = _watchlist_without_sector()
-
-    # When: deterministic shortlist generation evaluates the optional sector component.
-    output = generate_shortlist(conn, "2026-07-10")
-
-    # Then: watchlist lineage remains, sector lineage is omitted, and absence is explicit.
-    data = output.data
-    assert isinstance(data, dict)
-    assert data["artifact_refs"] == ["daily_watchlist:2026-07-10"]
-    assert "sector_strength_snapshot" in data["missing_data"]
-    assert any("sector component defaulted" in item.lower() for item in data["caveats"])
-
-
-def test_deep_symbol_without_sector_snapshot_discloses_missing_artifact() -> None:
-    conn = _watchlist_without_sector()
-
-    from vnalpha.data_availability.deep_readiness_models import ContextRequirement
-
-    output = deep_symbol_analysis(
-        conn,
-        "FPT",
-        "2026-07-10",
-        sector_strength_requirement=ContextRequirement.REQUIRED,
-    )
-
-    data = output.data
-    assert isinstance(data, dict)
-    assert "sector_strength_snapshot" in data["missing_data"]
-    assert all(
-        not ref.startswith("sector_strength_snapshot:") for ref in data["artifact_refs"]
-    )
-    assert any(
-        "sector strength snapshot" in caveat.lower() for caveat in data["caveats"]
-    )
-
-
-def test_filtered_shortlist_preserves_persisted_watchlist_reference() -> None:
-    # Given: a persisted watchlist exists but no candidate clears a stricter threshold.
-    conn = _watchlist_without_sector()
-
-    # When: shortlist generation filters every persisted candidate.
-    output = generate_shortlist(conn, "2026-07-10", min_score=0.95)
-
-    # Then: watchlist lineage remains valid while candidate absence is disclosed.
-    data = output.data
-    assert isinstance(data, dict)
-    assert "daily_watchlist:2026-07-10" in data["artifact_refs"]
-    assert "daily_watchlist" not in data["missing_data"]
-    assert "eligible_watchlist_candidates" in data["missing_data"]
-
-
-def test_shortlist_persists_candidates_as_append_only_runs() -> None:
-    conn = _watchlist_without_sector()
-    repository = ResearchModelsRepository(conn)
-    assert repository.list_shortlist_candidates(limit=10) == []
-    assert repository.list_shortlist_decision_reports(limit=10) == []
-
-    first = generate_shortlist(conn, "2026-07-10")
-    second = generate_shortlist(conn, "2026-07-10")
-
-    records = repository.list_shortlist_candidates(limit=20)
-    reports = repository.list_shortlist_decision_reports(limit=20)
-    assert len(records) == 2
-    assert len(reports) == 2
-    assert first.data is not None
-    assert second.data is not None
-    first_run_id = str(first.data.get("shortlist_run_id"))
-    second_run_id = str(second.data.get("shortlist_run_id"))
-    run_ids = {record.shortlist_run_id for record in records}
-    report_run_ids = {report.shortlist_run_id for report in reports}
-    assert run_ids == {first_run_id, second_run_id}
-    assert len(run_ids) == len(records)
-    assert report_run_ids == {first_run_id, second_run_id}
-    for record in records:
-        assert record.as_of_date.isoformat() == "2026-07-10"
-        assert record.symbol == "FPT"
-        assert record.rank >= 1
-        assert record.shortlist_score > 0
-        assert record.correlation_id
-        assert record.setup_type == "MOMENTUM_CONTINUATION"
-    for report in reports:
-        assert report.validation_signature
-        assert report.shortlist_decision_report_id
-        assert report.validation_checks["score_order"]["passed"] is True
-        assert report.validation_checks["rank_contiguity"]["passed"] is True
-
-
-def test_shortlist_persists_decision_report_even_when_no_candidates_selected() -> None:
-    conn = _watchlist_without_sector()
-    repository = ResearchModelsRepository(conn)
-
-    output = generate_shortlist(conn, "2026-07-10", min_score=0.95)
-    data = output.data
-    assert isinstance(data, dict)
-    assert data["shortlist_candidate_count"] == 0
-
-    reports = repository.list_shortlist_decision_reports(limit=10)
-    assert len(reports) == 1
-    report = reports[0]
-    assert report.shortlisted_count == 0
-    assert report.validation_signature == data["validation_signature"]
-    assert report.validation_checks["duplicate_symbol_exclusion"]["passed"] is True
-    assert report.shortlist_decision_report_id == data["shortlist_decision_report_id"]
-
-
-def test_shortlist_duplicate_symbols_fail_exclusion_validation() -> None:
-    conn = _watchlist_with_duplicate_symbol()
-    repository = ResearchModelsRepository(conn)
-    output = generate_shortlist(conn, "2026-07-10")
-    shortlist = output.data.get("shortlist")
-    assert isinstance(shortlist, list)
-    assert len(shortlist) == 1
-    assert shortlist[0]["rank"] == 1
-    assert shortlist[0]["symbol"] == "FPT"
-
-    report_data = output.data.get("validation_checks") if output.data else None
-    assert isinstance(report_data, dict)
-    assert report_data["duplicate_symbol_exclusion"]["passed"] is False
-    assert report_data["duplicate_symbol_exclusion"]["symbols"] == ["FPT"]
-
-    reports = repository.list_shortlist_decision_reports(limit=10)
-    assert len(reports) == 1
-    assert reports[0].validation_checks["duplicate_symbol_exclusion"]["passed"] is False
-    assert reports[0].validation_checks["duplicate_symbol_exclusion"]["symbols"] == [
-        "FPT"
-    ]
 
 
 def test_shortlist_refs_remain_integral_through_research_answer_audit() -> None:

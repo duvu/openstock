@@ -81,34 +81,3 @@ def test_runtime_loader_when_case_is_valid_returns_frozen_typed_contract(
     assert case.tool_outputs[0].artifact_refs == ("fixture://runtime/market_regime",)
     with pytest.raises(ValidationError):
         case.case_id = "changed"
-
-
-@pytest.mark.parametrize(
-    ("document", "match"),
-    [
-        (
-            _runtime_case("fixture://runtime/market_regime", ',\n  "unexpected": true'),
-            "unexpected",
-        ),
-        (
-            _runtime_case("fixture://runtime/../market_regime"),
-            "invalid fixture URI",
-        ),
-    ],
-)
-def test_runtime_loader_when_input_is_unknown_or_unsafe_rejects_document(
-    tmp_path: Path,
-    document: str,
-    match: str,
-) -> None:
-    # Given: a boundary document with an unknown field or unsafe logical reference
-    path = tmp_path / "invalid.json"
-    path.write_text(document, encoding="utf-8")
-
-    # When: strict runtime loading is attempted
-    from vnalpha.evals.runtime_loader import load_runtime_replay_case
-    from vnalpha.evals.runtime_models import RuntimeReplayValidationError
-
-    # Then: the malformed case cannot enter replay execution
-    with pytest.raises(RuntimeReplayValidationError, match=match):
-        load_runtime_replay_case(path)

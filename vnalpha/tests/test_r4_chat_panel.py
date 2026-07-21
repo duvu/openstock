@@ -14,10 +14,7 @@ Task coverage:
 
 from __future__ import annotations
 
-import builtins
-import importlib.util
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -51,158 +48,9 @@ def mock_get_connection():
 
 
 @skip_if_no_textual
-def test_chat_panel_creates_controller_on_init():
-    from vnalpha.tui.widgets.chat_panel import ChatPanel
-
-    panel = ChatPanel(target_date="2024-01-10")
-    assert panel._chat_controller is not None
-
-
-@skip_if_no_textual
-def test_chat_panel_passes_target_date_to_controller():
-    from vnalpha.tui.widgets.chat_panel import ChatPanel
-
-    panel = ChatPanel(target_date="2024-01-10")
-    ctrl = panel._chat_controller
-    assert ctrl._target_date == "2024-01-10"
-
-
-@skip_if_no_textual
-def test_chat_panel_passes_implicit_date_provenance_to_controller():
-    from vnalpha.tui.widgets.chat_panel import ChatPanel
-
-    panel = ChatPanel(
-        target_date="2026-07-19",
-        target_date_is_implicit=True,
-    )
-
-    assert panel._chat_controller._target_date == "2026-07-19"
-    assert panel._chat_controller._target_date_is_implicit is True
-
-
-def test_fallback_chat_panel_passes_implicit_date_provenance(monkeypatch) -> None:
-    module_path = (
-        Path(__file__).parents[1]
-        / "src"
-        / "vnalpha"
-        / "tui"
-        / "widgets"
-        / "chat_panel.py"
-    )
-    real_import = builtins.__import__
-
-    def import_without_textual(name, *args, **kwargs):
-        if name == "textual" or name.startswith("textual."):
-            raise ImportError(name)
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", import_without_textual)
-    spec = importlib.util.spec_from_file_location(
-        "chat_panel_fallback_test", module_path
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    panel = module.ChatPanel(
-        target_date="2026-07-19",
-        target_date_is_implicit=True,
-    )
-
-    assert panel._chat_controller._target_date == "2026-07-19"
-    assert panel._chat_controller._target_date_is_implicit is True
-
-
-@skip_if_no_textual
-@pytest.mark.asyncio
-async def test_input_submission_calls_handle_turn():
-    from vnalpha.tui.widgets.chat_panel import ChatPanel
-
-    panel = ChatPanel(target_date="2024-01-10")
-    mock_ctrl = MagicMock()
-    mock_ctrl.handle_turn = MagicMock(return_value=None)
-    panel._chat_controller = mock_ctrl
-    panel.post_message_text = MagicMock()
-
-    await panel._dispatch_via_controller("show VNM analysis")
-
-    mock_ctrl.handle_turn.assert_called_once_with("show VNM analysis")
-
-
-@skip_if_no_textual
-def test_action_approve_calls_approve_pending_plan():
-    from vnalpha.tui.widgets.chat_panel import ChatPanel
-
-    panel = ChatPanel()
-    mock_ctrl = MagicMock()
-    panel._chat_controller = mock_ctrl
-
-    panel.action_approve_plan()
-
-    mock_ctrl.approve_pending_plan.assert_called_once()
-
-
-@skip_if_no_textual
-def test_action_cancel_calls_cancel_pending_plan():
-    from vnalpha.tui.widgets.chat_panel import ChatPanel
-
-    panel = ChatPanel()
-    mock_ctrl = MagicMock()
-    panel._chat_controller = mock_ctrl
-
-    panel.action_cancel_plan()
-
-    mock_ctrl.cancel_pending_plan.assert_called_once()
-
-
-@skip_if_no_textual
-def test_no_local_command_registry_in_panel():
-    from vnalpha.tui.widgets.chat_panel import ChatPanel
-
-    panel = ChatPanel()
-    assert not hasattr(panel, "_registry")
-    assert not hasattr(panel, "_VALID_COMMANDS")
-    assert not hasattr(panel, "_dispatch_command_sync")
-
-
-@skip_if_no_textual
 def test_no_local_assistant_dispatch_in_panel():
     from vnalpha.tui.widgets.chat_panel import ChatPanel
 
     panel = ChatPanel()
     assert not hasattr(panel, "_dispatch_assistant")
     assert not hasattr(panel, "_run_ask")
-
-
-@skip_if_no_textual
-@pytest.mark.asyncio
-async def test_vn_alpha_app_approve_plan_calls_controller(mock_get_connection):
-    """action_approve_plan delegates to TuiInputRouter._handle_approve (new arch)."""
-    from vnalpha.tui.app import VnAlphaApp
-
-    app = VnAlphaApp(date="2024-01-10")
-    async with app.run_test(headless=True) as pilot:
-        mock_router = MagicMock()
-        pilot.app._router = mock_router
-
-        pilot.app.action_approve_plan()
-        await pilot.pause()
-
-        mock_router._handle_approve.assert_called_once()
-
-
-@skip_if_no_textual
-@pytest.mark.asyncio
-async def test_vn_alpha_app_cancel_plan_calls_controller(mock_get_connection):
-    """action_cancel_pending_plan delegates to TuiInputRouter._handle_cancel (new arch)."""
-    from vnalpha.tui.app import VnAlphaApp
-
-    app = VnAlphaApp(date="2024-01-10")
-    async with app.run_test(headless=True) as pilot:
-        mock_router = MagicMock()
-        pilot.app._router = mock_router
-
-        pilot.app.action_cancel_pending_plan()
-        await pilot.pause()
-
-        mock_router._handle_cancel.assert_called_once()

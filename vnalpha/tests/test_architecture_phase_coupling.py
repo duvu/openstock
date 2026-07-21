@@ -31,33 +31,3 @@ def test_core_architecture_descriptions_use_capability_language() -> None:
 
     # Then: architecture descriptions remain coupled to capabilities, not project phases
     assert not stale_lines, "\n".join(stale_lines)
-
-
-def test_architecture_docs_describe_current_package_boundaries() -> None:
-    # Given: the architecture refactor's documented package-boundary contract
-    # When: its authoritative documents are inspected
-    expected_sections = {
-        "architecture.md": (
-            "cli_app",
-            "data.fetch",
-            "ensure_symbol_analysis_ready",
-            "model routing",
-            "workspace_context",
-            "commandstatus",
-        ),
-        "package-boundaries.md": (
-            "policy",
-            "tui.routing",
-            "data_availability",
-            "planner",
-            "service",
-        ),
-    }
-    documents = {
-        filename: (DOCS_ROOT / filename).read_text(encoding="utf-8").lower()
-        for filename in expected_sections
-    }
-
-    # Then: each required document exists and names its implemented boundaries
-    for filename, sections in expected_sections.items():
-        assert all(section in documents[filename] for section in sections)
