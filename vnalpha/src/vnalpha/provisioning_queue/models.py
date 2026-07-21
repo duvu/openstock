@@ -104,8 +104,11 @@ class EnsureCurrentSymbolGoal(_GoalModel):
 
     @model_validator(mode="after")
     def _validate_fallback(self) -> EnsureCurrentSymbolGoal:
-        if self.allowed_fallback is self.desired_capability:
-            raise ValueError("allowed_fallback must differ from desired_capability")
+        if self.allowed_fallback is not None and (
+            self.desired_capability is not ReadinessCapability.CANDIDATE_RANKING
+            or self.allowed_fallback is not ReadinessCapability.PRICE_ANALYSIS
+        ):
+            raise ValueError("allowed_fallback must be a lower readiness capability")
         return self
 
 

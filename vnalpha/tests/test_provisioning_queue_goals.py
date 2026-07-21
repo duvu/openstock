@@ -117,6 +117,11 @@ def test_provisioning_goal_contract() -> None:
         versionless_payload.pop("schema_version")
         with pytest.raises(InvalidProvisioningGoalError):
             parse_goal_payload(dumps(versionless_payload))
+    fallback_upgrade_payload = loads(first.payload_json())
+    fallback_upgrade_payload["desired_capability"] = "PRICE_ANALYSIS"
+    fallback_upgrade_payload["allowed_fallback"] = "CANDIDATE_RANKING"
+    with pytest.raises(InvalidProvisioningGoalError):
+        parse_goal_payload(dumps(fallback_upgrade_payload))
     with pytest.raises(InvalidProvisioningGoalError):
         parse_goal_payload(
             first.payload_json().replace("VALUATION_CONTEXT", "UNKNOWN_CONTEXT")
