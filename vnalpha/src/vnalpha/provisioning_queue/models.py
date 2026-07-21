@@ -172,9 +172,9 @@ _GOAL_PAYLOAD_ADAPTER: Final = TypeAdapter(_GoalPayload)
 
 
 def parse_goal_payload(payload_json: str) -> ProvisioningGoal:
-    if len(payload_json.encode("utf-8")) > MAX_GOAL_PAYLOAD_BYTES:
-        raise InvalidProvisioningGoalError("invalid provisioning goal payload")
     try:
+        if len(payload_json.encode("utf-8")) > MAX_GOAL_PAYLOAD_BYTES:
+            raise ValueError("payload exceeds maximum size")
         payload = loads(payload_json)
         if not isinstance(payload, dict) or "schema_version" not in payload:
             raise ValueError("schema_version is required")
@@ -184,7 +184,7 @@ def parse_goal_payload(payload_json: str) -> ProvisioningGoal:
         ):
             raise ValueError("schema_version is unsupported")
         return _GOAL_PAYLOAD_ADAPTER.validate_json(payload_json, strict=True)
-    except (JSONDecodeError, ValidationError, ValueError):
+    except (JSONDecodeError, UnicodeEncodeError, ValidationError, ValueError):
         raise InvalidProvisioningGoalError(
             "invalid provisioning goal payload"
         ) from None

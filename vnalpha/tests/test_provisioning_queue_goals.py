@@ -136,6 +136,7 @@ def test_provisioning_goal_contract() -> None:
         first.payload_json().replace("policy-v1", "https://example.invalid/$(curl)"),
         first.payload_json()[:-1] + ',"credential":"Bearer secret-value"}',
         "x" * (MAX_GOAL_PAYLOAD_BYTES + 1),
+        "\ud800",
     ):
         with pytest.raises(InvalidProvisioningGoalError) as error:
             parse_goal_payload(payload)
