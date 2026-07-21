@@ -324,6 +324,11 @@ domain = "application"
 test = "tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract"
 
 [[contract]]
+id = "provisioning-queue-repository-durable-lifecycle-contract"
+domain = "application"
+test = "tests/test_provisioning_queue_repository.py::test_durable_provisioning_queue_contract"
+
+[[contract]]
 id = "artifact-readiness-service-test-artifact-readiness-contract"
 domain = "data"
 test = "tests/test_artifact_readiness.py::test_artifact_readiness_contract"

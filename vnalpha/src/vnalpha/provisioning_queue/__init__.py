@@ -16,9 +16,27 @@ from vnalpha.provisioning_queue.models import (
     goal_type,
     parse_goal_payload,
 )
+from vnalpha.provisioning_queue.queue_models import (
+    ProvisioningJob,
+    ProvisioningJobId,
+    ProvisioningJobLeaseError,
+    ProvisioningJobNotFoundError,
+    ProvisioningJobStatus,
+    ProvisioningJobTransitionError,
+    ProvisioningQueueError,
+    ProvisioningQueueStorageError,
+    ProvisioningQueueValidationError,
+    QueueRuntimeSettings,
+    QueueSubmitResult,
+)
+from vnalpha.provisioning_queue.repository import (
+    DEFAULT_QUEUE_PATH,
+    ProvisioningQueue,
+)
 
 __all__ = [
     "CURRENT_GOAL_SCHEMA_VERSION",
+    "DEFAULT_QUEUE_PATH",
     "EnsureCurrentSymbolGoal",
     "FinalizeMarketSessionGoal",
     "GoalEnrichment",
@@ -27,8 +45,20 @@ __all__ = [
     "MAX_DATASET_RANGE_DAYS",
     "MAX_GOAL_PAYLOAD_BYTES",
     "ProvisioningGoal",
+    "ProvisioningJob",
+    "ProvisioningJobId",
+    "ProvisioningJobLeaseError",
+    "ProvisioningJobNotFoundError",
+    "ProvisioningJobStatus",
+    "ProvisioningJobTransitionError",
+    "ProvisioningQueue",
+    "ProvisioningQueueError",
+    "ProvisioningQueueStorageError",
+    "ProvisioningQueueValidationError",
     "QueueDataset",
     "QueueEntityType",
+    "QueueRuntimeSettings",
+    "QueueSubmitResult",
     "RefreshMode",
     "SyncDatasetRangeGoal",
     "goal_identity",
