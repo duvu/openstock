@@ -11,17 +11,19 @@ policy:
 
 changes:
 
-  optimize-test-execution-feedback-loop:
-    status: planned
+  consolidate-authoritative-test-suite:
+    status: partial
     github_issues: [348]
     roadmap_state: scheduled
     summary: >-
-      Establish contract-level H+1 coverage, checked test ownership, path-aware
-      validation lanes, duplicate-execution removal, isolated DuckDB fixture
-      reuse and evidence-gated parallelization without weakening correctness.
+      Enforce a 60-second development loop and consolidate the repository to a
+      checked 180–220 authoritative contract inventory (hard cap 250), with
+      duplicate execution, test and checker removal plus isolated DuckDB reuse.
     evidence: >-
       Issue #348 owns the normative policy, spec-first gate, phased execution
-      plan and before/after acceptance evidence. Implementation has not started.
+      plan and before/after acceptance evidence. Initial routing, aggregate
+      de-duplication and fixture work are implemented; inventory consolidation
+      and final evidence remain incomplete.
 
   validate-daily-equity-ranking:
     status: partial

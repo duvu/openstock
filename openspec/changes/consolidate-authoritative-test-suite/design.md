@@ -2,7 +2,7 @@
 
 OpenStock currently has more than three thousand `vnalpha` tests plus `vnstock`, repository, packaging and installed-host checks. The root aggregate runs standalone R0 and R4 collections immediately before or after the full `vnalpha` suite that already collects those files, and `openstock-verify --ci` is invoked through more than one aggregate path. Pull requests also run broad component jobs without a checked mapping from changed paths to the contracts they can affect.
 
-Issue #348 defines a contract-level H+1 policy and requires measured optimization rather than an arbitrary deletion target. The change must preserve high-risk financial, point-in-time, lineage, transaction, recovery, fail-closed, migration and package scenarios. Every before/after claim must identify the exact commit, machine/runtime identity, command, collection count and duration.
+Issue #348 defines a contract-level H+1 policy and requires a compact inventory of approximately 180–220 authoritative tests, with a hard cap of 250. The change must preserve high-risk financial, point-in-time, lineage, transaction, recovery, fail-closed, migration and package scenarios. Every before/after claim must identify the exact commit, machine/runtime identity, command, collection count and duration.
 
 The repository already provides the authoritative boundaries: root Make targets, `.github/workflows`, `scripts/check-repo-consistency.py`, `vnalpha` pytest configuration and package acceptance scripts. The design extends those seams instead of creating a parallel validation system.
 
@@ -13,7 +13,7 @@ Stakeholders are developers running local validation, pull-request authors, revi
 **Goals:**
 
 - Make the minimum sufficient test set explicit at the public-contract level.
-- Assign every test file to exactly one checked domain or narrow allowlist.
+- Reduce the retained authoritative inventory to 180–220 tests and fail consistency above 250.
 - Avoid executing the same pytest file more than once in an aggregate lane.
 - Route pull requests to consistency, smoke, affected-domain, full-regression and package lanes using fail-closed path classification.
 - Reuse expensive DuckDB migration setup without sharing mutable database state.
@@ -22,7 +22,7 @@ Stakeholders are developers running local validation, pull-request authors, revi
 
 **Non-Goals:**
 
-- Deleting a fixed percentage of tests or weakening a contract to meet a time target.
+- Weakening a contract to meet the inventory or time target.
 - Removing standalone R0 or R4 developer commands.
 - Replacing full nightly, release or manual regression and package acceptance.
 - Treating skipped, cancelled or unknown jobs as success.
@@ -31,9 +31,9 @@ Stakeholders are developers running local validation, pull-request authors, revi
 
 ## Decisions
 
-### 1. A TOML manifest is the canonical test inventory
+### 1. A concise manifest is the canonical authoritative inventory
 
-`vnalpha/tests/suites/manifest.toml` will assign each `test_*.py` file to exactly one of `vnalpha-data`, `vnalpha-research`, `vnalpha-application`, `shared-smoke` or `migration`. Each file entry will list the public contracts it owns and classify retained scenarios as canonical H, canonical +1 or an approved named risk exception.
+The replacement manifest will assign each retained public or approved risk contract to one test node and one domain, and will enforce the 250-test hard cap. The current file-level suite manifest is an interim routing inventory; it is not sufficient evidence for a contract-level budget because one suite entry can select thousands of nodes.
 
 TOML is selected because Python 3.11 can parse it with `tomllib` in the repository consistency job without installing application dependencies. Directory naming or pytest markers alone were rejected: names drift, markers are easy to omit and neither supplies replacement evidence for consolidation.
 
@@ -43,7 +43,7 @@ TOML is selected because Python 3.11 can parse it with `tomllib` in the reposito
 
 `scripts/run-test-suite.py` will parse the manifest, resolve one or more domains, deduplicate paths while preserving stable order and either print the plan or invoke pytest once. Standalone Make targets remain thin named selections. Aggregate targets select the full inventory once and must not call R0/R4 around it.
 
-A manifest-aware checker will fail for an unassigned file, a multiply assigned file, a missing path, an unsupported role or exception category, a contract without H and +1, or the same file repeated in an aggregate execution plan. Direct hand-maintained pytest lists were rejected because they reproduce the drift this change is intended to remove.
+A manifest-aware checker will fail for a missing test node, duplicate contract identifier, unsupported risk exception, unclassified new test or a count above 250. Direct hand-maintained pytest lists were rejected because they reproduce the drift this change is intended to remove.
 
 ### 3. Change impact is a typed, fail-closed classification
 
@@ -81,7 +81,7 @@ One canonical schema manifest replaces repeated hard-coded table counts/lists; d
 
 ### 8. Measurement artifacts are durable completion evidence
 
-`openspec/changes/optimize-test-execution-feedback-loop/evidence/` will contain baseline and final reports with commit, dirty state, OS, CPU, memory, Python, DuckDB, pytest and dependency identity; collection count; sequential wall time; duration by file/domain; top 100 slow tests; repeated aggregate files; and measurable migration counts. CI evidence records job wall times and conclusions for the exact final commit.
+`openspec/changes/consolidate-authoritative-test-suite/evidence/` will contain baseline and final reports with commit, dirty state, OS, CPU, memory, Python, DuckDB, pytest and dependency identity; collection count; sequential wall time; duration by file/domain; top 100 slow tests; repeated aggregate files; and measurable migration counts. CI evidence records job wall times and conclusions for the exact final commit.
 
 The local fast-smoke target is accepted only at or below 60 seconds in the recorded environment. Required-PR improvement must be material and compared on equivalent runner/environment data; otherwise the remaining blocker is explicitly recorded and the task remains incomplete.
 

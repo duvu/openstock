@@ -52,3 +52,18 @@ Before/after collection, runtime, duplicate and migration measurements SHALL ide
 #### Scenario: A performance comparison is published
 - **WHEN** final evidence claims improvement
 - **THEN** it includes both exact commits, clean/dirty state, commands, counts, durations and matching environment identity.
+
+### Requirement: Routing SHALL classify changed paths fail-closed
+Routing SHALL classify normalized repository-relative paths as
+`docs_openspec_only`, `vnalpha`, `vnstock`, `packaging`, `shared_contract` or
+`test_or_workflow_infrastructure`. Unknown paths shall fail rather than receive
+a docs-only disposition. Routing, manifest, migration, shared-fixture, pytest,
+Make and workflow changes shall require full appropriate regression.
+
+#### Scenario: Documentation-only work changes
+- **WHEN** all changed paths are documentation or OpenSpec artifacts
+- **THEN** routing selects consistency/spec and deliberately skips runtime lanes.
+
+#### Scenario: Infrastructure changes
+- **WHEN** a manifest, fixture, migration, runner, Make target or workflow changes
+- **THEN** routing selects full regression in addition to consistency.
