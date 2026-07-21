@@ -95,6 +95,7 @@ def test_provisioning_goal_contract() -> None:
     assert goal_type(range_goal) is GoalType.SYNC_DATASET_RANGE
     assert goal_type(finalization_goal) is GoalType.FINALIZE_MARKET_SESSION
     assert parse_goal_payload(first.payload_json()) == first
+    assert parse_goal_payload(range_goal.payload_json()) == range_goal
     assert parse_goal_payload(finalization_goal.payload_json()) == finalization_goal
     for distinct_range_goal in (
         range_goal.model_copy(update={"entity_id": "HNXINDEX"}),
@@ -104,10 +105,13 @@ def test_provisioning_goal_contract() -> None:
         range_goal.model_copy(update={"contract_version": "dataset-range-v2"}),
     ):
         assert goal_identity(range_goal) != goal_identity(distinct_range_goal)
-    with pytest.raises(InvalidProvisioningGoalError):
-        parse_goal_payload(
-            first.payload_json().replace('"schema_version":1', '"schema_version":2')
-        )
+    for unsupported_schema in ("2", "true", "1.0"):
+        with pytest.raises(InvalidProvisioningGoalError):
+            parse_goal_payload(
+                first.payload_json().replace(
+                    '"schema_version":1', f'"schema_version":{unsupported_schema}'
+                )
+            )
     for versionless_goal in (first, range_goal, finalization_goal):
         versionless_payload = loads(versionless_goal.payload_json())
         versionless_payload.pop("schema_version")

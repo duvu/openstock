@@ -319,6 +319,11 @@ domain = "data"
 test = "tests/test_data_provisioning_runtime_hardening.py::test_market_regime_builder_receives_date_and_complete_is_success"
 
 [[contract]]
+id = "provisioning-queue-goals-test-provisioning-goal-contract"
+domain = "application"
+test = "tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract"
+
+[[contract]]
 id = "dates-testresolvedatetoday-test-none-returns-today"
 domain = "application"
 test = "tests/test_dates.py::TestResolveDateToday::test_none_returns_today"
