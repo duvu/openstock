@@ -15,8 +15,8 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 - [x] 2.1 Add artifact states and capability-scoped readiness.
 - [x] 2.2 Add source/provider/auth/persistence-aware repairability.
 - [x] 2.3 Report exact missing ranges and bounded actions without writing or calling providers.
-- [x] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`. Evidence: `9a6f516843eda890bd5d13e9bbfc4a7612e2eecc`, hardened by `65c329393fdbccae00c7cae82889a11c41861123`.
-- [x] 2.5 Add deterministic identities, enrichment normalization and collision tests. Evidence: `65c329393fdbccae00c7cae82889a11c41861123`; authoritative `vnalpha/tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract`; `make test-loop TEST=tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract` passed. The authoritative inventory classifies this contract; its plan retains four pre-existing unclassified contracts owned outside #338.
+- [x] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`. Evidence: `9a6f516843eda890bd5d13e9bbfc4a7612e2eecc`, hardened by `9c58212171db4e59f78cca7f294679a64b1aa493`.
+- [x] 2.5 Add deterministic identities, enrichment normalization and collision tests. Evidence: `9c58212171db4e59f78cca7f294679a64b1aa493`; authoritative `vnalpha/tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract`; `make test-loop TEST=tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract` passed. The authoritative inventory classifies this contract; its plan retains four pre-existing unclassified contracts owned outside #338.
 
 ## 3. Queue repository — #323
 
