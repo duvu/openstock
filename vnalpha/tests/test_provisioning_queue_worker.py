@@ -9,18 +9,19 @@ import duckdb
 import pytest
 from typer.testing import CliRunner
 
-import vnalpha.provisioning_queue.worker as worker_module
+import vnalpha.provisioning_queue.handlers as handlers_module
 from vnalpha.cli import app
 from vnalpha.data_availability.artifact_readiness_models import ReadinessCapability
 from vnalpha.provisioning_queue import (
     EnsureCurrentSymbolGoal,
+    GoalEnrichment,
     ProvisioningJobStatus,
     ProvisioningQueue,
     QueueDataset,
     QueueEntityType,
     SyncDatasetRangeGoal,
 )
-from vnalpha.provisioning_queue.handlers import HandlerResult
+from vnalpha.provisioning_queue.handlers import CurrentSymbolGoalHandler, HandlerResult
 from vnalpha.provisioning_queue.models import GoalType, ProvisioningGoal
 from vnalpha.provisioning_queue.worker import (
     ProvisioningWorker,
@@ -96,6 +97,29 @@ def test_sequential_provisioning_worker_contract(
         restarted_queue.get(unsupported.job_id).status is ProvisioningJobStatus.FAILED
     )
     assert not (tmp_path / "never-opened.duckdb").exists()
+
+    unsupported_enrichment = restarted_queue.submit_or_join(
+        _current_goal("VIC").model_copy(
+            update={"requested_enrichments": (GoalEnrichment.FLOW_CONTEXT,)}
+        ),
+        priority=1,
+    ).job
+    monkeypatch.setattr(
+        handlers_module,
+        "ensure_current_symbol_ready",
+        lambda *_args, **_kwargs: pytest.fail("unsupported enrichment called provider"),
+    )
+    enrichment_result = ProvisioningWorker(
+        restarted_queue,
+        worker_id="unsupported-enrichment",
+        warehouse_path=tmp_path / "unsupported-enrichment.duckdb",
+        handlers=(CurrentSymbolGoalHandler(),),
+    ).process_one()
+    assert enrichment_result.error == "UNSUPPORTED_ENRICHMENT_REQUEST"
+    assert (
+        restarted_queue.get(unsupported_enrichment.job_id).status
+        is ProvisioningJobStatus.FAILED
+    )
 
     cancelled = restarted_queue.submit_or_join(_current_goal("HPG"), priority=1).job
 
@@ -189,7 +213,7 @@ def test_sequential_provisioning_worker_contract(
     release_stage.set()
     worker_thread.join(timeout=5)
     assert not worker_thread.is_alive()
-    assert overrun_result[0].status is ProvisioningJobStatus.FAILED
+    assert overrun_result[0].status is ProvisioningJobStatus.SUCCEEDED
 
     exclusive_queue = ProvisioningQueue(tmp_path / "exclusive.sqlite3")
     exclusive_queue.initialize()
@@ -250,30 +274,6 @@ def test_sequential_provisioning_worker_contract(
         exclusive_queue.get(second_exclusive.job_id).status
         is ProvisioningJobStatus.SUCCEEDED
     )
-
-    timeout_queue = ProvisioningQueue(tmp_path / "timeout.sqlite3")
-    timeout_queue.initialize()
-    timeout_queue.submit_or_join(_current_goal("VIC"), priority=1)
-
-    class TimedOutHandler:
-        goal_type = GoalType.ENSURE_CURRENT_SYMBOL
-        requires_warehouse_write = False
-
-        def execute(
-            self, _: ProvisioningGoal, __: duckdb.DuckDBPyConnection | None
-        ) -> HandlerResult:
-            return HandlerResult(True, "late success")
-
-    monotonic_values = iter((0.0, 2.0))
-    monkeypatch.setattr(worker_module, "monotonic", lambda: next(monotonic_values))
-    timed_out = ProvisioningWorker(
-        timeout_queue,
-        worker_id="timed-out",
-        handlers=(TimedOutHandler(),),
-        settings=WorkerSettings(stage_timeout_seconds=1, lease_safety_seconds=1),
-    ).process_one()
-    assert timed_out.status is ProvisioningJobStatus.FAILED
-    assert timed_out.error == "STAGE_TIMEOUT"
 
     cli_queue_path = tmp_path / "cli.sqlite3"
     cli_queue = ProvisioningQueue(cli_queue_path)

@@ -47,6 +47,8 @@ class CurrentSymbolGoalHandler:
     ) -> HandlerResult:
         match goal:
             case EnsureCurrentSymbolGoal() as current_goal:
+                if current_goal.requested_enrichments:
+                    return HandlerResult(False, "UNSUPPORTED_ENRICHMENT_REQUEST")
                 if connection is None:
                     raise CurrentSymbolHandlerConfigurationError(
                         "current-symbol provisioning requires a writable warehouse"

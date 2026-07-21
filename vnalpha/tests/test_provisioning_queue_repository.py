@@ -122,6 +122,10 @@ def test_durable_provisioning_queue_contract(tmp_path) -> None:
         ).lease_owner
         == "worker-symbol"
     )
+    with pytest.raises(ProvisioningJobLeaseError):
+        queue.acknowledge_cancellation(
+            claimed_symbol.job_id, "worker-symbol", "not an administrative request"
+        )
     assert queue.cancel(claimed_symbol.job_id).cancellation_requested
     assert queue.requeue_expired(now=now + timedelta(seconds=71))
     assert queue.get(claimed_symbol.job_id).status is ProvisioningJobStatus.CANCELLED
