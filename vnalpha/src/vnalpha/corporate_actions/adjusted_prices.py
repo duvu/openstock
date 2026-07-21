@@ -179,7 +179,6 @@ def persist_adjustment_factor(
             """,
             [factor_id, prior[0]],
         )
-    conn.commit()
     return factor_id
 
 
@@ -309,7 +308,6 @@ def build_adjusted_ohlcv(
             ],
         )
         rows_written += 1
-    conn.commit()
     return AdjustedPriceBuildResult(
         symbol=symbol,
         rows_written=rows_written,
@@ -355,7 +353,6 @@ def rebuild_pending_adjusted_ranges(
             [resolution_ref, signal_id],
         )
         results.append(result)
-    conn.commit()
     return results
 
 

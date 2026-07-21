@@ -51,32 +51,21 @@ class CommandScreen(Screen):
 
         self.query_one("#cmd-bar", CommandInput).action_clear_input()
 
-        conn = None
         try:
             from vnalpha.commands.executor import CommandExecutor
             from vnalpha.commands.renderers.textual_renderer import result_to_markup
-            from vnalpha.warehouse.connection import get_connection
-            from vnalpha.warehouse.migrations import run_migrations
+            from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-            conn = get_connection()
-            run_migrations(conn=conn)
-
-            result = CommandExecutor(
-                conn,
-                surface="tui",
-                default_date=self.target_date,
-                default_date_is_implicit=self.target_date_is_implicit,
-            ).execute(text)
+            with WarehouseWriteCoordinator().transaction() as conn:
+                result = CommandExecutor(
+                    conn,
+                    surface="tui",
+                    default_date=self.target_date,
+                    default_date_is_implicit=self.target_date_is_implicit,
+                ).execute(text)
             markup = result_to_markup(result)
             log.show_result(text, markup)
 
         except Exception as exc:
             capture_exception(exc)
             log.show_error(text, "Command failed. Check logs and retry.")
-        finally:
-            if conn is not None:
-                try:
-                    conn.close()
-                except Exception as exc:
-                    capture_exception(exc)
-                    log.show_error(text, "Command failed. Check logs and retry.")

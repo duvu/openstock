@@ -25,10 +25,10 @@ def shortlist(
     set_correlation_id()
     with command_lifecycle("shortlist"):
         from vnalpha.tools.research_intelligence import generate_shortlist
-        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        result = generate_shortlist(conn, date=date, top=limit, min_score=min_score)
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = generate_shortlist(conn, date=date, top=limit, min_score=min_score)
         data = result.data if isinstance(result.data, dict) else {}
         candidates = data.get("shortlist") if isinstance(data, dict) else []
         if not isinstance(candidates, list):

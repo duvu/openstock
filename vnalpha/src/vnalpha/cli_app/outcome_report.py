@@ -23,13 +23,10 @@ def outcome_report(
         from vnalpha.core.dates import resolve_date
         from vnalpha.outcomes.calibration import generate_calibration_report
         from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        as_of = resolve_date(date) if date else None
-        report = generate_calibration_report(conn, horizon, as_of_date=as_of)
-        conn.close()
+        with get_connection() as conn:
+            as_of = resolve_date(date) if date else None
+            report = generate_calibration_report(conn, horizon, as_of_date=as_of)
         console = Console()
         console.print(
             Panel(

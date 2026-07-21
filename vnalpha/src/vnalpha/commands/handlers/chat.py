@@ -14,14 +14,12 @@ def handle_chat(parsed: ParsedCommand, **kwargs) -> CommandResult:
         raise CommandValidationError("chat command requires an active connection.")
 
     from vnalpha.warehouse.chat_repo import create_chat_session
-    from vnalpha.warehouse.migrations import run_migrations
 
     target_date = (
         parsed.options.get("date")
         if isinstance(parsed.options.get("date"), str)
         else None
     )
-    run_migrations(conn=conn)
     chat_session_id = create_chat_session(
         conn,
         surface=kwargs.get("surface", "tui-chat"),

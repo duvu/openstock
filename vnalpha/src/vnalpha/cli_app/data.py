@@ -17,7 +17,6 @@ from vnalpha.scoring.policy import (
     BASELINE_SCORING_POLICY,
     parse_scoring_policy_reference,
 )
-from vnalpha.warehouse.migrations import run_migrations
 
 app = typer.Typer(help="Explicit bounded data downloads and derived-data builds.")
 download_app = typer.Typer(help="Download approved raw market data.")
@@ -114,11 +113,10 @@ def status_fundamentals(
     except ValueError as exc:
         raise typer.BadParameter("scope must be CONSOLIDATED or SEPARATE") from exc
 
-    conn = get_connection()
-    run_migrations(conn=conn)
-    snapshot = as_of_snapshot(
-        conn, symbol.upper(), as_of, statement_scope=statement_scope
-    )
+    with get_connection() as conn:
+        snapshot = as_of_snapshot(
+            conn, symbol.upper(), as_of, statement_scope=statement_scope
+        )
     typer.echo(
         json.dumps(
             {
@@ -140,14 +138,13 @@ def status_corporate_actions(
     from vnalpha.ingestion.corporate_actions import corporate_action_status
     from vnalpha.warehouse.connection import get_connection
 
-    conn = get_connection()
-    run_migrations(conn=conn)
-    typer.echo(
-        json.dumps(
-            corporate_action_status(conn, symbol=symbol, start=start, end=end),
-            sort_keys=True,
+    with get_connection() as conn:
+        typer.echo(
+            json.dumps(
+                corporate_action_status(conn, symbol=symbol, start=start, end=end),
+                sort_keys=True,
+            )
         )
-    )
 
 
 @build_app.command("canonical")
@@ -298,22 +295,21 @@ def _run_corporate_actions(
     *, symbol: str, start: str | None, end: str | None, source: str | None
 ) -> None:
     from vnalpha.ingestion.corporate_actions import sync_corporate_actions
-    from vnalpha.warehouse.connection import get_connection
+    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
     normalized_symbol = symbol.strip().upper()
     if not normalized_symbol:
         raise typer.BadParameter("symbol must not be empty")
     set_correlation_id()
     with command_lifecycle("data download corporate-actions"):
-        conn = get_connection()
-        run_migrations(conn=conn)
-        result = sync_corporate_actions(
-            conn,
-            symbol=normalized_symbol,
-            start=start,
-            end=end,
-            source=source,
-        )
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = sync_corporate_actions(
+                conn,
+                symbol=normalized_symbol,
+                start=start,
+                end=end,
+                source=source,
+            )
         typer.echo(json.dumps(result, sort_keys=True))
         if result["status"] in {"FAILED", "UNSUPPORTED"}:
             raise typer.Exit(code=1)
@@ -328,15 +324,14 @@ def _run(request: DataProvisioningRequest) -> None:
         except DataProvisioningValidationError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1) from exc
-        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        try:
-            result = DataProvisioningService(conn).execute(request)
-        except DataProvisioningValidationError as exc:
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(code=1) from exc
+        with WarehouseWriteCoordinator().transaction() as conn:
+            try:
+                result = DataProvisioningService(conn).execute(request)
+            except DataProvisioningValidationError as exc:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(code=1) from exc
         typer.echo(_render(result))
         if result.status is ProvisioningStatus.FAILED:
             raise typer.Exit(code=1)

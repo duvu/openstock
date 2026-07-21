@@ -25,19 +25,19 @@ def build_canonical_cmd(
     """Build canonical OHLCV from raw data."""
     set_correlation_id()
     with command_lifecycle("build canonical"):
-        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        result = _execute(
-            conn,
-            DataProvisioningRequest(
-                "build",
-                "canonical",
-                symbol=symbol,
-                interval=interval,
-                allow_all_symbols=symbol is None,
-            ),
-        )
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = _execute(
+                conn,
+                DataProvisioningRequest(
+                    "build",
+                    "canonical",
+                    symbol=symbol,
+                    interval=interval,
+                    allow_all_symbols=symbol is None,
+                ),
+            )
         typer.echo(
             f"Canonical build complete: {result.counts['upserted']} rows, "
             f"{result.counts['rejected']} symbols rejected"
@@ -54,15 +54,10 @@ def build_adjustment_factors_cmd(
         from vnalpha.corporate_actions.adjusted_prices import (
             rebuild_pending_adjusted_ranges,
         )
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        try:
-            run_migrations(conn=conn)
+        with WarehouseWriteCoordinator().transaction() as conn:
             results = rebuild_pending_adjusted_ranges(conn, limit=limit)
-        finally:
-            conn.close()
         typer.echo(
             f"Adjusted ranges rebuilt: {len(results)}; "
             f"rows={sum(item.rows_written for item in results)}"
@@ -79,20 +74,15 @@ def build_adjusted_ohlcv_cmd(
     set_correlation_id()
     with command_lifecycle("build adjusted-ohlcv"):
         from vnalpha.corporate_actions.adjusted_prices import build_adjusted_ohlcv
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        try:
-            run_migrations(conn=conn)
+        with WarehouseWriteCoordinator().transaction() as conn:
             result = build_adjusted_ohlcv(
                 conn,
                 symbol,
                 from_date=from_date,
                 to_date=to_date,
             )
-        finally:
-            conn.close()
         typer.echo(
             f"Adjusted OHLCV built: symbol={result.symbol} "
             f"rows={result.rows_written} factors={result.factors_used} "
@@ -117,20 +107,20 @@ def build_features_cmd(
     """Compute technical features for all symbols on the given date."""
     set_correlation_id()
     with command_lifecycle("build features"):
-        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        result = _execute(
-            conn,
-            DataProvisioningRequest(
-                "build",
-                "features",
-                symbols=tuple(symbols.split(",")) if symbols else None,
-                allow_all_symbols=symbols is None,
-                date=date,
-                benchmark=benchmark,
-            ),
-        )
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = _execute(
+                conn,
+                DataProvisioningRequest(
+                    "build",
+                    "features",
+                    symbols=tuple(symbols.split(",")) if symbols else None,
+                    allow_all_symbols=symbols is None,
+                    date=date,
+                    benchmark=benchmark,
+                ),
+            )
         typer.echo(
             f"Features built: {result.counts['built']} symbols, "
             f"skipped: {result.counts['skipped']}"
@@ -144,12 +134,12 @@ def build_market_regime_cmd(
     """Build one bounded persisted market-regime snapshot."""
     set_correlation_id()
     with command_lifecycle("build market-regime"):
-        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        result = _execute(
-            conn, DataProvisioningRequest("build", "market-regime", date=date)
-        )
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = _execute(
+                conn, DataProvisioningRequest("build", "market-regime", date=date)
+            )
         typer.echo(
             f"Market regime built: {result.resolved_date} ({result.status.value})"
         )
@@ -162,12 +152,12 @@ def build_sector_strength_cmd(
     """Build bounded persisted sector-strength snapshots for one date."""
     set_correlation_id()
     with command_lifecycle("build sector-strength"):
-        from vnalpha.warehouse.connection import get_connection
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        result = _execute(
-            conn, DataProvisioningRequest("build", "sector-strength", date=date)
-        )
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = _execute(
+                conn, DataProvisioningRequest("build", "sector-strength", date=date)
+            )
         typer.echo(
             f"Sector strength built: {result.counts['sectors']} sectors "
             f"({result.status.value})"

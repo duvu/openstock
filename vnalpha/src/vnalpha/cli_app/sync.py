@@ -29,20 +29,18 @@ def sync_symbols_cmd(
     """Sync symbol master from vnstock-service."""
     set_correlation_id()
     with command_lifecycle("sync symbols"):
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        result = _execute(
-            conn,
-            DataProvisioningRequest(
-                "download",
-                "symbols",
-                source=source,
-                authoritative_snapshot=authoritative,
-            ),
-        )
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = _execute(
+                conn,
+                DataProvisioningRequest(
+                    "download",
+                    "symbols",
+                    source=source,
+                    authoritative_snapshot=authoritative,
+                ),
+            )
         typer.echo(
             f"Synced {result.counts['synced']} symbols (errors: {result.counts['errors']})"
         )
@@ -70,8 +68,7 @@ def sync_ohlcv_cmd(
     set_correlation_id()
     with command_lifecycle("sync ohlcv"):
         from vnalpha.core.universe import parse_symbols_or_universe
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
         try:
             resolved = parse_symbols_or_universe(symbols, universe)
@@ -79,22 +76,21 @@ def sync_ohlcv_cmd(
             typer.echo(f"Error: {err}", err=True)
             raise typer.Exit(code=1) from err
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        result = _execute(
-            conn,
-            DataProvisioningRequest(
-                "download",
-                "ohlcv",
-                symbols=tuple(resolved) if resolved is not None else None,
-                allow_all_symbols=resolved is None,
-                start=start,
-                end=end,
-                source=source,
-                interval=interval,
-            ),
-            exit_on_failure=False,
-        )
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = _execute(
+                conn,
+                DataProvisioningRequest(
+                    "download",
+                    "ohlcv",
+                    symbols=tuple(resolved) if resolved is not None else None,
+                    allow_all_symbols=resolved is None,
+                    start=start,
+                    end=end,
+                    source=source,
+                    interval=interval,
+                ),
+                exit_on_failure=False,
+            )
         typer.echo(
             f"OHLCV sync complete: {result.counts['inserted']} inserted, {result.counts['skipped']} skipped"
         )
@@ -127,23 +123,21 @@ def sync_index_cmd(
     """
     set_correlation_id()
     with command_lifecycle("sync index"):
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        result = _execute(
-            conn,
-            DataProvisioningRequest(
-                "download",
-                "index",
-                symbol=symbol,
-                start=start,
-                end=end,
-                source=source,
-                interval=interval,
-            ),
-        )
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = _execute(
+                conn,
+                DataProvisioningRequest(
+                    "download",
+                    "index",
+                    symbol=symbol,
+                    start=start,
+                    end=end,
+                    source=source,
+                    interval=interval,
+                ),
+            )
         typer.echo(
             f"Index sync complete ({symbol}): {result.counts['inserted']} inserted, {result.counts['skipped']} skipped"
         )
@@ -158,23 +152,21 @@ def sync_corporate_actions_cmd(
 ):
     """Sync bounded corporate-action evidence without calculating adjusted prices."""
     from vnalpha.ingestion.corporate_actions import sync_corporate_actions
-    from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
     normalized_symbol = symbol.strip().upper()
     if not normalized_symbol:
         raise typer.BadParameter("symbol must not be empty")
     set_correlation_id()
     with command_lifecycle("sync corporate-actions"):
-        conn = get_connection()
-        run_migrations(conn=conn)
-        result = sync_corporate_actions(
-            conn,
-            symbol=normalized_symbol,
-            start=start,
-            end=end,
-            source=source,
-        )
+        with WarehouseWriteCoordinator().transaction() as conn:
+            result = sync_corporate_actions(
+                conn,
+                symbol=normalized_symbol,
+                start=start,
+                end=end,
+                source=source,
+            )
         status = str(result.get("status", "FAILED"))
         if status in {"FAILED", "UNSUPPORTED"}:
             typer.echo(
@@ -202,8 +194,7 @@ def sync_membership_cmd(
         sync_membership,
         validate_membership_request,
     )
-    from vnalpha.warehouse.connection import get_connection
-    from vnalpha.warehouse.migrations import run_migrations
+    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
     set_correlation_id()
     with command_lifecycle("sync membership"):
@@ -212,18 +203,17 @@ def sync_membership_cmd(
         except ValueError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1) from exc
-        conn = get_connection()
-        run_migrations(conn=conn)
-        try:
-            result = sync_membership(
-                conn,
-                membership_type=membership_type,
-                entity_id=entity_id,
-                source=source,
-            )
-        except ValueError as exc:
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(code=1) from exc
+        with WarehouseWriteCoordinator().transaction() as conn:
+            try:
+                result = sync_membership(
+                    conn,
+                    membership_type=membership_type,
+                    entity_id=entity_id,
+                    source=source,
+                )
+            except ValueError as exc:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(code=1) from exc
         typer.echo(
             f"Membership sync {result.status.value}: {result.member_count} members "
             f"for {result.membership_type}:{result.entity_id}"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import Optional
 
 import typer
@@ -51,11 +52,25 @@ def register(app: typer.Typer) -> None:
             from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
             from vnalpha.core.text_safety import sanitize_error_summary, sanitize_text
             from vnalpha.observability.errors import capture_exception
-            from vnalpha.warehouse.connection import get_connection
-            from vnalpha.warehouse.migrations import run_migrations
+            from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
             console = Console()
             error_console = Console(stderr=True)
+
+            @contextmanager
+            def coordinated_connection():
+                try:
+                    with WarehouseWriteCoordinator().transaction() as connection:
+                        yield connection
+                except Exception as exc:  # noqa: BLE001
+                    capture_exception(exc)
+                    error_console.print(
+                        Text(
+                            "Assistant request failed. Check logs and retry.",
+                            style="red",
+                        )
+                    )
+                    raise typer.Exit(code=1) from exc
 
             if date is not None and date.strip().lower() != "today":
                 try:
@@ -68,23 +83,7 @@ def register(app: typer.Typer) -> None:
                     raise typer.Exit(code=1) from exc
 
             try:
-                conn = get_connection()
-
-                def close_connection() -> None:
-                    try:
-                        conn.close()
-                    except Exception as exc:
-                        capture_exception(exc)
-                        error_console.print(
-                            Text(
-                                "Assistant request failed. Check logs and retry.",
-                                style="red",
-                            )
-                        )
-                        raise typer.Exit(code=1) from exc
-
-                ctx.call_on_close(close_connection)
-                run_migrations(conn=conn)
+                conn = ctx.with_resource(coordinated_connection())
             except Exception as exc:
                 capture_exception(exc)
                 error_console.print(

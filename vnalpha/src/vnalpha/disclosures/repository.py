@@ -67,7 +67,6 @@ def ingest_occurrence(
             json.dumps(occurrence.raw_payload, sort_keys=True),
         ],
     )
-    conn.commit()
     return occurrence_id
 
 
@@ -158,7 +157,6 @@ def normalize_event(
             """,
             [revision_id, current[0]],
         )
-    conn.commit()
     return NormalizedEvent(
         revision_id=revision_id,
         event_id=event_id,

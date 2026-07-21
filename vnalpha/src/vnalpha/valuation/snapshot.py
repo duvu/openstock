@@ -413,7 +413,6 @@ def _persist(
             VALUATION_CONTRACT_VERSION,
         ],
     )
-    conn.commit()
     return ValuationSnapshot(
         snapshot_id=revision_id,
         symbol=snapshot.symbol,

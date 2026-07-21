@@ -70,8 +70,7 @@ def run(
             get_replay,
             run_replay,
         )
-        from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
         spec = _spec_from_options(
             start_date=start_date,
@@ -82,20 +81,14 @@ def run(
             price_basis=price_basis,
             scoring_policy_hash=scoring_policy_hash,
         )
-        conn = get_connection()
-        run_migrations(conn=conn)
-        try:
-            result = run_replay(conn, spec, persist=True)
-            # Read back through the shared persisted-artifact reader so the CLI
-            # reports exactly what the TUI would show.
-            artifact = get_replay(conn, result.replay_id)
-        except ReplayContaminationError as exc:
-            # Future-data / mixed-basis / policy contamination fails closed.
-            raise typer.BadParameter(str(exc)) from exc
-        except ValueError as exc:
-            raise typer.BadParameter(str(exc)) from exc
-        finally:
-            conn.close()
+        with WarehouseWriteCoordinator().transaction() as conn:
+            try:
+                result = run_replay(conn, spec, persist=True)
+                artifact = get_replay(conn, result.replay_id)
+            except ReplayContaminationError as exc:
+                raise typer.BadParameter(str(exc)) from exc
+            except ValueError as exc:
+                raise typer.BadParameter(str(exc)) from exc
 
         _render(artifact, json_output=json_output)
 
@@ -110,11 +103,8 @@ def show(
         from vnalpha.replay.engine import get_replay
         from vnalpha.warehouse.connection import get_connection
 
-        conn = get_connection()
-        try:
+        with get_connection() as conn:
             artifact = get_replay(conn, replay_id)
-        finally:
-            conn.close()
         if artifact is None:
             raise typer.BadParameter(f"No persisted replay with id {replay_id!r}")
         _render(artifact, json_output=json_output)

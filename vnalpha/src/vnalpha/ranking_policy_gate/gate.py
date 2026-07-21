@@ -377,7 +377,6 @@ def record_decision(
             json.dumps(list(verified.dataset_hashes)),
         ],
     )
-    conn.commit()
     return decision_id
 
 

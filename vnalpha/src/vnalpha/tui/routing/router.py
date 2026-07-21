@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
 
     from vnalpha.chat.controller import ChatController
+    from vnalpha.commands.coordinated_executor import CoordinatedCommandExecutor
     from vnalpha.commands.executor import CommandExecutor
     from vnalpha.commands.models import CommandResult, CommandStatus
     from vnalpha.tui.clipboard import ClipboardPort
@@ -54,7 +55,9 @@ class TuiInputRouter:
         self._turn_correlation_id = "unset"
         self._chat_controller: ChatController | None = None
         self._command_conn: DuckDBPyConnection | None = None
-        self._command_executor: CommandExecutor | None = None
+        self._command_executor: CommandExecutor | CoordinatedCommandExecutor | None = (
+            None
+        )
         self._operational_bridge = OperationalCommandBridge()
         self._status_adapter = StatusAdapter(status_bar)
         self._lifecycle_hooks = LifecycleHooks(

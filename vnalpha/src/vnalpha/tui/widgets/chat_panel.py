@@ -88,19 +88,16 @@ if _TEXTUAL_AVAILABLE:
                 from vnalpha.warehouse.chat_repo import (
                     get_or_create_active_chat_session,
                 )
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
+                from vnalpha.warehouse.write_coordinator import (
+                    WarehouseWriteCoordinator,
+                )
 
-                conn = get_connection()
-                try:
-                    run_migrations(conn=conn)
+                with WarehouseWriteCoordinator().transaction() as conn:
                     return get_or_create_active_chat_session(
                         conn,
                         surface="tui-chat",
                         target_date=self._target_date,
                     )
-                finally:
-                    conn.close()
             except Exception as exc:
                 _capture_exception(exc)
                 return None
@@ -264,19 +261,16 @@ else:
                 from vnalpha.warehouse.chat_repo import (
                     get_or_create_active_chat_session,
                 )
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
+                from vnalpha.warehouse.write_coordinator import (
+                    WarehouseWriteCoordinator,
+                )
 
-                conn = get_connection()
-                try:
-                    run_migrations(conn=conn)
+                with WarehouseWriteCoordinator().transaction() as conn:
                     return get_or_create_active_chat_session(
                         conn,
                         surface="tui-chat",
                         target_date=self._target_date,
                     )
-                finally:
-                    conn.close()
             except Exception as exc:
                 _capture_exception(exc)
                 return None

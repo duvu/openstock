@@ -34,10 +34,6 @@ def handle_scoring_policy(
             summary="No database connection.",
         )
 
-    from vnalpha.warehouse.migrations import run_migrations
-
-    run_migrations(conn=conn)
-
     if not parsed.positional:
         subcommand = "active"
     else:

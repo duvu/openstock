@@ -63,23 +63,22 @@ if _TEXTUAL_AVAILABLE:
             answer_panel = self.query_one("#assistant-answer", Static)
             plan_panel = self.query_one("#assistant-plan", Static)
             answer_panel.update(Text("Processing...", style="dim"))
-            conn = None
             try:
                 from vnalpha.assistant.app import AssistantApp
                 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
                 from vnalpha.assistant.models import RefusalMessage
-                from vnalpha.warehouse.connection import get_connection
-                from vnalpha.warehouse.migrations import run_migrations
-
-                conn = get_connection()
-                run_migrations(conn=conn)
-                llm_client = LLMGatewayClient(LLMGatewayConfig.from_env())
-                app = AssistantApp(conn, surface="tui", llm_client=llm_client)
-                result, plan = app.ask(
-                    question,
-                    date=self.target_date,
-                    date_is_implicit=self.target_date_is_implicit,
+                from vnalpha.warehouse.write_coordinator import (
+                    WarehouseWriteCoordinator,
                 )
+
+                with WarehouseWriteCoordinator().transaction() as conn:
+                    llm_client = LLMGatewayClient(LLMGatewayConfig.from_env())
+                    app = AssistantApp(conn, surface="tui", llm_client=llm_client)
+                    result, plan = app.ask(
+                        question,
+                        date=self.target_date,
+                        date_is_implicit=self.target_date_is_implicit,
+                    )
                 if isinstance(result, RefusalMessage):
                     refusal_text = Text("Refused: ", style="red")
                     refusal_text.append(sanitize_text(result.reason))
@@ -107,18 +106,6 @@ if _TEXTUAL_AVAILABLE:
                         style="red",
                     )
                 )
-            finally:
-                if conn is not None:
-                    try:
-                        conn.close()
-                    except Exception as exc:
-                        capture_exception(exc)
-                        answer_panel.update(
-                            Text(
-                                "Assistant request failed. Check logs and retry.",
-                                style="red",
-                            )
-                        )
 else:
 
     class AssistantScreen:  # type: ignore[no-redef]

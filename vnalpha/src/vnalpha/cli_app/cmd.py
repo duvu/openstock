@@ -33,16 +33,13 @@ def register(app: typer.Typer) -> None:
             from vnalpha.commands.executor import CommandExecutor
             from vnalpha.commands.renderers.rich_renderer import render_result
             from vnalpha.core.text_safety import sanitize_text
-            from vnalpha.warehouse.connection import get_connection
-            from vnalpha.warehouse.migrations import run_migrations
+            from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-            conn = None
             try:
-                conn = get_connection()
-                run_migrations(conn=conn)
-                result = CommandExecutor(conn, surface="cli").execute(
-                    command, date_override=date
-                )
+                with WarehouseWriteCoordinator().transaction() as conn:
+                    result = CommandExecutor(conn, surface="cli").execute(
+                        command, date_override=date
+                    )
 
                 try:
                     from rich.console import Console
@@ -56,14 +53,6 @@ def register(app: typer.Typer) -> None:
                 _capture_exception(exc)
                 typer.echo("Command failed. Check logs and retry.", err=True)
                 raise typer.Exit(code=1) from exc
-            finally:
-                if conn is not None:
-                    try:
-                        conn.close()
-                    except Exception as exc:
-                        _capture_exception(exc)
-                        typer.echo("Command failed. Check logs and retry.", err=True)
-                        raise typer.Exit(code=1) from exc
 
             match result.status:
                 case (
