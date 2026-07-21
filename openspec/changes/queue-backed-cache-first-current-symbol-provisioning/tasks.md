@@ -15,8 +15,8 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 - [x] 2.1 Add artifact states and capability-scoped readiness.
 - [x] 2.2 Add source/provider/auth/persistence-aware repairability.
 - [x] 2.3 Report exact missing ranges and bounded actions without writing or calling providers.
-- [x] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`.
-- [x] 2.5 Add deterministic identities, enrichment normalization and collision tests.
+- [x] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`. Evidence: `9a6f516843eda890bd5d13e9bbfc4a7612e2eecc`, hardened by `cd7181d`.
+- [x] 2.5 Add deterministic identities, enrichment normalization and collision tests. Evidence: `cd7181d`; authoritative `vnalpha/tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract`.
 
 ## 3. Queue repository — #323
 
