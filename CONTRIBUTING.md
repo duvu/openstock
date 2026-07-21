@@ -42,6 +42,7 @@ The goal is not high test count. The goal is a small suite where each test prote
 8. A new public or independent risk contract may add at most one authoritative test.
 9. Duplicate or obsolete tests must be merged or deleted, not moved to nightly.
 10. A new fixture, helper, checker or test script must remove more duplication or runtime than it introduces.
+11. If a proposed test cannot be mapped to a distinct public or risk contract, it must not be added.
 
 High-impact boundaries such as point-in-time exclusion, transaction rollback, queue crash/lease recovery, writer exclusion, policy approval/rollback, security and package-state preservation may be modeled as independent risk contracts. Each such contract still owns only one authoritative test.
 
