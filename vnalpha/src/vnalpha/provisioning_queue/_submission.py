@@ -35,6 +35,8 @@ def submit_or_join(
 ) -> QueueSubmitResult:
     normalized_goal = validated_goal(goal)
     normalized_priority = validated_priority(priority)
+    normalized_origin = metadata(origin, field_name="origin")
+    normalized_correlation_id = metadata(correlation_id, field_name="correlation_id")
     timestamp = timestamp_ms(now)
     identity = goal_identity(normalized_goal)
     try:
@@ -72,8 +74,8 @@ def submit_or_join(
                     normalized_priority,
                     normalized_goal.schema_version,
                     normalized_goal.payload_json(),
-                    metadata(origin, field_name="origin"),
-                    metadata(correlation_id, field_name="correlation_id"),
+                    normalized_origin,
+                    normalized_correlation_id,
                     timestamp,
                     timestamp,
                 ),

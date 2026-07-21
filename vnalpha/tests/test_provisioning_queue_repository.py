@@ -107,6 +107,10 @@ def test_durable_provisioning_queue_contract(tmp_path) -> None:
     assert joined_symbol.joined_existing_job
     assert joined_symbol.job.job_id == submitted_symbol.job.job_id
     assert joined_symbol.job.priority == 9
+    with pytest.raises(ProvisioningQueueValidationError):
+        queue.submit_or_join(
+            symbol_goal, priority=1, origin="invalid\nmetadata", now=now
+        )
 
     claimed_symbol = queue.claim("worker-symbol", now=now)
     assert claimed_symbol is not None
