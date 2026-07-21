@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from enum import StrEnum
 from hashlib import sha256
-from json import dumps
+from json import JSONDecodeError, dumps, loads
 from re import fullmatch
 from typing import Annotated, Final, Literal, TypeAlias, assert_never
 
@@ -175,8 +175,11 @@ def parse_goal_payload(payload_json: str) -> ProvisioningGoal:
     if len(payload_json.encode("utf-8")) > MAX_GOAL_PAYLOAD_BYTES:
         raise InvalidProvisioningGoalError("invalid provisioning goal payload")
     try:
-        return _GOAL_PAYLOAD_ADAPTER.validate_json(payload_json)
-    except ValidationError as error:
+        payload = loads(payload_json)
+        if not isinstance(payload, dict) or "schema_version" not in payload:
+            raise ValueError("schema_version is required")
+        return _GOAL_PAYLOAD_ADAPTER.validate_python(payload)
+    except (JSONDecodeError, ValidationError, ValueError) as error:
         raise InvalidProvisioningGoalError(
             "invalid provisioning goal payload"
         ) from error

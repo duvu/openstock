@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from json import dumps, loads
 
 import pytest
 
@@ -106,6 +107,11 @@ def test_provisioning_goal_contract() -> None:
         parse_goal_payload(
             first.payload_json().replace('"schema_version":1', '"schema_version":2')
         )
+    for versionless_goal in (first, range_goal, finalization_goal):
+        versionless_payload = loads(versionless_goal.payload_json())
+        versionless_payload.pop("schema_version")
+        with pytest.raises(InvalidProvisioningGoalError):
+            parse_goal_payload(dumps(versionless_payload))
     with pytest.raises(InvalidProvisioningGoalError):
         parse_goal_payload(
             first.payload_json().replace("VALUATION_CONTEXT", "UNKNOWN_CONTEXT")
