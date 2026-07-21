@@ -21,19 +21,30 @@ def _valid_workflow() -> str:
     branches:
       - main
 jobs:
+  impact:
+    name: Change impact routing
+    run: python scripts/classify-test-impact.py --github-output
   consistency:
     name: Repository consistency
   vnalpha:
     name: vnalpha lint and tests
+    if: needs.impact.outputs.full == 'true'
+  vnalpha-smoke:
+    if: needs.impact.outputs.smoke == 'true'
+  vnalpha-domains:
+    if: contains(fromJSON(needs.impact.outputs.domains), 'vnalpha-application')
   vnstock:
     name: vnstock contracts and package
   required:
     name: Required merge gate
     if: always()
     run: |
-      test \"$CONSISTENCY_RESULT\" = success
-      test \"$VNALPHA_RESULT\" = success
-      test \"$VNSTOCK_RESULT\" = success
+      case \"$IMPACT_RESULT\" in success|skipped) ;; *) exit 1 ;; esac
+      case \"$CONSISTENCY_RESULT\" in success|skipped) ;; *) exit 1 ;; esac
+      case \"$VNALPHA_RESULT\" in success|skipped) ;; *) exit 1 ;; esac
+      case \"$VNALPHA_SMOKE_RESULT\" in success|skipped) ;; *) exit 1 ;; esac
+      case \"$VNALPHA_DOMAINS_RESULT\" in success|skipped) ;; *) exit 1 ;; esac
+      case \"$VNSTOCK_RESULT\" in success|skipped) ;; *) exit 1 ;; esac
 """
 
 
@@ -144,6 +155,53 @@ def test_ci_gate_contract_accepts_stable_required_checks(monkeypatch) -> None:
     module._check_ci_gate_contract(errors)
 
     assert errors == []
+
+
+def test_ci_gate_contract_accepts_deliberate_skips(monkeypatch) -> None:
+    module = _load_checker()
+    files = {
+        ".github/workflows/openstock-ci.yml": _valid_workflow(),
+        "vnalpha/docs/branch-protection.md": _valid_document(),
+    }
+    monkeypatch.setattr(module, "_read", files.__getitem__)
+    errors: list[str] = []
+
+    module._check_ci_gate_contract(errors)
+
+    assert errors == []
+
+
+def test_ci_gate_contract_rejects_unchecked_routed_lane(monkeypatch) -> None:
+    module = _load_checker()
+    files = {
+        ".github/workflows/openstock-ci.yml": _valid_workflow().replace(
+            '      case "$VNALPHA_SMOKE_RESULT" in success|skipped) ;; *) exit 1 ;; esac\n',
+            "",
+        ),
+        "vnalpha/docs/branch-protection.md": _valid_document(),
+    }
+    monkeypatch.setattr(module, "_read", files.__getitem__)
+    errors: list[str] = []
+
+    module._check_ci_gate_contract(errors)
+
+    assert any("VNALPHA_SMOKE_RESULT" in error for error in errors)
+
+
+def test_ci_gate_contract_rejects_missing_impact_router(monkeypatch) -> None:
+    module = _load_checker()
+    files = {
+        ".github/workflows/openstock-ci.yml": _valid_workflow().replace(
+            "python scripts/classify-test-impact.py --github-output", "true"
+        ),
+        "vnalpha/docs/branch-protection.md": _valid_document(),
+    }
+    monkeypatch.setattr(module, "_read", files.__getitem__)
+    errors: list[str] = []
+
+    module._check_ci_gate_contract(errors)
+
+    assert any("classifier" in error for error in errors)
 
 
 def test_ci_gate_contract_rejects_path_filtered_pull_requests(monkeypatch) -> None:

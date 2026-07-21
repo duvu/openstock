@@ -18,6 +18,44 @@ env:
   _TYPER_FORCE_DISABLE_TERMINAL: "1"
 
 jobs:
+  impact:
+    name: Change impact routing
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      smoke: ${{ steps.classify.outputs.smoke }}
+      domains: ${{ steps.classify.outputs.domains }}
+      full: ${{ steps.classify.outputs.full }}
+      package: ${{ steps.classify.outputs.package }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - id: classify
+        name: Classify changed paths
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$BASE_SHA" =~ ^0+$ ]]; then
+            mapfile -t changed_paths < <(git ls-tree -r --name-only "$HEAD_SHA")
+          else
+            mapfile -t changed_paths < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          fi
+          test "${#changed_paths[@]}" -gt 0
+          arguments=()
+          for changed_path in "${changed_paths[@]}"; do
+            arguments+=(--path "$changed_path")
+          done
+          python scripts/classify-test-impact.py --github-output "${arguments[@]}"
+
   consistency:
     name: Repository consistency
     runs-on: ubuntu-latest
@@ -43,6 +81,8 @@ jobs:
 
   vnalpha:
     name: vnalpha lint and tests
+    needs: impact
+    if: needs.impact.outputs.full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -68,8 +108,59 @@ jobs:
       - name: Build vnalpha package artifacts
         run: python -m build --wheel --sdist --no-isolation --outdir /tmp/vnalpha-dist ./vnalpha
 
+  vnalpha-smoke:
+    name: vnalpha fast smoke
+    needs: impact
+    if: needs.impact.outputs.smoke == 'true' && needs.impact.outputs.full != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: vnalpha/pyproject.toml
+
+      - name: Install vnalpha development dependencies
+        run: |
+          python -m pip install --quiet --disable-pip-version-check --upgrade pip
+          python -m pip install --quiet --disable-pip-version-check -e "./vnalpha[dev]"
+
+      - name: Canonical smoke suite
+        run: make test-vnalpha-smoke
+
+  vnalpha-domains:
+    name: vnalpha affected domains
+    needs: impact
+    if: needs.impact.outputs.full != 'true' && contains(fromJSON(needs.impact.outputs.domains), 'vnalpha-application')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: vnalpha/pyproject.toml
+
+      - name: Install vnalpha development dependencies
+        run: |
+          python -m pip install --quiet --disable-pip-version-check --upgrade pip
+          python -m pip install --quiet --disable-pip-version-check -e "./vnalpha[dev]"
+
+      - name: Canonical affected domains
+        run: |
+          make test-vnalpha-data
+          make test-vnalpha-research
+          make test-vnalpha-application
+
   vnstock:
     name: vnstock contracts and package
+    needs: impact
+    if: needs.impact.outputs.full == 'true' || contains(fromJSON(needs.impact.outputs.domains), 'vnstock-contracts')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -110,21 +201,33 @@ jobs:
     name: Required merge gate
     if: always()
     needs:
+      - impact
       - consistency
       - vnalpha
+      - vnalpha-smoke
+      - vnalpha-domains
       - vnstock
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require all validation jobs
         env:
+          IMPACT_RESULT: ${{ needs.impact.result }}
           CONSISTENCY_RESULT: ${{ needs.consistency.result }}
           VNALPHA_RESULT: ${{ needs.vnalpha.result }}
+          VNALPHA_SMOKE_RESULT: ${{ needs.vnalpha-smoke.result }}
+          VNALPHA_DOMAINS_RESULT: ${{ needs.vnalpha-domains.result }}
           VNSTOCK_RESULT: ${{ needs.vnstock.result }}
         run: |
+          printf 'Change impact routing: %s\n' "$IMPACT_RESULT"
           printf 'Repository consistency: %s\n' "$CONSISTENCY_RESULT"
           printf 'vnalpha lint and tests: %s\n' "$VNALPHA_RESULT"
+          printf 'vnalpha fast smoke: %s\n' "$VNALPHA_SMOKE_RESULT"
+          printf 'vnalpha affected domains: %s\n' "$VNALPHA_DOMAINS_RESULT"
           printf 'vnstock contracts and package: %s\n' "$VNSTOCK_RESULT"
-          test "$CONSISTENCY_RESULT" = success
-          test "$VNALPHA_RESULT" = success
-          test "$VNSTOCK_RESULT" = success
+          case "$IMPACT_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          case "$CONSISTENCY_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          case "$VNALPHA_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          case "$VNALPHA_SMOKE_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          case "$VNALPHA_DOMAINS_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          case "$VNSTOCK_RESULT" in success|skipped) ;; *) exit 1 ;; esac

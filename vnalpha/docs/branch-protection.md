@@ -19,9 +19,12 @@ openstock-ci / vnstock contracts and package
 openstock-ci / Required merge gate
 ```
 
-`Required merge gate` uses `if: always()` and fails unless every preceding job
-concludes with `success`. A failed, skipped, cancelled or missing component gate
-must therefore prevent the aggregate gate from succeeding.
+`Required merge gate` uses `if: always()` and accepts only `success` or an
+intentional `skipped` conclusion from every routing consumer. The change-impact
+classifier keeps the consistency lane on every pull request, skips runtime work
+for docs/OpenSpec-only changes, and escalates unknown paths by failing routing.
+A failed, cancelled or missing component gate must therefore prevent the
+aggregate gate from succeeding.
 
 ## Required GitHub settings
 

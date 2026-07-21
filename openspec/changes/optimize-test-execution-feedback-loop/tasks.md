@@ -30,10 +30,10 @@
 - [x] 4.1 Add a typed path classifier for docs/OpenSpec-only, vnalpha, vnstock, packaging, shared-contract and test/workflow-infrastructure changes.
 - [x] 4.2 Add RED/GREEN classifier tests for every class, mixed changes, unknown paths, normalized paths and infrastructure/full-regression escalation.
 - [x] 4.3 Emit deterministic JSON and GitHub Actions outputs listing required smoke, domain, full and package lanes.
-- [ ] 4.4 Update `openstock-ci.yml` so consistency always runs and smoke/domain/full jobs consume classifier outputs independently.
-- [ ] 4.5 Update package workflow routing so packaging/release-relevant changes run full Debian acceptance and docs-only changes do not.
-- [ ] 4.6 Make the Required merge gate accept only `success` or deliberate `skipped` conclusions and fail every other/missing conclusion.
-- [ ] 4.7 Add workflow/consistency regressions proving docs-only safe skips, unknown-path failure, parallel job eligibility and fail-closed Required conclusions.
+- [x] 4.4 Update `openstock-ci.yml` so consistency always runs and smoke/domain/full jobs consume classifier outputs independently.
+- [x] 4.5 Update package workflow routing so packaging/release-relevant changes run full Debian acceptance and docs-only changes do not.
+- [x] 4.6 Make the Required merge gate accept only `success` or deliberate `skipped` conclusions and fail every other/missing conclusion.
+- [x] 4.7 Add workflow/consistency regressions proving docs-only safe skips, unknown-path failure, parallel job eligibility and fail-closed Required conclusions.
 
 ## 5. H+1 consolidation
 
