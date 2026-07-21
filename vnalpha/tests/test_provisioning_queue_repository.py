@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from threading import Barrier
@@ -11,8 +12,12 @@ from vnalpha.provisioning_queue import (
     EnsureCurrentSymbolGoal,
     FinalizeMarketSessionGoal,
     GoalEnrichment,
+    ProvisioningJobId,
+    ProvisioningJobLeaseError,
+    ProvisioningJobNotFoundError,
     ProvisioningJobStatus,
     ProvisioningQueue,
+    ProvisioningQueueStorageError,
     ProvisioningQueueValidationError,
     QueueDataset,
     QueueEntityType,
@@ -22,7 +27,7 @@ from vnalpha.provisioning_queue import (
 
 
 def test_durable_provisioning_queue_contract(tmp_path) -> None:
-    now = datetime(2026, 7, 21, 9, tzinfo=UTC)
+    now = datetime(2030, 7, 21, 9, tzinfo=UTC)
     symbol_goal = EnsureCurrentSymbolGoal(
         symbol="FPT",
         effective_date=date(2026, 7, 21),
@@ -82,6 +87,18 @@ def test_durable_provisioning_queue_contract(tmp_path) -> None:
     assert settings.foreign_keys_enabled
     assert settings.busy_timeout_ms == 1_000
     assert settings.synchronous in {"NORMAL", "FULL", "EXTRA"}
+    migration_path = tmp_path / "migration.sqlite3"
+    with sqlite3.connect(migration_path) as connection:
+        connection.execute("PRAGMA user_version = 0")
+    migrated_queue = ProvisioningQueue(migration_path)
+    migrated_queue.initialize()
+    assert not migrated_queue.list()
+    with sqlite3.connect(migration_path) as connection:
+        connection.execute("PRAGMA user_version = 2")
+    with pytest.raises(ProvisioningQueueStorageError):
+        migrated_queue.initialize()
+    with pytest.raises(ProvisioningJobNotFoundError):
+        queue.cancel(ProvisioningJobId("unknown-job"))
     assert [job.goal for job in queue.list()] == [
         symbol_goal,
         range_goal,
@@ -122,19 +139,26 @@ def test_durable_provisioning_queue_contract(tmp_path) -> None:
     assert completed.status is ProvisioningJobStatus.SUCCEEDED
     assert completed.result == "persisted evidence is already current"
 
+    recovery_now = datetime(2020, 1, 1, tzinfo=UTC)
     recovery_queue = ProvisioningQueue(
         tmp_path / "recovery.sqlite3", lease_seconds=30, max_attempts=2
     )
     recovery_queue.initialize()
-    recovery_job = recovery_queue.submit_or_join(symbol_goal, priority=1, now=now).job
-    first_lease = recovery_queue.claim("worker-one", now=now)
+    recovery_job = recovery_queue.submit_or_join(
+        symbol_goal, priority=1, now=recovery_now
+    ).job
+    first_lease = recovery_queue.claim("worker-one", now=recovery_now)
     assert first_lease is not None
     assert first_lease.job_id == recovery_job.job_id
-    assert recovery_queue.requeue_expired(now=now + timedelta(seconds=31))
-    second_lease = recovery_queue.claim("worker-two", now=now + timedelta(seconds=31))
+    with pytest.raises(ProvisioningJobLeaseError):
+        recovery_queue.complete(first_lease.job_id, "worker-one", "stale completion")
+    assert recovery_queue.requeue_expired(now=recovery_now + timedelta(seconds=31))
+    second_lease = recovery_queue.claim(
+        "worker-two", now=recovery_now + timedelta(seconds=31)
+    )
     assert second_lease is not None
     assert second_lease.attempts == 2
-    recovered = recovery_queue.requeue_expired(now=now + timedelta(seconds=62))
+    recovered = recovery_queue.requeue_expired(now=recovery_now + timedelta(seconds=62))
     recovered_job = recovery_queue.get(recovery_job.job_id)
     assert recovered_job in recovered
     assert recovered_job is not None

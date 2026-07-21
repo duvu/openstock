@@ -506,6 +506,7 @@ class ProvisioningQueue:
                         lease_expires_at_ms = NULL, lease_heartbeat_at_ms = NULL,
                         updated_at_ms = ?
                     WHERE job_id = ? AND status = 'RUNNING' AND lease_owner = ?
+                      AND lease_expires_at_ms > ?
                     RETURNING job_id
                     """,
                     (
@@ -516,6 +517,7 @@ class ProvisioningQueue:
                         timestamp,
                         job_id,
                         worker,
+                        timestamp,
                     ),
                 ).fetchone()
                 if updated is None:

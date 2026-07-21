@@ -77,7 +77,7 @@ class QueueRuntimeSettings:
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass
 class ProvisioningQueueError(Exception):
     """Base error for the queue boundary."""
 
@@ -88,19 +88,19 @@ class ProvisioningQueueError(Exception):
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass
 class ProvisioningQueueValidationError(ProvisioningQueueError):
     """A request cannot be represented by the finite queue contract."""
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass
 class ProvisioningQueueStorageError(ProvisioningQueueError):
     """SQLite could not safely complete a queue operation."""
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass
 class ProvisioningJobNotFoundError(ProvisioningQueueError):
     """The requested queue job does not exist."""
 
@@ -108,7 +108,7 @@ class ProvisioningJobNotFoundError(ProvisioningQueueError):
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass
 class ProvisioningJobTransitionError(ProvisioningQueueError):
     """A queue lifecycle transition is not valid for the current job state."""
 
@@ -117,7 +117,7 @@ class ProvisioningJobTransitionError(ProvisioningQueueError):
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass
 class ProvisioningJobLeaseError(ProvisioningQueueError):
     """A worker attempted to mutate a job without its live lease."""
 
