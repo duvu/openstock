@@ -101,7 +101,7 @@ net_test_count_change:
 net_test_LOC_change:
 ```
 
-An agent MUST NOT add a second authoritative test for an existing contract without explicitly replacing or deleting the previous owner.
+An agent MUST NOT add a second authoritative test for an existing contract without explicitly replacing or deleting the previous owner. If the agent cannot identify a distinct public/risk contract for a proposed test, the test MUST NOT be added.
 
 Issue [#348](https://github.com/duvu/openstock/issues/348) owns consolidation and CI enforcement. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
