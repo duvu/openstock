@@ -6,8 +6,6 @@ OpenStock is developed spec-first. GitHub Issues define active scope and depende
 
 OpenStock does **not** require test-driven development, test-first coding or red–green–refactor.
 
-Use this order:
-
 ```text
 specify or understand the public contract
 → implement the complete behavior
@@ -16,52 +14,64 @@ specify or understand the public contract
 → run that test once
 ```
 
-Guidelines:
-
 - Do not create a failing test before implementation solely as process ceremony.
 - Do not add production abstractions, mocks or dependency seams only to make tests easier to write.
-- Tests should validate stable externally observable behavior after the implementation and failure model are understood.
+- Tests validate stable externally observable behavior after the implementation and failure model are understood.
 - Temporary exploratory tests, scripts and diagnostics must be removed before completion unless they become the one authoritative contract test.
-- Spec-first and test-after are compatible: the specification defines expected behavior; the automated test verifies the implemented contract.
 
-## Test policy: 1:1
+## Minimal meaningful test policy
 
-The repository uses a **1:1 public feature/function-to-authoritative-test policy**:
+The repository uses a **1:1 public-contract-to-authoritative-test policy**:
 
 ```text
-one public feature or public function
-→ one authoritative automated test case
+one public feature, public function or independent risk contract
+→ one authoritative automated test
 ```
 
-This is a contract-to-test ratio. It is not a line-coverage target and it does not require tests for private helper functions.
+The goal is not high test count. The goal is a small suite where each test protects a meaningful externally observable contract.
 
 ### Rules
 
-1. Test externally observable behavior at the owning public boundary.
-2. Do not create separate tests for private helpers, internal branches or issue numbers when the behavior is already covered by the public feature/function test.
-3. One authoritative test may use table-driven assertions to exercise equivalent inputs and important edge conditions without creating many collected test nodes.
-4. Do not repeat the same domain behavior through repository, service, CLI, TUI and assistant layers. The domain/application contract owns the behavior test; a surface receives a separate test only when it exposes a distinct public function or adapter contract.
-5. High-impact boundaries such as point-in-time exclusion, transaction rollback, queue crash recovery, writer exclusion, policy approval and package state preservation are modeled as separate public risk contracts. Each such contract may own one test.
-6. A new authoritative test requires one of:
-   - a new public feature/function contract;
-   - a newly identified independent risk contract;
-   - replacement of an obsolete authoritative test.
-7. Bug fixes update or replace the owning contract test after the fix is implemented and understood. Do not normally add permanent issue-specific regression files.
-8. Equivalent parameter combinations must not be expanded solely to increase test counts.
+1. Test behavior at the owning public boundary, not every private helper, branch, issue or file.
+2. Do not duplicate the same domain behavior through repository, service, CLI, TUI and assistant layers.
+3. Use one table-driven test for equivalent inputs and edge cases instead of expanding large parameterized matrices.
+4. Assert public output, persisted contract and critical side effects; avoid private state, helper call order and mock choreography.
+5. Mock only external boundaries. Prefer real pure functions, in-memory DuckDB and small fakes.
+6. A bug fix updates or replaces the owning contract test. Do not normally add permanent issue-specific regression files.
+7. For an existing contract, the default expected net test-count change is `<= 0`.
+8. A new public or independent risk contract may add at most one authoritative test.
+9. Duplicate or obsolete tests must be merged or deleted, not moved to nightly.
+10. A new fixture, helper, checker or test script must remove more duplication or runtime than it introduces.
 
-## Test budget
+High-impact boundaries such as point-in-time exclusion, transaction rollback, queue crash/lease recovery, writer exclusion, policy approval/rollback, security and package-state preservation may be modeled as independent risk contracts. Each such contract still owns only one authoritative test.
 
-The repository target is approximately **200 authoritative automated tests** with a hard cap of **250** across `vnalpha`, `vnstock`, packaging, governance and end-to-end validation.
+## Test size and repository budget
 
-Issue [#348](https://github.com/duvu/openstock/issues/348) owns consolidation of the existing suite and CI enforcement of this budget.
+Guidance:
+
+```text
+normal contract test: usually <= 80 LOC
+normal test file: usually <= 250 LOC
+repository target: approximately 200 authoritative tests
+repository hard cap: 250 authoritative tests
+test LOC: normally <= 0.8 × production LOC
+```
+
+These are design signals, not incentives to make assertions unreadable. A justified concurrency, recovery or package contract may be longer.
+
+Issue [#348](https://github.com/duvu/openstock/issues/348) owns consolidation and CI enforcement.
 
 ## Pull request expectations
 
-A pull request that adds or changes behavior must identify:
+A behavior-changing pull request must state:
 
-- the public feature/function or risk contract being changed;
-- the one authoritative test that owns the implemented contract;
-- obsolete or duplicate tests removed or replaced;
-- exact validation commands and results for the final SHA.
+```text
+contract_id:
+authoritative_test:
+tests_removed_or_merged:
+net_test_count_change:
+net_test_LOC_change:
+validation_command:
+```
 
-Do not report duplicated test executions as additional evidence. Required validation should execute each authoritative test once per applicable lane.
+A new test for an existing contract must replace or delete the previous owner. Do not report duplicated executions as additional evidence. Each authoritative test should run once per applicable validation lane.
