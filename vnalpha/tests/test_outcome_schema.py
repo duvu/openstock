@@ -63,18 +63,6 @@ class TestMigrations:
         tables = {t[0] for t in conn.execute("SHOW TABLES").fetchall()}
         assert PHASE5_TABLES <= tables
 
-    def test_total_table_count(self, conn):
-        tables = conn.execute("SHOW TABLES").fetchall()
-        # Core + ledger (#252) + fundamentals/valuation (#257/#258) +
-        # adjusted-price, share-count and content-addressed v2 ranking/replay
-        # schemas (#256/#296/#297).
-        assert len(tables) == 83
-
-    def test_migrations_idempotent(self, conn):
-        run_migrations(conn=conn)
-        tables = conn.execute("SHOW TABLES").fetchall()
-        assert len(tables) == 83
-
 
 class TestOutcomeModels:
     def test_outcome_status_values(self):

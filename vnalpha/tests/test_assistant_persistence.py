@@ -44,12 +44,6 @@ def test_migrations_create_assistant_and_llm_tables(conn):
     assert "llm_trace" in tables
 
 
-def test_migrations_idempotent(conn):
-    run_migrations(conn=conn)  # second run
-    tables = conn.execute("SHOW TABLES").fetchall()
-    assert len(tables) == 83  # adjusted-price, share-count and v2 ranking schemas
-
-
 def test_assistant_session_projections_redact_nested_dynamic_content(conn):
     private_fragment = "SESSION_SECRET_37"
     hostile = (

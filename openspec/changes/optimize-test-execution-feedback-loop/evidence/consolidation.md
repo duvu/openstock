@@ -1,7 +1,9 @@
 # Low-value test consolidation evidence
 
-Commit pending at the time of this record. The baseline collection was 3,303
-tests; the post-consolidation collection is 3,298 tests.
+The baseline collection was 3,303 tests. The first duplicate-removal pass
+collected 3,298 tests; the later three schema-owner removals are recorded below
+and require the final bounded collection evidence before a final count is
+claimed.
 
 | Removed test | Disposition | Retained replacement evidence |
 | --- | --- | --- |
@@ -10,9 +12,13 @@ tests; the post-consolidation collection is 3,298 tests.
 | `test_outcome_schema.py::TestOutcomeModels::test_default_horizons` | Exact AST duplicate. | `test_outcome_metrics.py::TestDefaultHorizons::test_default_horizons` asserts the same exported horizon list. |
 | `test_tui.py::test_score_table_widget_exists` | Empty body (`pass`), no behavior observed. | No replacement is required because the test never imported or asserted a widget. Real Textual behavior remains covered by the non-empty TUI tests in the same module. |
 | `test_tui.py::test_risk_panel_widget_exists` | Empty body (`pass`), no behavior observed. | No replacement is required because the test never imported or asserted a widget. Real Textual behavior remains covered by the non-empty TUI tests in the same module. |
+| `test_outcome_schema.py::TestMigrations::test_total_table_count` | Duplicate schema implementation count. | `test_warehouse.py::test_all_tables_created` is the canonical exact schema manifest; it asserts the complete owned table set. |
+| `test_outcome_schema.py::TestMigrations::test_migrations_idempotent` | Duplicate migration idempotency/count contract. | `test_warehouse.py::test_run_migrations_idempotent` reruns migrations and asserts the canonical schema count. |
+| `test_assistant_persistence.py::test_migrations_idempotent` | Duplicate migration idempotency/count contract. | `test_warehouse.py::test_run_migrations_idempotent` reruns migrations and asserts the canonical schema count. |
 
-Focused retained coverage passed, the affected files passed Ruff, and a complete
-AST-body scan found no remaining exact duplicate test functions. The scan is not
+The retained migration owner passed through `make test-loop` in 1.4 seconds,
+the affected files passed Ruff, and a complete AST-body scan found no remaining
+exact duplicate test functions. The scan is not
 used to classify financial, migration, package, recovery or security cases as
 deletable; those boundaries remain retained unless a contract-level replacement
 is separately demonstrated.
