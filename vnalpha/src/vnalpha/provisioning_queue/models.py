@@ -172,10 +172,12 @@ _GOAL_PAYLOAD_ADAPTER: Final = TypeAdapter(_GoalPayload)
 
 
 def parse_goal_payload(payload_json: str) -> ProvisioningGoal:
+    if not isinstance(payload_json, str):
+        raise InvalidProvisioningGoalError("invalid provisioning goal payload")
     try:
         if len(payload_json.encode("utf-8")) > MAX_GOAL_PAYLOAD_BYTES:
             raise ValueError("payload exceeds maximum size")
-        payload = loads(payload_json)
+        payload = loads(payload_json, object_pairs_hook=_reject_duplicate_keys)
         if not isinstance(payload, dict) or "schema_version" not in payload:
             raise ValueError("schema_version is required")
         if (
@@ -185,9 +187,8 @@ def parse_goal_payload(payload_json: str) -> ProvisioningGoal:
             raise ValueError("schema_version is unsupported")
         return _GOAL_PAYLOAD_ADAPTER.validate_json(payload_json, strict=True)
     except (JSONDecodeError, UnicodeEncodeError, ValidationError, ValueError):
-        raise InvalidProvisioningGoalError(
-            "invalid provisioning goal payload"
-        ) from None
+        pass
+    raise InvalidProvisioningGoalError("invalid provisioning goal payload")
 
 
 def goal_identity(goal: ProvisioningGoal) -> str:
@@ -231,3 +232,12 @@ def _normalize_version(value: str, *, field_name: str) -> str:
     if not fullmatch(_VERSION_PATTERN, normalized):
         raise ValueError(f"{field_name} must be a bounded version identifier")
     return normalized
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON member")
+        result[key] = value
+    return result

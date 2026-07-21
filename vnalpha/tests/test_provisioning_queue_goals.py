@@ -129,6 +129,17 @@ def test_provisioning_goal_contract() -> None:
         parse_goal_payload(
             first.payload_json().replace("ENSURE_CURRENT_SYMBOL", "UNKNOWN_GOAL")
         )
+    for duplicate_member_payload in (
+        first.payload_json().replace(
+            '"schema_version":1', '"schema_version":2,"schema_version":1'
+        ),
+        first.payload_json().replace(
+            '"goal_type":"ENSURE_CURRENT_SYMBOL"',
+            '"goal_type":"UNKNOWN_GOAL","goal_type":"ENSURE_CURRENT_SYMBOL"',
+        ),
+    ):
+        with pytest.raises(InvalidProvisioningGoalError):
+            parse_goal_payload(duplicate_member_payload)
     for payload in (
         first.payload_json().replace("FPT", "PASSWORD=secret-value"),
         range_goal.payload_json().replace("VNINDEX", "index; DROP TABLE jobs"),
@@ -137,8 +148,13 @@ def test_provisioning_goal_contract() -> None:
         first.payload_json()[:-1] + ',"credential":"Bearer secret-value"}',
         "x" * (MAX_GOAL_PAYLOAD_BYTES + 1),
         "\ud800",
+        None,
+        b"{}",
+        1,
+        [],
     ):
         with pytest.raises(InvalidProvisioningGoalError) as error:
             parse_goal_payload(payload)
         assert "secret-value" not in str(error.value)
         assert "secret-value" not in "".join(format_exception(error.value))
+        assert error.value.__context__ is None
