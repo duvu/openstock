@@ -77,9 +77,9 @@ class ProvisioningWorker:
         self._coordinator = WarehouseWriteCoordinator(path=warehouse_path)
         self._stop_requested = Event()
         self._process_lock = Lock()
-        self._provisioner_gate = ExclusiveProvisioner(queue.path)
         self._handlers = _handler_registry(handlers)
         queue_settings = queue.initialize()
+        self._provisioner_gate = ExclusiveProvisioner(queue.path.resolve())
         _validate_settings(settings, queue_settings.lease_seconds)
 
     def request_stop(self) -> None:

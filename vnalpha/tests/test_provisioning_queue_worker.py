@@ -258,8 +258,10 @@ def test_sequential_provisioning_worker_contract(
         warehouse_path=tmp_path / "exclusive.duckdb",
         handlers=(ExclusiveHandler(),),
     )
+    exclusive_alias_path = tmp_path / "exclusive-alias.sqlite3"
+    exclusive_alias_path.symlink_to(exclusive_queue.path)
     second_worker = ProvisioningWorker(
-        exclusive_queue,
+        ProvisioningQueue(exclusive_alias_path),
         worker_id="exclusive-two",
         warehouse_path=tmp_path / "exclusive.duckdb",
         handlers=(ExclusiveHandler(),),
