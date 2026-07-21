@@ -11,6 +11,18 @@ policy:
 
 changes:
 
+  optimize-test-execution-feedback-loop:
+    status: planned
+    github_issues: [348]
+    roadmap_state: scheduled
+    summary: >-
+      Establish contract-level H+1 coverage, checked test ownership, path-aware
+      validation lanes, duplicate-execution removal, isolated DuckDB fixture
+      reuse and evidence-gated parallelization without weakening correctness.
+    evidence: >-
+      Issue #348 owns the normative policy, spec-first gate, phased execution
+      plan and before/after acceptance evidence. Implementation has not started.
+
   validate-daily-equity-ranking:
     status: partial
     github_issues: [196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206]
