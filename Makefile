@@ -8,7 +8,9 @@ PROJECT ?= vnalpha
 
 .PHONY: help up-vnstock down-vnstock login-vnstock validate-compose \
         sync features score tui mvp1-start verify-mvp1 install-vnalpha \
-        lint-vnalpha test-loop test-vnalpha \
+        lint-vnalpha test-vnalpha test-vnalpha-smoke test-vnalpha-data \
+        test-vnalpha-research test-vnalpha-application test-vnalpha-migration \
+        test-loop \
         eval-research-answers eval-research-runtime verify-hardening verify-r0 \
         verify-r2-ci verify-r4 repo-hygiene verify-repo-consistency \
         verify-vnalpha-package build-vnalpha-deb verify-vnalpha-deb
@@ -75,8 +77,28 @@ test-loop: ## Run one owning contract test with a hard 60-second limit: TEST=pat
 	@case "$(PROJECT)" in vnalpha|vnstock) ;; *) echo "PROJECT must be vnalpha or vnstock"; exit 2;; esac
 	@timeout 60s sh -c 'cd "$(PROJECT)" && pytest -q --maxfail=1 "$(TEST)"'
 
-test-vnalpha: ## Run the complete vnalpha suite; final-candidate/release use only
-	cd vnalpha && pytest -q
+test-vnalpha: ## Run the canonical complete vnalpha suite; final-candidate/release use only
+	cd vnalpha && uv run python ../scripts/run-test-suite.py \
+		--suite shared-smoke \
+		--suite migration \
+		--suite vnalpha-data \
+		--suite vnalpha-research \
+		--suite vnalpha-application
+
+test-vnalpha-smoke: ## Run canonical R0/R4 smoke coverage
+	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite shared-smoke
+
+test-vnalpha-data: ## Run canonical vnalpha data coverage
+	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite vnalpha-data
+
+test-vnalpha-research: ## Run canonical vnalpha research coverage
+	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite vnalpha-research
+
+test-vnalpha-application: ## Run canonical vnalpha application coverage
+	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite vnalpha-application
+
+test-vnalpha-migration: ## Run canonical vnalpha migration coverage
+	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite migration
 
 # Legacy bounded suites remain callable for diagnosis only. Do not chain them with the full suite.
 verify-r0: ## Run the legacy offline R0 diagnostic subset
@@ -120,8 +142,9 @@ verify-hardening: ## Release-only validation; never use in the inner edit-test l
 	$(MAKE) verify-repo-consistency
 	$(MAKE) validate-compose
 	$(MAKE) lint-vnalpha
+	packaging/tests/test_daily_pipeline_units.sh
 	$(MAKE) test-vnalpha
-	$(MAKE) verify-r2-ci
+	packaging/scripts/openstock-verify --ci
 	$(MAKE) verify-vnalpha-package
 	$(MAKE) eval-research-answers
 	$(MAKE) eval-research-runtime

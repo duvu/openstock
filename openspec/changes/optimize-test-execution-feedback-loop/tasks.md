@@ -20,10 +20,10 @@
 
 - [x] 3.1 Add a typed suite runner that resolves manifest selections, preserves stable order, rejects unknown suites and invokes pytest once with deduplicated paths.
 - [x] 3.2 Add RED/GREEN runner tests for domain selection, overlapping selections, deterministic plans, unknown suites and pytest exit propagation.
-- [ ] 3.3 Add Make targets for consistency/spec, fast smoke, each affected domain, full regression and the canonical aggregate path.
-- [ ] 3.4 Keep `verify-r0` and `verify-r4` standalone while removing their sequential execution around the full suite in aggregate targets.
-- [ ] 3.5 Ensure each aggregate path invokes `openstock-verify --ci` at most once and preserves logs/failure diagnostics.
-- [ ] 3.6 Prove the canonical aggregate plan contains no repeated pytest file and retains all currently collected full-suite files.
+- [x] 3.3 Add Make targets for consistency/spec, fast smoke, each affected domain, full regression and the canonical aggregate path.
+- [x] 3.4 Keep `verify-r0` and `verify-r4` standalone while removing their sequential execution around the full suite in aggregate targets.
+- [x] 3.5 Ensure each aggregate path invokes `openstock-verify --ci` at most once and preserves logs/failure diagnostics.
+- [x] 3.6 Prove the canonical aggregate plan contains no repeated pytest file and retains all currently collected full-suite files.
 
 ## 4. Fail-closed change-impact routing
 
