@@ -6,7 +6,6 @@ on:
       - "Makefile"
       - "packaging/**"
       - "vnalpha/pyproject.toml"
-      - "vnalpha/src/**"
       - ".github/workflows/vnalpha-debian-package.yml"
   push:
     branches:
@@ -15,7 +14,6 @@ on:
       - "Makefile"
       - "packaging/**"
       - "vnalpha/pyproject.toml"
-      - "vnalpha/src/**"
       - ".github/workflows/vnalpha-debian-package.yml"
   workflow_dispatch:
 
@@ -41,39 +39,17 @@ jobs:
           cache-dependency-path: vnalpha/pyproject.toml
 
       - name: Validate install source contract
-        shell: bash
-        run: |
-          set -o pipefail
-          bash packaging/test/test_install_contract.sh \
-            2>&1 | tee vnalpha-debian-package.log
+        run: bash packaging/test/test_install_contract.sh
 
-      - name: Validate required files and modes
-        env:
-          PACKAGING_TEST_GROUP: files
-        run: packaging/test/test_packaging.sh
-
-      - name: Validate shell syntax
-        env:
-          PACKAGING_TEST_GROUP: syntax
+      - name: Validate package structure
         run: |
-          packaging/test/test_packaging.sh
+          PACKAGING_TEST_GROUP=files packaging/test/test_packaging.sh
+          PACKAGING_TEST_GROUP=syntax packaging/test/test_packaging.sh
+          PACKAGING_TEST_GROUP=metadata packaging/test/test_packaging.sh
+          PACKAGING_TEST_GROUP=boundary packaging/test/test_packaging.sh
+          PACKAGING_TEST_GROUP=state packaging/test/test_packaging.sh
           bash -n packaging/test/test_deb_install_upgrade.sh
           bash -n packaging/test/deb_install_upgrade_inner.sh
-
-      - name: Validate Debian metadata
-        env:
-          PACKAGING_TEST_GROUP: metadata
-        run: packaging/test/test_packaging.sh
-
-      - name: Validate research boundary
-        env:
-          PACKAGING_TEST_GROUP: boundary
-        run: packaging/test/test_packaging.sh
-
-      - name: Validate state preservation
-        env:
-          PACKAGING_TEST_GROUP: state
-        run: packaging/test/test_packaging.sh
 
       - name: Install build prerequisites
         run: |
@@ -82,46 +58,22 @@ jobs:
           python -m pip install --quiet --disable-pip-version-check --upgrade pip setuptools wheel
 
       - name: Build standalone Debian package
-        shell: bash
         run: |
-          set -o pipefail
           rm -rf packaging/dist-ci
           mkdir -p packaging/dist-ci
-          packaging/build-deb.sh --output-dir packaging/dist-ci \
-            2>&1 | tee -a vnalpha-debian-package.log
+          packaging/build-deb.sh --output-dir packaging/dist-ci
 
       - name: Validate built package and offline runtime
-        shell: bash
-        run: |
-          set -o pipefail
-          bash packaging/test/test_install_contract.sh \
-            packaging/dist-ci/vnalpha_*.deb \
-            2>&1 | tee -a vnalpha-debian-package.log
+        run: bash packaging/test/test_install_contract.sh packaging/dist-ci/vnalpha_*.deb
 
-      - name: Validate exact Debian install, upgrade and broken-wheel rollback
-        shell: bash
-        run: |
-          set -o pipefail
-          bash packaging/test/test_deb_install_upgrade.sh \
-            packaging/dist-ci/vnalpha_*.deb \
-            2>&1 | tee -a vnalpha-debian-package.log
-
-      - name: Upload package diagnostics
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: vnalpha-debian-package-log
-          path: vnalpha-debian-package.log
-          if-no-files-found: warn
-          retention-days: 7
+      - name: Validate install, upgrade and broken-wheel rollback
+        run: bash packaging/test/test_deb_install_upgrade.sh packaging/dist-ci/vnalpha_*.deb
 
       - name: Upload package artifact
         if: success()
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: vnalpha-debian-package
           path: packaging/dist-ci/vnalpha_*.deb
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
