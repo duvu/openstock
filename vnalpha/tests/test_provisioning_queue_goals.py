@@ -101,8 +101,6 @@ def test_provisioning_goal_contract() -> None:
         range_goal.model_copy(update={"entity_id": "HNXINDEX"}),
         range_goal.model_copy(update={"start_date": date(2026, 7, 19)}),
         range_goal.model_copy(update={"end_date": date(2026, 7, 22)}),
-        range_goal.model_copy(update={"source_policy_version": "policy-v2"}),
-        range_goal.model_copy(update={"contract_version": "dataset-range-v2"}),
     ):
         assert goal_identity(range_goal) != goal_identity(distinct_range_goal)
     for unsupported_schema in ("2", "true", "1.0"):
@@ -126,6 +124,13 @@ def test_provisioning_goal_contract() -> None:
         parse_goal_payload(
             first.payload_json().replace("VALUATION_CONTEXT", "UNKNOWN_CONTEXT")
         )
+    for unsupported_version in ("policy-v2", "current-symbol-v2"):
+        with pytest.raises(InvalidProvisioningGoalError):
+            parse_goal_payload(
+                first.payload_json()
+                .replace("policy-v1", unsupported_version)
+                .replace("current-symbol-v1", unsupported_version)
+            )
     with pytest.raises(InvalidProvisioningGoalError):
         parse_goal_payload(
             range_goal.payload_json().replace("index.ohlcv", "equity.ohlcv")
