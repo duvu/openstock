@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+
+from vnalpha.data_availability.artifact_readiness_models import ReadinessCapability
+from vnalpha.provisioning_queue.models import (
+    EnsureCurrentSymbolGoal,
+    FinalizeMarketSessionGoal,
+    GoalEnrichment,
+    InvalidProvisioningGoalError,
+    RefreshMode,
+    SyncDatasetRangeGoal,
+    goal_identity,
+    parse_goal_payload,
+)
+
+
+def test_provisioning_goal_contract() -> None:
+    first = EnsureCurrentSymbolGoal(
+        symbol="fpt",
+        effective_date=date(2026, 7, 21),
+        desired_capability=ReadinessCapability.CANDIDATE_RANKING,
+        allowed_fallback=ReadinessCapability.PRICE_ANALYSIS,
+        requested_enrichments=(
+            GoalEnrichment.VALUATION_CONTEXT,
+            GoalEnrichment.FUNDAMENTAL_CONTEXT,
+            GoalEnrichment.VALUATION_CONTEXT,
+        ),
+        refresh_mode=RefreshMode.CACHE_FIRST,
+        source_policy_version="policy-v1",
+        contract_version="current-symbol-v1",
+    )
+    equivalent = EnsureCurrentSymbolGoal(
+        symbol="FPT",
+        effective_date=date(2026, 7, 21),
+        desired_capability=ReadinessCapability.CANDIDATE_RANKING,
+        allowed_fallback=ReadinessCapability.PRICE_ANALYSIS,
+        requested_enrichments=(
+            GoalEnrichment.FUNDAMENTAL_CONTEXT,
+            GoalEnrichment.VALUATION_CONTEXT,
+        ),
+        refresh_mode=RefreshMode.CACHE_FIRST,
+        source_policy_version="policy-v1",
+        contract_version="current-symbol-v1",
+    )
+    distinct = EnsureCurrentSymbolGoal(
+        symbol="FPT",
+        effective_date=date(2026, 7, 21),
+        desired_capability=ReadinessCapability.CANDIDATE_RANKING,
+        allowed_fallback=ReadinessCapability.PRICE_ANALYSIS,
+        requested_enrichments=(GoalEnrichment.FLOW_CONTEXT,),
+        refresh_mode=RefreshMode.CACHE_FIRST,
+        source_policy_version="policy-v1",
+        contract_version="current-symbol-v1",
+    )
+    range_goal = SyncDatasetRangeGoal(
+        dataset="index.ohlcv",
+        entity_type="index",
+        entity_id="VNINDEX",
+        start_date=date(2026, 7, 20),
+        end_date=date(2026, 7, 21),
+        refresh_mode=RefreshMode.FORCE_REFRESH,
+        source_policy_version="policy-v1",
+        contract_version="dataset-range-v1",
+    )
+    finalization_goal = FinalizeMarketSessionGoal(
+        maintenance_run_id="maintenance-2026-07-21",
+        resolved_session=date(2026, 7, 21),
+        frozen_universe_hash="universe-v1",
+        source_policy_version="policy-v1",
+        finalization_contract_version="finalization-v1",
+    )
+
+    assert first.symbol == "FPT"
+    assert first.requested_enrichments == (
+        GoalEnrichment.FUNDAMENTAL_CONTEXT,
+        GoalEnrichment.VALUATION_CONTEXT,
+    )
+    assert goal_identity(first) == goal_identity(equivalent)
+    assert goal_identity(first) != goal_identity(distinct)
+    assert goal_identity(first) != goal_identity(range_goal)
+    assert goal_identity(first) != goal_identity(finalization_goal)
+    assert parse_goal_payload(first.payload_json()) == first
+    assert parse_goal_payload(finalization_goal.payload_json()) == finalization_goal
+    with pytest.raises(InvalidProvisioningGoalError):
+        parse_goal_payload(
+            first.payload_json().replace('"schema_version":1', '"schema_version":2')
+        )
+    with pytest.raises(InvalidProvisioningGoalError):
+        parse_goal_payload(
+            first.payload_json().replace("VALUATION_CONTEXT", "UNKNOWN_CONTEXT")
+        )

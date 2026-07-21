@@ -15,8 +15,8 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 - [x] 2.1 Add artifact states and capability-scoped readiness.
 - [x] 2.2 Add source/provider/auth/persistence-aware repairability.
 - [x] 2.3 Report exact missing ranges and bounded actions without writing or calling providers.
-- [ ] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`.
-- [ ] 2.5 Add deterministic identities, enrichment normalization and collision tests.
+- [x] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`.
+- [x] 2.5 Add deterministic identities, enrichment normalization and collision tests.
 
 ## 3. Queue repository — #323
 
