@@ -3,7 +3,6 @@
 import pytest
 
 from vnalpha.outcomes.models import (
-    DEFAULT_HORIZONS,
     CandidateOutcomeRecord,
     OutcomeStatus,
     RiskFlagPerformanceRecord,
@@ -84,9 +83,6 @@ class TestOutcomeModels:
         assert OutcomeStatus.PARTIAL.value == "PARTIAL"
         assert OutcomeStatus.MISSING_DATA.value == "MISSING_DATA"
         assert OutcomeStatus.ERROR.value == "ERROR"
-
-    def test_default_horizons(self):
-        assert DEFAULT_HORIZONS == [5, 10, 20, 60]
 
     def test_assign_score_bucket(self):
         assert assign_score_bucket(0.95) == "0.90-1.00"

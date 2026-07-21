@@ -56,16 +56,6 @@ def test_quality_screen_exists():
 
 
 @skip_if_no_textual
-def test_score_table_widget_exists():
-    pass
-
-
-@skip_if_no_textual
-def test_risk_panel_widget_exists():
-    pass
-
-
-@skip_if_no_textual
 def test_no_buy_sell_language_in_tui():
     import inspect
 

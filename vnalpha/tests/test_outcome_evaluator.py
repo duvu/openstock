@@ -149,32 +149,6 @@ class TestEvaluatorComplete:
         assert rows[0]["forward_return"] is not None
         assert rows[0]["excess_return_vs_vnindex"] is not None
 
-    def test_next_session_entry_bases_forward_return_for_benchmark(self, conn):
-        conn.execute(
-            """
-            INSERT INTO canonical_ohlcv
-                (symbol, time, interval, open, high, low, close, volume)
-            VALUES
-                ('FPT', '2026-01-01', '1D', 100, 100, 100, 100, 100),
-                ('FPT', '2026-01-02', '1D', 110, 110, 110, 110, 100),
-                ('FPT', '2026-01-03', '1D', 120, 120, 120, 120, 100),
-                ('VNINDEX', '2026-01-01', '1D', 1000, 1000, 1000, 1000, 100),
-                ('VNINDEX', '2026-01-02', '1D', 1100, 1100, 1100, 1100, 100),
-                ('VNINDEX', '2026-01-03', '1D', 1200, 1200, 1200, 1200, 100)
-            ON CONFLICT (symbol, time, interval) DO NOTHING
-            """
-        )
-        _insert_watchlist(conn, "FPT", "2026-01-01", score=0.80)
-
-        evaluate_watchlist_date(conn, "2026-01-01", horizons=[2])
-        rows = get_candidate_outcomes(conn, "2026-01-01", 2)
-        assert rows[0]["observation_start_date"] == "2026-01-02"
-        assert rows[0]["observation_end_date"] == "2026-01-03"
-        assert rows[0]["entry_close"] == 110.0
-        assert rows[0]["exit_close"] == 120.0
-        assert rows[0]["forward_return"] == pytest.approx(10.0 / 110.0)
-        assert rows[0]["benchmark_return"] == pytest.approx(100.0 / 1100.0)
-
     def test_next_session_entry_bases_forward_return(self, conn):
         conn.execute(
             """

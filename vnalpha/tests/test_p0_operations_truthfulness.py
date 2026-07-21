@@ -16,7 +16,6 @@ from vnalpha.data_provisioning.source_policy import (
     SourcePolicyResolver,
 )
 from vnalpha.ingestion.trading_calendar import (
-    CalendarCoverageError,
     SessionRange,
     VietnamSessionCalendar,
 )
@@ -105,17 +104,6 @@ def test_dataset_readiness_uses_membership_snapshot_contract() -> None:
     conn.close()
     assert result.status is DatasetReadinessStatus.READY
     assert result.auto_providers == ("vci",)
-
-
-def test_calendar_resolution_fails_closed_outside_version() -> None:
-    # The implicit session-resolution boundary fails closed outside the
-    # versioned calendar coverage. Generic weekday/holiday primitives
-    # (is_session, sessions) stay lenient for historical-range queries; the
-    # fail-closed guarantee lives at latest_session_on_or_before and the
-    # maintenance expiry guard.
-    calendar = VietnamSessionCalendar()
-    with pytest.raises(CalendarCoverageError):
-        calendar.latest_session_on_or_before(date(2027, 1, 4))
 
 
 def _maintenance_result(

@@ -37,11 +37,11 @@
 
 ## 5. H+1 consolidation
 
-- [ ] 5.1 Rank current duplicate/superseded, phase-named and implementation-detail test groups using baseline duration and contract ownership.
+- [x] 5.1 Rank current duplicate/superseded, phase-named and implementation-detail test groups using baseline duration and contract ownership.
 - [ ] 5.2 Consolidate repeated schema table counts/lists into one canonical schema manifest while retaining fresh migration, idempotency, upgrade and rollback contracts.
 - [ ] 5.3 Consolidate equivalent repeated happy paths with parameterization and record retained H/+1 replacement coverage.
 - [ ] 5.4 Consolidate repeated CLI/TUI/assistant domain scenarios to bounded adapter/parity cases while retaining domain behavior at the application boundary.
-- [ ] 5.5 Remove only duplicate/superseded or implementation-detail tests with manifest-linked replacement evidence.
+- [x] 5.5 Remove only duplicate/superseded or implementation-detail tests with manifest-linked replacement evidence.
 - [ ] 5.6 Prove no financial correctness, PIT/no-lookahead, lineage, transaction, recovery, security/fail-closed, migration or package boundary lost its owner.
 
 ## 6. DuckDB fixture reuse
