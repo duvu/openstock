@@ -46,7 +46,7 @@
 
 ## 6. DuckDB fixture reuse
 
-- [ ] 6.1 Add a session/worker migrated-template fixture and isolated per-test copy fixture with real mutation-contamination tests.
+- [x] 6.1 Add a session/worker migrated-template fixture and isolated per-test copy fixture with real mutation-contamination tests.
 - [x] 6.2 Migrate compatible tests from repeated full migration setup to the isolated template fixture.
 - [ ] 6.3 Keep commit, crash, reopen, locking, multiprocessing, fresh migration, upgrade and rollback tests on dedicated file-backed inputs.
 - [ ] 6.4 Reuse module-scoped synthetic pipeline outputs only where inputs and outputs are immutable and equivalent.
