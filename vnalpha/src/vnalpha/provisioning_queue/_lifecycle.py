@@ -154,9 +154,11 @@ def terminalize(
         result, error = detail(value, field_name="result"), None
     elif status is ProvisioningJobStatus.FAILED:
         result, error = None, detail(value, field_name="error")
+    elif status is ProvisioningJobStatus.CANCELLED:
+        result, error = None, detail(value, field_name="cancellation reason")
     else:
         raise ProvisioningQueueValidationError(
-            "only successful or failed terminal queue statuses are supported"
+            "only terminal queue statuses are supported"
         )
     try:
         with database.connection() as connection:

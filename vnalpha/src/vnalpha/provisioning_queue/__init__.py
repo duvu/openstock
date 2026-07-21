@@ -33,6 +33,12 @@ from vnalpha.provisioning_queue.repository import (
     DEFAULT_QUEUE_PATH,
     ProvisioningQueue,
 )
+from vnalpha.provisioning_queue.worker import (
+    MAX_CONCURRENCY,
+    ProvisioningWorker,
+    ProvisioningWorkerConfigurationError,
+    WorkerSettings,
+)
 
 __all__ = [
     "CURRENT_GOAL_SCHEMA_VERSION",
@@ -44,6 +50,7 @@ __all__ = [
     "InvalidProvisioningGoalError",
     "MAX_DATASET_RANGE_DAYS",
     "MAX_GOAL_PAYLOAD_BYTES",
+    "MAX_CONCURRENCY",
     "ProvisioningGoal",
     "ProvisioningJob",
     "ProvisioningJobId",
@@ -55,12 +62,15 @@ __all__ = [
     "ProvisioningQueueError",
     "ProvisioningQueueStorageError",
     "ProvisioningQueueValidationError",
+    "ProvisioningWorker",
+    "ProvisioningWorkerConfigurationError",
     "QueueDataset",
     "QueueEntityType",
     "QueueRuntimeSettings",
     "QueueSubmitResult",
     "RefreshMode",
     "SyncDatasetRangeGoal",
+    "WorkerSettings",
     "goal_identity",
     "goal_type",
     "parse_goal_payload",

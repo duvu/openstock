@@ -1,0 +1,211 @@
+from __future__ import annotations
+
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+
+import duckdb
+import pytest
+from typer.testing import CliRunner
+
+import vnalpha.provisioning_queue.worker as worker_module
+from vnalpha.cli import app
+from vnalpha.data_availability.artifact_readiness_models import ReadinessCapability
+from vnalpha.provisioning_queue import (
+    EnsureCurrentSymbolGoal,
+    ProvisioningJobStatus,
+    ProvisioningQueue,
+    QueueDataset,
+    QueueEntityType,
+    SyncDatasetRangeGoal,
+)
+from vnalpha.provisioning_queue.handlers import HandlerResult
+from vnalpha.provisioning_queue.models import GoalType, ProvisioningGoal
+from vnalpha.provisioning_queue.worker import (
+    ProvisioningWorker,
+    ProvisioningWorkerConfigurationError,
+    WorkerSettings,
+)
+
+
+def test_sequential_provisioning_worker_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    queue_path = tmp_path / "provisioning.sqlite3"
+    warehouse_path = tmp_path / "warehouse.duckdb"
+    goal = _current_goal("FPT")
+    queue = _CrashBeforeCompletionQueue(queue_path)
+    queue.initialize()
+    submitted = queue.submit_or_join(goal, priority=1).job
+    effects: list[str] = []
+
+    class ReplanningHandler:
+        goal_type = GoalType.ENSURE_CURRENT_SYMBOL
+        requires_warehouse_write = True
+
+        def execute(
+            self, _: ProvisioningGoal, connection: duckdb.DuckDBPyConnection | None
+        ) -> HandlerResult:
+            assert connection is not None
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS worker_effect(symbol VARCHAR PRIMARY KEY)"
+            )
+            persisted = connection.execute(
+                "SELECT count(*) FROM worker_effect WHERE symbol = 'FPT'"
+            ).fetchone()
+            assert persisted is not None
+            if persisted[0] == 0:
+                connection.execute("INSERT INTO worker_effect VALUES ('FPT')")
+                effects.append("CREATED")
+                return HandlerResult(True, "CREATED")
+            effects.append("REUSED")
+            return HandlerResult(True, "REUSED")
+
+    worker = ProvisioningWorker(
+        queue,
+        worker_id="worker-one",
+        warehouse_path=warehouse_path,
+        handlers=(ReplanningHandler(),),
+    )
+    with pytest.raises(KeyboardInterrupt):
+        worker.process_one()
+    assert queue.get(submitted.job_id).status is ProvisioningJobStatus.RUNNING
+    queue.requeue_expired(now=datetime.now(UTC) + timedelta(seconds=61))
+
+    restarted_queue = ProvisioningQueue(queue_path)
+    restarted = ProvisioningWorker(
+        restarted_queue,
+        worker_id="worker-two",
+        warehouse_path=warehouse_path,
+        handlers=(ReplanningHandler(),),
+    ).process_one()
+    assert restarted is not None
+    assert restarted.status is ProvisioningJobStatus.SUCCEEDED
+    assert effects == ["CREATED", "REUSED"]
+
+    unsupported = restarted_queue.submit_or_join(_range_goal("VNINDEX"), priority=1).job
+    unsupported_worker = ProvisioningWorker(
+        restarted_queue,
+        worker_id="unsupported",
+        warehouse_path=tmp_path / "never-opened.duckdb",
+        handlers=(),
+    )
+    assert unsupported_worker.process_one().error == "UNSUPPORTED_GOAL_HANDLER"
+    assert (
+        restarted_queue.get(unsupported.job_id).status is ProvisioningJobStatus.FAILED
+    )
+    assert not (tmp_path / "never-opened.duckdb").exists()
+
+    cancelled = restarted_queue.submit_or_join(_current_goal("HPG"), priority=1).job
+
+    class CancellingHandler:
+        goal_type = GoalType.ENSURE_CURRENT_SYMBOL
+        requires_warehouse_write = True
+
+        def execute(
+            self, _: ProvisioningGoal, connection: duckdb.DuckDBPyConnection | None
+        ) -> HandlerResult:
+            assert connection is not None
+            connection.execute("CREATE TABLE cancellation_boundary(value INTEGER)")
+            restarted_queue.cancel(cancelled.job_id)
+            return HandlerResult(True, "should not complete")
+
+    cancelled_result = ProvisioningWorker(
+        restarted_queue,
+        worker_id="cancelling",
+        warehouse_path=warehouse_path,
+        handlers=(CancellingHandler(),),
+    ).process_one()
+    assert cancelled_result.status is ProvisioningJobStatus.CANCELLED
+
+    short_lease_queue = ProvisioningQueue(
+        tmp_path / "short-lease.sqlite3", lease_seconds=2
+    )
+    with pytest.raises(ProvisioningWorkerConfigurationError):
+        ProvisioningWorker(
+            short_lease_queue,
+            worker_id="invalid-lease",
+            settings=WorkerSettings(stage_timeout_seconds=1, lease_safety_seconds=1),
+        )
+
+    timeout_queue = ProvisioningQueue(tmp_path / "timeout.sqlite3")
+    timeout_queue.initialize()
+    timeout_queue.submit_or_join(_current_goal("VIC"), priority=1)
+
+    class TimedOutHandler:
+        goal_type = GoalType.ENSURE_CURRENT_SYMBOL
+        requires_warehouse_write = False
+
+        def execute(
+            self, _: ProvisioningGoal, __: duckdb.DuckDBPyConnection | None
+        ) -> HandlerResult:
+            return HandlerResult(True, "late success")
+
+    monotonic_values = iter((0.0, 2.0))
+    monkeypatch.setattr(worker_module, "monotonic", lambda: next(monotonic_values))
+    timed_out = ProvisioningWorker(
+        timeout_queue,
+        worker_id="timed-out",
+        handlers=(TimedOutHandler(),),
+        settings=WorkerSettings(stage_timeout_seconds=1, lease_safety_seconds=1),
+    ).process_one()
+    assert timed_out.status is ProvisioningJobStatus.FAILED
+    assert timed_out.error == "STAGE_TIMEOUT"
+
+    cli_queue_path = tmp_path / "cli.sqlite3"
+    cli_queue = ProvisioningQueue(cli_queue_path)
+    cli_queue.initialize()
+    first_cli_job = cli_queue.submit_or_join(_range_goal("VN30"), priority=2).job
+    second_cli_job = cli_queue.submit_or_join(_range_goal("HNX30"), priority=1).job
+    cli_result = CliRunner().invoke(
+        app,
+        [
+            "provision",
+            "worker",
+            "--once",
+            "--queue-path",
+            str(cli_queue_path),
+            "--warehouse-path",
+            str(tmp_path / "cli-warehouse.duckdb"),
+            "--worker-id",
+            "cli-worker",
+        ],
+        catch_exceptions=False,
+    )
+    assert cli_result.exit_code == 0
+    assert "processed=1" in cli_result.output
+    assert cli_queue.get(first_cli_job.job_id).status is ProvisioningJobStatus.FAILED
+    assert cli_queue.get(second_cli_job.job_id).status is ProvisioningJobStatus.QUEUED
+
+
+class _CrashBeforeCompletionQueue(ProvisioningQueue):
+    def __init__(self, path: Path) -> None:
+        super().__init__(path)
+        self._crash_once = True
+
+    def complete(self, job_id, worker_id: str, result: str):
+        if self._crash_once:
+            self._crash_once = False
+            raise KeyboardInterrupt
+        return super().complete(job_id, worker_id, result)
+
+
+def _current_goal(symbol: str) -> EnsureCurrentSymbolGoal:
+    return EnsureCurrentSymbolGoal(
+        symbol=symbol,
+        effective_date=date(2026, 7, 21),
+        desired_capability=ReadinessCapability.PRICE_ANALYSIS,
+        source_policy_version="policy-v1",
+        contract_version="current-symbol-v1",
+    )
+
+
+def _range_goal(entity_id: str) -> SyncDatasetRangeGoal:
+    return SyncDatasetRangeGoal(
+        dataset=QueueDataset.INDEX_OHLCV,
+        entity_type=QueueEntityType.INDEX,
+        entity_id=entity_id,
+        start_date=date(2026, 7, 20),
+        end_date=date(2026, 7, 21),
+        source_policy_version="policy-v1",
+        contract_version="dataset-range-v1",
+    )

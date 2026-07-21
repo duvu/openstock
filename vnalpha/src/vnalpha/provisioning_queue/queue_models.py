@@ -74,6 +74,7 @@ class QueueRuntimeSettings:
     foreign_keys_enabled: bool
     busy_timeout_ms: int
     synchronous: str
+    lease_seconds: int
 
 
 @final

@@ -116,6 +116,13 @@ class ProvisioningQueue:
             self._database, job_id, worker_id, ProvisioningJobStatus.FAILED, error
         )
 
+    def acknowledge_cancellation(
+        self, job_id: ProvisioningJobId, worker_id: str, reason: str
+    ) -> ProvisioningJob:
+        return terminalize(
+            self._database, job_id, worker_id, ProvisioningJobStatus.CANCELLED, reason
+        )
+
     def cancel(self, job_id: ProvisioningJobId) -> ProvisioningJob:
         return cancel(self._database, job_id)
 
