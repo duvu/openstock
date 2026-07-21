@@ -9,17 +9,17 @@
 
 ## 2. Canonical ownership and H+1 policy
 
-- [ ] 2.1 Add the TOML suite manifest schema for domain, contract, H, +1 and approved risk-exception ownership.
-- [ ] 2.2 Add a consistency checker that rejects missing paths, unassigned or multiply assigned test files, unsupported roles/categories and contracts without H+1.
-- [ ] 2.3 Add RED/GREEN checker tests for valid inventory, unassigned files, duplicate ownership, missing H/+1 and invalid exception categories.
-- [ ] 2.4 Inventory every `vnalpha/tests/test_*.py` file under exactly one `vnalpha-data`, `vnalpha-research`, `vnalpha-application`, `shared-smoke` or `migration` owner.
+- [x] 2.1 Add the TOML suite manifest schema for domain, contract, H, +1 and approved risk-exception ownership.
+- [x] 2.2 Add a consistency checker that rejects missing paths, unassigned or multiply assigned test files, unsupported roles/categories and contracts without H+1.
+- [x] 2.3 Add RED/GREEN checker tests for valid inventory, unassigned files, duplicate ownership, missing H/+1 and invalid exception categories.
+- [x] 2.4 Inventory every `vnalpha/tests/test_*.py` file under exactly one `vnalpha-data`, `vnalpha-research`, `vnalpha-application`, `shared-smoke` or `migration` owner.
 - [ ] 2.5 Record canonical contract ownership for `vnstock-contracts` and packaging validation lanes.
-- [ ] 2.6 Integrate suite ownership validation into repository consistency and the every-PR consistency lane.
+- [x] 2.6 Integrate suite ownership validation into repository consistency and the every-PR consistency lane.
 
 ## 3. Deduplicated execution lanes
 
-- [ ] 3.1 Add a typed suite runner that resolves manifest selections, preserves stable order, rejects unknown suites and invokes pytest once with deduplicated paths.
-- [ ] 3.2 Add RED/GREEN runner tests for domain selection, overlapping selections, deterministic plans, unknown suites and pytest exit propagation.
+- [x] 3.1 Add a typed suite runner that resolves manifest selections, preserves stable order, rejects unknown suites and invokes pytest once with deduplicated paths.
+- [x] 3.2 Add RED/GREEN runner tests for domain selection, overlapping selections, deterministic plans, unknown suites and pytest exit propagation.
 - [ ] 3.3 Add Make targets for consistency/spec, fast smoke, each affected domain, full regression and the canonical aggregate path.
 - [ ] 3.4 Keep `verify-r0` and `verify-r4` standalone while removing their sequential execution around the full suite in aggregate targets.
 - [ ] 3.5 Ensure each aggregate path invokes `openstock-verify --ci` at most once and preserves logs/failure diagnostics.

@@ -167,7 +167,8 @@ def test_ci_gate_contract_rejects_stale_documentation(monkeypatch) -> None:
     files = {
         ".github/workflows/openstock-ci.yml": _valid_workflow(),
         "vnalpha/docs/branch-protection.md": (
-            _valid_document() + "vnalpha-ci / validate\n.github/workflows/vnalpha-ci.yml\n"
+            _valid_document()
+            + "vnalpha-ci / validate\n.github/workflows/vnalpha-ci.yml\n"
         ),
     }
     monkeypatch.setattr(module, "_read", files.__getitem__)
@@ -178,7 +179,9 @@ def test_ci_gate_contract_rejects_stale_documentation(monkeypatch) -> None:
     assert any("stale branch-protection contract" in error for error in errors)
 
 
-def test_active_changes_rejects_noncanonical_roadmap_source(monkeypatch, tmp_path) -> None:
+def test_active_changes_rejects_noncanonical_roadmap_source(
+    monkeypatch, tmp_path
+) -> None:
     module = _load_checker()
     _create_change_dirs(module, tmp_path)
     files: dict[str, str] = {
@@ -239,4 +242,38 @@ def test_live_roadmap_docs_reject_superseded_issue_209(monkeypatch) -> None:
 
     module._check_live_roadmap_contract(errors)
 
-    assert any("superseded live-roadmap reference to issue #209" in error for error in errors)
+    assert any(
+        "superseded live-roadmap reference to issue #209" in error for error in errors
+    )
+
+
+def test_suite_manifest_consistency_reports_unassigned_test_file(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_checker()
+    manifest = tmp_path / "vnalpha" / "tests" / "suites" / "manifest.toml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        "\n".join(
+            (
+                "version = 1",
+                "[[suite]]",
+                'name = "vnalpha-data"',
+                'paths = ["tests/test_assigned.py"]',
+                "[[suite.contract]]",
+                'name = "data"',
+                'happy = "tests/test_assigned.py::test_happy"',
+                'plus_one = "tests/test_assigned.py::test_failure"',
+            )
+        ),
+        encoding="utf-8",
+    )
+    tests_root = manifest.parents[1]
+    (tests_root / "test_assigned.py").write_text("", encoding="utf-8")
+    (tests_root / "test_unassigned.py").write_text("", encoding="utf-8")
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    errors: list[str] = []
+
+    module._check_suite_manifest(errors)
+
+    assert any("test_unassigned.py" in error for error in errors)

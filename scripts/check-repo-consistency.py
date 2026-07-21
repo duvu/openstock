@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
@@ -108,7 +109,9 @@ def _check_active_changes(errors: list[str]) -> None:
         roadmap_state_match = re.search(
             r"^    roadmap_state:\s*(\S+)", entry_text, re.MULTILINE
         )
-        issues_match = re.search(r"^    github_issues:\s*\[(.*?)\]", entry_text, re.MULTILINE)
+        issues_match = re.search(
+            r"^    github_issues:\s*\[(.*?)\]", entry_text, re.MULTILINE
+        )
 
         if status_match is None:
             errors.append(f"{registry_path}: active entry {name!r} missing status")
@@ -176,9 +179,7 @@ def _check_live_roadmap_contract(errors: list[str]) -> None:
                 f"{path}: missing canonical live roadmap URL {LIVE_ROADMAP_URL}"
             )
         if "#90" in text or "issues/90" in text:
-            errors.append(
-                f"{path}: contains stale live-roadmap reference to issue #90"
-            )
+            errors.append(f"{path}: contains stale live-roadmap reference to issue #90")
         if "#209" in text or "issues/209" in text:
             errors.append(
                 f"{path}: contains superseded live-roadmap reference to issue #209"
@@ -240,6 +241,28 @@ def _check_ci_gate_contract(errors: list[str]) -> None:
             errors.append(
                 f"{doc_path}: contains stale branch-protection contract {stale!r}"
             )
+
+
+def _check_suite_manifest(errors: list[str]) -> None:
+    module_path = Path(__file__).with_name("test_suite_manifest.py")
+    spec = importlib.util.spec_from_file_location(
+        "_openstock_test_suite_manifest", module_path
+    )
+    if spec is None or spec.loader is None:
+        errors.append("cannot load test suite manifest validator")
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    manifest_path = ROOT / "vnalpha" / "tests" / "suites" / "manifest.toml"
+    tests_root = ROOT / "vnalpha" / "tests"
+    try:
+        manifest = module.load_manifest(manifest_path, tests_root)
+        manifest_errors = module.validate_manifest(manifest, tests_root)
+    except module.ManifestError as exc:
+        errors.append(f"vnalpha test suite manifest: {exc}")
+        return
+    errors.extend(f"vnalpha test suite manifest: {error}" for error in manifest_errors)
 
 
 def check() -> tuple[str, ...]:
@@ -336,6 +359,7 @@ def check() -> tuple[str, ...]:
     _check_active_changes(errors)
     _check_ci_gate_contract(errors)
     _check_live_roadmap_contract(errors)
+    _check_suite_manifest(errors)
     return tuple(errors)
 
 

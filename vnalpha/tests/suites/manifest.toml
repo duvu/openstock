@@ -1,0 +1,156 @@
+version = 1
+
+[[suite]]
+name = "shared-smoke"
+paths = [
+  "tests/test_phase5_e2e.py",
+  "tests/test_features.py",
+  "tests/test_warehouse.py",
+  "tests/test_command_warehouse.py",
+  "tests/test_r0_gaps.py",
+  "tests/test_r4_permissions.py",
+  "tests/test_r4_session.py",
+  "tests/test_r4_trace.py",
+  "tests/test_r4_clear.py",
+  "tests/test_r4_persistence.py",
+  "tests/test_r4_controller_persistence.py",
+]
+
+[[suite.contract]]
+name = "offline-r0-lineage"
+happy = "tests/test_r0_gaps.py::test_as_of_bar_date_records_actual_bar_date"
+plus_one = "tests/test_r0_gaps.py::test_benchmark_as_of_bar_date_records_actual_benchmark_date"
+risk_exceptions = ["point-in-time/no-lookahead"]
+
+[[suite]]
+name = "migration"
+include = ["tests/**/*migration*.py", "tests/**/*schema*.py"]
+
+[[suite.contract]]
+name = "workspace-migration"
+happy = "tests/workspace_context/test_migration.py::test_migrate_legacy_workspace_preserves_backup_and_latest_pointer"
+plus_one = "tests/workspace_context/test_migration.py::test_migration_rejects_occupied_destination"
+risk_exceptions = ["migration upgrade/rollback"]
+
+[[suite]]
+name = "vnalpha-data"
+include = [
+  "tests/**/*warehouse*.py",
+  "tests/**/*ohlcv*.py",
+  "tests/**/*data*.py",
+  "tests/**/*calendar*.py",
+  "tests/**/*canonical*.py",
+  "tests/**/*provider*.py",
+  "tests/**/*vnstock*.py",
+  "tests/**/*corporate*.py",
+  "tests/**/*fundamental*.py",
+  "tests/**/*disclosure*.py",
+  "tests/**/*sector*.py",
+  "tests/**/*symbol_lifecycle*.py",
+  "tests/**/*maintenance_source*.py",
+]
+exclude = [
+  "tests/test_warehouse.py",
+  "tests/test_command_warehouse.py",
+  "tests/**/*migration*.py",
+  "tests/**/*schema*.py",
+]
+
+[[suite.contract]]
+name = "data-availability"
+happy = "tests/test_data_availability_integration.py::TestExplainEnsureIntegration::test_explain_shows_data_readiness_panel_on_cache_hit"
+plus_one = "tests/test_data_availability_integration.py::TestExplainEnsureIntegration::test_explain_ensure_failure_still_returns_result"
+risk_exceptions = ["provider provenance conflict"]
+
+[[suite]]
+name = "vnalpha-research"
+include = [
+  "tests/**/*feature*.py",
+  "tests/**/*score*.py",
+  "tests/**/*outcome*.py",
+  "tests/**/*memory*.py",
+  "tests/**/*research*.py",
+  "tests/**/*market*.py",
+  "tests/**/*benchmark*.py",
+  "tests/**/*regime*.py",
+  "tests/**/*evaluator*.py",
+  "tests/**/*backtest*.py",
+  "tests/**/*walk_forward*.py",
+  "tests/**/*deep_analysis*.py",
+  "tests/**/*watchlist*.py",
+]
+exclude = [
+  "tests/test_features.py",
+  "tests/**/*migration*.py",
+  "tests/**/*schema*.py",
+  "tests/**/*warehouse*.py",
+  "tests/**/*ohlcv*.py",
+  "tests/**/*data*.py",
+  "tests/**/*calendar*.py",
+  "tests/**/*canonical*.py",
+  "tests/**/*provider*.py",
+  "tests/**/*vnstock*.py",
+  "tests/**/*corporate*.py",
+  "tests/**/*fundamental*.py",
+  "tests/**/*disclosure*.py",
+  "tests/**/*sector*.py",
+  "tests/**/*symbol_lifecycle*.py",
+  "tests/**/*maintenance_source*.py",
+]
+
+[[suite.contract]]
+name = "outcome-evaluation"
+happy = "tests/test_outcome_evaluator.py::TestEvaluatorComplete::test_complete_outcome"
+plus_one = "tests/test_outcome_evaluator.py::TestEvaluatorMissingData::test_missing_data_when_no_symbol_ohlcv"
+risk_exceptions = ["point-in-time/no-lookahead"]
+
+[[suite]]
+name = "vnalpha-application"
+include = ["tests/**/test_*.py"]
+exclude = [
+  "tests/test_phase5_e2e.py",
+  "tests/test_features.py",
+  "tests/test_warehouse.py",
+  "tests/test_command_warehouse.py",
+  "tests/test_r0_gaps.py",
+  "tests/test_r4_permissions.py",
+  "tests/test_r4_session.py",
+  "tests/test_r4_trace.py",
+  "tests/test_r4_clear.py",
+  "tests/test_r4_persistence.py",
+  "tests/test_r4_controller_persistence.py",
+  "tests/**/*migration*.py",
+  "tests/**/*schema*.py",
+  "tests/**/*warehouse*.py",
+  "tests/**/*ohlcv*.py",
+  "tests/**/*data*.py",
+  "tests/**/*calendar*.py",
+  "tests/**/*canonical*.py",
+  "tests/**/*provider*.py",
+  "tests/**/*vnstock*.py",
+  "tests/**/*corporate*.py",
+  "tests/**/*fundamental*.py",
+  "tests/**/*disclosure*.py",
+  "tests/**/*sector*.py",
+  "tests/**/*symbol_lifecycle*.py",
+  "tests/**/*maintenance_source*.py",
+  "tests/**/*feature*.py",
+  "tests/**/*score*.py",
+  "tests/**/*outcome*.py",
+  "tests/**/*memory*.py",
+  "tests/**/*research*.py",
+  "tests/**/*market*.py",
+  "tests/**/*benchmark*.py",
+  "tests/**/*regime*.py",
+  "tests/**/*evaluator*.py",
+  "tests/**/*backtest*.py",
+  "tests/**/*walk_forward*.py",
+  "tests/**/*deep_analysis*.py",
+  "tests/**/*watchlist*.py",
+]
+
+[[suite.contract]]
+name = "command-handling"
+happy = "tests/test_command_handlers.py::TestCompareHandler::test_compare_returns_table"
+plus_one = "tests/test_command_handlers.py::TestCompareHandler::test_compare_no_symbols_validation_error"
+risk_exceptions = ["security/fail-closed"]
