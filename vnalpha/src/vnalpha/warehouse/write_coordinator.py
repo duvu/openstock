@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import os
 import sys
 from contextlib import contextmanager
@@ -35,7 +36,6 @@ class WarehouseWriteCoordinator:
     """Own the global lock, writable connection, and transaction lifecycle."""
 
     path: Path | str | None = None
-    lock_path: Path | str | None = None
 
     @contextmanager
     def transaction(self) -> Iterator[duckdb.DuckDBPyConnection]:
@@ -50,14 +50,15 @@ class WarehouseWriteCoordinator:
             with warehouse_transaction(active_write.connection):
                 yield active_write.connection
             return
-        lock_path = (
-            Path(self.lock_path)
-            if self.lock_path is not None
-            else Path(f"{warehouse_path}.writer.lock")
-        )
+        lock_path = _warehouse_lock_path(warehouse_path)
         try:
             lock_path.parent.mkdir(parents=True, exist_ok=True)
-            descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+            os.chmod(lock_path.parent, 0o700)
+            descriptor = os.open(
+                lock_path,
+                os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
+                0o600,
+            )
         except OSError as exc:
             raise warehouse_open_error(exc) from exc
         locked = False
@@ -66,16 +67,21 @@ class WarehouseWriteCoordinator:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX)
                 locked = True
-                warehouse_path.parent.mkdir(parents=True, exist_ok=True)
+                warehouse_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             except OSError as exc:
                 raise warehouse_open_error(exc) from exc
             connection = _open_connection(warehouse_path, read_only=False)
+            try:
+                os.chmod(warehouse_path, 0o600)
+            except OSError as exc:
+                connection.close()
+                raise warehouse_open_error(exc) from exc
             token = _ACTIVE_WRITE.set(_ActiveWrite(warehouse_path, connection))
             try:
                 with warehouse_transaction(connection):
                     yield connection
             finally:
-                operation_failed = sys.exception() is not None
+                operation_failed = sys.exc_info()[0] is not None
                 _ACTIVE_WRITE.reset(token)
                 try:
                     connection.close()
@@ -83,7 +89,7 @@ class WarehouseWriteCoordinator:
                     if not operation_failed:
                         raise warehouse_open_error(exc) from exc
         finally:
-            operation_failed = operation_failed or sys.exception() is not None
+            operation_failed = operation_failed or sys.exc_info()[0] is not None
             cleanup_error: OSError | None = None
             if locked:
                 try:
@@ -109,6 +115,14 @@ class WarehouseWritePathConflictError(Exception):
 
     def __str__(self) -> str:
         return "A nested warehouse write requested a different database path."
+
+
+def _warehouse_lock_path(warehouse_path: Path) -> Path:
+    state_home = Path(
+        os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")
+    )
+    identity = hashlib.sha256(os.fsencode(str(warehouse_path))).hexdigest()
+    return state_home / "vnalpha" / "warehouse-locks" / f"{identity}.lock"
 
 
 __all__ = ["WarehouseWriteCoordinator", "WarehouseWritePathConflictError"]

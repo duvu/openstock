@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
-from typing import Iterator, assert_never
+from typing import Iterator
 
 import duckdb
 
@@ -15,11 +15,6 @@ class WarehouseOpenFailureKind(StrEnum):
     UNAVAILABLE = "unavailable"
     PERMISSION = "permission"
     SCHEMA = "schema"
-
-
-class WarehouseFallback(StrEnum):
-    DISABLED = "disabled"
-    MEMORY = "memory"
 
 
 class WarehouseOpenError(Exception):
@@ -94,32 +89,19 @@ def _open_connection(path: Path, *, read_only: bool) -> duckdb.DuckDBPyConnectio
 def get_connection(
     path: Path | str | None = None,
     read_only: bool = True,
-    *,
-    fallback: WarehouseFallback = WarehouseFallback.DISABLED,
 ) -> duckdb.DuckDBPyConnection:
     """Open one fresh read-only connection to the authoritative warehouse."""
     if not read_only:
         raise WarehouseWriteCoordinatorRequiredError
     resolved_path = _configured_path(path)
-    try:
-        return _open_connection(resolved_path, read_only=True)
-    except WarehouseOpenError:
-        match fallback:
-            case WarehouseFallback.DISABLED:
-                raise
-            case WarehouseFallback.MEMORY:
-                return duckdb.connect(":memory:")
-            case unreachable:
-                assert_never(unreachable)
+    return _open_connection(resolved_path, read_only=True)
 
 
 @contextmanager
 def read_connection(
     path: Path | str | None = None,
-    *,
-    fallback: WarehouseFallback = WarehouseFallback.DISABLED,
 ) -> Iterator[duckdb.DuckDBPyConnection]:
-    connection = get_connection(path=path, fallback=fallback)
+    connection = get_connection(path=path)
     with connection:
         yield connection
 
@@ -130,7 +112,6 @@ def in_memory_connection() -> duckdb.DuckDBPyConnection:
 
 
 __all__ = [
-    "WarehouseFallback",
     "WarehouseOpenError",
     "WarehouseOpenFailureKind",
     "WarehouseWriteCoordinatorRequiredError",

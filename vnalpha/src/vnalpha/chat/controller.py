@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator, Literal
 
 from vnalpha.assistant.errors import (
@@ -35,6 +36,7 @@ from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
 from vnalpha.core.text_safety import redact_structure, sanitize_text
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
+from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
@@ -58,6 +60,16 @@ def _capture_exception_safely(exc: Exception) -> None:
         capture_exception(exc)
     except Exception:  # noqa: BLE001
         pass
+
+
+def _connection_warehouse_path(connection: DuckDBPyConnection) -> Path | None:
+    try:
+        database_path = connection.execute("PRAGMA database_list").fetchone()[2]
+    except Exception as exc:
+        raise RuntimeError(
+            "A supplied chat connection must identify its warehouse path."
+        ) from exc
+    return Path(database_path) if database_path else None
 
 
 class ChatController:
@@ -104,13 +116,17 @@ class ChatController:
     def _write_connection(self) -> Iterator[DuckDBPyConnection]:
         if self._connection_factory is not None:
             connection = self._connection_factory()
+            warehouse_path = _connection_warehouse_path(connection)
+            if warehouse_path is not None:
+                connection.close()
+                with WarehouseWriteCoordinator(path=warehouse_path).transaction() as managed:
+                    yield managed
+                return
             try:
                 yield connection
             finally:
                 connection.close()
             return
-        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
-
         with WarehouseWriteCoordinator().transaction() as connection:
             yield connection
 

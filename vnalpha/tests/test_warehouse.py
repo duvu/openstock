@@ -1,5 +1,7 @@
 """Tests for the DuckDB warehouse."""
 
+import threading
+
 import duckdb
 import pytest
 
@@ -7,11 +9,14 @@ from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
 
-def test_configured_warehouse_connection_fails_closed(
+def test_warehouse_lifecycle_fails_closed_serializes_writers_and_rolls_back(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     from vnalpha.core.config import AppConfig, WarehouseConfig
     from vnalpha.warehouse import connection
+    from vnalpha.warehouse.connection import read_connection
+    from vnalpha.warehouse.transaction import WarehouseTransactionRollbackOnlyError
+    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
     configured_path = tmp_path / "configured" / "warehouse.duckdb"
     attempts: list[tuple[str, bool]] = []
@@ -32,6 +37,56 @@ def test_configured_warehouse_connection_fails_closed(
 
     assert raised.value.kind is connection.WarehouseOpenFailureKind.UNAVAILABLE
     assert attempts == [(str(configured_path), True)]
+
+    monkeypatch.undo()
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    warehouse_path = tmp_path / "warehouse.duckdb"
+    coordinator = WarehouseWriteCoordinator(path=warehouse_path)
+    with coordinator.transaction() as database:
+        database.execute("CREATE TABLE writes(value INTEGER)")
+
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    second_entered = threading.Event()
+
+    def first_writer() -> None:
+        with coordinator.transaction() as database:
+            database.execute("INSERT INTO writes VALUES (1)")
+            first_entered.set()
+            assert release_first.wait(timeout=2)
+
+    def second_writer() -> None:
+        with coordinator.transaction() as database:
+            database.execute("INSERT INTO writes VALUES (2)")
+            second_entered.set()
+
+    first = threading.Thread(target=first_writer)
+    second = threading.Thread(target=second_writer)
+    first.start()
+    assert first_entered.wait(timeout=2)
+    second.start()
+    assert not second_entered.wait(timeout=0.1)
+    release_first.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+    assert not first.is_alive()
+    assert not second.is_alive()
+
+    with pytest.raises(WarehouseTransactionRollbackOnlyError):
+        with coordinator.transaction() as database:
+            database.execute("INSERT INTO writes VALUES (3)")
+            try:
+                with coordinator.transaction() as nested:
+                    nested.execute("INSERT INTO writes VALUES (4)")
+                    raise RuntimeError("force nested rollback")
+            except RuntimeError:
+                database.execute("INSERT INTO writes VALUES (5)")
+
+    with read_connection(warehouse_path) as database:
+        assert database.execute("SELECT value FROM writes ORDER BY value").fetchall() == [
+            (1,),
+            (2,),
+        ]
 
 
 @pytest.fixture

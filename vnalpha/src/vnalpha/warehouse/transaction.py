@@ -11,6 +11,7 @@ import duckdb
 @dataclass(frozen=True, slots=True)
 class _TransactionState:
     connection: duckdb.DuckDBPyConnection
+    rollback_only: bool = False
 
 
 _ACTIVE_TRANSACTION: Final[ContextVar[_TransactionState | None]] = ContextVar(
@@ -22,6 +23,10 @@ class WarehouseTransactionConflictError(Exception):
     pass
 
 
+class WarehouseTransactionRollbackOnlyError(Exception):
+    pass
+
+
 @contextmanager
 def warehouse_transaction(
     connection: duckdb.DuckDBPyConnection,
@@ -30,9 +35,10 @@ def warehouse_transaction(
     if active_transaction is not None and active_transaction.connection is connection:
         try:
             yield connection
-        except BaseException:  # noqa: BROAD_EXCEPT_OK
-            connection.execute("ROLLBACK")
-            connection.execute("BEGIN TRANSACTION")
+        except BaseException:
+            _ACTIVE_TRANSACTION.set(
+                _TransactionState(connection=connection, rollback_only=True)
+            )
             raise
         return
     if active_transaction is not None:
@@ -46,6 +52,10 @@ def warehouse_transaction(
     transaction_complete = False
     try:
         yield connection
+        if _ACTIVE_TRANSACTION.get().rollback_only:
+            raise WarehouseTransactionRollbackOnlyError(
+                "A nested warehouse operation failed; the outer transaction was rolled back."
+            )
         connection.execute("COMMIT")
         transaction_complete = True
     finally:
@@ -55,4 +65,8 @@ def warehouse_transaction(
         _ACTIVE_TRANSACTION.reset(token)
 
 
-__all__ = ["WarehouseTransactionConflictError", "warehouse_transaction"]
+__all__ = [
+    "WarehouseTransactionConflictError",
+    "WarehouseTransactionRollbackOnlyError",
+    "warehouse_transaction",
+]
