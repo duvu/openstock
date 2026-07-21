@@ -1,0 +1,1059 @@
+version = 1
+target_min = 180
+target_max = 220
+hard_cap = 250
+
+[[contract]]
+id = "commands-context-commands-test-context-status-returns-workspace-health"
+domain = "application"
+test = "tests/commands/test_context_commands.py::test_context_status_returns_workspace_health"
+
+[[contract]]
+id = "commands-research-automation-commands-test-feature-create-persists-definition-and-reproducibility-artifacts"
+domain = "research"
+test = "tests/commands/test_research_automation_commands.py::test_feature_create_persists_definition_and_reproducibility_artifacts"
+
+[[contract]]
+id = "commands-todo-commands-test-todo-commands-list-add-update-and-clear-persist-rows"
+domain = "application"
+test = "tests/commands/test_todo_commands.py::test_todo_commands_list_add_update_and_clear_persist_rows"
+
+[[contract]]
+id = "sandbox-approval-repository-test-persists-immutable-approval-bound-to-exact-job-material"
+domain = "application"
+test = "tests/sandbox/test_approval_repository.py::test_persists_immutable_approval_bound_to_exact_job_material"
+
+[[contract]]
+id = "sandbox-artifact-path-length-test-output-schema-rejects-overlong-optional-artifact-path"
+domain = "data"
+test = "tests/sandbox/test_artifact_path_length.py::test_output_schema_rejects_overlong_optional_artifact_path"
+
+[[contract]]
+id = "sandbox-artifact-writer-test-persist-request-writes-safe-metadata-code-and-approved-references"
+domain = "data"
+test = "tests/sandbox/test_artifact_writer.py::test_persist_request_writes_safe_metadata_code_and_approved_references"
+
+[[contract]]
+id = "sandbox-artifact-writer-validation-finalization-test-finalization-tracks-execution-and-writes-validation-before-manifest"
+domain = "research"
+test = "tests/sandbox/test_artifact_writer_validation_finalization.py::test_finalization_tracks_execution_and_writes_validation_before_manifest"
+
+[[contract]]
+id = "sandbox-contract-persistence-test-output-schema-rejects-more-than-32-artifacts"
+domain = "data"
+test = "tests/sandbox/test_contract_persistence.py::test_output_schema_rejects_more_than_32_artifacts"
+
+[[contract]]
+id = "sandbox-contracts-test-filesystem-policy-canonicalizes-approved-relative-read-paths"
+domain = "application"
+test = "tests/sandbox/test_contracts.py::test_filesystem_policy_canonicalizes_approved_relative_read_paths"
+
+[[contract]]
+id = "sandbox-docker-orchestration-test-execute-creates-canonical-output-then-runs-digest-bound-request"
+domain = "application"
+test = "tests/sandbox/test_docker_orchestration.py::test_execute_creates_canonical_output_then_runs_digest_bound_request"
+
+[[contract]]
+id = "sandbox-docker-orchestration-terminalization-test-zero-exit-validated-outputs-persist-succeeded-after-finalization"
+domain = "application"
+test = "tests/sandbox/test_docker_orchestration_terminalization.py::test_zero_exit_validated_outputs_persist_succeeded_after_finalization"
+
+[[contract]]
+id = "sandbox-docker-runtime-test-preflight-rejects-non-linux-before-invoking-docker"
+domain = "application"
+test = "tests/sandbox/test_docker_runtime.py::test_preflight_rejects_non_linux_before_invoking_docker"
+
+[[contract]]
+id = "sandbox-docker-runtime-failures-timeout-cleanup-oserror"
+domain = "application"
+test = "tests/sandbox/test_docker_runtime_failures.py::test_run_marks_timeout_cleanup_unsuccessful_when_docker_kill_raises_oserror"
+
+[[contract]]
+id = "sandbox-execution-artifacts-test-persist-execution-writes-canonical-metadata-and-exact-stream-bytes"
+domain = "data"
+test = "tests/sandbox/test_execution_artifacts.py::test_persist_execution_writes_canonical_metadata_and_exact_stream_bytes"
+
+[[contract]]
+id = "sandbox-execution-permissions-test-execution-service-prepares-container-accessible-code-and-output-permissions"
+domain = "application"
+test = "tests/sandbox/test_execution_permissions.py::test_execution_service_prepares_container_accessible_code_and_output_permissions"
+
+[[contract]]
+id = "sandbox-execution-service-test-materialize-assistant-plan-persists-queued-job-preview-and-request-evidence"
+domain = "application"
+test = "tests/sandbox/test_execution_service.py::test_materialize_assistant_plan_persists_queued_job_preview_and_request_evidence"
+
+[[contract]]
+id = "sandbox-failure-observability-invalid-runner-contract"
+domain = "data"
+test = "tests/sandbox/test_failure_observability.py::test_records_invalid_runner_contract_failure"
+
+[[contract]]
+id = "sandbox-generation-approved-numeric-literals"
+domain = "research"
+test = "tests/sandbox/test_generation.py::test_generated_program_depends_on_approved_numeric_literals"
+
+[[contract]]
+id = "sandbox-models-test-parse-job-preserves-immutable-safe-request-values"
+domain = "application"
+test = "tests/sandbox/test_models.py::test_parse_job_preserves_immutable_safe_request_values"
+
+[[contract]]
+id = "sandbox-output-validation-test-validate-accepts-required-output-and-extra-research-fields"
+domain = "research"
+test = "tests/sandbox/test_output_validation.py::test_validate_accepts_required_output_and_extra_research_fields"
+
+[[contract]]
+id = "sandbox-repository-test-repository-persists-safe-metadata-and-terminal-states"
+domain = "data"
+test = "tests/sandbox/test_repository.py::test_repository_persists_safe_metadata_and_terminal_states"
+
+[[contract]]
+id = "sandbox-repository-quality-test-terminal-result-cannot-be-overwritten-and-missing-job-fails"
+domain = "application"
+test = "tests/sandbox/test_repository_quality.py::test_terminal_result_cannot_be_overwritten_and_missing_job_fails"
+
+[[contract]]
+id = "sandbox-sandbox-planning-test-sandbox-calculation-creates-an-approval-gated-plan-step"
+domain = "application"
+test = "tests/sandbox/test_sandbox_planning.py::test_sandbox_calculation_creates_an_approval_gated_plan_step"
+
+[[contract]]
+id = "sandbox-static-guard-safe-scientific-module"
+domain = "application"
+test = "tests/sandbox/test_static_guard.py::test_allows_safe_statement_based_scientific_module"
+
+[[contract]]
+id = "sandbox-static-guard-artifacts-test-persist-guard-requires-persisted-request-and-matching-digest"
+domain = "research"
+test = "tests/sandbox/test_static_guard_artifacts.py::test_persist_guard_requires_persisted_request_and_matching_digest"
+
+[[contract]]
+id = "sandbox-storage-test-storage-creates-only-canonical-job-directory-and-contains-artifacts"
+domain = "research"
+test = "tests/sandbox/test_storage.py::test_storage_creates_only_canonical_job_directory_and_contains_artifacts"
+
+[[contract]]
+id = "sandbox-typed-artifact-persistence-test-database-rejects-chart-outside-canonical-directory"
+domain = "data"
+test = "tests/sandbox/test_typed_artifact_persistence.py::test_database_rejects_chart_outside_canonical_directory"
+
+[[contract]]
+id = "adjusted-price-vertical-test-split-factor-is-a-price-multiplier"
+domain = "application"
+test = "tests/test_adjusted_price_vertical.py::test_split_factor_is_a_price_multiplier"
+
+[[contract]]
+id = "architecture-phase-coupling-test-core-architecture-descriptions-use-capability-language"
+domain = "application"
+test = "tests/test_architecture_phase_coupling.py::test_core_architecture_descriptions_use_capability_language"
+
+[[contract]]
+id = "assistant-completion-gate-test-assistant-tool-trace-has-explicit-assistant-parent"
+domain = "application"
+test = "tests/test_assistant_completion_gate.py::test_assistant_tool_trace_has_explicit_assistant_parent"
+
+[[contract]]
+id = "assistant-lifecycle-hardening-test-context-message-is-bounded-and-untrusted"
+domain = "application"
+test = "tests/test_assistant_lifecycle_hardening.py::test_context_message_is_bounded_and_untrusted"
+
+[[contract]]
+id = "assistant-models-test-assistant-session-status-values"
+domain = "application"
+test = "tests/test_assistant_models.py::test_assistant_session_status_values"
+
+[[contract]]
+id = "assistant-persistence-test-migrations-create-assistant-and-llm-tables"
+domain = "data"
+test = "tests/test_assistant_persistence.py::test_migrations_create_assistant_and_llm_tables"
+
+[[contract]]
+id = "assistant-research-intelligence-completion-test-research-prompt-contains-template-and-bounded-source-refs"
+domain = "research"
+test = "tests/test_assistant_research_intelligence_completion.py::test_research_prompt_contains_template_and_bounded_source_refs"
+
+[[contract]]
+id = "benchmark-registry-test-resolve-benchmark-selects-exchange-default"
+domain = "research"
+test = "tests/test_benchmark_registry.py::test_resolve_benchmark_selects_exchange_default"
+
+[[contract]]
+id = "benchmark-relative-strength-test-vn30-reference-is-not-written-as-vnindex"
+domain = "research"
+test = "tests/test_benchmark_relative_strength.py::test_vn30_reference_is_not_written_as_vnindex"
+
+[[contract]]
+id = "canonical-quarantine-test-invalid-close-is-quarantined-before-canonical-promotion"
+domain = "application"
+test = "tests/test_canonical_quarantine.py::test_invalid_close_is_quarantined_before_canonical_promotion"
+
+[[contract]]
+id = "chat-context-testchatcontextdefaults-test-all-optional-fields-are-none-or-empty"
+domain = "application"
+test = "tests/test_chat_context.py::TestChatContextDefaults::test_all_optional_fields_are_none_or_empty"
+
+[[contract]]
+id = "chat-local-commands-test-cmd-chat-new-via-handle-turn-creates-session"
+domain = "application"
+test = "tests/test_chat_local_commands.py::test_cmd_chat_new_via_handle_turn_creates_session"
+
+[[contract]]
+id = "chat-persistence-test-migrations-create-chat-tables"
+domain = "data"
+test = "tests/test_chat_persistence.py::test_migrations_create_chat_tables"
+
+[[contract]]
+id = "chat-safety-testistoolallowedinchat-test-each-canonical-safe-tool-is-allowed"
+domain = "application"
+test = "tests/test_chat_safety.py::TestIsToolAllowedInChat::test_each_canonical_safe_tool_is_allowed"
+
+[[contract]]
+id = "cli-log-test-log-cmd-shows-all-records"
+domain = "application"
+test = "tests/test_cli_log.py::test_log_cmd_shows_all_records"
+
+[[contract]]
+id = "cli-logging-test-vnalpha-init-emits-log-record"
+domain = "application"
+test = "tests/test_cli_logging.py::test_vnalpha_init_emits_log_record"
+
+[[contract]]
+id = "closed-loop-commands-test-closed-loop-commands-are-registered-and-render-inline-errors"
+domain = "application"
+test = "tests/test_closed_loop_commands.py::test_closed_loop_commands_are_registered_and_render_inline_errors"
+
+[[contract]]
+id = "closed-loop-e2e-testclosedloope2e-test-13-1-fixture-command-produces-failed-run-dir"
+domain = "application"
+test = "tests/test_closed_loop_e2e.py::TestClosedLoopE2E::test_13_1_fixture_command_produces_failed_run_dir"
+
+[[contract]]
+id = "closed-loop-models-test-lifecycle-has-canonical-closed-loop-states"
+domain = "application"
+test = "tests/test_closed_loop_models.py::test_lifecycle_has_canonical_closed_loop_states"
+
+[[contract]]
+id = "closed-loop-security-test-closed-loop-store-rejects-traversal-ids"
+domain = "application"
+test = "tests/test_closed_loop_security.py::test_closed_loop_store_rejects_traversal_ids"
+
+[[contract]]
+id = "closed-loop-service-test-prepare-packages-complete-bundle-and-lifecycle"
+domain = "application"
+test = "tests/test_closed_loop_service.py::test_prepare_packages_complete_bundle_and_lifecycle"
+
+[[contract]]
+id = "command-completion-gate-testcommandexecutorcompletion-test-unexpected-runtime-failure-is-generic-captured-and-persisted"
+domain = "application"
+test = "tests/test_command_completion_gate.py::TestCommandExecutorCompletion::test_unexpected_runtime_failure_is_generic_captured_and_persisted"
+
+[[contract]]
+id = "command-handlers-testscanhandler-test-scan-returns-watchlist"
+domain = "application"
+test = "tests/test_command_handlers.py::TestScanHandler::test_scan_returns_watchlist"
+
+[[contract]]
+id = "command-parser-testcommandnames-test-simple-command"
+domain = "application"
+test = "tests/test_command_parser.py::TestCommandNames::test_simple_command"
+
+[[contract]]
+id = "command-registry-testcommandregistry-test-register-and-lookup"
+domain = "application"
+test = "tests/test_command_registry.py::TestCommandRegistry::test_register_and_lookup"
+
+[[contract]]
+id = "command-safety-testnobrokerbehavior-test-no-broker-imports-in-handlers"
+domain = "application"
+test = "tests/test_command_safety.py::TestNoBrokerBehavior::test_no_broker_imports_in_handlers"
+
+[[contract]]
+id = "command-warehouse-testschemaadditive-test-phase5-tables-still-exist"
+domain = "data"
+test = "tests/test_command_warehouse.py::TestSchemaAdditive::test_phase5_tables_still_exist"
+
+[[contract]]
+id = "context-readiness-test-not-requested-context-does-not-block-ready-core-result"
+domain = "application"
+test = "tests/test_context_readiness.py::test_not_requested_context_does_not_block_ready_core_result"
+
+[[contract]]
+id = "corporate-action-ingestion-test-migrations-create-all-corporate-action-tables"
+domain = "data"
+test = "tests/test_corporate_action_ingestion.py::test_migrations_create_all_corporate_action_tables"
+
+[[contract]]
+id = "data-availability-checks-testgetsymbolmasterstatus-test-symbol-exists"
+domain = "data"
+test = "tests/test_data_availability_checks.py::TestGetSymbolMasterStatus::test_symbol_exists"
+
+[[contract]]
+id = "data-availability-ensure-testcachehit-test-returns-ready-on-complete-cache-hit"
+domain = "data"
+test = "tests/test_data_availability_ensure.py::TestCacheHit::test_returns_ready_on_complete_cache_hit"
+
+[[contract]]
+id = "data-availability-integration-testexplainensureintegration-test-missing-score-triggers-ensure"
+domain = "data"
+test = "tests/test_data_availability_integration.py::TestExplainEnsureIntegration::test_missing_score_triggers_ensure"
+
+[[contract]]
+id = "data-availability-lock-and-observability-testensurelock-test-acquire-creates-lock-file"
+domain = "data"
+test = "tests/test_data_availability_lock_and_observability.py::TestEnsureLock::test_acquire_creates_lock_file"
+
+[[contract]]
+id = "data-availability-service-split-test-planning-is-side-effect-free-when-snapshot-has-missing-data"
+domain = "data"
+test = "tests/test_data_availability_service_split.py::test_planning_is_side_effect_free_when_snapshot_has_missing_data"
+
+[[contract]]
+id = "data-provisioning-test-download-ohlcv-normalizes-arguments-and-reports-operation-evidence"
+domain = "data"
+test = "tests/test_data_provisioning.py::test_download_ohlcv_normalizes_arguments_and_reports_operation_evidence"
+
+[[contract]]
+id = "data-provisioning-runtime-hardening-test-market-regime-builder-receives-date-and-complete-is-success"
+domain = "data"
+test = "tests/test_data_provisioning_runtime_hardening.py::test_market_regime_builder_receives_date_and_complete_is_success"
+
+[[contract]]
+id = "dates-testresolvedatetoday-test-none-returns-today"
+domain = "application"
+test = "tests/test_dates.py::TestResolveDateToday::test_none_returns_today"
+
+[[contract]]
+id = "deep-analysis-readiness-test-readiness-reports-cache-hit-for-every-required-core-artifact"
+domain = "data"
+test = "tests/test_deep_analysis_readiness.py::test_readiness_reports_cache_hit_for_every_required_core_artifact"
+
+[[contract]]
+id = "deploy-testdeployevents-test-verify-started-event-written"
+domain = "application"
+test = "tests/test_deploy.py::TestDeployEvents::test_verify_started_event_written"
+
+[[contract]]
+id = "e2e-pipeline-testwarehousetables-test-symbol-master-populated"
+domain = "data"
+test = "tests/test_e2e_pipeline.py::TestWarehouseTables::test_symbol_master_populated"
+
+[[contract]]
+id = "evals-adapter-test-adapt-observation-when-typed-fixture-is-valid-copies-only-local-values"
+domain = "application"
+test = "tests/test_evals_adapter.py::test_adapt_observation_when_typed_fixture_is_valid_copies_only_local_values"
+
+[[contract]]
+id = "evals-checks-test-evaluate-case-when-claim-and-fact-ids-match-passes-without-answer-value-matching"
+domain = "application"
+test = "tests/test_evals_checks.py::test_evaluate_case_when_claim_and_fact_ids_match_passes_without_answer_value_matching"
+
+[[contract]]
+id = "evals-golden-cases-test-load-golden-cases-when-fixture-uri-and-references-are-valid-loads-case"
+domain = "application"
+test = "tests/test_evals_golden_cases.py::test_load_golden_cases_when_fixture_uri_and_references_are_valid_loads_case"
+
+[[contract]]
+id = "evals-package-resources-test-default-golden-corpus-when-package-is-imported-uses-package-data"
+domain = "data"
+test = "tests/test_evals_package_resources.py::test_default_golden_corpus_when_package_is_imported_uses_package_data"
+
+[[contract]]
+id = "evals-report-test-render-report-when-check-fails-includes-diagnostic-and-stable-totals"
+domain = "application"
+test = "tests/test_evals_report.py::test_render_report_when_check_fails_includes_diagnostic_and_stable_totals"
+
+[[contract]]
+id = "evals-runner-test-run-golden-corpus-when-case-passes-and-case-fails-collects-both"
+domain = "application"
+test = "tests/test_evals_runner.py::test_run_golden_corpus_when_case_passes_and_case_fails_collects_both"
+
+[[contract]]
+id = "evals-runtime-loader-test-runtime-loader-when-case-is-valid-returns-frozen-typed-contract"
+domain = "application"
+test = "tests/test_evals_runtime_loader.py::test_runtime_loader_when_case_is_valid_returns_frozen_typed_contract"
+
+[[contract]]
+id = "evals-runtime-report-test-runtime-report-when-results-are-unsorted-renders-canonical-text-and-json"
+domain = "application"
+test = "tests/test_evals_runtime_report.py::test_runtime_report_when_results_are_unsorted_renders_canonical_text_and_json"
+
+[[contract]]
+id = "evals-runtime-runner-test-runtime-replay-when-case-is-seeded-exercises-prepared-turn-boundaries"
+domain = "application"
+test = "tests/test_evals_runtime_runner.py::test_runtime_replay_when_case_is_seeded_exercises_prepared_turn_boundaries"
+
+[[contract]]
+id = "executor-and-policy-testcheckpolicy-test-policy-refuses-buy"
+domain = "application"
+test = "tests/test_executor_and_policy.py::TestCheckPolicy::test_policy_refuses_buy"
+
+[[contract]]
+id = "executor-missing-symbol-logs-test-executor-does-not-log-data-ensure-for-missing-symbols"
+domain = "data"
+test = "tests/test_executor_missing_symbol_logs.py::test_executor_does_not_log_data_ensure_for_missing_symbols"
+
+[[contract]]
+id = "feature-completeness-standard-profile-missing-required-neutral-feature"
+domain = "application"
+test = "tests/test_feature_completeness.py::test_standard_profile_reports_missing_required_neutral_feature"
+
+[[contract]]
+id = "features-test-compute-ma"
+domain = "application"
+test = "tests/test_features.py::test_compute_ma"
+
+[[contract]]
+id = "fiinquantx-membership-ingestion-test-client-requests-typed-membership-endpoints"
+domain = "data"
+test = "tests/test_fiinquantx_membership_ingestion.py::test_client_requests_typed_membership_endpoints"
+
+[[contract]]
+id = "ingestion-test-sync-symbols-inserts-records"
+domain = "data"
+test = "tests/test_ingestion.py::test_sync_symbols_inserts_records"
+
+[[contract]]
+id = "ingestion-outcomes-test-mixed-batch-cannot-persist-all-success"
+domain = "data"
+test = "tests/test_ingestion_outcomes.py::test_mixed_batch_cannot_persist_all_success"
+
+[[contract]]
+id = "ingestion-persistence-test-quality-and-diagnostics-are-persisted-with-raw-rows"
+domain = "data"
+test = "tests/test_ingestion_persistence.py::test_quality_and_diagnostics_are_persisted_with_raw_rows"
+
+[[contract]]
+id = "ingestion-surfaces-test-provisioning-uses-explicit-failed-batch-status-and-preserves-symbols"
+domain = "data"
+test = "tests/test_ingestion_surfaces.py::test_provisioning_uses_explicit_failed_batch_status_and_preserves_symbols"
+
+[[contract]]
+id = "input-history-testpush-test-push-stores-text"
+domain = "application"
+test = "tests/test_input_history.py::TestPush::test_push_stores_text"
+
+[[contract]]
+id = "intent-and-planner-testdeterministicprecheck-test-deterministic-precheck-buy-refused"
+domain = "application"
+test = "tests/test_intent_and_planner.py::TestDeterministicPrecheck::test_deterministic_precheck_buy_refused"
+
+[[contract]]
+id = "llm-capability-fallback-test-route-decision-carries-configured-capabilities"
+domain = "application"
+test = "tests/test_llm_capability_fallback.py::test_route_decision_carries_configured_capabilities"
+
+[[contract]]
+id = "llm-fail-closed-config-test-unconfigured-gateway-fails-before-route-or-network"
+domain = "application"
+test = "tests/test_llm_fail_closed_config.py::test_unconfigured_gateway_fails_before_route_or_network"
+
+[[contract]]
+id = "llm-structured-output-test-gateway-sends-strict-json-schema"
+domain = "data"
+test = "tests/test_llm_structured_output.py::test_gateway_sends_strict_json_schema"
+
+[[contract]]
+id = "logging-test-configure-logging-creates-log-file"
+domain = "application"
+test = "tests/test_logging.py::test_configure_logging_creates_log_file"
+
+[[contract]]
+id = "logging-surfaces-test-tui-surface-keeps-file-logging-and-silences-console"
+domain = "application"
+test = "tests/test_logging_surfaces.py::test_tui_surface_keeps_file_logging_and_silences_console"
+
+[[contract]]
+id = "maintenance-source-routing-test-legacy-source-applies-only-to-equity-and-index-ohlcv"
+domain = "application"
+test = "tests/test_maintenance_source_routing.py::test_legacy_source_applies_only_to_equity_and_index_ohlcv"
+
+[[contract]]
+id = "market-context-production-policy-test-production-market-rejects-five-rows-and-records-policy"
+domain = "data"
+test = "tests/test_market_context_production_policy.py::test_production_market_rejects_five_rows_and_records_policy"
+
+[[contract]]
+id = "market-regime-builder-test-build-market-regime-persists-deterministic-risk-on-snapshot"
+domain = "data"
+test = "tests/test_market_regime_builder.py::test_build_market_regime_persists_deterministic_risk_on_snapshot"
+
+[[contract]]
+id = "market-regime-repository-test-migrations-create-market-regime-and-sector-strength-tables"
+domain = "data"
+test = "tests/test_market_regime_repository.py::test_migrations_create_market_regime_and_sector_strength_tables"
+
+[[contract]]
+id = "migrated-warehouse-fixture-test-migrated-warehouse-copies-isolate-mutations"
+domain = "data"
+test = "tests/test_migrated_warehouse_fixture.py::test_migrated_warehouse_copies_isolate_mutations"
+
+[[contract]]
+id = "model-routing-runtime-evidence-test-gateway-fallback-emits-explicit-audit-events"
+domain = "application"
+test = "tests/test_model_routing_runtime_evidence.py::test_gateway_fallback_emits_explicit_audit_events"
+
+[[contract]]
+id = "observability-testruncontext-test-run-dir-is-created"
+domain = "application"
+test = "tests/test_observability.py::TestRunContext::test_run_dir_is_created"
+
+[[contract]]
+id = "observability-domain-testdomainlogging-test-migration-start-success"
+domain = "data"
+test = "tests/test_observability_domain.py::TestDomainLogging::test_migration_start_success"
+
+[[contract]]
+id = "ohlcv-gap-checks-test-gap-check-counts-only-unresolved-daily-true-gaps-in-window"
+domain = "application"
+test = "tests/test_ohlcv_gap_checks.py::test_gap_check_counts_only_unresolved_daily_true_gaps_in_window"
+
+[[contract]]
+id = "ohlcv-gap-readiness-test-unresolved-true-gap-blocks-readiness-even-when-bar-counts-are-sufficient"
+domain = "application"
+test = "tests/test_ohlcv_gap_readiness.py::test_unresolved_true_gap_blocks_readiness_even_when_bar_counts_are_sufficient"
+
+[[contract]]
+id = "ohlcv-gaps-test-sessions-exclude-weekends-and-configured-holidays"
+domain = "application"
+test = "tests/test_ohlcv_gaps.py::test_sessions_exclude_weekends_and_configured_holidays"
+
+[[contract]]
+id = "ohlcv-maintenance-test-daily-sync-uses-watermark-overlap-and-rebuilds-each-symbol"
+domain = "data"
+test = "tests/test_ohlcv_maintenance.py::test_daily_sync_uses_watermark_overlap_and_rebuilds_each_symbol"
+
+[[contract]]
+id = "ohlcv-repair-test-repair-fetches-only-true-gap-rebuilds-and-is-idempotent"
+domain = "application"
+test = "tests/test_ohlcv_repair.py::test_repair_fetches_only_true_gap_rebuilds_and_is_idempotent"
+
+[[contract]]
+id = "ohlcv-watermark-test-watermark-uses-latest-complete-raw-and-canonical-with-session-overlap"
+domain = "application"
+test = "tests/test_ohlcv_watermark.py::test_watermark_uses_latest_complete_raw_and_canonical_with_session_overlap"
+
+[[contract]]
+id = "outcome-completion-gate-test-evaluate-watchlist-date-generates-candidate-and-aggregate-tables"
+domain = "data"
+test = "tests/test_outcome_completion_gate.py::test_evaluate_watchlist_date_generates_candidate_and_aggregate_tables"
+
+[[contract]]
+id = "outcome-evaluator-testevaluatornowatchlist-test-no-watchlist-returns-empty"
+domain = "data"
+test = "tests/test_outcome_evaluator.py::TestEvaluatorNoWatchlist::test_no_watchlist_returns_empty"
+
+[[contract]]
+id = "outcome-metrics-testdefaulthorizons-test-default-horizons"
+domain = "data"
+test = "tests/test_outcome_metrics.py::TestDefaultHorizons::test_default_horizons"
+
+[[contract]]
+id = "outcome-safety-testoutcomelanguageboundary-test-no-trading-execution-terms"
+domain = "data"
+test = "tests/test_outcome_safety.py::TestOutcomeLanguageBoundary::test_no_trading_execution_terms"
+
+[[contract]]
+id = "outcome-schema-testmigrations-test-all-outcome-tables-created"
+domain = "data"
+test = "tests/test_outcome_schema.py::TestMigrations::test_all_outcome_tables_created"
+
+[[contract]]
+id = "output-stream-test-transcript-is-unboxed-so-result-blocks-own-visual-emphasis"
+domain = "application"
+test = "tests/test_output_stream.py::test_transcript_is_unboxed_so_result_blocks_own_visual_emphasis"
+
+[[contract]]
+id = "p0-operations-truthfulness-test-daily-cli-persists-noop-invocation"
+domain = "application"
+test = "tests/test_p0_operations_truthfulness.py::test_daily_cli_persists_noop_invocation"
+
+[[contract]]
+id = "persistence-testsaveandgetcandidatescore-test-save-then-get-returns-record"
+domain = "application"
+test = "tests/test_persistence.py::TestSaveAndGetCandidateScore::test_save_then_get_returns_record"
+
+[[contract]]
+id = "plan-approval-test-prepare-turn-routes-with-chat-session-identity"
+domain = "application"
+test = "tests/test_plan_approval.py::test_prepare_turn_routes_with_chat_session_identity"
+
+[[contract]]
+id = "point-in-time-membership-test-symbol-listed-after-date-is-excluded"
+domain = "data"
+test = "tests/test_point_in_time_membership.py::test_symbol_listed_after_date_is_excluded"
+
+[[contract]]
+id = "policy-capabilities-test-central-policy-package-exists-when-capabilities-are-needed"
+domain = "application"
+test = "tests/test_policy_capabilities.py::test_central_policy_package_exists_when_capabilities_are_needed"
+
+[[contract]]
+id = "pr38-conflict-resolution-test-status-adapter-maps-failed-result-to-error"
+domain = "application"
+test = "tests/test_pr38_conflict_resolution.py::test_status_adapter_maps_failed_result_to_error"
+
+[[contract]]
+id = "repair-testrepairbundlegeneration-test-bundle-dir-created"
+domain = "application"
+test = "tests/test_repair.py::TestRepairBundleGeneration::test_bundle_dir_created"
+
+[[contract]]
+id = "research-answer-audit-completion-test-migrations-create-research-answer-audit-table"
+domain = "data"
+test = "tests/test_research_answer_audit_completion.py::test_migrations_create_research_answer_audit_table"
+
+[[contract]]
+id = "research-automation-migrations-test-run-migrations-adds-lifecycle-state-to-legacy-research-artifact"
+domain = "data"
+test = "tests/test_research_automation_migrations.py::test_run_migrations_adds_lifecycle_state_to_legacy_research_artifact"
+
+[[contract]]
+id = "research-context-commands-test-market-regime-reads-latest-and-exact-persisted-context"
+domain = "data"
+test = "tests/test_research_context_commands.py::test_market_regime_reads_latest_and_exact_persisted_context"
+
+[[contract]]
+id = "research-context-review-findings-missing-snapshot-context"
+domain = "research"
+test = "tests/test_research_context_review_findings.py::test_symbol_alignment_discloses_unclassified_and_missing_snapshot_context"
+
+[[contract]]
+id = "research-context-tools-test-context-tools-register-as-autonomous-read-only-feature-reads"
+domain = "research"
+test = "tests/test_research_context_tools.py::test_context_tools_register_as_autonomous_read_only_feature_reads"
+
+[[contract]]
+id = "research-evidence-point-in-time-test-fundamental-visibility-uses-available-from-not-publication-label"
+domain = "research"
+test = "tests/test_research_evidence_point_in_time.py::test_fundamental_visibility_uses_available_from_not_publication_label"
+
+[[contract]]
+id = "research-models-foundation-test-research-models-migrations-are-additive-and-idempotent"
+domain = "data"
+test = "tests/test_research_models_foundation.py::test_research_models_migrations_are_additive_and_idempotent"
+
+[[contract]]
+id = "research-policy-rewrite-completion-test-execution-oriented-scenario-answer-is-rewritten-fail-closed"
+domain = "research"
+test = "tests/test_research_policy_rewrite_completion.py::test_execution_oriented_scenario_answer_is_rewritten_fail_closed"
+
+[[contract]]
+id = "research-scenario-plan-engine-test-scenario-plan-persists-linked-research-artifacts"
+domain = "research"
+test = "tests/test_research_scenario_plan_engine.py::test_scenario_plan_persists_linked_research_artifacts"
+
+[[contract]]
+id = "research-templates-summary-test-deep-analyze-summary-uses-analysis-payload-not-provisioning-payload"
+domain = "research"
+test = "tests/test_research_templates_summary.py::test_deep_analyze_summary_uses_analysis_payload_not_provisioning_payload"
+
+[[contract]]
+id = "research-tool-execution-completion-test-local-registry-exposes-all-bounded-research-tools"
+domain = "research"
+test = "tests/test_research_tool_execution_completion.py::test_local_registry_exposes_all_bounded_research_tools"
+
+[[contract]]
+id = "response-json-parser-test-parse-classifier-response-recovers-markdown-fence"
+domain = "application"
+test = "tests/test_response_json_parser.py::test_parse_classifier_response_recovers_markdown_fence"
+
+[[contract]]
+id = "safety-boundary-test-no-hard-forbidden-terms"
+domain = "application"
+test = "tests/test_safety_boundary.py::test_no_hard_forbidden_terms"
+
+[[contract]]
+id = "scoring-test-rule-price-above-ma20-true"
+domain = "application"
+test = "tests/test_scoring.py::test_rule_price_above_ma20_true"
+
+[[contract]]
+id = "sector-strength-builder-test-build-sector-strength-ranks-tied-scores-alphabetically-and-persists"
+domain = "research"
+test = "tests/test_sector_strength_builder.py::test_build_sector_strength_ranks_tied_scores_alphabetically_and_persists"
+
+[[contract]]
+id = "sector-strength-regressions-test-rebuild-replaces-omitted-same-date-sectors-and-clears-no-rankable-state"
+domain = "research"
+test = "tests/test_sector_strength_regressions.py::test_rebuild_replaces_omitted_same_date_sectors_and_clears_no_rankable_state"
+
+[[contract]]
+id = "staged-response-test-assistant-stage-has-all-seven-values"
+domain = "application"
+test = "tests/test_staged_response.py::test_assistant_stage_has_all_seven_values"
+
+[[contract]]
+id = "symbol-lifecycle-test-sync-persists-typed-snapshot-membership-and-excludes-non-equities"
+domain = "data"
+test = "tests/test_symbol_lifecycle.py::test_sync_persists_typed_snapshot_membership_and_excludes_non_equities"
+
+[[contract]]
+id = "symbol-memory-adapters-test-persisted-candidate-and-feature-snapshots-create-grounded-evidence"
+domain = "data"
+test = "tests/test_symbol_memory_adapters.py::test_persisted_candidate_and_feature_snapshots_create_grounded_evidence"
+
+[[contract]]
+id = "symbol-memory-assistant-context-test-prepare-adds-bounded-untrusted-symbol-memory-after-classification"
+domain = "data"
+test = "tests/test_symbol_memory_assistant_context.py::test_prepare_adds_bounded_untrusted_symbol_memory_after_classification"
+
+[[contract]]
+id = "symbol-memory-availability-test-memory-command-returns-structured-unavailable-when-schema-is-missing"
+domain = "data"
+test = "tests/test_symbol_memory_availability.py::test_memory_command_returns_structured_unavailable_when_schema_is_missing"
+
+[[contract]]
+id = "symbol-memory-boundaries-unknown-source-rejected-before-persistence"
+domain = "data"
+test = "tests/test_symbol_memory_boundaries.py::test_unknown_source_kind_is_rejected_before_memory_persistence"
+
+[[contract]]
+id = "symbol-memory-commands-test-memory-command-registers-remember-show-and-redacted-status"
+domain = "data"
+test = "tests/test_symbol_memory_commands.py::test_memory_command_registers_remember_show_and_redacted_status"
+
+[[contract]]
+id = "symbol-memory-compaction-test-compaction-preview-is-non-mutating-and-reports-omissions"
+domain = "data"
+test = "tests/test_symbol_memory_compaction.py::test_compaction_preview_is_non_mutating_and_reports_omissions"
+
+[[contract]]
+id = "symbol-memory-ingestion-test-validated-evidence-records-one-event-and-typed-claim-idempotently"
+domain = "data"
+test = "tests/test_symbol_memory_ingestion.py::test_validated_evidence_records_one_event_and_typed_claim_idempotently"
+
+[[contract]]
+id = "symbol-memory-lifecycle-test-newer-validated-claim-supersedes-older-active-claim"
+domain = "data"
+test = "tests/test_symbol_memory_lifecycle.py::test_newer_validated_claim_supersedes_older_active_claim"
+
+[[contract]]
+id = "symbol-memory-locking-test-symbol-locks-are-independent-and-exclusive"
+domain = "data"
+test = "tests/test_symbol_memory_locking.py::test_symbol_locks_are_independent_and_exclusive"
+
+[[contract]]
+id = "symbol-memory-maintenance-test-compaction-policy-controls-default-card-budget-and-event-threshold"
+domain = "data"
+test = "tests/test_symbol_memory_maintenance.py::test_compaction_policy_controls_default_card_budget_and_event_threshold"
+
+[[contract]]
+id = "symbol-memory-markdown-test-knowledge-layout-and-card-path-are-canonical-and-symbol-scoped"
+domain = "data"
+test = "tests/test_symbol_memory_markdown.py::test_knowledge_layout_and_card_path_are_canonical_and_symbol_scoped"
+
+[[contract]]
+id = "symbol-memory-models-test-memory-contracts-preserve-typed-temporal-metadata"
+domain = "data"
+test = "tests/test_symbol_memory_models.py::test_memory_contracts_preserve_typed_temporal_metadata"
+
+[[contract]]
+id = "symbol-memory-observability-test-memory-lifecycle-logs-are-bounded-redacted-and-correlated"
+domain = "data"
+test = "tests/test_symbol_memory_observability.py::test_memory_lifecycle_logs_are_bounded_redacted_and_correlated"
+
+[[contract]]
+id = "symbol-memory-recovery-test-external-card-edit-is-reported-and-audited-without-overwrite"
+domain = "data"
+test = "tests/test_symbol_memory_recovery.py::test_external_card_edit_is_reported_and_audited_without_overwrite"
+
+[[contract]]
+id = "symbol-memory-repository-test-migrations-create-all-symbol-memory-tables-idempotently"
+domain = "data"
+test = "tests/test_symbol_memory_repository.py::test_migrations_create_all_symbol_memory_tables_idempotently"
+
+[[contract]]
+id = "symbol-memory-retrieval-test-retrieval-is-exact-symbol-temporal-and-status-safe"
+domain = "data"
+test = "tests/test_symbol_memory_retrieval.py::test_retrieval_is_exact_symbol_temporal_and_status_safe"
+
+[[contract]]
+id = "symbol-memory-runtime-evaluation-test-symbol-memory-runtime-corpus-exercises-lifecycle-and-trust-cases"
+domain = "data"
+test = "tests/test_symbol_memory_runtime_evaluation.py::test_symbol_memory_runtime_corpus_exercises_lifecycle_and_trust_cases"
+
+[[contract]]
+id = "synthesizer-and-app-testanswersynthesizer-test-synthesizer-returns-answer-with-summary"
+domain = "application"
+test = "tests/test_synthesizer_and_app.py::TestAnswerSynthesizer::test_synthesizer_returns_answer_with_summary"
+
+[[contract]]
+id = "textual-renderer-research-test-deep-analysis-renderer-surfaces-workflow-metadata"
+domain = "data"
+test = "tests/test_textual_renderer_research.py::test_deep_analysis_renderer_surfaces_workflow_metadata"
+
+[[contract]]
+id = "tool-policy-unknown-tool-is-not-safe"
+domain = "research"
+test = "tests/test_tool_policy.py::test_assert_safe_tool_when_unknown_tool"
+
+[[contract]]
+id = "tools-testtoolmodels-test-tool-permission-values"
+domain = "application"
+test = "tests/test_tools.py::TestToolModels::test_tool_permission_values"
+
+[[contract]]
+id = "trace-timeline-test-running-content"
+domain = "application"
+test = "tests/test_trace_timeline.py::test_running_content"
+
+[[contract]]
+id = "tui-test-app-can-be-created"
+domain = "application"
+test = "tests/test_tui.py::test_app_can_be_created"
+
+[[contract]]
+id = "tui-clipboard-missing-target-visible-and-non-mutating"
+domain = "application"
+test = "tests/test_tui_clipboard.py::test_copy_missing_target_is_visible_and_non_mutating"
+
+[[contract]]
+id = "tui-context-commands-test-context-command-output-rendered-into-stream"
+domain = "application"
+test = "tests/test_tui_context_commands.py::test_context_command_output_rendered_into_stream"
+
+[[contract]]
+id = "tui-layout-and-history-testcomposerinputhistory-test-composer-creates-default-history"
+domain = "application"
+test = "tests/test_tui_layout_and_history.py::TestComposerInputHistory::test_composer_creates_default_history"
+
+[[contract]]
+id = "tui-legacy-error-boundaries-test-watchlist-failure-closes-connection-and-renders-literal-error"
+domain = "application"
+test = "tests/test_tui_legacy_error_boundaries.py::test_watchlist_failure_closes_connection_and_renders_literal_error"
+
+[[contract]]
+id = "tui-log-viewer-test-log-formatters-strip-controls-markup-and-secrets"
+domain = "application"
+test = "tests/test_tui_log_viewer.py::test_log_formatters_strip_controls_markup_and_secrets"
+
+[[contract]]
+id = "tui-operational-router-unsupported-command-redacted-failure"
+domain = "application"
+test = "tests/test_tui_operational_router.py::test_unsupported_operational_command_records_redacted_failure"
+
+[[contract]]
+id = "tui-pilot-test-app-mounts"
+domain = "application"
+test = "tests/test_tui_pilot.py::test_app_mounts"
+
+[[contract]]
+id = "tui-responsive-layout-test-height-policy-has-compact-medium-and-full-suggestion-limits"
+domain = "application"
+test = "tests/test_tui_responsive_layout.py::test_height_policy_has_compact_medium_and_full_suggestion_limits"
+
+[[contract]]
+id = "tui-result-presentation-test-command-presentation-keeps-rich-and-exact-plain-forms"
+domain = "application"
+test = "tests/test_tui_result_presentation.py::test_command_presentation_keeps_rich_and_exact_plain_forms"
+
+[[contract]]
+id = "tui-terminal-integrity-workspace-suggestions-and-logs-bounded"
+domain = "application"
+test = "tests/test_tui_terminal_integrity.py::test_suggestions_and_inline_logs_remain_inside_workspace"
+
+[[contract]]
+id = "tui-thread-dispatch-test-controller-callbacks-use-app-call-from-thread"
+domain = "application"
+test = "tests/test_tui_thread_dispatch.py::test_controller_callbacks_use_app_call_from_thread"
+
+[[contract]]
+id = "tui-todo-panel-test-workspace-todo-source-maps-workspace-state-to-items"
+domain = "application"
+test = "tests/test_tui_todo_panel.py::test_workspace_todo_source_maps_workspace_state_to_items"
+
+[[contract]]
+id = "tui-todo-refresh-add-updates-workspace-without-side-panel"
+domain = "application"
+test = "tests/test_tui_todo_refresh.py::test_todo_add_updates_workspace_without_side_panel"
+
+[[contract]]
+id = "tui-workspace-test-9-1-app-mounts"
+domain = "application"
+test = "tests/test_tui_workspace.py::test_9_1_app_mounts"
+
+[[contract]]
+id = "tui-workspace-context-lifecycle-test-tui-startup-displays-active-workspace-and-resume-summary"
+domain = "application"
+test = "tests/test_tui_workspace_context_lifecycle.py::test_tui_startup_displays_active_workspace_and_resume_summary"
+
+[[contract]]
+id = "vnstock-client-test-get-symbols"
+domain = "data"
+test = "tests/test_vnstock_client.py::test_get_symbols"
+
+[[contract]]
+id = "vnstock-corporate-action-client-test-get-corporate-actions-uses-canonical-bounded-endpoint"
+domain = "application"
+test = "tests/test_vnstock_corporate_action_client.py::test_get_corporate_actions_uses_canonical_bounded_endpoint"
+
+[[contract]]
+id = "vnstock-source-policy-test-fiinquantx-is-rejected-without-commercial-persistence-approval"
+domain = "application"
+test = "tests/test_vnstock_source_policy.py::test_fiinquantx_is_rejected_without_commercial_persistence_approval"
+
+[[contract]]
+id = "warehouse-test-all-tables-created"
+domain = "data"
+test = "tests/test_warehouse.py::test_all_tables_created"
+
+[[contract]]
+id = "workspace-context-assistant-integration-test-workspace-context-returns-empty-when-workspace-is-missing"
+domain = "application"
+test = "tests/workspace_context/test_assistant_integration.py::test_workspace_context_returns_empty_when_workspace_is_missing"
+
+[[contract]]
+id = "workspace-context-cleaning-test-clean-workspace-dry-run-classifies-files-safely"
+domain = "application"
+test = "tests/workspace_context/test_cleaning.py::test_clean_workspace_dry_run_classifies_files_safely"
+
+[[contract]]
+id = "workspace-context-compaction-test-compact-workspace-writes-compact-file-and-updates-state"
+domain = "application"
+test = "tests/workspace_context/test_compaction.py::test_compact_workspace_writes_compact_file_and_updates_state"
+
+[[contract]]
+id = "workspace-context-context-files-test-render-context-markdown-includes-core-sections"
+domain = "application"
+test = "tests/workspace_context/test_context_files.py::test_render_context_markdown_includes_core_sections"
+
+[[contract]]
+id = "workspace-context-export-test-export-workspace-bundles-only-pinned-workspace-artifacts"
+domain = "research"
+test = "tests/workspace_context/test_export.py::test_export_workspace_bundles_only_pinned_workspace_artifacts"
+
+[[contract]]
+id = "workspace-context-lifecycle-test-create-resume-and-status-flow"
+domain = "application"
+test = "tests/workspace_context/test_lifecycle.py::test_create_resume_and_status_flow"
+
+[[contract]]
+id = "workspace-context-lifecycle-e2e-test-workspace-context-lifecycle-preserves-safe-resumable-boundaries"
+domain = "application"
+test = "tests/workspace_context/test_lifecycle_e2e.py::test_workspace_context_lifecycle_preserves_safe_resumable_boundaries"
+
+[[contract]]
+id = "workspace-context-locking-test-workspace-transaction-records-owner-metadata-and-releases"
+domain = "data"
+test = "tests/workspace_context/test_locking.py::test_workspace_transaction_records_owner_metadata_and_releases"
+
+[[contract]]
+id = "workspace-context-migration-test-detect-legacy-workspace-root-when-canonical-is-empty"
+domain = "data"
+test = "tests/workspace_context/test_migration.py::test_detect_legacy_workspace_root_when_canonical_is_empty"
+
+[[contract]]
+id = "workspace-context-model-routed-compaction-test-compaction-can-use-routed-long-context-client"
+domain = "application"
+test = "tests/workspace_context/test_model_routed_compaction.py::test_compaction_can_use_routed_long_context_client"
+
+[[contract]]
+id = "workspace-context-models-test-workspace-state-round-trip-serialization"
+domain = "application"
+test = "tests/workspace_context/test_models.py::test_workspace_state_round_trip_serialization"
+
+[[contract]]
+id = "workspace-context-observability-test-emit-workspace-audit-event-redacts-sensitive-metadata"
+domain = "data"
+test = "tests/workspace_context/test_observability.py::test_emit_workspace_audit_event_redacts_sensitive_metadata"
+
+[[contract]]
+id = "workspace-context-recovery-test-recovery-quarantines-malformed-workspace-and-keeps-startup-available"
+domain = "application"
+test = "tests/workspace_context/test_recovery.py::test_recovery_quarantines_malformed_workspace_and_keeps_startup_available"
+
+[[contract]]
+id = "workspace-context-redaction-test-workspace-redaction-reports-text-status-and-categories"
+domain = "application"
+test = "tests/workspace_context/test_redaction.py::test_workspace_redaction_reports_text_status_and_categories"
+
+[[contract]]
+id = "workspace-context-retention-test-input-retention-archives-entries-outside-configured-bound"
+domain = "application"
+test = "tests/workspace_context/test_retention.py::test_input_retention_archives_entries_outside_configured_bound"
+
+[[contract]]
+id = "workspace-context-storage-test-resolve-workspace-root-prefers-env-override"
+domain = "application"
+test = "tests/workspace_context/test_storage.py::test_resolve_workspace_root_prefers_env_override"
+
+[[contract]]
+id = "workspace-context-task-mutations-test-add-task-persists-immutable-task-and-redacts-item-event"
+domain = "application"
+test = "tests/workspace_context/test_task_mutations.py::test_add_task_persists_immutable_task_and_redacts_item_event"
+
+[[contract]]
+id = "r0-gaps-test-benchmark-as-of-bar-date-records-actual-benchmark-date"
+domain = "research"
+test = "tests/test_r0_gaps.py::test_benchmark_as_of_bar_date_records_actual_benchmark_date"
+
+[[contract]]
+id = "r0-gaps-test-migration-from-minimal-warehouse"
+domain = "data"
+test = "tests/test_r0_gaps.py::test_migration_from_minimal_warehouse"
+
+[[contract]]
+id = "r0-gaps-test-cli-unknown-universe-exits-nonzero"
+domain = "application"
+test = "tests/test_r0_gaps.py::test_cli_unknown_universe_exits_nonzero"
+
+[[contract]]
+id = "r4-session-test-full-session-lifecycle"
+domain = "application"
+test = "tests/test_r4_session.py::test_full_session_lifecycle"
+
+[[contract]]
+id = "r4-trace-test-trace-persisted-via-controller-callback"
+domain = "application"
+test = "tests/test_r4_trace.py::test_trace_persisted_via_controller_callback"
+
+[[contract]]
+id = "r4-clear-test-clear-does-not-affect-other-sessions"
+domain = "application"
+test = "tests/test_r4_clear.py::test_clear_does_not_affect_other_sessions"
+
+[[contract]]
+id = "r4-permissions-test-unsafe-tool-is-refused-without-approval"
+domain = "application"
+test = "tests/test_r4_permissions.py::test_unsafe_tool_is_refused_without_approval"
+
+[[contract]]
+id = "r4-controller-persistence-testcontrollerpersistence-test-answer-projection-removes-credentials-and-terminal-controls"
+domain = "application"
+test = "tests/test_r4_controller_persistence.py::TestNaturalLanguagePersistence::test_answer_projection_removes_credentials_and_terminal_controls"
+
+[[contract]]
+id = "r4-chat-panel-test-no-local-assistant-dispatch-in-panel"
+domain = "application"
+test = "tests/test_r4_chat_panel.py::test_no_local_assistant_dispatch_in_panel"
+
+[[contract]]
+id = "r4-persistence-test-persist-multiple-turn-types-in-sequence"
+domain = "application"
+test = "tests/test_r4_persistence.py::test_persist_multiple_turn_types_in_sequence"
+
+[[contract]]
+id = "phase5-e2e-testphase5pipeline-test-pipeline-produces-at-least-one-noniignore-candidate"
+domain = "research"
+test = "tests/test_phase5_e2e.py::TestWatchlist::test_pipeline_produces_at_least_one_noniignore_candidate"
+
+[[contract]]
+id = "phase3-artifact-references-test-shortlist-refs-remain-integral-through-research-answer-audit"
+domain = "research"
+test = "tests/test_phase3_artifact_references.py::test_shortlist_refs_remain_integral_through_research_answer_audit"
+
+[[contract]]
+id = "phase3-cache-eligibility-test-complete-cache-hit-runs-no-provisioning-actions"
+domain = "data"
+test = "tests/test_phase3_cache_eligibility.py::test_complete_cache_hit_runs_no_provisioning_actions"
+
+[[contract]]
+id = "phase3-data-lock-and-dates-test-data-lock-has-exactly-one-process-owner-under-contention"
+domain = "data"
+test = "tests/test_phase3_data_lock_and_dates.py::test_data_lock_has_exactly_one_process_owner_under_contention"
+
+[[contract]]
+id = "phase3-grounded-source-refs-test-groundedness-rejects-unsupported-claim-source-ref"
+domain = "research"
+test = "tests/test_phase3_grounded_source_refs.py::test_groundedness_rejects_unsupported_claim_source_ref"

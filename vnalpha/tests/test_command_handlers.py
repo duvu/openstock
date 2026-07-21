@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from datetime import date
 
 import pytest
 
-from vnalpha.commands.errors import CommandValidationError
 from vnalpha.commands.parser import parse
 from vnalpha.commands.setup import build_default_registry
-from vnalpha.outcomes.models import DEFAULT_HORIZONS
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import build_local_tool_registry
@@ -133,48 +130,10 @@ class TestScanHandler:
         assert len(result.tables) == 1
         assert len(result.tables[0].rows) == 2
 
-    def test_scan_empty_watchlist(self, conn, reg):
-        parsed = parse("/scan --date 2000-01-01")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-        assert "empty" in result.summary.lower() or "No candidates" in result.summary
-
-    def test_scan_with_universe_hint(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/scan VN30 --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-
 
 # ---------------------------------------------------------------------------
 # /filter
 # ---------------------------------------------------------------------------
-
-
-class TestFilterHandler:
-    def test_filter_by_score(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/filter score>=0.70 --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-        # Only FPT qualifies
-        assert len(result.tables[0].rows) == 1
-        assert result.tables[0].rows[0][0] == "FPT"
-
-    def test_filter_by_class(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/filter class=STRONG_CANDIDATE --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-        assert any("FPT" in str(row) for row in result.tables[0].rows)
 
 
 # ---------------------------------------------------------------------------
@@ -182,59 +141,9 @@ class TestFilterHandler:
 # ---------------------------------------------------------------------------
 
 
-class TestCompareHandler:
-    def test_compare_returns_table(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/compare FPT VNM --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status in {"SUCCESS", "PARTIAL"}
-        assert len(result.tables) == 1
-        assert len(result.tables[0].rows) == 2
-
-    def test_compare_no_symbols_validation_error(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse("/compare")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "VALIDATION_ERROR"
-
-
 # ---------------------------------------------------------------------------
 # /explain
 # ---------------------------------------------------------------------------
-
-
-class TestExplainHandler:
-    def test_explain_returns_panels(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/explain FPT --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status in {"SUCCESS", "PARTIAL"}
-        panel_titles = [p.title for p in result.panels]
-        assert "Score Summary" in panel_titles
-        assert "Score Breakdown" in panel_titles
-        assert "Risk Flags" in panel_titles
-        assert "Lineage" in panel_titles
-
-    def test_explain_no_symbol_validation_error(self, conn, reg):
-        parsed = parse("/explain")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "VALIDATION_ERROR"
-
-    def test_explain_missing_score_graceful(self, conn, reg):
-        parsed = parse("/explain FPT --date 2000-01-01")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "EMPTY_RESULT"
-        assert result.summary is not None
 
 
 # ---------------------------------------------------------------------------
@@ -242,314 +151,9 @@ class TestExplainHandler:
 # ---------------------------------------------------------------------------
 
 
-class TestQualityHandler:
-    def test_quality_watchlist_level(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/quality --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-
-    def test_quality_symbol_level_missing(self, conn, reg):
-        parsed = parse("/quality FPT --date 2000-01-01")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-        assert result.summary is not None
-
-
-class TestAnalyzeHandler:
-    def test_analyze_blocks_when_fixture_lacks_required_core_data(
-        self, conn_with_data, reg, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.setenv("VNSTOCK_SERVICE_URL", "http://127.0.0.1:1")
-        conn, today = conn_with_data
-        parsed = parse(f"/analyze FPT --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "FAILED"
-        panel_titles = [panel.title for panel in result.panels]
-        assert panel_titles == ["Data Readiness"]
-        assert result.metadata is None
-
-
-class TestWatchlistSummaryHandler:
-    def test_watchlist_summary_returns_groups(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/watchlist-summary --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status in {"SUCCESS", "PARTIAL"}
-        assert len(result.tables) >= 4
-        table_names = [table.title for table in result.tables]
-        assert "Candidate class distribution" in table_names
-        assert "Top candidates" in table_names
-        assert result.summary is not None
-
-
-class TestShortlistHandler:
-    def test_shortlist_returns_shortlist(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/shortlist --date {today} --limit 10")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status in {"SUCCESS", "PARTIAL"}
-        assert len(result.tables) == 1
-        assert result.tables[0].title == "Research shortlist"
-        assert result.summary is not None
-
-    def test_shortlist_filtered_by_setup(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/shortlist --date {today} --setup ACCUMULATION_BASE")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status in {"SUCCESS", "PARTIAL"}
-        assert result.tables and all(
-            "ACCUMULATION_BASE" in row[3] for row in result.tables[0].rows
-        )
-
-    def test_shortlist_empty_when_filtered(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/shortlist --date {today} --sector ENERGY")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "EMPTY_RESULT"
-        assert result.summary is not None
-
-
-class TestResearchPlanHandler:
-    def test_research_plan_blocks_when_fixture_lacks_required_core_data(
-        self, conn_with_data, reg, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.setenv("VNSTOCK_SERVICE_URL", "http://127.0.0.1:1")
-        conn, today = conn_with_data
-        parsed = parse(f"/research-plan FPT --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "FAILED"
-        assert [panel.title for panel in result.panels] == ["Data Readiness"]
-        assert result.tables == []
-        assert result.metadata is None
-
-
-class TestSetupEvidenceHandler:
-    def test_setup_evidence_returns_empty_result_without_history(
-        self, conn_with_data, reg
-    ):
-        conn, today = conn_with_data
-        parsed = parse(f"/setup-evidence ACCUMULATION_BASE --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "EMPTY_RESULT"
-        assert result.summary is not None
-
-
-class TestScoringPolicyCreateHandler:
-    def test_scoring_policy_create_rejects_missing_required_fields(self, conn, reg):
-        parsed = parse(
-            "/scoring-policy create --policy-id openstock-candidate-score "
-            "--policy-version v1.0 --policy-hash "
-            f"{BASELINE_SCORING_POLICY.payload_hash} --status EXPERIMENTAL "
-            "--effective-date 2026-07-10 --reviewer qa.bot"
-        )
-        with pytest.raises(CommandValidationError, match="--rationale"):
-            reg.execute(
-                parsed,
-                conn=conn,
-                registry=reg,
-                tool_executor=_make_tool_executor(conn),
-            )
-
-    def test_scoring_policy_create_rejects_invalid_hash(self, conn, reg):
-        parsed = parse(
-            "/scoring-policy create --policy-id openstock-candidate-score "
-            "--policy-version v1.0 --policy-hash not-a-hash --status EXPERIMENTAL "
-            "--effective-date 2026-07-10 --reviewer qa.bot --rationale baseline"
-        )
-        with pytest.raises(CommandValidationError, match="64"):
-            reg.execute(
-                parsed,
-                conn=conn,
-                registry=reg,
-                tool_executor=_make_tool_executor(conn),
-            )
-
-    def test_scoring_policy_create_rejects_accepted_without_readiness(self, conn, reg):
-        parsed = parse(
-            f"/scoring-policy create --policy-id {BASELINE_SCORING_POLICY.policy_id} "
-            f"--policy-version {BASELINE_SCORING_POLICY.version} --policy-hash "
-            f"{BASELINE_SCORING_POLICY.payload_hash} --status ACCEPTED "
-            "--effective-date 2026-07-10 --reviewer qa.bot "
-            "--rationale accepted --evidence-json '[\"shortlist\"]'"
-        )
-        with pytest.raises(
-            CommandValidationError, match="matching shortlist decision report"
-        ):
-            reg.execute(
-                parsed,
-                conn=conn,
-                registry=reg,
-                tool_executor=_make_tool_executor(conn),
-            )
-
-    def test_scoring_policy_create_succeeds_without_activation(self, conn, reg):
-        parsed = parse(
-            f"/scoring-policy create --policy-id {BASELINE_SCORING_POLICY.policy_id} "
-            f"--policy-version {BASELINE_SCORING_POLICY.version} --policy-hash "
-            f"{BASELINE_SCORING_POLICY.payload_hash} --status EXPERIMENTAL "
-            "--effective-date 2026-07-10 --reviewer qa.bot --rationale baseline"
-        )
-        result = reg.execute(
-            parsed,
-            conn=conn,
-            registry=reg,
-            tool_executor=_make_tool_executor(conn),
-        )
-
-        assert result.status == "SUCCESS"
-        panel = result.panels[0].content
-        assert panel["activated"] is False
-        assert panel["decision"]["policy_id"] == BASELINE_SCORING_POLICY.policy_id
-        assert panel["active_decision"]["decision_id"] == (
-            "baseline::"
-            f"{BASELINE_SCORING_POLICY.policy_id}::"
-            f"{BASELINE_SCORING_POLICY.version}::"
-            f"{BASELINE_SCORING_POLICY.payload_hash}"
-        )
-        assert (
-            panel["decision"]["decision_id"] != panel["active_decision"]["decision_id"]
-        )
-
-    def test_scoring_policy_create_succeeds_with_activation_when_accepted_with_readiness(
-        self,
-        conn,
-        reg,
-    ):
-        conn.execute(
-            """
-            INSERT INTO research_shortlist_decision_report (
-                shortlist_decision_report_id,
-                as_of_date,
-                correlation_id,
-                quality_status,
-                created_at,
-                payload_json
-            )
-            VALUES (
-                'shortlist-report-1',
-                DATE '2026-07-10',
-                'corr-1',
-                'passed',
-                CURRENT_TIMESTAMP,
-                ?
-            )
-            """,
-            [
-                json.dumps(
-                    {
-                        "scoring_policy": {
-                            "scoring_policy_id": BASELINE_SCORING_POLICY.policy_id,
-                            "scoring_policy_version": BASELINE_SCORING_POLICY.version,
-                            "scoring_policy_hash": BASELINE_SCORING_POLICY.payload_hash,
-                        },
-                    }
-                )
-            ],
-        )
-
-        for horizon in DEFAULT_HORIZONS:
-            conn.execute(
-                """
-                INSERT INTO candidate_outcome (
-                    symbol,
-                    watchlist_date,
-                    horizon_sessions,
-                    outcome_status,
-                    price_basis,
-                    benchmark_price_basis,
-                    adjustment_methodology,
-                    adjustment_version,
-                    action_overlap_status,
-                    scoring_policy_id,
-                    scoring_policy_version,
-                    scoring_policy_hash
-                ) VALUES (
-                    'FPT',
-                    DATE '2026-07-10',
-                    ?,
-                    'COMPLETE',
-                    'RAW_UNADJUSTED',
-                    'RAW_UNADJUSTED',
-                    'NONE',
-                    'raw-unadjusted-v1',
-                    'CLEAR',
-                    ?,
-                    ?,
-                    ?
-                )
-                """,
-                [
-                    horizon,
-                    BASELINE_SCORING_POLICY.policy_id,
-                    BASELINE_SCORING_POLICY.version,
-                    BASELINE_SCORING_POLICY.payload_hash,
-                ],
-            )
-
-        parsed = parse(
-            f"/scoring-policy create --policy-id {BASELINE_SCORING_POLICY.policy_id} "
-            f"--policy-version {BASELINE_SCORING_POLICY.version} --policy-hash "
-            f"{BASELINE_SCORING_POLICY.payload_hash} --status ACCEPTED "
-            "--effective-date 2026-07-10 --reviewer qa.bot --rationale accepted "
-            "--evidence-json '[\"shortlist\"]' --activate"
-        )
-        result = reg.execute(
-            parsed,
-            conn=conn,
-            registry=reg,
-            tool_executor=_make_tool_executor(conn),
-        )
-
-        assert result.status == "SUCCESS"
-        panel = result.panels[0].content
-        assert panel["activated"] is True
-        assert (
-            panel["active_decision"]["decision_id"] == panel["decision"]["decision_id"]
-        )
-        assert panel["decision"]["status"] == "ACCEPTED"
-
-
 # ---------------------------------------------------------------------------
 # /lineage
 # ---------------------------------------------------------------------------
-
-
-class TestLineageHandler:
-    def test_lineage_returns_panel(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse(f"/lineage FPT --date {today}")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-        assert len(result.panels) == 1
-        assert "scoring_version" in str(result.panels[0].content)
-
-    def test_lineage_no_symbol_validation_error(self, conn, reg):
-        parsed = parse("/lineage")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "VALIDATION_ERROR"
 
 
 # ---------------------------------------------------------------------------
@@ -557,82 +161,11 @@ class TestLineageHandler:
 # ---------------------------------------------------------------------------
 
 
-class TestNoteHandler:
-    def test_note_persists(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse('/note FPT "watch RS persistence"')
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-        assert "FPT" in result.title
-
-        # Verify persisted
-        from vnalpha.warehouse.session_repo import list_research_notes
-
-        notes = list_research_notes(conn, symbol="FPT")
-        assert any("RS persistence" in n["note_text"] for n in notes)
-
-    def test_note_missing_text_validation_error(self, conn, reg):
-        parsed = parse("/note FPT")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "VALIDATION_ERROR"
-
-
 # ---------------------------------------------------------------------------
 # /history
 # ---------------------------------------------------------------------------
 
 
-class TestHistoryHandler:
-    def test_history_returns_sessions(self, conn_with_data, reg):
-        conn, today = conn_with_data
-        parsed = parse("/history --limit 10")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-        assert len(result.tables) == 1
-
-    def test_history_empty(self, conn, reg):
-        parsed = parse("/history")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-        assert "No research sessions" in result.summary
-
-
 # ---------------------------------------------------------------------------
 # /help
 # ---------------------------------------------------------------------------
-
-
-class TestHelpHandler:
-    def test_help_lists_all_commands(self, conn, reg):
-        parsed = parse("/help")
-        result = reg.execute(
-            parsed, conn=conn, registry=reg, tool_executor=_make_tool_executor(conn)
-        )
-        assert result.status == "SUCCESS"
-        assert len(result.tables) == 1
-        all_names = [row[0] for row in result.tables[0].rows]
-        for cmd in [
-            "/scan",
-            "/filter",
-            "/compare",
-            "/explain",
-            "/quality",
-            "/lineage",
-            "/note",
-            "/history",
-            "/help",
-            "/analyze",
-            "/watchlist-summary",
-            "/shortlist",
-            "/research-plan",
-            "/setup-evidence",
-        ]:
-            assert cmd in all_names, f"{cmd} not in help table"

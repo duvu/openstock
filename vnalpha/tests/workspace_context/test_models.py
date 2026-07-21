@@ -3,14 +3,9 @@ from __future__ import annotations
 import json
 
 from vnalpha.workspace_context.models import (
-    CleanPlan,
-    CleanResult,
-    CompactionResult,
-    ExportResult,
     WorkspaceArtifactRef,
     WorkspaceInputRef,
     WorkspaceState,
-    WorkspaceStatusReport,
     WorkspaceTask,
 )
 
@@ -79,88 +74,3 @@ def test_workspace_state_round_trip_serialization() -> None:
     assert restored == state
     assert restored.active_artifacts[0].metadata["rows"] == 12
     assert restored.open_tasks[0].source_refs == ["artifacts/watchlist.json"]
-
-
-def test_workspace_state_has_versioned_status_contract() -> None:
-    state = WorkspaceState(
-        workspace_id="ws-versioned",
-        title="Versioned",
-        status="active",
-        mode="research",
-        created_at="2026-07-09T01:02:03+00:00",
-        updated_at="2026-07-09T01:02:03+00:00",
-    )
-
-    payload = state.to_dict()
-    migrated = WorkspaceState.from_dict(
-        {key: value for key, value in payload.items() if key != "schema_version"}
-    )
-
-    assert payload["schema_version"] == 2
-    assert migrated.schema_version == 2
-    assert migrated.status == "active"
-
-
-def test_workspace_report_models_round_trip() -> None:
-    report = WorkspaceStatusReport(
-        workspace_id="ws-20260709-001",
-        title="FPT continuation",
-        mode="symbol-analysis",
-        status="active",
-        active_date="2026-07-08",
-        active_symbols=["FPT"],
-        open_tasks=["Review breakout evidence"],
-        warnings=["compact recommended"],
-        errors=["stale context"],
-        last_updated_at="2026-07-09T02:03:04+00:00",
-        last_compacted_at="2026-07-09T00:00:00+00:00",
-        context_size={"events": 8},
-        stale_artifacts=["artifacts/watchlist.json"],
-        suggested_action="/context compact",
-        source_refs=["workspace.json", "events.jsonl#evt-1"],
-    )
-    compaction = CompactionResult(
-        workspace_id="ws-20260709-001",
-        compact_path="compact.md",
-        before_size={"events": 8},
-        after_size={"summary_lines": 20},
-        preserved_items=["active_symbols", "open_tasks"],
-        archived_items=["duplicate outputs"],
-        warnings=["none"],
-        generated_at="2026-07-09T02:10:00+00:00",
-    )
-    clean_plan = CleanPlan(
-        workspace_id="ws-20260709-001",
-        dry_run=True,
-        archive_first=True,
-        keep=["workspace.json", "compact.md"],
-        archive=["events.old.jsonl"],
-        remove=["artifacts/tmp.txt"],
-        needs_confirmation=["notes/private.md"],
-        protected=["audit.jsonl"],
-        summary="dry run only",
-    )
-    clean_result = CleanResult(
-        workspace_id="ws-20260709-001",
-        dry_run=True,
-        archived=["archive/events.old.jsonl"],
-        removed=[],
-        kept=["workspace.json"],
-        warnings=["notes skipped"],
-        generated_at="2026-07-09T02:20:00+00:00",
-        plan=clean_plan,
-    )
-    export_result = ExportResult(
-        workspace_id="ws-20260709-001",
-        bundle_dir="exports/20260709T022500-context-bundle",
-        manifest_path="exports/20260709T022500-context-bundle/manifest.json",
-        exported_files=["manifest.json", "workspace.json", "context.md"],
-        checksums={"workspace.json": "abc123"},
-        generated_at="2026-07-09T02:25:00+00:00",
-    )
-
-    assert WorkspaceStatusReport.from_dict(report.to_dict()) == report
-    assert CompactionResult.from_dict(compaction.to_dict()) == compaction
-    assert CleanPlan.from_dict(clean_plan.to_dict()) == clean_plan
-    assert CleanResult.from_dict(clean_result.to_dict()) == clean_result
-    assert ExportResult.from_dict(export_result.to_dict()) == export_result

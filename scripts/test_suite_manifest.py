@@ -1,33 +1,12 @@
 from __future__ import annotations
 
+import ast
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Final
 
-ALLOWED_SUITES: Final = frozenset(
-    {
-        "vnalpha-data",
-        "vnalpha-research",
-        "vnalpha-application",
-        "shared-smoke",
-        "migration",
-    }
-)
-APPROVED_RISK_EXCEPTIONS: Final = frozenset(
-    {
-        "point-in-time/no-lookahead",
-        "corporate-action adjustment/invalidation",
-        "provider provenance conflict",
-        "transaction/crash/recovery",
-        "queue lease/idempotency/writer exclusion",
-        "security/fail-closed",
-        "migration upgrade/rollback",
-        "package state preservation",
-        "policy promotion/rejection/rollback",
-        "cross-version compatibility",
-    }
-)
+ALLOWED_DOMAINS: Final = frozenset({"application", "data", "research"})
 
 
 class ManifestError(ValueError):
@@ -36,230 +15,165 @@ class ManifestError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Contract:
-    name: str
-    happy: str | None
-    plus_one: str | None
-    risk_exceptions: tuple[str, ...]
+    identifier: str
+    domain: str
+    test: str
 
 
 @dataclass(frozen=True, slots=True)
-class Suite:
-    name: str
-    paths: tuple[str, ...]
+class AuthoritativeInventory:
+    version: int
+    target_min: int
+    target_max: int
+    hard_cap: int
     contracts: tuple[Contract, ...]
 
 
-@dataclass(frozen=True, slots=True)
-class SuiteManifest:
-    version: int | None
-    suites: tuple[Suite, ...]
-
-
-def _string_tuple(value: object, field_name: str) -> tuple[str, ...]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise ManifestError(f"{field_name} must be a list of strings")
-    return tuple(value)
-
-
-def _normalize_path(value: str) -> str:
-    path = PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts or path.as_posix() != value:
-        raise ManifestError(
-            f"path must be normalized and repository-relative: {value!r}"
-        )
-    if not value.startswith("tests/") or not value.endswith(".py"):
-        raise ManifestError(f"path must name a pytest file below tests/: {value!r}")
-    return value
-
-
-def _normalize_pattern(value: str) -> str:
-    path = PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts or path.as_posix() != value:
-        raise ManifestError(
-            f"pattern must be normalized and repository-relative: {value!r}"
-        )
-    if not value.startswith("tests/") or not value.endswith(".py"):
-        raise ManifestError(f"pattern must target pytest files below tests/: {value!r}")
-    return value
-
-
-def _expand_patterns(
-    repository_root: Path,
-    include_patterns: tuple[str, ...],
-    exclude_patterns: tuple[str, ...],
-) -> tuple[str, ...]:
-    included = {
-        path.relative_to(repository_root).as_posix()
-        for pattern in include_patterns
-        for path in repository_root.glob(pattern)
-        if path.is_file()
-    }
-    excluded = {
-        path.relative_to(repository_root).as_posix()
-        for pattern in exclude_patterns
-        for path in repository_root.glob(pattern)
-        if path.is_file()
-    }
-    return tuple(sorted(included - excluded))
-
-
-def _read_contract(value: object, suite_name: str) -> Contract:
-    if not isinstance(value, dict):
-        raise ManifestError(f"suite {suite_name!r} contract must be a table")
-    name = value.get("name")
-    if not isinstance(name, str) or not name:
-        raise ManifestError(
-            f"suite {suite_name!r} contract name must be a non-empty string"
-        )
-    happy = value.get("happy")
-    plus_one = value.get("plus_one")
-    if happy is not None and not isinstance(happy, str):
-        raise ManifestError(f"contract {name!r} happy must be a string")
-    if plus_one is not None and not isinstance(plus_one, str):
-        raise ManifestError(f"contract {name!r} plus_one must be a string")
-    risk_exceptions = _string_tuple(value.get("risk_exceptions", []), "risk_exceptions")
-    return Contract(name, happy, plus_one, risk_exceptions)
-
-
-def load_manifest(manifest_path: Path, tests_root: Path) -> SuiteManifest:
+def _read_text(manifest_path: Path) -> str:
     try:
-        parsed = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ManifestError(f"cannot load manifest {manifest_path}: {exc}") from exc
+        return manifest_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ManifestError(f"cannot read inventory {manifest_path}: {exc}") from exc
+
+
+def _string(value, name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ManifestError(f"{name} must be a non-empty string")
+    return value
+
+
+def _integer(value, name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ManifestError(f"{name} must be an integer")
+    return value
+
+
+def _test_path(node: str) -> str:
+    path, separator, name = node.partition("::")
+    if not separator or not name:
+        raise ManifestError(f"test must be an exact pytest node: {node!r}")
+    normalized = PurePosixPath(path)
+    if (
+        normalized.is_absolute()
+        or ".." in normalized.parts
+        or normalized.as_posix() != path
+        or not path.startswith("tests/")
+        or not path.endswith(".py")
+    ):
+        raise ManifestError(
+            f"test must be a normalized pytest node below tests/: {node!r}"
+        )
+    return path
+
+
+def _defined_tests(tests_root: Path) -> set[tuple[str, ...]]:
+    definitions: set[tuple[str, ...]] = set()
+    for source_path in tests_root.rglob("*.py"):
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        for child in tree.body:
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if child.name.startswith("test_"):
+                    definitions.add((child.name,))
+            if isinstance(child, ast.ClassDef) and child.name.startswith("Test"):
+                definitions.update(
+                    (child.name, method.name)
+                    for method in child.body
+                    if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and method.name.startswith("test_")
+                )
+    return definitions
+
+
+def load_manifest(manifest_path: Path) -> AuthoritativeInventory:
+    try:
+        parsed = tomllib.loads(_read_text(manifest_path))
+    except tomllib.TOMLDecodeError as exc:
+        raise ManifestError(f"cannot parse inventory {manifest_path}: {exc}") from exc
     if not isinstance(parsed, dict):
-        raise ManifestError("manifest root must be a table")
-    raw_suites = parsed.get("suite")
-    if not isinstance(raw_suites, list):
-        raise ManifestError("manifest must contain one or more [[suite]] tables")
-    suites: list[Suite] = []
-    for raw_suite in raw_suites:
-        if not isinstance(raw_suite, dict):
-            raise ManifestError("suite entry must be a table")
-        name = raw_suite.get("name")
-        if not isinstance(name, str) or not name:
-            raise ManifestError("suite name must be a non-empty string")
-        raw_paths = raw_suite.get("paths")
-        raw_include = raw_suite.get("include")
-        if raw_paths is not None and raw_include is not None:
-            raise ManifestError(f"suite {name!r} must use paths or include, not both")
-        if raw_paths is not None:
-            paths = tuple(
-                _normalize_path(item) for item in _string_tuple(raw_paths, "paths")
-            )
-        elif raw_include is not None:
-            include_patterns = tuple(
-                _normalize_pattern(item)
-                for item in _string_tuple(raw_include, "include")
-            )
-            exclude_patterns = tuple(
-                _normalize_pattern(item)
-                for item in _string_tuple(raw_suite.get("exclude", []), "exclude")
-            )
-            paths = _expand_patterns(
-                tests_root.parent, include_patterns, exclude_patterns
-            )
-        else:
-            raise ManifestError(f"suite {name!r} must define paths or include")
-        raw_contracts = raw_suite.get("contract", [])
-        if not isinstance(raw_contracts, list):
-            raise ManifestError(f"suite {name!r} contract must be a list")
-        suites.append(
-            Suite(
-                name=name,
-                paths=paths,
-                contracts=tuple(_read_contract(item, name) for item in raw_contracts),
+        raise ManifestError("inventory root must be a table")
+    raw_contracts = parsed.get("contract")
+    if not isinstance(raw_contracts, list):
+        raise ManifestError("inventory must contain one or more [[contract]] tables")
+    contracts: list[Contract] = []
+    for raw_contract in raw_contracts:
+        if not isinstance(raw_contract, dict):
+            raise ManifestError("contract entry must be a table")
+        contracts.append(
+            Contract(
+                identifier=_string(raw_contract.get("id"), "contract id"),
+                domain=_string(raw_contract.get("domain"), "contract domain"),
+                test=_string(raw_contract.get("test"), "contract test"),
             )
         )
-    version = parsed.get("version")
-    return SuiteManifest(
-        version=version if isinstance(version, int) else None, suites=tuple(suites)
+    return AuthoritativeInventory(
+        version=_integer(parsed.get("version"), "version"),
+        target_min=_integer(parsed.get("target_min"), "target_min"),
+        target_max=_integer(parsed.get("target_max"), "target_max"),
+        hard_cap=_integer(parsed.get("hard_cap"), "hard_cap"),
+        contracts=tuple(contracts),
     )
 
 
-def _discovered_test_paths(tests_root: Path) -> tuple[str, ...]:
-    repository_root = tests_root.parent
-    return tuple(
-        path.relative_to(repository_root).as_posix()
-        for path in sorted(tests_root.rglob("test_*.py"))
-    )
-
-
-def _case_path(case: str) -> str | None:
-    path, separator, test_name = case.partition("::")
-    if not separator or not test_name:
-        return None
-    try:
-        return _normalize_path(path)
-    except ManifestError:
-        return None
-
-
-def validate_manifest(manifest: SuiteManifest, tests_root: Path) -> tuple[str, ...]:
+def validate_manifest(
+    inventory: AuthoritativeInventory, tests_root: Path
+) -> tuple[str, ...]:
     errors: list[str] = []
-    if manifest.version != 1:
-        errors.append("manifest version must be 1")
-    owners: dict[str, list[str]] = {}
-    suite_names: set[str] = set()
-    repository_root = tests_root.parent
-    for suite in manifest.suites:
-        if suite.name not in ALLOWED_SUITES:
-            errors.append(f"unsupported suite {suite.name!r}")
-        if suite.name in suite_names:
-            errors.append(f"suite {suite.name!r} is declared more than once")
-        suite_names.add(suite.name)
-        if not suite.contracts:
-            errors.append(f"suite {suite.name!r} must define at least one contract")
-        for path in suite.paths:
-            owners.setdefault(path, []).append(suite.name)
-            if not (repository_root / path).is_file():
-                errors.append(
-                    f"suite {suite.name!r} references missing test file {path!r}"
-                )
-        for contract in suite.contracts:
-            if contract.happy is None or contract.plus_one is None:
-                errors.append(
-                    f"contract {contract.name!r} must define exactly one happy and one plus_one case"
-                )
-            elif contract.happy == contract.plus_one:
-                errors.append(
-                    f"contract {contract.name!r} happy and plus_one cases must be distinct"
-                )
-            for case in (contract.happy, contract.plus_one):
-                if case is None:
-                    continue
-                case_path = _case_path(case)
-                if case_path not in suite.paths:
-                    errors.append(
-                        f"contract {contract.name!r} case {case!r} must belong to its suite"
-                    )
-            for risk_exception in contract.risk_exceptions:
-                if risk_exception not in APPROVED_RISK_EXCEPTIONS:
-                    errors.append(
-                        f"contract {contract.name!r} has unsupported risk exception {risk_exception!r}"
-                    )
-    for path, assigned_suites in sorted(owners.items()):
-        if len(assigned_suites) > 1:
+    if inventory.version != 1:
+        errors.append("inventory version must be 1")
+    if inventory.target_min != 180 or inventory.target_max != 220:
+        errors.append("inventory target range must be 180 through 220")
+    if inventory.hard_cap != 250:
+        errors.append("inventory hard cap must be 250")
+    count = len(inventory.contracts)
+    if not inventory.target_min <= count <= inventory.target_max:
+        errors.append(
+            f"inventory has {count} contracts; expected {inventory.target_min} through {inventory.target_max}"
+        )
+    if count > inventory.hard_cap:
+        errors.append(
+            f"inventory has {count} contracts; hard cap is {inventory.hard_cap}"
+        )
+    identifiers: set[str] = set()
+    tests: set[str] = set()
+    expected_definitions: set[tuple[str, ...]] = set()
+    for contract in inventory.contracts:
+        if contract.identifier in identifiers:
+            errors.append(f"contract id is duplicated: {contract.identifier!r}")
+        identifiers.add(contract.identifier)
+        if contract.domain not in ALLOWED_DOMAINS:
             errors.append(
-                f"test file {path!r} is assigned by multiple suites: {assigned_suites}"
+                f"contract {contract.identifier!r} has unsupported domain {contract.domain!r}"
             )
-    for path in _discovered_test_paths(tests_root):
-        if path not in owners:
-            errors.append(f"test file {path!r} is unassigned")
+        if contract.test in tests:
+            errors.append(f"pytest node is duplicated: {contract.test!r}")
+        tests.add(contract.test)
+        expected_definitions.add(tuple(contract.test.split("::")[1:]))
+        try:
+            test_path = _test_path(contract.test)
+        except ManifestError as exc:
+            errors.append(f"contract {contract.identifier!r}: {exc}")
+        else:
+            if not (tests_root.parent / test_path).is_file():
+                errors.append(
+                    f"contract {contract.identifier!r} references missing test file {test_path!r}"
+                )
+    defined_tests = _defined_tests(tests_root)
+    for definition in sorted(defined_tests - expected_definitions):
+        errors.append(f"test is unclassified: {'::'.join(definition)}")
+    for definition in sorted(expected_definitions - defined_tests):
+        errors.append(f"inventory node has no test definition: {'::'.join(definition)}")
     return tuple(errors)
 
 
-def resolve_paths(
-    manifest: SuiteManifest, requested_suites: tuple[str, ...]
+def resolve_tests(
+    inventory: AuthoritativeInventory, requested_domains: tuple[str, ...]
 ) -> tuple[str, ...]:
-    by_name = {suite.name: suite for suite in manifest.suites}
-    resolved: list[str] = []
-    seen: set[str] = set()
-    for suite_name in requested_suites:
-        suite = by_name.get(suite_name)
-        if suite is None:
-            raise ManifestError(f"unknown suite: {suite_name}")
-        for path in suite.paths:
-            if path not in seen:
-                seen.add(path)
-                resolved.append(path)
-    return tuple(resolved)
+    unknown = sorted(set(requested_domains) - ALLOWED_DOMAINS)
+    if unknown:
+        raise ManifestError(f"unknown domain: {', '.join(unknown)}")
+    selected_domains = frozenset(requested_domains)
+    return tuple(
+        contract.test
+        for contract in inventory.contracts
+        if not selected_domains or contract.domain in selected_domains
+    )

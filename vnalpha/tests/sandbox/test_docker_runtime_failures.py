@@ -6,8 +6,6 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Final, final
 
-import pytest
-
 from vnalpha.sandbox import docker_runner
 from vnalpha.sandbox.docker_runner import (
     DockerExecutionRequest,
@@ -45,40 +43,6 @@ class _FakeDockerCommand:
                 raise outcome
             case unreachable:
                 raise AssertionError(f"unexpected fake outcome: {unreachable!r}")
-
-
-@pytest.mark.parametrize(
-    "launch_error",
-    (
-        PermissionError(errno.EACCES, "permission denied"),
-        OSError(errno.EIO, "launch failed"),
-    ),
-)
-def test_run_returns_typed_failure_when_docker_launch_raises_oserror(
-    tmp_path: Path,
-    launch_error: OSError,
-) -> None:
-    # Given
-    command = _FakeDockerCommand(
-        iter(
-            (
-                DockerExecutionResult(return_code=0, stdout=b"linux\n", stderr=b""),
-                DockerExecutionResult(
-                    return_code=0, stdout=b"sha256:local", stderr=b""
-                ),
-                launch_error,
-            )
-        )
-    )
-    runner = docker_runner.DockerRunner(command=command, host_platform="Linux")
-
-    # When
-    result = runner.run(_request(tmp_path))
-
-    # Then
-    assert result.failure_code is docker_runner.DockerFailureCode.DOCKER_LAUNCH_FAILED
-    assert result.return_code == -1
-    assert [argv[1] for argv in command.calls] == ["version", "image", "run"]
 
 
 def test_run_marks_timeout_cleanup_unsuccessful_when_docker_kill_raises_oserror(

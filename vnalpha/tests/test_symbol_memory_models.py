@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import date, datetime, timezone
-
-import pytest
 
 from vnalpha.symbol_memory.models import (
     ClaimOrigin,
@@ -14,8 +11,6 @@ from vnalpha.symbol_memory.models import (
     MemoryEvent,
     MemoryRetrievalResult,
 )
-from vnalpha.symbol_memory.paths import SymbolPathError, normalize_symbol
-from vnalpha.symbol_memory.validators import MemoryValidationError, validate_claim
 
 
 def _claim() -> MemoryClaim:
@@ -92,24 +87,3 @@ def test_memory_contracts_preserve_typed_temporal_metadata() -> None:
     assert event.symbol == claim.symbol
     assert document.generation == compaction.after_generation
     assert retrieval.selected_claims == (claim,)
-
-
-def test_claim_requires_source_and_temporal_metadata_for_numeric_facts() -> None:
-    claim = _claim()
-    validate_claim(claim)
-
-    with pytest.raises(MemoryValidationError):
-        validate_claim(replace(claim, source_refs=()))
-
-
-@pytest.mark.parametrize(
-    "value",
-    ["../FPT", "FPT/notes", "/tmp/FPT", "C:\\FPT", ".", "..", "CON"],
-)
-def test_normalize_symbol_rejects_unsafe_path_components(value: str) -> None:
-    with pytest.raises(SymbolPathError):
-        normalize_symbol(value)
-
-
-def test_normalize_symbol_returns_canonical_uppercase_symbol() -> None:
-    assert normalize_symbol(" fpt ") == "FPT"

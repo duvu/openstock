@@ -1,14 +1,10 @@
 """Tests for the vnstock-service client using respx mock."""
 
 import httpx
-import pytest
 import respx
 
-import vnalpha.clients.vnstock.client as client_module
 from vnalpha.clients.vnstock.client import VnstockClient
-from vnalpha.clients.vnstock.errors import VnstockHTTPError
 from vnalpha.clients.vnstock.schemas import (
-    OHLCVResponse,
     SymbolsResponse,
 )
 
@@ -63,85 +59,3 @@ def test_get_symbols(respx_mock):
     request = respx_mock.calls.last.request
     assert request.url.params["validate"] == "true"
     assert request.url.params["quality_mode"] == "strict"
-
-
-@respx.mock(base_url=MOCK_BASE)
-def test_get_equity_ohlcv(respx_mock):
-    respx_mock.get("/v1/equity/ohlcv").mock(
-        return_value=httpx.Response(200, json=OHLCV_RESPONSE)
-    )
-    client = VnstockClient(base_url=MOCK_BASE)
-    result = client.get_equity_ohlcv("FPT", start="2024-01-01")
-    assert isinstance(result, OHLCVResponse)
-    assert result.data[0]["symbol"] == "FPT"
-    request = respx_mock.calls.last.request
-    assert request.url.params["validate"] == "true"
-    assert request.url.params["quality_mode"] == "strict"
-
-
-@respx.mock(base_url=MOCK_BASE)
-def test_http_error_raises(respx_mock):
-    respx_mock.get("/v1/equity/ohlcv").mock(
-        return_value=httpx.Response(503, text="Service unavailable")
-    )
-    client = VnstockClient(base_url=MOCK_BASE)
-    with pytest.raises(VnstockHTTPError) as exc_info:
-        client.get_equity_ohlcv("FPT")
-    assert exc_info.value.status_code == 503
-
-
-@respx.mock(base_url=MOCK_BASE)
-def test_response_preserves_meta(respx_mock):
-    respx_mock.get("/v1/reference/symbols").mock(
-        return_value=httpx.Response(200, json=SYMBOLS_RESPONSE)
-    )
-    client = VnstockClient(base_url=MOCK_BASE)
-    result = client.get_symbols()
-    assert result.meta.dataset == "reference.symbols"
-    assert result.meta.quality_status == "pass"
-    assert result.meta.fetched_at is not None
-
-
-@respx.mock(base_url=MOCK_BASE)
-def test_provider_health(respx_mock):
-    health_response = {"providers": [{"provider": "kbs", "status": "HEALTHY"}]}
-    respx_mock.get("/v1/providers/health").mock(
-        return_value=httpx.Response(200, json=health_response)
-    )
-    client = VnstockClient(base_url=MOCK_BASE)
-    result = client.get_provider_health()
-    assert len(result.providers) == 1
-    assert result.providers[0]["provider"] == "kbs"
-
-
-def test_no_provider_specific_logic():
-    """vnalpha client MUST NOT import vnstock provider classes."""
-    import inspect
-
-    import vnalpha.clients.vnstock.client as mod
-
-    src = inspect.getsource(mod)
-    # Ensure no direct imports of vnstock provider internals
-    assert "from vnstock.providers" not in src
-    assert "from vnstock.explorer" not in src
-    assert "PluginRegistry" not in src
-
-
-@respx.mock(base_url=MOCK_BASE)
-def test_get_forwards_active_correlation_id(respx_mock, monkeypatch):
-    monkeypatch.setattr(
-        client_module,
-        "get_correlation_id",
-        lambda: "corr-173-warehouse",
-        raising=False,
-    )
-    route = respx_mock.get("/healthz").mock(
-        return_value=httpx.Response(200, json={"status": "ok"})
-    )
-
-    client = VnstockClient(base_url=MOCK_BASE)
-    client.health_check()
-
-    assert route.calls.last.request.headers["X-Correlation-ID"] == (
-        "corr-173-warehouse"
-    )

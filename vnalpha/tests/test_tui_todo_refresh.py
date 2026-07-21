@@ -5,8 +5,6 @@ from unittest.mock import patch
 import pytest
 from rich.console import Console, Group
 
-from vnalpha.commands.models import CommandStatus
-
 
 def _connection():
     import duckdb
@@ -37,40 +35,6 @@ def _renderable_text(renderable: Group) -> str:
     console = Console(record=True, width=120)
     console.print(renderable)
     return console.export_text()
-
-
-@pytest.mark.parametrize(
-    ("raw", "status", "refreshes_workspace"),
-    [
-        ("/todo add Refresh after routing", CommandStatus.SUCCESS, True),
-        ("/todo done task-1", CommandStatus.SUCCESS, True),
-        ("/todo block task-1", CommandStatus.SUCCESS, True),
-        ("/todo clear-done", CommandStatus.SUCCESS, True),
-        ("/todo list", CommandStatus.SUCCESS, False),
-        ("/todo add Refresh after routing", CommandStatus.EMPTY_RESULT, False),
-        ("/todo add Refresh after routing", CommandStatus.PARTIAL, False),
-        ("/todo add Refresh after routing", CommandStatus.FAILED, False),
-        (
-            "/todo add Refresh after routing",
-            CommandStatus.VALIDATION_ERROR,
-            False,
-        ),
-        ("/context status", CommandStatus.SUCCESS, True),
-    ],
-)
-def test_workspace_refresh_predicate_accepts_only_successful_mutations(
-    raw: str, status: CommandStatus, refreshes_workspace: bool
-) -> None:
-    from vnalpha.tui.workspace_context import refreshed_workspace_for_context_command
-
-    with patch(
-        "vnalpha.tui.workspace_context.load_active_workspace",
-        return_value=_workspace_state(),
-    ) as load_workspace:
-        workspace = refreshed_workspace_for_context_command(raw, status)
-
-    assert (workspace is not None) is refreshes_workspace
-    assert load_workspace.called is refreshes_workspace
 
 
 @pytest.mark.asyncio
@@ -125,9 +89,3 @@ async def test_todo_add_updates_workspace_without_side_panel(
             task.text for task in get_or_create_latest_workspace().open_tasks
         ]
         assert pilot.app.focused is composer
-
-
-def test_todo_panel_empty_hint_uses_todo_add_command() -> None:
-    from vnalpha.tui.widgets.todo_panel import _render_items
-
-    assert '/todo add "..."' in _renderable_text(_render_items([]))

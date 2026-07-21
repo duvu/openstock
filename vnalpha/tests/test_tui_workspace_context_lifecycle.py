@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-from functools import partial
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vnalpha.workspace_context.lifecycle import (
-    create_workspace,
-    new_workspace,
-)
 from vnalpha.workspace_context.models import WorkspaceState
-from vnalpha.workspace_context.storage import load_workspace_state
 
 
 def _result_with_artifact():
@@ -65,94 +59,3 @@ async def test_tui_startup_displays_active_workspace_and_resume_summary(
                 assert workspace.workspace_id in status_bar._render_status()
                 show_summary.assert_called_once()
                 assert workspace.workspace_id in show_summary.call_args.args[0]
-
-
-@pytest.mark.asyncio
-async def test_router_records_sanitized_input_before_chat_routing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
-    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
-    workspace = create_workspace(root=tmp_path)
-    router, _ = _router(workspace)
-
-    with patch("anyio.to_thread.run_sync", new_callable=AsyncMock) as run_sync:
-        await router.route("api_key=super-secret show FPT")
-
-    persisted = load_workspace_state(root=tmp_path, workspace_id=workspace.workspace_id)
-    stored = persisted.recent_inputs[-1]
-    assert stored.input_kind == "natural_language"
-    assert stored.redaction_status == "redacted"
-    assert stored.metadata == {"length": len("api_key=super-secret show FPT")}
-    assert "super-secret" not in stored.content
-    handle_turn = run_sync.call_args.args[0]
-    assert isinstance(handle_turn, partial)
-    assert handle_turn.func == router._chat_controller.handle_turn
-    assert handle_turn.args == ("api_key=super-secret show FPT",)
-
-
-@pytest.mark.asyncio
-async def test_router_records_command_artifacts_without_result_payload(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
-    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
-    workspace = create_workspace(root=tmp_path)
-    router, _ = _router(workspace)
-    result = _result_with_artifact()
-
-    with patch("anyio.to_thread.run_sync", new_callable=AsyncMock, return_value=result):
-        await router.route("/scan")
-
-    persisted = load_workspace_state(root=tmp_path, workspace_id=workspace.workspace_id)
-    artifact = persisted.active_artifacts[-1]
-    assert artifact.artifact_type == "command_result"
-    assert artifact.path == ""
-    assert artifact.summary == "Command artifact: watchlist"
-    assert artifact.metadata == {"name": "watchlist"}
-
-
-@pytest.mark.asyncio
-async def test_context_command_switch_notifies_tui_of_latest_workspace(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
-    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
-    workspace = create_workspace(root=tmp_path)
-    workspace_changed = MagicMock()
-    router, _ = _router(workspace, workspace_changed)
-    result = _result_with_artifact()
-
-    async def execute_and_switch(*_args):
-        new_workspace(root=tmp_path)
-        return result
-
-    with patch("anyio.to_thread.run_sync", new_callable=AsyncMock) as run_sync:
-        run_sync.side_effect = execute_and_switch
-        await router.route("/context new")
-
-    switched = load_workspace_state(
-        root=tmp_path,
-        workspace_id=router._workspace.workspace_id,
-    )
-    assert switched.workspace_id != workspace.workspace_id
-    workspace_changed.assert_called_once_with(switched)
-
-
-@pytest.mark.asyncio
-async def test_router_passes_raw_chat_and_bounded_workspace_context_separately(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
-    monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
-    workspace = create_workspace(root=tmp_path)
-    router, _ = _router(workspace)
-
-    with patch("anyio.to_thread.run_sync", new_callable=AsyncMock) as run_sync:
-        await router.route("Show FPT candidates")
-
-    handle_turn = run_sync.call_args.args[0]
-    assert isinstance(handle_turn, partial)
-    assert handle_turn.args == ("Show FPT candidates",)
-    workspace_context = handle_turn.keywords["workspace_context"]
-    assert workspace_context.startswith("# Workspace Context")
-    assert (
-        "current warehouse and tool output is authoritative"
-        in workspace_context.lower()
-    )

@@ -43,25 +43,3 @@ async def test_controller_callbacks_use_app_call_from_thread(tmp_path: Path) -> 
     assert app_call_from_thread.call_count == 2
     output.show_assistant_message.assert_not_called()
     output.show_trace_event.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_app_unmount_closes_router_and_worker_callback_renders(
-    tmp_path: Path,
-) -> None:
-    pytest.importorskip("textual")
-    from vnalpha.tui.app import VnAlphaApp
-    from vnalpha.tui.input_router import TuiInputRouter
-
-    with patch.object(TuiInputRouter, "close", create=True) as close:
-        with patch.object(TuiInputRouter, "_bootstrap_session", return_value=None):
-            async with VnAlphaApp(date="2026-07-10").run_test(headless=True) as pilot:
-                router = pilot.app._router
-                controller = router._chat_controller
-                on_message = controller._on_message
-                await anyio.to_thread.run_sync(
-                    on_message, "assistant", "headless worker callback"
-                )
-                await pilot.pause()
-
-    close.assert_called_once_with()

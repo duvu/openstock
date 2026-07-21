@@ -7,7 +7,6 @@ on:
       - "packaging/**"
       - "vnalpha/pyproject.toml"
       - "vnalpha/uv.lock"
-      - "vnalpha/src/**"
       - ".github/workflows/vnalpha-debian-package.yml"
   push:
     branches:
@@ -17,7 +16,6 @@ on:
       - "packaging/**"
       - "vnalpha/pyproject.toml"
       - "vnalpha/uv.lock"
-      - "vnalpha/src/**"
       - ".github/workflows/vnalpha-debian-package.yml"
   workflow_dispatch:
 

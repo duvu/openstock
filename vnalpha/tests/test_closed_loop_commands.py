@@ -60,18 +60,3 @@ def test_closed_loop_commands_are_registered_and_render_inline_errors(
     assert unsupported.status.value == "VALIDATION_ERROR"
     assert "Unsupported" in (unsupported.summary or "")
     conn.close()
-
-
-def test_deploy_force_option_is_rejected_inline(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("VNALPHA_LOG_ROOT", str(tmp_path))
-    conn = duckdb.connect(":memory:")
-    run_migrations(conn=conn)
-
-    result = build_default_registry().execute(
-        parse("/deploy promote artifact-1 --deployment-id deployment-1 --force"),
-        conn=conn,
-    )
-
-    assert result.status.value == "VALIDATION_ERROR"
-    assert "Unsupported" in (result.summary or "")
-    conn.close()

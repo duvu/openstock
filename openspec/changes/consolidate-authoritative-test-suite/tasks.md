@@ -7,18 +7,18 @@
 
 ## 2. Authoritative inventory and budget
 
-- [ ] 2.1 Inventory every current test and validation check as `KEEP`, `MERGE`, `REPLACE` or `DELETE` with retained-owner evidence.
-- [ ] 2.2 Create one concise authoritative manifest that maps every retained public/risk contract to one test node and domain.
-- [ ] 2.3 Make consistency reject a missing test node, duplicate contract identifier, unclassified new test, or authoritative count above 250.
-- [ ] 2.4 Consolidate the manifest to 180–220 authoritative tests, with explicit exceptions only for distinct approved risk contracts.
-- [ ] 2.5 Remove duplicate checker tests/scripts and policy prose after their real owner is retained.
+- [x] 2.1 Inventory every current test and validation check as `KEEP`, `MERGE`, `REPLACE` or `DELETE` with retained-owner evidence.
+- [x] 2.2 Create one concise authoritative manifest that maps every retained public/risk contract to one test node and domain.
+- [x] 2.3 Make consistency reject a missing test node, duplicate contract identifier, unclassified new test, or authoritative count above 250.
+- [x] 2.4 Consolidate the manifest to 180–220 authoritative tests, with explicit exceptions only for distinct approved risk contracts.
+- [x] 2.5 Remove duplicate checker tests/scripts and policy prose after their real owner is retained.
 
 ## 3. Validation lanes and routing
 
 - [x] 3.1 Classify docs/OpenSpec-only, component, packaging, shared-contract and infrastructure changes fail-closed.
 - [x] 3.2 Keep consistency unconditional; let docs-only changes deliberately skip runtime lanes; fail Required on every conclusion other than `success` or `skipped`.
 - [ ] 3.3 Route changed domains to their compact authoritative tests and demonstrate a PR wall-time target of five minutes or less.
-- [ ] 3.4 Restrict Debian acceptance to packaging, installer, dependency-layout, service-unit or release changes; ordinary `vnalpha/src/**` changes must not trigger it.
+- [x] 3.4 Restrict Debian acceptance to packaging, installer, dependency-layout, service-unit or release changes; ordinary `vnalpha/src/**` changes must not trigger it.
 
 ## 4. Fixture and consolidation implementation
 
@@ -26,7 +26,7 @@
 - [x] 4.2 Prove the isolated copy fixture prevents mutation contamination and migrate compatible current-schema contracts.
 - [ ] 4.3 Keep fresh migration, idempotency, upgrade, rollback, crash, reopen, locking and multiprocessing contracts on dedicated inputs.
 - [ ] 4.4 Replace repeated table counts/lists with one canonical schema owner and consolidate equivalent application/CLI/TUI/assistant cases to their public boundary.
-- [ ] 4.5 Record retained financial, PIT, lineage, recovery, security and package-risk owners for every deletion.
+- [x] 4.5 Record retained financial, PIT, lineage, recovery, security and package-risk owners for every deletion.
 
 ## 5. Final evidence and closure
 

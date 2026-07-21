@@ -219,7 +219,6 @@ def _check_ci_gate_contract(errors: list[str]) -> None:
         "IMPACT_RESULT",
         "CONSISTENCY_RESULT",
         "VNALPHA_RESULT",
-        "VNALPHA_SMOKE_RESULT",
         "VNALPHA_DOMAINS_RESULT",
         "VNSTOCK_RESULT",
     ):
@@ -231,7 +230,6 @@ def _check_ci_gate_contract(errors: list[str]) -> None:
     for routing_contract in (
         "name: Change impact routing",
         "python scripts/classify-test-impact.py --github-output",
-        "needs.impact.outputs.smoke == 'true'",
         "needs.impact.outputs.full == 'true'",
         "contains(fromJSON(needs.impact.outputs.domains), 'vnalpha-application')",
     ):
@@ -275,10 +273,10 @@ def _check_suite_manifest(errors: list[str]) -> None:
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    manifest_path = ROOT / "vnalpha" / "tests" / "suites" / "manifest.toml"
+    manifest_path = ROOT / "vnalpha" / "tests" / "suites" / "authoritative.toml"
     tests_root = ROOT / "vnalpha" / "tests"
     try:
-        manifest = module.load_manifest(manifest_path, tests_root)
+        manifest = module.load_manifest(manifest_path)
         manifest_errors = module.validate_manifest(manifest, tests_root)
     except module.ManifestError as exc:
         errors.append(f"vnalpha test suite manifest: {exc}")

@@ -17,7 +17,6 @@ class ImpactError(ValueError):
 class ImpactDecision:
     classes: tuple[str, ...]
     consistency: bool
-    smoke: bool
     domains: tuple[str, ...]
     full: bool
     package: bool
@@ -67,7 +66,6 @@ def classify_paths(paths: tuple[str, ...]) -> ImpactDecision:
         return ImpactDecision(
             classes=(INFRASTRUCTURE,),
             consistency=True,
-            smoke=True,
             domains=ALL_DOMAINS,
             full=True,
             package=False,
@@ -77,11 +75,9 @@ def classify_paths(paths: tuple[str, ...]) -> ImpactDecision:
         for name in (DOCS, "packaging", "shared_contract", "vnalpha", "vnstock")
         if name in classes
     )
-    has_runtime = bool(classes - {DOCS})
     return ImpactDecision(
         classes=ordered_classes,
         consistency=True,
-        smoke=has_runtime,
         domains=tuple(
             domain
             for domain in ALL_DOMAINS

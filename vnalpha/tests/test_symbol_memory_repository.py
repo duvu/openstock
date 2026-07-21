@@ -8,8 +8,6 @@ from vnalpha.symbol_memory.models import (
     ClaimOrigin,
     ClaimStatus,
     MemoryClaim,
-    MemoryCompactionRun,
-    MemoryDocument,
     MemoryEvent,
 )
 from vnalpha.symbol_memory.repository import SymbolMemoryRepository
@@ -77,68 +75,3 @@ def test_migrations_create_all_symbol_memory_tables_idempotently() -> None:
         "memory_document",
         "memory_event",
     ]
-
-
-def test_events_are_append_only_and_deduplicated_by_evidence_and_content() -> None:
-    repository = _repository()
-    event = _event()
-
-    assert repository.append_event(event) is True
-    assert repository.append_event(event) is False
-    assert repository.list_events("fpt") == [event]
-
-
-def test_claim_creation_lookup_and_lifecycle_transition_preserve_history() -> None:
-    repository = _repository()
-    claim = _claim()
-
-    repository.create_claim(claim)
-    repository.transition_claim(
-        claim.claim_id,
-        ClaimStatus.SUPERSEDED,
-        "newer validated evidence",
-    )
-
-    stored = repository.get_claim(claim.claim_id)
-    assert stored is not None
-    assert stored.status is ClaimStatus.SUPERSEDED
-    assert stored.lifecycle_reason == "newer validated evidence"
-    assert repository.list_claims("FPT", statuses=(ClaimStatus.ACTIVE,)) == []
-    assert repository.list_claims("FPT") == [stored]
-
-
-def test_document_and_compaction_metadata_round_trip() -> None:
-    repository = _repository()
-    document = MemoryDocument(
-        symbol="FPT",
-        path="knowledge/symbols/FPT.md",
-        schema_version=1,
-        generation=2,
-        managed_hash="managed-002",
-        document_hash="document-002",
-        token_estimate=38,
-        last_compacted_at=_time(),
-        updated_at=_time(),
-    )
-    run = MemoryCompactionRun(
-        compaction_run_id="compaction-001",
-        symbol="FPT",
-        before_generation=1,
-        after_generation=2,
-        before_hash="document-001",
-        after_hash="document-002",
-        retained_claim_count=2,
-        archived_claim_count=1,
-        conflicted_claim_count=0,
-        before_token_estimate=52,
-        after_token_estimate=38,
-        source_coverage=1.0,
-        created_at=_time(),
-        correlation_id="memory-correlation-001",
-    )
-
-    repository.upsert_document(document)
-    repository.record_compaction_run(run)
-
-    assert repository.get_document("fpt") == document
-    assert repository.list_compaction_runs("FPT") == [run]

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import date
 
 import duckdb
 import pytest
@@ -118,80 +117,3 @@ class TestCommandExecutorCompletion:
         ).fetchone()[0]
         assert private_fragment not in persisted
         assert "Command failed. Check logs and retry." in persisted
-
-    def test_successful_scan_creates_session_and_tool_trace(self, conn):
-        from vnalpha.commands.executor import CommandExecutor
-
-        target_date = date.today().isoformat()
-        _seed_watchlist(conn, target_date)
-
-        result = CommandExecutor(conn, surface="cli").execute(
-            f"/scan --date {target_date}"
-        )
-
-        assert result.status == "SUCCESS"
-        session = _latest_research_session(conn)
-        assert session["status"] == "SUCCESS"
-        assert session["surface"] == "cli"
-        assert session["command_name"] == "scan"
-        traces = conn.execute(
-            "SELECT tool_name, status, trace_parent_type FROM tool_trace WHERE session_id = ?",
-            [session["session_id"]],
-        ).fetchall()
-        assert traces == [("watchlist.scan", "SUCCESS", "command")]
-
-    def test_parse_error_persists_validation_error_session(self, conn):
-        from vnalpha.commands.executor import CommandExecutor
-
-        result = CommandExecutor(conn, surface="cli").execute("no leading slash")
-
-        assert result.status == "VALIDATION_ERROR"
-        session = _latest_research_session(conn)
-        assert session["status"] == "VALIDATION_ERROR"
-        assert session["command_name"] is None
-        assert conn.execute("SELECT COUNT(*) FROM tool_trace").fetchone()[0] == 0
-
-    def test_unknown_command_persists_validation_error_session(self, conn):
-        from vnalpha.commands.executor import CommandExecutor
-
-        result = CommandExecutor(conn, surface="cli").execute("/unknown")
-
-        assert result.status == "VALIDATION_ERROR"
-        session = _latest_research_session(conn)
-        assert session["status"] == "VALIDATION_ERROR"
-        assert session["command_name"] == "unknown"
-        assert conn.execute("SELECT COUNT(*) FROM tool_trace").fetchone()[0] == 0
-
-    def test_malformed_filter_is_validation_error_without_tool_trace(self, conn):
-        from vnalpha.commands.executor import CommandExecutor
-
-        result = CommandExecutor(conn, surface="cli").execute("/filter score>>0.70")
-
-        assert result.status == "VALIDATION_ERROR"
-        assert conn.execute("SELECT COUNT(*) FROM tool_trace").fetchone()[0] == 0
-
-    def test_unsupported_filter_field_is_validation_error_without_tool_trace(
-        self, conn
-    ):
-        from vnalpha.commands.executor import CommandExecutor
-
-        result = CommandExecutor(conn, surface="cli").execute(
-            '/filter raw_sql="drop table candidate_score"'
-        )
-
-        assert result.status == "VALIDATION_ERROR"
-        assert conn.execute("SELECT COUNT(*) FROM tool_trace").fetchone()[0] == 0
-
-    def test_scan_result_renders_risk_flags_column(self, conn):
-        from vnalpha.commands.executor import CommandExecutor
-
-        target_date = date.today().isoformat()
-        _seed_watchlist(conn, target_date)
-
-        result = CommandExecutor(conn, surface="cli").execute(
-            f"/scan VN30 --date {target_date}"
-        )
-
-        table = result.tables[0]
-        assert any(c.name == "risk_flags" for c in table.columns)
-        assert any("THIN_VOLUME" in str(row) for row in table.rows)

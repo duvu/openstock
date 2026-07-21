@@ -20,7 +20,6 @@ Task coverage:
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
 import duckdb
@@ -145,50 +144,9 @@ def _insert_ohlcv(
 # ---------------------------------------------------------------------------
 
 
-def test_feature_data_status_missing_benchmark():
-    """feature_data_status = MISSING_BENCHMARK when VNINDEX data is absent (1.2.1)."""
-    from vnalpha.features.build_features import build_features
-
-    conn = _make_full_schema_conn()
-    target = "2024-06-28"
-    _insert_ohlcv(conn, "FPT", end_date=target)
-    # No VNINDEX inserted
-
-    result = build_features(conn, target, universe=["FPT"])
-    assert result["built"] == 1
-
-    row = conn.execute(
-        "SELECT feature_data_status FROM feature_snapshot WHERE symbol='FPT' AND date=?",
-        [target],
-    ).fetchone()
-    assert row is not None
-    assert row[0] == "MISSING_BENCHMARK"
-
-
 # ---------------------------------------------------------------------------
 # Task 1.2.2 — STALE_DATE when target date has no exact bar
 # ---------------------------------------------------------------------------
-
-
-def test_feature_data_status_stale_date():
-    """feature_data_status = STALE_DATE when last bar < target date (1.2.2)."""
-    from vnalpha.features.build_features import build_features
-
-    conn = _make_full_schema_conn()
-    data_end = "2024-06-25"
-    target = "2024-06-28"
-    _insert_ohlcv(conn, "ACB", end_date=data_end)
-    _insert_ohlcv(conn, "VNINDEX", end_date=target, seed=99)
-
-    result = build_features(conn, target, universe=["ACB"])
-    assert result["built"] == 1
-
-    row = conn.execute(
-        "SELECT feature_data_status FROM feature_snapshot WHERE symbol='ACB' AND date=?",
-        [target],
-    ).fetchone()
-    assert row is not None
-    assert row[0] == "STALE_DATE"
 
 
 # ---------------------------------------------------------------------------
@@ -196,50 +154,9 @@ def test_feature_data_status_stale_date():
 # ---------------------------------------------------------------------------
 
 
-def test_feature_data_status_exact_date():
-    """feature_data_status = EXACT_DATE when target date has an exact bar (1.2.3)."""
-    from vnalpha.features.build_features import build_features
-
-    conn = _make_full_schema_conn()
-    target = "2024-06-28"
-    _insert_ohlcv(conn, "VNM", end_date=target)
-    _insert_ohlcv(conn, "VNINDEX", end_date=target, seed=99)
-
-    result = build_features(conn, target, universe=["VNM"])
-    assert result["built"] == 1
-
-    row = conn.execute(
-        "SELECT feature_data_status FROM feature_snapshot WHERE symbol='VNM' AND date=?",
-        [target],
-    ).fetchone()
-    assert row is not None
-    assert row[0] == "EXACT_DATE"
-
-
 # ---------------------------------------------------------------------------
 # Task 1.2.4 — as_of_bar_date records actual bar date used
 # ---------------------------------------------------------------------------
-
-
-def test_as_of_bar_date_records_actual_bar_date():
-    """as_of_bar_date records the actual bar date used (1.2.4)."""
-    from vnalpha.features.build_features import build_features
-
-    conn = _make_full_schema_conn()
-    data_end = "2024-06-25"
-    target = "2024-06-28"
-    _insert_ohlcv(conn, "ACB", end_date=data_end)
-    _insert_ohlcv(conn, "VNINDEX", end_date=target, seed=99)
-
-    build_features(conn, target, universe=["ACB"])
-
-    row = conn.execute(
-        "SELECT as_of_bar_date FROM feature_snapshot WHERE symbol='ACB' AND date=?",
-        [target],
-    ).fetchone()
-    assert row is not None
-    # as_of_bar_date should be earlier than target (last available bar)
-    assert str(row[0]) == data_end
 
 
 # ---------------------------------------------------------------------------
@@ -270,37 +187,6 @@ def test_benchmark_as_of_bar_date_records_actual_benchmark_date():
 # ---------------------------------------------------------------------------
 # Task 1.2.6 — lineage includes provider, ingestion_run_id, quality, bar date, version
 # ---------------------------------------------------------------------------
-
-
-def test_feature_lineage_includes_all_required_fields():
-    """Feature lineage_json includes provider, ingestion_run_id, source quality, bar date, version (1.2.6)."""
-    from vnalpha.features.build_features import build_features
-
-    conn = _make_full_schema_conn()
-    target = "2024-06-28"
-    _insert_ohlcv(
-        conn, "FPT", end_date=target, provider="vnstock", ingestion_run_id="run-abc123"
-    )
-    _insert_ohlcv(conn, "VNINDEX", end_date=target, seed=99)
-
-    build_features(conn, target, universe=["FPT"])
-
-    row = conn.execute(
-        "SELECT lineage_json, feature_build_version FROM feature_snapshot WHERE symbol='FPT' AND date=?",
-        [target],
-    ).fetchone()
-    assert row is not None
-    lineage_json, build_version = row
-    assert lineage_json is not None
-    lineage = json.loads(lineage_json)
-
-    assert "provider" in lineage
-    assert "ingestion_run_id" in lineage
-    assert "source_quality_status" in lineage
-    assert "as_of_bar_date" in lineage
-    assert "feature_build_version" in lineage
-    assert lineage["ingestion_run_id"] == "run-abc123"
-    assert build_version is not None
 
 
 # ---------------------------------------------------------------------------
@@ -413,87 +299,9 @@ def test_migration_from_minimal_warehouse():
 # ---------------------------------------------------------------------------
 
 
-def test_migration_adds_feature_metadata_columns_without_dropping_rows():
-    """Migrations add feature metadata columns and do not drop existing rows (1.3.2)."""
-    from vnalpha.warehouse.migrations import run_migrations
-
-    conn = _make_schema_without_metadata()
-    # Insert a row BEFORE migration
-    conn.execute(
-        "INSERT INTO feature_snapshot (symbol, date, close, ma20) VALUES ('FPT', '2024-01-01', 100.0, 98.0)"
-    )
-
-    run_migrations(conn=conn)
-
-    # Row must still exist
-    row = conn.execute(
-        "SELECT symbol, close FROM feature_snapshot WHERE symbol='FPT'"
-    ).fetchone()
-    assert row is not None
-    assert row[0] == "FPT"
-    assert row[1] == 100.0
-
-    # Metadata column must now exist
-    cols = conn.execute("DESCRIBE feature_snapshot").fetchall()
-    col_names = {c[0] for c in cols}
-    assert "as_of_bar_date" in col_names
-    assert "feature_data_status" in col_names
-    assert "lineage_json" in col_names
-
-
-def test_migrations_mark_pre_profile_feature_rows_legacy_unknown():
-    from vnalpha.warehouse.migrations import run_migrations
-
-    # Given: a feature snapshot created before completeness evidence existed.
-    conn = _make_schema_without_metadata()
-    conn.execute(
-        "INSERT INTO feature_snapshot (symbol, date, close) VALUES ('FPT', '2024-01-01', 100.0)"
-    )
-
-    # When: the warehouse migration runs.
-    run_migrations(conn=conn)
-
-    # Then: the row remains readable but cannot claim a known profile.
-    row = conn.execute(
-        """
-        SELECT feature_profile, neutral_completeness,
-               relative_strength_completeness
-        FROM feature_snapshot
-        WHERE symbol = 'FPT'
-        """
-    ).fetchone()
-    assert row == ("LEGACY_UNKNOWN", "LEGACY_UNKNOWN", "LEGACY_UNKNOWN")
-
-
 # ---------------------------------------------------------------------------
 # Task 1.3.3 — Migrations add assistant/chat/outcome tables without dropping rows
 # ---------------------------------------------------------------------------
-
-
-def test_migration_adds_assistant_chat_outcome_tables_without_dropping_existing_rows():
-    """Migrations add new tables without dropping existing rows (1.3.3)."""
-    from vnalpha.warehouse.migrations import run_migrations
-
-    conn = _make_full_schema_conn()
-    conn.execute(
-        "INSERT INTO canonical_ohlcv (symbol, time, interval, open, high, low, close, volume) VALUES ('TEST', '2024-01-01 00:00:00', '1D', 1, 1, 1, 1, 1)"
-    )
-
-    # Run migration again (should be idempotent)
-    run_migrations(conn=conn)
-
-    # Existing row must still be present
-    row = conn.execute(
-        "SELECT symbol FROM canonical_ohlcv WHERE symbol='TEST'"
-    ).fetchone()
-    assert row is not None
-    assert row[0] == "TEST"
-
-    # New tables must exist
-    tables = {t[0] for t in conn.execute("SHOW TABLES").fetchall()}
-    assert "chat_session" in tables
-    assert "chat_message" in tables
-    assert "assistant_session" in tables
 
 
 # ---------------------------------------------------------------------------
@@ -501,67 +309,14 @@ def test_migration_adds_assistant_chat_outcome_tables_without_dropping_existing_
 # ---------------------------------------------------------------------------
 
 
-def test_migration_adds_versioning_columns_without_dropping_rows():
-    """Migrations add candidate/outcome versioning columns without dropping rows (1.3.4)."""
-    from vnalpha.warehouse.migrations import run_migrations
-
-    conn = _make_full_schema_conn()
-    conn.execute("""
-        INSERT INTO candidate_outcome (symbol, watchlist_date, horizon_sessions, outcome_status)
-        VALUES ('FPT', '2024-01-01', 20, 'pending')
-    """)
-
-    run_migrations(conn=conn)
-
-    # Row still exists
-    row = conn.execute(
-        "SELECT symbol FROM candidate_outcome WHERE symbol='FPT'"
-    ).fetchone()
-    assert row is not None
-
-    # Versioning columns must exist
-    cols = {c[0] for c in conn.execute("DESCRIBE candidate_outcome").fetchall()}
-    assert "evaluation_run_id" in cols
-
-
 # ---------------------------------------------------------------------------
 # Task 1.3.5 — Migration can be run twice safely (idempotent)
 # ---------------------------------------------------------------------------
 
 
-def test_migration_idempotent_double_run():
-    """Running run_migrations twice does not raise or break schema (1.3.5)."""
-    from vnalpha.warehouse.migrations import run_migrations
-
-    conn = _make_full_schema_conn()
-    conn.execute(
-        "INSERT INTO canonical_ohlcv (symbol, time, interval, open, high, low, close, volume) VALUES ('IDM', '2024-01-01 00:00:00', '1D', 1, 1, 1, 1, 1)"
-    )
-
-    # Second run — must not raise
-    run_migrations(conn=conn)
-
-    # Data still intact
-    row = conn.execute(
-        "SELECT symbol FROM canonical_ohlcv WHERE symbol='IDM'"
-    ).fetchone()
-    assert row is not None
-
-
 # ---------------------------------------------------------------------------
 # Task 1.4.1 — Explicit --symbols overrides --universe
 # ---------------------------------------------------------------------------
-
-
-def test_cli_explicit_symbols_overrides_universe():
-    """parse_symbols_or_universe: explicit symbols take precedence (1.4.1)."""
-    from vnalpha.core.universe import parse_symbols_or_universe
-
-    result = parse_symbols_or_universe("FPT,VNM", "VN30")
-    assert "FPT" in result
-    assert "VNM" in result
-    # Should not contain full VN30 set
-    assert len(result) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -591,46 +346,6 @@ def test_cli_unknown_universe_exits_nonzero():
 # ---------------------------------------------------------------------------
 
 
-def test_cli_sync_index_command_shape():
-    """sync index --symbol VNINDEX invokes sync_index_ohlcv with correct symbol (1.4.3)."""
-    with (
-        patch("vnalpha.ingestion.sync_index.sync_index_ohlcv") as mock_sync,
-        patch("vnalpha.warehouse.connection.get_connection") as mock_conn,
-        patch("vnalpha.warehouse.migrations.run_migrations"),
-    ):
-        mock_conn.return_value = MagicMock()
-        mock_sync.return_value = {"inserted": 0, "skipped": 0}
-        result = runner.invoke(app, ["sync", "index", "--symbol", "VNINDEX"])
-
-    assert result.exit_code == 0
-    mock_sync.assert_called_once()
-    call_kwargs = mock_sync.call_args
-    assert call_kwargs is not None
-    kwargs = call_kwargs[1] if call_kwargs[1] else {}
-    symbol_passed = kwargs.get("symbol")
-    assert symbol_passed == "VNINDEX"
-
-
 # ---------------------------------------------------------------------------
 # Task 1.4.4 — watchlist --date no-data message
 # ---------------------------------------------------------------------------
-
-
-def test_cli_watchlist_date_no_data_message():
-    """watchlist --date with empty warehouse returns no-data message, not a crash (1.4.4)."""
-    from vnalpha.warehouse.connection import in_memory_connection
-    from vnalpha.warehouse.migrations import run_migrations
-
-    in_mem_conn = in_memory_connection()
-    run_migrations(conn=in_mem_conn)
-
-    with (
-        patch("vnalpha.warehouse.connection.get_connection", return_value=in_mem_conn),
-        patch("vnalpha.warehouse.migrations.run_migrations"),
-    ):
-        result = runner.invoke(app, ["watchlist", "--date", "2024-01-01"])
-
-    assert result.exception is None or result.exit_code in (0, 1)
-    output = result.output or ""
-    no_crash = "Traceback" not in output or result.exit_code == 0
-    assert no_crash
