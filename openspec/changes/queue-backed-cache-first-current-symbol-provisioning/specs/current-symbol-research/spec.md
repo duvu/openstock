@@ -9,6 +9,7 @@ CLI, TUI, slash commands and assistant SHALL delegate to one `CurrentSymbolResea
 - **AND** does not contain unconditional provisioning followed by analysis steps.
 
 ### Requirement: Queue waiting SHALL NOT hold a DuckDB connection
+The application SHALL close its readiness connection before queue submission or polling and reopen a read-only connection only after terminal work requires analysis.
 
 #### Scenario: A job remains active
 - **WHEN** the application submits or joins a job and begins waiting
@@ -52,6 +53,7 @@ The LLM SHALL NOT choose the fallback capability.
 - **AND** sets the effective capability to `PRICE_ANALYSIS`.
 
 ### Requirement: Price-only output SHALL contain only supported claims
+An output whose effective capability is `PRICE_ANALYSIS` SHALL omit score, rank and benchmark-derived claims that require unavailable evidence.
 
 #### Scenario: Effective capability is price analysis
 - **WHEN** a degraded price-only result is rendered
@@ -59,6 +61,7 @@ The LLM SHALL NOT choose the fallback capability.
 - **AND** omits score, rank and unavailable benchmark-derived claims.
 
 ### Requirement: Shared jobs SHALL use administrative cancellation
+Only an explicit administrative cancellation request MAY cancel a shared job; caller timeout or disconnect SHALL leave it active.
 
 #### Scenario: A user requests job cancellation
 - **WHEN** `jobs cancel JOB_ID` targets an active shared job
@@ -66,6 +69,7 @@ The LLM SHALL NOT choose the fallback capability.
 - **AND** the action is explicit rather than caused by timeout or disconnect.
 
 ### Requirement: Current-symbol results SHALL be consistent across surfaces
+Equivalent CLI, TUI and chat requests over the same persisted evidence SHALL return the same typed protocol result.
 
 #### Scenario: Equivalent requests use CLI, TUI and chat
 - **WHEN** the same inputs and persisted evidence are used
