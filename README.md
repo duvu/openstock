@@ -27,6 +27,14 @@ Vietnamese market research often depends on provider-specific APIs, inconsistent
 
 ## Engineering test policy
 
+OpenStock is **not a TDD project**. Material changes remain spec-first, but implementation comes before the final automated test:
+
+```text
+specify the public contract
+→ implement and inspect the behavior
+→ add or update one authoritative contract test
+```
+
 OpenStock uses a **1:1 public feature/function-to-authoritative-test policy**:
 
 ```text
