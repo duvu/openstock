@@ -59,6 +59,10 @@ class ProvisioningQueue:
     def initialize(self) -> QueueRuntimeSettings:
         return self._database.initialize()
 
+    @property
+    def path(self) -> Path:
+        return self._database.configuration.path
+
     def runtime_settings(self) -> QueueRuntimeSettings:
         return self._database.runtime_settings()
 

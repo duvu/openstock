@@ -164,7 +164,7 @@ def terminalize(
         with database.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             updated = connection.execute(
-                "UPDATE provision_job SET status=?, stage=?, result=?, error=?, lease_owner=NULL, lease_expires_at_ms=NULL, lease_heartbeat_at_ms=NULL, updated_at_ms=? WHERE job_id=? AND status='RUNNING' AND lease_owner=? AND lease_expires_at_ms > ? RETURNING job_id",
+                "UPDATE provision_job SET status=?, stage=?, result=?, error=?, lease_owner=NULL, lease_expires_at_ms=NULL, lease_heartbeat_at_ms=NULL, updated_at_ms=? WHERE job_id=? AND status='RUNNING' AND lease_owner=? AND lease_expires_at_ms > ? AND (cancellation_requested=0 OR ?='CANCELLED') RETURNING job_id",
                 (
                     status.value,
                     status.value,
@@ -174,6 +174,7 @@ def terminalize(
                     job_id,
                     worker,
                     timestamp,
+                    status.value,
                 ),
             ).fetchone()
             if updated is None:

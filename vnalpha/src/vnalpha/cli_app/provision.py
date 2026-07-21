@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from os import getpid
 from pathlib import Path
 from socket import gethostname
 from typing import Annotated
@@ -18,7 +19,7 @@ def worker(
     queue_path: Annotated[Path, typer.Option("--queue-path")] = DEFAULT_QUEUE_PATH,
     warehouse_path: Annotated[Path | None, typer.Option("--warehouse-path")] = None,
     worker_id: Annotated[str, typer.Option("--worker-id")] = (
-        f"vnalpha-{gethostname()[:96]}"
+        f"vnalpha-{gethostname()[:96]}-{getpid()}"
     ),
 ) -> None:
     provisioner = ProvisioningWorker(

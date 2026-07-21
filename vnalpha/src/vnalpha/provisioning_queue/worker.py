@@ -11,6 +11,10 @@ from time import monotonic
 from types import FrameType
 from typing import Callable, Final, Iterator
 
+from vnalpha.provisioning_queue._worker_runtime import (
+    ExclusiveProvisioner,
+    LeaseHeartbeat,
+)
 from vnalpha.provisioning_queue.handlers import (
     CurrentSymbolGoalHandler,
     HandlerResult,
@@ -75,6 +79,7 @@ class ProvisioningWorker:
         self._coordinator = WarehouseWriteCoordinator(path=warehouse_path)
         self._stop_requested = Event()
         self._process_lock = Lock()
+        self._provisioner_gate = ExclusiveProvisioner(queue.path)
         self._handlers = _handler_registry(handlers)
         queue_settings = queue.initialize()
         _validate_settings(settings, queue_settings.lease_seconds)
@@ -84,19 +89,15 @@ class ProvisioningWorker:
 
         self._stop_requested.set()
 
-    def register(self, handler: ProvisioningGoalHandler) -> None:
-        if handler.goal_type in self._handlers:
-            raise ProvisioningWorkerConfigurationError("duplicate provisioning handler")
-        self._handlers[handler.goal_type] = handler
-
     def process_one(self) -> ProvisioningJob | None:
         with self._process_lock:
-            if self._stop_requested.is_set():
-                return None
-            job = self._queue.claim(self._worker_id)
-            if job is None:
-                return None
-            return self._process_claimed(job)
+            with self._provisioner_gate.hold():
+                if self._stop_requested.is_set():
+                    return None
+                job = self._queue.claim(self._worker_id)
+                if job is None:
+                    return None
+                return self._process_claimed(job)
 
     def run(self, *, once: bool = False) -> int:
         if once:
@@ -135,34 +136,44 @@ class ProvisioningWorker:
             if self._cancellation_requested(job):
                 return self._cancel_at_safe_boundary(job)
             self._queue.heartbeat(job.job_id, self._worker_id)
+            if result.succeeded:
+                return self._queue.complete(job.job_id, self._worker_id, result.detail)
+            return self._queue.fail(job.job_id, self._worker_id, result.detail)
         except ProvisioningJobLeaseError:
+            if self._cancellation_requested(job):
+                return self._cancel_at_safe_boundary(job)
             return None
         except WarehouseOpenError as error:
             return self._queue.fail(job.job_id, self._worker_id, str(error))
-        if result.succeeded:
-            return self._queue.complete(job.job_id, self._worker_id, result.detail)
-        return self._queue.fail(job.job_id, self._worker_id, result.detail)
 
     def _execute_handler(
         self, job: ProvisioningJob, handler: ProvisioningGoalHandler
     ) -> HandlerResult:
         if handler.requires_warehouse_write:
             with self._coordinator.transaction() as connection:
-                self._queue.heartbeat(job.job_id, self._worker_id)
+                with self._lease_heartbeat(job):
+                    if self._cancellation_requested(job):
+                        return HandlerResult(False, _CANCELLATION_REASON)
+                    started_at = monotonic()
+                    result = handler.execute(job.goal, connection)
+        else:
+            with self._lease_heartbeat(job):
                 if self._cancellation_requested(job):
                     return HandlerResult(False, _CANCELLATION_REASON)
                 started_at = monotonic()
-                result = handler.execute(job.goal, connection)
-        else:
-            self._queue.heartbeat(job.job_id, self._worker_id)
-            if self._cancellation_requested(job):
-                return HandlerResult(False, _CANCELLATION_REASON)
-            started_at = monotonic()
-            result = handler.execute(job.goal, None)
+                result = handler.execute(job.goal, None)
         elapsed = monotonic() - started_at
         if elapsed > self._settings.stage_timeout_seconds:
             return HandlerResult(False, _STAGE_TIMEOUT)
         return result
+
+    def _lease_heartbeat(self, job: ProvisioningJob) -> LeaseHeartbeat:
+        return LeaseHeartbeat(
+            self._queue,
+            job,
+            self._worker_id,
+            max(0.25, self._settings.lease_safety_seconds / 2),
+        )
 
     def _cancellation_requested(self, job: ProvisioningJob) -> bool:
         current = self._queue.get(job.job_id)

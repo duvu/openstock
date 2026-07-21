@@ -5,6 +5,7 @@ from typing import Protocol, assert_never
 
 import duckdb
 
+from vnalpha.data_availability.artifact_readiness_models import ReadinessCapability
 from vnalpha.data_provisioning.ensure_current_symbol import (
     CurrentSymbolReadyResult,
     ensure_current_symbol_ready,
@@ -57,7 +58,10 @@ class CurrentSymbolGoalHandler:
                         current_goal.symbol,
                         current_goal.effective_date.isoformat(),
                         refresh=current_goal.refresh_mode is RefreshMode.FORCE_REFRESH,
-                        data_only=False,
+                        data_only=(
+                            current_goal.desired_capability
+                            is ReadinessCapability.PRICE_ANALYSIS
+                        ),
                     ),
                 )
             case unreachable:

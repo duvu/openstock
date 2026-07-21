@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from threading import Event, Thread
+from time import sleep
 
 import duckdb
 import pytest
@@ -117,6 +119,28 @@ def test_sequential_provisioning_worker_contract(
     ).process_one()
     assert cancelled_result.status is ProvisioningJobStatus.CANCELLED
 
+    cancellation_race_queue = _CancelBeforeCompletionQueue(
+        tmp_path / "cancellation-race.sqlite3"
+    )
+    cancellation_race_queue.initialize()
+    cancellation_race_queue.submit_or_join(_current_goal("SSI"), priority=1)
+
+    class SuccessfulHandler:
+        goal_type = GoalType.ENSURE_CURRENT_SYMBOL
+        requires_warehouse_write = False
+
+        def execute(
+            self, _: ProvisioningGoal, __: duckdb.DuckDBPyConnection | None
+        ) -> HandlerResult:
+            return HandlerResult(True, "success")
+
+    cancellation_race = ProvisioningWorker(
+        cancellation_race_queue,
+        worker_id="cancellation-race",
+        handlers=(SuccessfulHandler(),),
+    ).process_one()
+    assert cancellation_race.status is ProvisioningJobStatus.CANCELLED
+
     short_lease_queue = ProvisioningQueue(
         tmp_path / "short-lease.sqlite3", lease_seconds=2
     )
@@ -126,6 +150,106 @@ def test_sequential_provisioning_worker_contract(
             worker_id="invalid-lease",
             settings=WorkerSettings(stage_timeout_seconds=1, lease_safety_seconds=1),
         )
+
+    overrun_queue = ProvisioningQueue(tmp_path / "overrun.sqlite3", lease_seconds=3)
+    overrun_queue.initialize()
+    overrun_queue.submit_or_join(_current_goal("VCB"), priority=1)
+    stage_started = Event()
+    release_stage = Event()
+
+    class OverrunHandler:
+        goal_type = GoalType.ENSURE_CURRENT_SYMBOL
+        requires_warehouse_write = True
+
+        def execute(
+            self, _: ProvisioningGoal, connection: duckdb.DuckDBPyConnection | None
+        ) -> HandlerResult:
+            assert connection is not None
+            connection.execute("CREATE TABLE overrun_effect(value INTEGER)")
+            connection.execute("INSERT INTO overrun_effect VALUES (1)")
+            stage_started.set()
+            assert release_stage.wait(timeout=5)
+            return HandlerResult(True, "late success")
+
+    overrun_worker = ProvisioningWorker(
+        overrun_queue,
+        worker_id="overrun",
+        warehouse_path=tmp_path / "overrun.duckdb",
+        handlers=(OverrunHandler(),),
+        settings=WorkerSettings(stage_timeout_seconds=1, lease_safety_seconds=1),
+    )
+    overrun_result: list[object] = []
+    worker_thread = Thread(
+        target=lambda: overrun_result.append(overrun_worker.process_one())
+    )
+    worker_thread.start()
+    assert stage_started.wait(timeout=2)
+    sleep(3.2)
+    assert not overrun_queue.requeue_expired()
+    release_stage.set()
+    worker_thread.join(timeout=5)
+    assert not worker_thread.is_alive()
+    assert overrun_result[0].status is ProvisioningJobStatus.FAILED
+
+    exclusive_queue = ProvisioningQueue(tmp_path / "exclusive.sqlite3")
+    exclusive_queue.initialize()
+    first_exclusive = exclusive_queue.submit_or_join(
+        _current_goal("ACB"), priority=2
+    ).job
+    second_exclusive = exclusive_queue.submit_or_join(
+        _current_goal("VIC"), priority=1
+    ).job
+    first_stage_started = Event()
+    release_first_stage = Event()
+
+    class ExclusiveHandler:
+        goal_type = GoalType.ENSURE_CURRENT_SYMBOL
+        requires_warehouse_write = True
+
+        def execute(
+            self, goal: ProvisioningGoal, connection: duckdb.DuckDBPyConnection | None
+        ) -> HandlerResult:
+            assert connection is not None
+            if goal.symbol == "ACB":
+                first_stage_started.set()
+                assert release_first_stage.wait(timeout=5)
+            return HandlerResult(True, goal.symbol)
+
+    first_worker = ProvisioningWorker(
+        exclusive_queue,
+        worker_id="exclusive-one",
+        warehouse_path=tmp_path / "exclusive.duckdb",
+        handlers=(ExclusiveHandler(),),
+    )
+    second_worker = ProvisioningWorker(
+        exclusive_queue,
+        worker_id="exclusive-two",
+        warehouse_path=tmp_path / "exclusive.duckdb",
+        handlers=(ExclusiveHandler(),),
+    )
+    first_thread = Thread(target=first_worker.process_one)
+    second_thread = Thread(target=second_worker.process_one)
+    first_thread.start()
+    assert first_stage_started.wait(timeout=2)
+    second_thread.start()
+    sleep(0.1)
+    assert (
+        exclusive_queue.get(first_exclusive.job_id).status
+        is ProvisioningJobStatus.RUNNING
+    )
+    assert (
+        exclusive_queue.get(second_exclusive.job_id).status
+        is ProvisioningJobStatus.QUEUED
+    )
+    release_first_stage.set()
+    first_thread.join(timeout=5)
+    second_thread.join(timeout=5)
+    assert not first_thread.is_alive()
+    assert not second_thread.is_alive()
+    assert (
+        exclusive_queue.get(second_exclusive.job_id).status
+        is ProvisioningJobStatus.SUCCEEDED
+    )
 
     timeout_queue = ProvisioningQueue(tmp_path / "timeout.sqlite3")
     timeout_queue.initialize()
@@ -186,6 +310,12 @@ class _CrashBeforeCompletionQueue(ProvisioningQueue):
         if self._crash_once:
             self._crash_once = False
             raise KeyboardInterrupt
+        return super().complete(job_id, worker_id, result)
+
+
+class _CancelBeforeCompletionQueue(ProvisioningQueue):
+    def complete(self, job_id, worker_id: str, result: str):
+        self.cancel(job_id)
         return super().complete(job_id, worker_id, result)
 
 
