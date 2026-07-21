@@ -59,6 +59,10 @@ class ProvisioningQueue:
     def initialize(self) -> QueueRuntimeSettings:
         return self._database.initialize()
 
+    @property
+    def path(self) -> Path:
+        return self._database.configuration.path
+
     def runtime_settings(self) -> QueueRuntimeSettings:
         return self._database.runtime_settings()
 
@@ -114,6 +118,13 @@ class ProvisioningQueue:
     ) -> ProvisioningJob:
         return terminalize(
             self._database, job_id, worker_id, ProvisioningJobStatus.FAILED, error
+        )
+
+    def acknowledge_cancellation(
+        self, job_id: ProvisioningJobId, worker_id: str, reason: str
+    ) -> ProvisioningJob:
+        return terminalize(
+            self._database, job_id, worker_id, ProvisioningJobStatus.CANCELLED, reason
         )
 
     def cancel(self, job_id: ProvisioningJobId) -> ProvisioningJob:

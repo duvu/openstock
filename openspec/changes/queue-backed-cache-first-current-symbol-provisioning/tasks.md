@@ -15,7 +15,7 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 - [x] 2.1 Add artifact states and capability-scoped readiness.
 - [x] 2.2 Add source/provider/auth/persistence-aware repairability.
 - [x] 2.3 Report exact missing ranges and bounded actions without writing or calling providers.
-- [x] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`. Evidence: `9a6f516843eda890bd5d13e9bbfc4a7612e2eecc`, hardened by `d09efd351c9297c91bda18355b13979c02635036`.
+- [x] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`. Evidence: `9a6f516843eda890bd5d13e9bbfc4a7612e2eecc`, hardened by `d09efd351c9297c91bda18355b13979c02635036`, `e423e585646b4676dc7034430861e741a5abe1c8` and `0b3fef7bc820d2995bbbafe2ee49fb99d87cfe88`; supported source-policy and contract versions fail closed before queue persistence or handler execution, proven by the goal and queue contract tests.
 - [x] 2.5 Add deterministic identities, enrichment normalization and collision tests. Evidence: `d09efd351c9297c91bda18355b13979c02635036`; authoritative `vnalpha/tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract`; `make test-loop TEST=tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract` passed; `uv run python ../scripts/run_test_suite.py --plan --domain application` validates the authoritative inventory.
 
 ## 3. Queue repository — #323
@@ -28,11 +28,11 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 
 ## 4. Sequential worker — #324
 
-- [ ] 4.1 Add one worker and explicit handler registry.
-- [ ] 4.2 Open writable DuckDB only through #343 after lock acquisition.
-- [ ] 4.3 Re-read and re-plan after claim.
-- [ ] 4.4 Add bounded stage timeouts, lease extension and cooperative stop behavior.
-- [ ] 4.5 Prove retry after process interruption creates no duplicate persisted artifacts.
+- [x] 4.1 Add one worker and explicit handler registry. Evidence: `21c53513663a960d7334606bd035fcd4c4f9f016`, hardened by `079c32dfa3d59fd9bb345d5b730a0112035c2d45`, `031aef766584d14493b3835dc65baf69705098e3` and `555a7b772e4a0d47edc4f4248b8bc7e185c42b06`; the provisioner flocks the initialized shared queue inode across path aliases. Authoritative: `vnalpha/tests/test_provisioning_queue_worker.py::test_sequential_provisioning_worker_contract`.
+- [x] 4.2 Open writable DuckDB only through #343 after lock acquisition. Evidence: `21c53513663a960d7334606bd035fcd4c4f9f016`; the worker injects `WarehouseWriteCoordinator` and the contract verifies an unregistered goal creates no warehouse file.
+- [x] 4.3 Re-read and re-plan after claim. Evidence: `21c53513663a960d7334606bd035fcd4c4f9f016`, hardened by `079c32dfa3d59fd9bb345d5b730a0112035c2d45`; the current-symbol handler delegates core price/ranking work to the existing current-symbol operation and the restart contract proves persisted effects are reused. Enrichment and source-policy execution remain with their owning changes.
+- [ ] 4.4 Add bounded stage timeouts, lease extension and cooperative stop behavior. Partial evidence: `079c32dfa3d59fd9bb345d5b730a0112035c2d45` maintains the active lease, classifies a stage that exceeds its budget after its safe transaction boundary, and acknowledges cancellation at handler boundaries. Hard interruption, cancellation between the existing handler's internal stages, and signal-shutdown proof remain incomplete.
+- [x] 4.5 Prove retry after process interruption creates no duplicate persisted artifacts. Evidence: `21c53513663a960d7334606bd035fcd4c4f9f016`, hardened by `079c32dfa3d59fd9bb345d5b730a0112035c2d45`; `make test-loop TEST=tests/test_provisioning_queue_worker.py::test_sequential_provisioning_worker_contract` passed with committed-effect/expired-lease restart reuse and an active-stage lease-overrun probe.
 
 ## 5. Provisioning behavior — #318, #319, #321
 

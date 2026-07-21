@@ -93,6 +93,7 @@ class QueueDatabase:
             synchronous={0: "OFF", 1: "NORMAL", 2: "FULL", 3: "EXTRA"}.get(
                 synchronous_value, "UNKNOWN"
             ),
+            lease_seconds=self.configuration.lease_seconds,
         )
 
 

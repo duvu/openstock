@@ -61,6 +61,17 @@ def test_durable_provisioning_queue_contract(tmp_path) -> None:
     queue = ProvisioningQueue(tmp_path / "provisioning.sqlite3", max_attempts=2)
 
     settings = queue.initialize()
+    for field, unsupported_version in (
+        ("source_policy_version", "policy-v2"),
+        ("contract_version", "current-symbol-v2"),
+    ):
+        with pytest.raises(ProvisioningQueueValidationError):
+            queue.submit_or_join(
+                symbol_goal.model_copy(update={field: unsupported_version}),
+                priority=5,
+                now=now,
+            )
+    assert not queue.list()
     submitted_symbol = queue.submit_or_join(
         symbol_goal, priority=5, origin="interactive", now=now
     )
@@ -122,6 +133,10 @@ def test_durable_provisioning_queue_contract(tmp_path) -> None:
         ).lease_owner
         == "worker-symbol"
     )
+    with pytest.raises(ProvisioningJobLeaseError):
+        queue.acknowledge_cancellation(
+            claimed_symbol.job_id, "worker-symbol", "not an administrative request"
+        )
     assert queue.cancel(claimed_symbol.job_id).cancellation_requested
     assert queue.requeue_expired(now=now + timedelta(seconds=71))
     assert queue.get(claimed_symbol.job_id).status is ProvisioningJobStatus.CANCELLED
