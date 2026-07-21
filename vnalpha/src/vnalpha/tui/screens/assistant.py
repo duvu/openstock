@@ -67,18 +67,14 @@ if _TEXTUAL_AVAILABLE:
                 from vnalpha.assistant.app import AssistantApp
                 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
                 from vnalpha.assistant.models import RefusalMessage
-                from vnalpha.warehouse.write_coordinator import (
-                    WarehouseWriteCoordinator,
-                )
 
-                with WarehouseWriteCoordinator().transaction() as conn:
-                    llm_client = LLMGatewayClient(LLMGatewayConfig.from_env())
-                    app = AssistantApp(conn, surface="tui", llm_client=llm_client)
-                    result, plan = app.ask(
-                        question,
-                        date=self.target_date,
-                        date_is_implicit=self.target_date_is_implicit,
-                    )
+                llm_client = LLMGatewayClient(LLMGatewayConfig.from_env())
+                app = AssistantApp.managed(surface="tui", llm_client=llm_client)
+                result, plan = app.ask(
+                    question,
+                    date=self.target_date,
+                    date_is_implicit=self.target_date_is_implicit,
+                )
                 if isinstance(result, RefusalMessage):
                     refusal_text = Text("Refused: ", style="red")
                     refusal_text.append(sanitize_text(result.reason))

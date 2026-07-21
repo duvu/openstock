@@ -23,6 +23,10 @@ class AssistantInputValidationError(AssistantError):
     pass
 
 
+class PreparedPlanHashMismatchError(AssistantInputValidationError, ValueError):
+    pass
+
+
 class ToolExecutionError(AssistantError):
     """Raised when a tool call fails during plan execution."""
 

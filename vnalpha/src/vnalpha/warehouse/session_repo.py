@@ -146,9 +146,10 @@ def create_tool_trace(
     *,
     assistant_session_id: Optional[str] = None,
     trace_parent_type: Optional[str] = None,
+    trace_id: str | None = None,
 ) -> str:
     """Insert a new tool_trace row with status RUNNING. Returns tool_trace_id."""
-    trace_id = str(uuid.uuid4())
+    trace_id = trace_id or str(uuid.uuid4())
     if trace_parent_type is None:
         trace_parent_type = "assistant" if assistant_session_id else "command"
     conn.execute(
@@ -177,12 +178,14 @@ def finish_tool_trace(
     status: str = "SUCCESS",
     output_summary: Optional[dict[str, Any]] = None,
     error: Optional[dict[str, Any]] = None,
+    input_data: Optional[dict[str, Any]] = None,
 ) -> None:
     """Mark a tool_trace as finished."""
     conn.execute(
         """
         UPDATE tool_trace
-        SET finished_at = ?, status = ?, output_summary_json = ?, error_json = ?
+        SET finished_at = ?, status = ?, output_summary_json = ?, error_json = ?,
+            input_json = COALESCE(?, input_json)
         WHERE tool_trace_id = ?
         """,
         [
@@ -190,6 +193,7 @@ def finish_tool_trace(
             status,
             _dump_redacted(output_summary) if output_summary else None,
             _dump_redacted(error) if error else None,
+            _dump_redacted(input_data) if input_data is not None else None,
             trace_id,
         ],
     )

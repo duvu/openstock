@@ -3,10 +3,52 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from typing import Any, Callable
 
 from vnalpha.commands.errors import UnknownCommandError
 from vnalpha.commands.models import CommandResult, ParsedCommand
+
+
+class CommandAccessMode(StrEnum):
+    READ = "read"
+    WRITE = "write"
+
+
+_READ_COMMANDS = frozenset(
+    {
+        "filter",
+        "help",
+        "history",
+        "lineage",
+        "market-regime",
+        "quality",
+        "scan",
+        "sector-strength",
+        "shortlist",
+        "watchlist-summary",
+    }
+)
+_READ_TOOL_PLANS = {
+    "filter": ("watchlist.filter",),
+    "history": ("history.list_sessions",),
+    "lineage": ("lineage.get_symbol_lineage",),
+    "quality": ("quality.get_status",),
+    "scan": ("watchlist.scan",),
+    "shortlist": ("shortlist.generate",),
+    "watchlist-summary": ("watchlist.summarize_deep",),
+}
+_READ_SUBCOMMANDS = {
+    "context": frozenset({"export", "list", "status"}),
+    "data": frozenset({"gaps"}),
+    "feature": frozenset({"validate"}),
+    "memory": frozenset({"conflicts", "show", "sources", "status"}),
+    "model": frozenset({"explain-route", "profiles", "status"}),
+    "repair": frozenset({"status"}),
+    "sandbox": frozenset({"artifact", "list", "status"}),
+    "scoring-policy": frozenset({"active", "list"}),
+    "todo": frozenset({"list"}),
+}
 
 
 @dataclass
@@ -66,6 +108,20 @@ class CommandRegistry:
         """
         meta = self.get(parsed.command_name)
         return meta.handler(parsed, **handler_kwargs)
+
+    def access_mode(self, parsed: ParsedCommand) -> CommandAccessMode:
+        self.get(parsed.command_name)
+        if parsed.command_name in _READ_COMMANDS:
+            return CommandAccessMode.READ
+        subcommands = _READ_SUBCOMMANDS.get(parsed.command_name, frozenset())
+        if parsed.positional and parsed.positional[0] in subcommands:
+            return CommandAccessMode.READ
+        return CommandAccessMode.WRITE
+
+    def planned_read_tools(self, parsed: ParsedCommand) -> tuple[str, ...]:
+        if self.access_mode(parsed) is not CommandAccessMode.READ:
+            return ()
+        return _READ_TOOL_PLANS.get(parsed.command_name, ())
 
 
 def _current_metadata(meta: CommandMeta) -> CommandMeta:

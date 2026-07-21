@@ -9,6 +9,7 @@ Design:
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from datetime import date as DateType
 from pathlib import Path
@@ -23,6 +24,7 @@ from vnalpha.warehouse.repositories import (
     get_candidate_scores,
     save_candidate_score,
 )
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 logger = get_logger("scoring.generate_watchlist")
 
@@ -324,9 +326,8 @@ def save_watchlist(
             "explicit rebuild is required"
         )
 
-    if manage_transaction:
-        conn.execute("BEGIN TRANSACTION")
-    try:
+    scope = warehouse_transaction(conn) if manage_transaction else nullcontext(conn)
+    with scope:
         conn.execute("DELETE FROM daily_watchlist WHERE date = ?", [date])
 
         for rank, candidate in enumerate(candidates, start=1):
@@ -356,12 +357,6 @@ def save_watchlist(
                     candidate.get("scoring_policy_status"),
                 ],
             )
-        if manage_transaction:
-            conn.execute("COMMIT")
-    except duckdb.Error:
-        if manage_transaction:
-            conn.execute("ROLLBACK")
-        raise
     logger.info(
         "Saved %d watchlist entries for %s (from persisted scores)",
         len(candidates),
@@ -402,34 +397,29 @@ def generate_watchlist(
     except Exception:  # noqa: BLE001
         pass
     try:
-        conn.execute("BEGIN TRANSACTION")
-        scored = score_universe(
-            conn,
-            date,
-            universe=universe,
-            scoring_policy_id=scoring_policy_id,
-            scoring_policy_version=scoring_policy_version,
-            rebuild_policy=rebuild_policy,
-            project_memory=False,
-            scoring_policy_auto=scoring_policy_auto,
-        )
-        saved = save_watchlist(
-            conn,
-            date,
-            top_n=top_n,
-            min_score=min_score,
-            scoring_policy_id=policy.policy_id,
-            scoring_policy_version=policy.version,
-            allow_policy_rebuild=rebuild_policy,
-            manage_transaction=False,
-            scoring_policy_auto=scoring_policy_auto,
-        )
-        conn.execute("COMMIT")
+        with warehouse_transaction(conn):
+            scored = score_universe(
+                conn,
+                date,
+                universe=universe,
+                scoring_policy_id=scoring_policy_id,
+                scoring_policy_version=scoring_policy_version,
+                rebuild_policy=rebuild_policy,
+                project_memory=False,
+                scoring_policy_auto=scoring_policy_auto,
+            )
+            saved = save_watchlist(
+                conn,
+                date,
+                top_n=top_n,
+                min_score=min_score,
+                scoring_policy_id=policy.policy_id,
+                scoring_policy_version=policy.version,
+                allow_policy_rebuild=rebuild_policy,
+                manage_transaction=False,
+                scoring_policy_auto=scoring_policy_auto,
+            )
     except Exception as exc:
-        try:
-            conn.execute("ROLLBACK")
-        except duckdb.Error:
-            pass
         logger.error("Watchlist generation failed for %s: %s", date, exc)
         try:
             from vnalpha.observability.domain import log_watchlist_failure

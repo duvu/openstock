@@ -4,11 +4,11 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 
 ## 1. Warehouse ownership — #343
 
-- [ ] 1.1 Remove production warehouse copy/fallback behavior.
-- [ ] 1.2 Add short-lived read-only connections for readiness and analysis.
-- [ ] 1.3 Add one `WarehouseWriteCoordinator` and global lock.
-- [ ] 1.4 Route migrations, provisioning, finalization, outcomes, memory/context and metadata writes through the coordinator.
-- [ ] 1.5 Add writer-exclusion, rollback and typed-open-failure tests.
+- [x] 1.1 Remove production warehouse copy/fallback behavior.
+- [x] 1.2 Add short-lived read-only connections for readiness and analysis.
+- [x] 1.3 Add one `WarehouseWriteCoordinator` and global lock.
+- [x] 1.4 Route migrations, provisioning, finalization, outcomes, memory/context and metadata writes through the coordinator.
+- [x] 1.5 Add writer-exclusion, rollback and typed-open-failure tests.
 
 ## 2. Readiness and goal contracts — #320, #338
 

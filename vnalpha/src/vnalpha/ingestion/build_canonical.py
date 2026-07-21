@@ -24,6 +24,7 @@ from vnalpha.ingestion.canonical_validation import (
 )
 from vnalpha.observability.audit import log_audit
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 logger = get_logger("ingestion.build_canonical")
 
@@ -47,43 +48,34 @@ def build_canonical_ohlcv(
         "Canonical OHLCV validation started.",
         extra={"interval": interval, "symbol": symbol or "ALL"},
     )
-    transaction_started = False
     try:
-        conn.execute("BEGIN TRANSACTION")
-        transaction_started = True
-        grouped: defaultdict[tuple[str, datetime, str], list[CanonicalCandidate]] = (
-            defaultdict(list)
-        )
-        for candidate in load_ranked_candidates(conn, symbol, interval):
-            grouped[(candidate.symbol, candidate.timestamp, candidate.interval)].append(
-                candidate
-            )
+        with warehouse_transaction(conn):
+            grouped: defaultdict[
+                tuple[str, datetime, str], list[CanonicalCandidate]
+            ] = defaultdict(list)
+            for candidate in load_ranked_candidates(conn, symbol, interval):
+                grouped[
+                    (candidate.symbol, candidate.timestamp, candidate.interval)
+                ].append(candidate)
 
-        rejected = 0
-        for candidates in grouped.values():
-            selected_candidate = candidates[0]
-            rules = validate_candidate(selected_candidate, tuple(candidates[1:]))
-            if rules:
-                persist_quarantine(conn, selected_candidate, rules)
-                delete_canonical_bar(conn, selected_candidate)
-                rejected += 1
-            else:
-                upsert_canonical(
-                    conn, replace(selected_candidate, quality_status="pass")
-                )
-                resolve_quarantines(conn, selected_candidate)
+            rejected = 0
+            for candidates in grouped.values():
+                selected_candidate = candidates[0]
+                rules = validate_candidate(selected_candidate, tuple(candidates[1:]))
+                if rules:
+                    persist_quarantine(conn, selected_candidate, rules)
+                    delete_canonical_bar(conn, selected_candidate)
+                    rejected += 1
+                else:
+                    upsert_canonical(
+                        conn, replace(selected_candidate, quality_status="pass")
+                    )
+                    resolve_quarantines(conn, selected_candidate)
 
-        # Daily bars are keyed by trading date, not by an intraday timestamp.
-        # A canonical row with a non-midnight time-of-day is leftover from
-        # before candidates were grouped by date (raw providers occasionally
-        # report different times-of-day for the same trading session); every
-        # current write lands at midnight, so any such row is always stale.
-        if interval == "1D":
-            delete_stray_intraday_canonical_rows(conn, symbol, interval)
+            if interval == "1D":
+                delete_stray_intraday_canonical_rows(conn, symbol, interval)
 
-        canonical_count = count_canonical_rows(conn, symbol, interval)
-        conn.execute("COMMIT")
-        transaction_started = False
+            canonical_count = count_canonical_rows(conn, symbol, interval)
         log_audit(
             "CANONICAL_OHLCV_BUILD_COMPLETED",
             "Canonical OHLCV validation completed.",
@@ -103,8 +95,6 @@ def build_canonical_ohlcv(
         )
         return {"upserted": canonical_count, "rejected": rejected}
     except Exception:  # noqa: BLE001
-        if transaction_started:
-            conn.execute("ROLLBACK")
         log_audit(
             "CANONICAL_OHLCV_BUILD_FAILED",
             "Canonical OHLCV validation failed.",

@@ -28,6 +28,7 @@ from vnalpha.warehouse.repositories import (
     finish_ingestion_run,
     insert_raw_ohlcv,
 )
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 logger = get_logger("ingestion.sync_index")
 
@@ -100,8 +101,7 @@ def sync_index_ohlcv(
         diagnostics_json = (
             json.dumps(diagnostics, sort_keys=True) if diagnostics else None
         )
-        conn.execute("BEGIN TRANSACTION")
-        try:
+        with warehouse_transaction(conn):
             inserted = insert_raw_ohlcv(
                 conn,
                 run_id=run_id,
@@ -120,10 +120,6 @@ def sync_index_ohlcv(
             if inserted == 0:
                 skipped = 1
             finish_ingestion_run(conn, run_id, "SUCCESS" if inserted else "EMPTY")
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
         logger.info(
             "Index OHLCV sync complete: symbol=%s inserted=%d", symbol, inserted
         )

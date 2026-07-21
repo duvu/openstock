@@ -50,31 +50,45 @@ def _configured_path(path: Path | str | None) -> Path:
     return Path(path) if path is not None else Path(get_config().warehouse.path)
 
 
+def warehouse_open_error(exc: BaseException) -> WarehouseOpenError:
+    message = str(exc).casefold()
+    schema_markers = (
+        "not a valid duckdb database",
+        "database file is invalid",
+        "database version",
+        "storage version",
+        "corrupt",
+        "checksum",
+    )
+    if isinstance(exc, (duckdb.PermissionException, PermissionError)):
+        return WarehouseOpenError(
+            WarehouseOpenFailureKind.PERMISSION,
+            "Check warehouse and parent-directory permissions.",
+        )
+    if isinstance(exc, (duckdb.InvalidInputException, duckdb.CatalogException)) or (
+        isinstance(exc, duckdb.IOException)
+        and any(marker in message for marker in schema_markers)
+    ):
+        return WarehouseOpenError(
+            WarehouseOpenFailureKind.SCHEMA,
+            "Run the explicit warehouse migration or restore a compatible backup.",
+        )
+    if isinstance(exc, BlockingIOError) or "lock" in message:
+        return WarehouseOpenError(
+            WarehouseOpenFailureKind.BUSY,
+            "Wait for the active warehouse writer and retry.",
+        )
+    return WarehouseOpenError(
+        WarehouseOpenFailureKind.UNAVAILABLE,
+        "Verify the configured warehouse path and storage availability.",
+    )
+
+
 def _open_connection(path: Path, *, read_only: bool) -> duckdb.DuckDBPyConnection:
     try:
         return duckdb.connect(str(path), read_only=read_only)
-    except duckdb.PermissionException as exc:
-        raise WarehouseOpenError(
-            WarehouseOpenFailureKind.PERMISSION,
-            "Check warehouse and parent-directory permissions.",
-        ) from exc
-    except (duckdb.InvalidInputException, duckdb.CatalogException) as exc:
-        raise WarehouseOpenError(
-            WarehouseOpenFailureKind.SCHEMA,
-            "Run the explicit warehouse migration or restore a compatible backup.",
-        ) from exc
     except (duckdb.Error, OSError) as exc:
-        kind = (
-            WarehouseOpenFailureKind.BUSY
-            if "lock" in str(exc).casefold()
-            else WarehouseOpenFailureKind.UNAVAILABLE
-        )
-        remediation = (
-            "Wait for the active warehouse writer and retry."
-            if kind is WarehouseOpenFailureKind.BUSY
-            else "Verify the configured warehouse path and storage availability."
-        )
-        raise WarehouseOpenError(kind, remediation) from exc
+        raise warehouse_open_error(exc) from exc
 
 
 def get_connection(
@@ -123,4 +137,5 @@ __all__ = [
     "get_connection",
     "in_memory_connection",
     "read_connection",
+    "warehouse_open_error",
 ]

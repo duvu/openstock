@@ -30,6 +30,7 @@ from vnalpha.chat.events import (
 )
 from vnalpha.chat.modes import ExecutionMode, format_plan_preview
 from vnalpha.chat.safety import is_tool_approval_pending_eligible
+from vnalpha.commands.coordinated_executor import CoordinatedCommandExecutor
 from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
 from vnalpha.core.text_safety import redact_structure, sanitize_text
@@ -194,20 +195,26 @@ class ChatController:
             return error_text
 
     def handle_slash_command(self, raw: str, *, _connection=None) -> str | None:
-        if _connection is None:
+        if _connection is None and self._connection_factory is not None:
             with self._write_connection() as connection:
                 return self.handle_slash_command(raw, _connection=connection)
         self._persist_message("user", raw, "slash_command")
         self._ensure_chat_schema_ready()
-        conn = _connection
         try:
-            registry = build_default_registry()
-            executor = CommandExecutor(
-                conn=conn,
-                surface=self._surface,
-                registry=registry,
-                default_date=self._target_date,
-                default_date_is_implicit=self._target_date_is_implicit,
+            executor = (
+                CommandExecutor(
+                    conn=_connection,
+                    surface=self._surface,
+                    registry=build_default_registry(),
+                    default_date=self._target_date,
+                    default_date_is_implicit=self._target_date_is_implicit,
+                )
+                if _connection is not None
+                else CoordinatedCommandExecutor(
+                    surface=self._surface,
+                    default_date=self._target_date,
+                    default_date_is_implicit=self._target_date_is_implicit,
+                )
             )
             execute_parameters = inspect.signature(executor.execute).parameters
             if self._chat_session_id and "session_scope_id" in execute_parameters:
@@ -845,17 +852,25 @@ class ChatController:
         from vnalpha.assistant.app import AssistantApp
 
         self._ensure_chat_schema_ready()
-
-        with self._write_connection() as conn:
-            app = AssistantApp(conn, surface="tui-chat")
-            return app.ask(
-                question,
-                date=self._target_date,
-                date_is_implicit=self._target_date_is_implicit,
-                no_execute=no_execute,
-                on_trace_event=self._on_trace,
-                workspace_context=workspace_context,
-            )
+        if self._connection_factory is not None:
+            with self._write_connection() as connection:
+                app = AssistantApp(connection, surface="tui-chat")
+                return app.ask(
+                    question,
+                    date=self._target_date,
+                    date_is_implicit=self._target_date_is_implicit,
+                    no_execute=no_execute,
+                    on_trace_event=self._on_trace,
+                    workspace_context=workspace_context,
+                )
+        return AssistantApp.managed(surface="tui-chat").ask(
+            question,
+            date=self._target_date,
+            date_is_implicit=self._target_date_is_implicit,
+            no_execute=no_execute,
+            on_trace_event=self._on_trace,
+            workspace_context=workspace_context,
+        )
 
     def _legacy_run_ask_override(self) -> bool:
         return getattr(self._run_ask, "__func__", None) is not ChatController._run_ask
@@ -868,29 +883,35 @@ class ChatController:
 
         self._ensure_chat_schema_ready()
 
-        with self._write_connection() as conn:
-            app = AssistantApp(conn, surface=self._surface)
-            return app.prepare(
-                AssistantRequest(
-                    current_user_prompt=question,
-                    workspace_context=workspace_context,
-                    date=self._target_date,
-                    date_is_implicit=self._target_date_is_implicit,
-                    routing_session_id=self._chat_session_id,
-                )
-            )
+        request = AssistantRequest(
+            current_user_prompt=question,
+            workspace_context=workspace_context,
+            date=self._target_date,
+            date_is_implicit=self._target_date_is_implicit,
+            routing_session_id=self._chat_session_id,
+        )
+        if self._connection_factory is not None:
+            with self._write_connection() as connection:
+                return AssistantApp(connection, surface=self._surface).prepare(request)
+        return AssistantApp.managed(surface=self._surface).prepare(request)
 
     def _execute_prepared_turn(self, prepared: "PreparedAssistantTurn"):
         from vnalpha.assistant.app import AssistantApp
 
         self._ensure_chat_schema_ready()
 
-        with self._write_connection() as conn:
-            return AssistantApp(conn, surface=self._surface).execute_prepared(
-                prepared,
-                on_trace_event=self._on_trace,
-                on_synthesizing=lambda: self._emit_stage(AssistantStage.SYNTHESIZING),
-            )
+        kwargs = {
+            "on_trace_event": self._on_trace,
+            "on_synthesizing": lambda: self._emit_stage(AssistantStage.SYNTHESIZING),
+        }
+        if self._connection_factory is not None:
+            with self._write_connection() as connection:
+                return AssistantApp(connection, surface=self._surface).execute_prepared(
+                    prepared, **kwargs
+                )
+        return AssistantApp.managed(surface=self._surface).execute_prepared(
+            prepared, **kwargs
+        )
 
     def _approve_prepared_turn(self, prepared: "PreparedAssistantTurn") -> None:
         from vnalpha.sandbox.execution_service import SandboxExecutionService

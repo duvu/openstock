@@ -1,9 +1,37 @@
 """Tests for the DuckDB warehouse."""
 
+import duckdb
 import pytest
 
 from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
+
+
+def test_configured_warehouse_connection_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from vnalpha.core.config import AppConfig, WarehouseConfig
+    from vnalpha.warehouse import connection
+
+    configured_path = tmp_path / "configured" / "warehouse.duckdb"
+    attempts: list[tuple[str, bool]] = []
+
+    def unavailable(database: str, *, read_only: bool = False):
+        attempts.append((database, read_only))
+        raise duckdb.IOException("configured warehouse unavailable")
+
+    monkeypatch.setattr(
+        connection,
+        "get_config",
+        lambda: AppConfig(warehouse=WarehouseConfig(path=configured_path)),
+    )
+    monkeypatch.setattr(connection.duckdb, "connect", unavailable)
+
+    with pytest.raises(connection.WarehouseOpenError) as raised:
+        connection.get_connection()
+
+    assert raised.value.kind is connection.WarehouseOpenFailureKind.UNAVAILABLE
+    assert attempts == [(str(configured_path), True)]
 
 
 @pytest.fixture

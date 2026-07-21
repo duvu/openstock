@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 from typing import Optional
 
 import typer
@@ -13,7 +12,6 @@ from vnalpha.observability.commands import command_lifecycle
 def register(app: typer.Typer) -> None:
     @app.command("ask")
     def ask_runner(
-        ctx: typer.Context,
         question: str = typer.Argument(..., help="Natural-language research question."),
         date: Optional[str] = typer.Option(
             None, "--date", help="Target date (YYYY-MM-DD or 'today')."
@@ -52,25 +50,10 @@ def register(app: typer.Typer) -> None:
             from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
             from vnalpha.core.text_safety import sanitize_error_summary, sanitize_text
             from vnalpha.observability.errors import capture_exception
-            from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
+            from vnalpha.warehouse.connection import get_connection
 
             console = Console()
             error_console = Console(stderr=True)
-
-            @contextmanager
-            def coordinated_connection():
-                try:
-                    with WarehouseWriteCoordinator().transaction() as connection:
-                        yield connection
-                except Exception as exc:  # noqa: BLE001
-                    capture_exception(exc)
-                    error_console.print(
-                        Text(
-                            "Assistant request failed. Check logs and retry.",
-                            style="red",
-                        )
-                    )
-                    raise typer.Exit(code=1) from exc
 
             if date is not None and date.strip().lower() != "today":
                 try:
@@ -83,19 +66,8 @@ def register(app: typer.Typer) -> None:
                     raise typer.Exit(code=1) from exc
 
             try:
-                conn = ctx.with_resource(coordinated_connection())
-            except Exception as exc:
-                capture_exception(exc)
-                error_console.print(
-                    Text(
-                        "Assistant request failed. Check logs and retry.",
-                        style="red",
-                    )
-                )
-                raise typer.Exit(code=1) from exc
-
-            try:
-                resolved_date = resolve_date(date, conn=conn)
+                with get_connection() as connection:
+                    resolved_date = resolve_date(date, conn=connection)
             except ValueError as exc:
                 public_error = sanitize_error_summary(exc)
                 error_console.print(
@@ -115,7 +87,7 @@ def register(app: typer.Typer) -> None:
             try:
                 llm_config = LLMGatewayConfig.from_env()
                 llm_client = LLMGatewayClient(llm_config)
-                assistant = AssistantApp(conn, surface="cli", llm_client=llm_client)
+                assistant = AssistantApp.managed(surface="cli", llm_client=llm_client)
                 result, plan = assistant.ask(
                     question,
                     date=resolved_date,

@@ -6,6 +6,7 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from vnalpha.warehouse.point_in_time import resolve_universe
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 if TYPE_CHECKING:
     import duckdb
@@ -46,10 +47,7 @@ def persist_outcome_lineage(
     eligible_universe_hash = _hash(universe_payload)
 
     updated = 0
-    transaction_started = False
-    try:
-        conn.execute("BEGIN TRANSACTION")
-        transaction_started = True
+    with warehouse_transaction(conn):
         for (
             symbol,
             policy_hash,
@@ -82,11 +80,6 @@ def persist_outcome_lineage(
                 ],
             )
             updated += 1
-        conn.execute("COMMIT")
-    except BaseException:
-        if transaction_started:
-            conn.execute("ROLLBACK")
-        raise
     return updated
 
 

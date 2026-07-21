@@ -52,17 +52,14 @@ class CommandScreen(Screen):
         self.query_one("#cmd-bar", CommandInput).action_clear_input()
 
         try:
-            from vnalpha.commands.executor import CommandExecutor
+            from vnalpha.commands.coordinated_executor import CoordinatedCommandExecutor
             from vnalpha.commands.renderers.textual_renderer import result_to_markup
-            from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-            with WarehouseWriteCoordinator().transaction() as conn:
-                result = CommandExecutor(
-                    conn,
-                    surface="tui",
-                    default_date=self.target_date,
-                    default_date_is_implicit=self.target_date_is_implicit,
-                ).execute(text)
+            result = CoordinatedCommandExecutor(
+                surface="tui",
+                default_date=self.target_date,
+                default_date_is_implicit=self.target_date_is_implicit,
+            ).execute(text)
             markup = result_to_markup(result)
             log.show_result(text, markup)
 

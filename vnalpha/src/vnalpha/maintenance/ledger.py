@@ -14,6 +14,7 @@ from vnalpha.ingestion.trading_calendar import (
     VietnamSessionCalendar,
 )
 from vnalpha.maintenance.models import DailyMaintenanceResult, MaintenanceStageResult
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 if TYPE_CHECKING:
     import duckdb
@@ -43,10 +44,7 @@ def persist_maintenance_run(
     run_id = f"maint_{uuid4().hex[:12]}"
     duration_seconds = (completed_at - started_at).total_seconds()
 
-    transaction_started = False
-    try:
-        conn.execute("BEGIN TRANSACTION")
-        transaction_started = True
+    with warehouse_transaction(conn):
         conn.execute(
             """
             INSERT INTO maintenance_run (
@@ -83,14 +81,6 @@ def persist_maintenance_run(
         for order, stage in enumerate(result.stages, start=1):
             _persist_stage_run(conn, run_id, stage, order)
 
-        conn.execute("COMMIT")
-    except BaseException:
-        # Roll back on any failure, including operator interruption
-        # (KeyboardInterrupt/SystemExit), so an aborted write never leaves a
-        # partial or falsely-successful run committed.
-        if transaction_started:
-            conn.execute("ROLLBACK")
-        raise
     return run_id
 
 

@@ -25,6 +25,7 @@ from vnalpha.warehouse.symbol_lifecycle import (
 from vnalpha.warehouse.symbol_lifecycle import (
     get_symbol_taxonomy_as_of as _get_symbol_taxonomy_as_of,
 )
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 logger = get_logger("warehouse.repositories")
 
@@ -798,13 +799,8 @@ def replace_sector_strength_snapshots(
     if not owns_transaction:
         _replace_sector_strength_snapshots(conn, as_of_date, prepared_snapshots)
         return
-    _ = conn.execute("BEGIN TRANSACTION")
-    try:
+    with warehouse_transaction(conn):
         _replace_sector_strength_snapshots(conn, as_of_date, prepared_snapshots)
-        _ = conn.execute("COMMIT")
-    except duckdb.Error:
-        _ = conn.execute("ROLLBACK")
-        raise
 
 
 def _replace_sector_strength_snapshots(

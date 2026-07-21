@@ -30,16 +30,14 @@ def register(app: typer.Typer) -> None:
         """
         set_correlation_id()
         with command_lifecycle("cmd"):
-            from vnalpha.commands.executor import CommandExecutor
+            from vnalpha.commands.coordinated_executor import CoordinatedCommandExecutor
             from vnalpha.commands.renderers.rich_renderer import render_result
             from vnalpha.core.text_safety import sanitize_text
-            from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
             try:
-                with WarehouseWriteCoordinator().transaction() as conn:
-                    result = CommandExecutor(conn, surface="cli").execute(
-                        command, date_override=date
-                    )
+                result = CoordinatedCommandExecutor(surface="cli").execute(
+                    command, date_override=date
+                )
 
                 try:
                     from rich.console import Console

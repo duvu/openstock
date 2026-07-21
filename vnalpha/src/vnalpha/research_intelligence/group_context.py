@@ -41,6 +41,7 @@ from vnalpha.warehouse.repositories import (
     get_market_regime_as_of,
     get_sector_strength_as_of,
 )
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 
 class GroupType(StrEnum):
@@ -673,8 +674,7 @@ def _replace_snapshots(
     as_of_date: date,
     snapshots: tuple[GroupContextSnapshot, ...],
 ) -> None:
-    conn.execute("BEGIN TRANSACTION")
-    try:
+    with warehouse_transaction(conn):
         conn.execute(
             "DELETE FROM group_context_snapshot WHERE as_of_date = ?", [as_of_date]
         )
@@ -714,10 +714,6 @@ def _replace_snapshots(
                     item.generated_at,
                 ],
             )
-        conn.execute("COMMIT")
-    except BaseException:
-        conn.execute("ROLLBACK")
-        raise
 
 
 def _snapshot_from_row(row: tuple[object, ...]) -> GroupContextSnapshot:
