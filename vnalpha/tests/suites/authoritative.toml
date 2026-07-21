@@ -319,6 +319,31 @@ domain = "data"
 test = "tests/test_data_provisioning_runtime_hardening.py::test_market_regime_builder_receives_date_and_complete_is_success"
 
 [[contract]]
+id = "provisioning-queue-goals-test-provisioning-goal-contract"
+domain = "application"
+test = "tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract"
+
+[[contract]]
+id = "artifact-readiness-service-test-artifact-readiness-contract"
+domain = "data"
+test = "tests/test_artifact_readiness.py::test_artifact_readiness_contract"
+
+[[contract]]
+id = "warehouse-connection-test-configured-warehouse-connection-fails-closed"
+domain = "application"
+test = "tests/test_warehouse.py::test_configured_warehouse_connection_fails_closed"
+
+[[contract]]
+id = "warehouse-write-coordinator-test-warehouse-writers-are-exclusive-and-release-lock"
+domain = "data"
+test = "tests/test_warehouse.py::test_warehouse_writers_are_exclusive_and_release_lock"
+
+[[contract]]
+id = "warehouse-transaction-test-nested-warehouse-failure-rolls-back-outer-transaction"
+domain = "data"
+test = "tests/test_warehouse.py::test_nested_warehouse_failure_rolls_back_outer_transaction"
+
+[[contract]]
 id = "dates-testresolvedatetoday-test-none-returns-today"
 domain = "application"
 test = "tests/test_dates.py::TestResolveDateToday::test_none_returns_today"

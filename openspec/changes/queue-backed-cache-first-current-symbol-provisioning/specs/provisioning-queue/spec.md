@@ -3,10 +3,19 @@
 ### Requirement: Queue goals SHALL be finite and versioned
 The queue SHALL accept only `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION` payloads defined by explicit schema versions.
 
+`ENSURE_CURRENT_SYMBOL` SHALL normalize symbol casing and requested enrichments. Its identity SHALL include effective date, requested and fallback capability, normalized enrichments, refresh mode, source-policy version and contract version. `SYNC_DATASET_RANGE` SHALL include dataset, entity type/id, bounded dates, refresh mode, source-policy version and contract version. Before #328 publishes an inventory mapping, `index.ohlcv` for an `index` entity is the only allowed dataset-range pair. Text identity fields use bounded identifier/version grammars, payloads are limited to 4 KiB and dataset ranges to 366 days. `FINALIZE_MARKET_SESSION` SHALL include maintenance-run identity, resolved session, frozen-universe hash, source-policy version and finalization contract version.
+
+The worker boundary SHALL dispatch only by this closed goal enum through an allowlisted handler table; dynamic imports, shell, SQL and payload-directed execution are prohibited.
+
 #### Scenario: An unknown goal or enrichment is submitted
 - **WHEN** a payload contains an unknown goal, enrichment or schema version
 - **THEN** submission fails before persistence
 - **AND** no provider or DuckDB work occurs.
+
+#### Scenario: Equivalent enrichment requests are normalized
+- **WHEN** two otherwise-equivalent current-symbol requests differ only by enrichment ordering or duplicates
+- **THEN** they produce one normalized identity
+- **AND** an added, removed or different enrichment produces a distinct identity.
 
 ### Requirement: Equivalent active goals SHALL join one job
 The queue SHALL derive identity from every normalized field that changes desired persisted state.

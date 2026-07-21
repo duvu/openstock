@@ -11,6 +11,21 @@ policy:
 
 changes:
 
+  queue-backed-cache-first-current-symbol-provisioning:
+    status: partial
+    github_issues: [317, 320, 338, 343]
+    roadmap_state: scheduled
+    summary: >-
+      Replace direct current-symbol provisioning with a bounded cache-first
+      queue, preserving single-writer warehouse ownership and truthful
+      readiness across interactive and maintenance callers.
+    evidence: >-
+      Warehouse ownership (#343), readiness contracts (#320) and typed
+      provisioning goals (#338) are implemented. Commit
+      d09efd351c9297c91bda18355b13979c02635036 adds bounded
+      finite payloads and passes the focused goal-contract test;
+      queue repository, worker and application behavior remain incomplete.
+
   consolidate-authoritative-test-suite:
     status: partial
     github_issues: [348]
