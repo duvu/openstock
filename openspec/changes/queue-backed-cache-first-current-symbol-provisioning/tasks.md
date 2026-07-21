@@ -20,11 +20,11 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 
 ## 3. Queue repository — #323
 
-- [x] 3.1 Add SQLite schema, migrations and explicit WAL/busy-timeout settings. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820`.
-- [x] 3.2 Implement submit-or-join with priority escalation. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820`.
-- [x] 3.3 Implement atomic claim, lease, heartbeat and bounded retry. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820`.
-- [x] 3.4 Implement status, terminal result, cancellation and size limits. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820`.
-- [x] 3.5 Prove concurrent submit/claim/status behavior without DuckDB access. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820`; authoritative `vnalpha/tests/test_provisioning_queue_repository.py::test_durable_provisioning_queue_contract`; `make test-loop TEST=tests/test_provisioning_queue_repository.py::test_durable_provisioning_queue_contract` passed; `uv run python ../scripts/run-test-suite.py --plan --domain application` validates the authoritative inventory.
+- [x] 3.1 Add SQLite schema, migrations and explicit WAL/busy-timeout settings. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820` and separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`.
+- [x] 3.2 Implement submit-or-join with priority escalation. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820` and separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`.
+- [x] 3.3 Implement atomic claim, lease, heartbeat and bounded retry. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820` and separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`.
+- [x] 3.4 Implement status, terminal result, cancellation and size limits. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820` and separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`.
+- [x] 3.5 Prove concurrent submit/claim/status behavior without DuckDB access. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820` and separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`; authoritative `vnalpha/tests/test_provisioning_queue_repository.py::test_durable_provisioning_queue_contract`; `make test-loop TEST=tests/test_provisioning_queue_repository.py::test_durable_provisioning_queue_contract` passed; `uv run python ../scripts/run-test-suite.py --plan --domain application` validates the authoritative inventory.
 
 ## 4. Sequential worker — #324
 
