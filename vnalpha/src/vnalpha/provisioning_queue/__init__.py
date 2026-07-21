@@ -4,10 +4,13 @@ from vnalpha.provisioning_queue.models import (
     FinalizeMarketSessionGoal,
     GoalEnrichment,
     GoalType,
+    InvalidProvisioningGoalError,
     ProvisioningGoal,
+    QueueDataset,
     RefreshMode,
     SyncDatasetRangeGoal,
     goal_identity,
+    goal_type,
     parse_goal_payload,
 )
 
@@ -17,9 +20,12 @@ __all__ = [
     "FinalizeMarketSessionGoal",
     "GoalEnrichment",
     "GoalType",
+    "InvalidProvisioningGoalError",
     "ProvisioningGoal",
+    "QueueDataset",
     "RefreshMode",
     "SyncDatasetRangeGoal",
     "goal_identity",
+    "goal_type",
     "parse_goal_payload",
 ]

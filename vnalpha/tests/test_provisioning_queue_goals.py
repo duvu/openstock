@@ -5,11 +5,16 @@ from datetime import date
 import pytest
 
 from vnalpha.data_availability.artifact_readiness_models import ReadinessCapability
+from vnalpha.provisioning_queue import (
+    InvalidProvisioningGoalError,
+    QueueDataset,
+    goal_type,
+)
 from vnalpha.provisioning_queue.models import (
     EnsureCurrentSymbolGoal,
     FinalizeMarketSessionGoal,
     GoalEnrichment,
-    InvalidProvisioningGoalError,
+    GoalType,
     RefreshMode,
     SyncDatasetRangeGoal,
     goal_identity,
@@ -56,7 +61,7 @@ def test_provisioning_goal_contract() -> None:
         contract_version="current-symbol-v1",
     )
     range_goal = SyncDatasetRangeGoal(
-        dataset="index.ohlcv",
+        dataset=QueueDataset.INDEX_OHLCV,
         entity_type="index",
         entity_id="VNINDEX",
         start_date=date(2026, 7, 20),
@@ -82,8 +87,20 @@ def test_provisioning_goal_contract() -> None:
     assert goal_identity(first) != goal_identity(distinct)
     assert goal_identity(first) != goal_identity(range_goal)
     assert goal_identity(first) != goal_identity(finalization_goal)
+    assert goal_type(first) is GoalType.ENSURE_CURRENT_SYMBOL
+    assert goal_type(range_goal) is GoalType.SYNC_DATASET_RANGE
+    assert goal_type(finalization_goal) is GoalType.FINALIZE_MARKET_SESSION
     assert parse_goal_payload(first.payload_json()) == first
     assert parse_goal_payload(finalization_goal.payload_json()) == finalization_goal
+    for distinct_range_goal in (
+        range_goal.model_copy(update={"entity_type": "benchmark"}),
+        range_goal.model_copy(update={"entity_id": "HNXINDEX"}),
+        range_goal.model_copy(update={"start_date": date(2026, 7, 19)}),
+        range_goal.model_copy(update={"end_date": date(2026, 7, 22)}),
+        range_goal.model_copy(update={"source_policy_version": "policy-v2"}),
+        range_goal.model_copy(update={"contract_version": "dataset-range-v2"}),
+    ):
+        assert goal_identity(range_goal) != goal_identity(distinct_range_goal)
     with pytest.raises(InvalidProvisioningGoalError):
         parse_goal_payload(
             first.payload_json().replace('"schema_version":1', '"schema_version":2')
@@ -91,4 +108,12 @@ def test_provisioning_goal_contract() -> None:
     with pytest.raises(InvalidProvisioningGoalError):
         parse_goal_payload(
             first.payload_json().replace("VALUATION_CONTEXT", "UNKNOWN_CONTEXT")
+        )
+    with pytest.raises(InvalidProvisioningGoalError):
+        parse_goal_payload(
+            range_goal.payload_json().replace("index.ohlcv", "equity.ohlcv")
+        )
+    with pytest.raises(InvalidProvisioningGoalError):
+        parse_goal_payload(
+            first.payload_json().replace("ENSURE_CURRENT_SYMBOL", "UNKNOWN_GOAL")
         )

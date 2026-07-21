@@ -35,6 +35,10 @@ class RefreshMode(StrEnum):
     FORCE_REFRESH = "FORCE_REFRESH"
 
 
+class QueueDataset(StrEnum):
+    INDEX_OHLCV = "index.ohlcv"
+
+
 class InvalidProvisioningGoalError(ValueError):
     def __init__(self, reason: str) -> None:
         self.reason = reason
@@ -104,7 +108,7 @@ class EnsureCurrentSymbolGoal(_GoalModel):
 class SyncDatasetRangeGoal(_GoalModel):
     goal_type: Literal[GoalType.SYNC_DATASET_RANGE] = GoalType.SYNC_DATASET_RANGE
     schema_version: Literal[CURRENT_GOAL_SCHEMA_VERSION] = CURRENT_GOAL_SCHEMA_VERSION
-    dataset: str
+    dataset: QueueDataset
     entity_type: str
     entity_id: str
     start_date: date
@@ -112,7 +116,7 @@ class SyncDatasetRangeGoal(_GoalModel):
     refresh_mode: RefreshMode = RefreshMode.CACHE_FIRST
     contract_version: str
 
-    @field_validator("dataset", "entity_type", "entity_id", "contract_version")
+    @field_validator("entity_type", "entity_id", "contract_version")
     @classmethod
     def _normalize_required_text(cls, value: str) -> str:
         normalized = value.strip()
@@ -190,6 +194,7 @@ __all__ = [
     "GoalType",
     "InvalidProvisioningGoalError",
     "ProvisioningGoal",
+    "QueueDataset",
     "RefreshMode",
     "SyncDatasetRangeGoal",
     "goal_identity",
