@@ -259,7 +259,7 @@ def test_sequential_provisioning_worker_contract(
         handlers=(ExclusiveHandler(),),
     )
     exclusive_alias_path = tmp_path / "exclusive-alias.sqlite3"
-    exclusive_alias_path.symlink_to(exclusive_queue.path)
+    exclusive_alias_path.hardlink_to(exclusive_queue.path)
     second_worker = ProvisioningWorker(
         ProvisioningQueue(exclusive_alias_path),
         worker_id="exclusive-two",

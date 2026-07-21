@@ -62,15 +62,13 @@ class LeaseHeartbeat:
 
 class ExclusiveProvisioner:
     def __init__(self, queue_path: Path) -> None:
-        self._lock_path = queue_path.with_suffix(queue_path.suffix + ".worker.lock")
+        self._queue_path = queue_path
 
     @contextmanager
     def hold(self) -> Iterator[None]:
-        self._lock_path.parent.mkdir(parents=True, exist_ok=True)
         descriptor = os.open(
-            self._lock_path,
-            os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
-            0o600,
+            self._queue_path,
+            os.O_RDONLY | os.O_NOFOLLOW,
         )
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX)
