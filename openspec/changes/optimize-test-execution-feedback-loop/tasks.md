@@ -1,10 +1,10 @@
 ## 1. Spec and baseline gate
 
 - [x] 1.1 Register issue #348 and strictly validate proposal, design, four capability specs and tasks.
-- [ ] 1.2 Record the exact base commit, clean-tree state, OS, CPU, memory, Python, DuckDB, pytest and dependency identity.
-- [ ] 1.3 Record `vnalpha` collection count and the full sequential wall time with JUnit output and top 100 tests at or above 0.20 seconds.
-- [ ] 1.4 Aggregate baseline runtime by file and initial domain without double-counting parameterized cases.
-- [ ] 1.5 Record every pytest file repeated by current aggregate Make/CI paths and every repeated `openstock-verify --ci` invocation.
+- [x] 1.2 Record the exact base commit, clean-tree state, OS, CPU, memory, Python, DuckDB, pytest and dependency identity.
+- [x] 1.3 Record `vnalpha` collection count and the full sequential wall time with JUnit output and top 100 tests at or above 0.20 seconds.
+- [x] 1.4 Aggregate baseline runtime by file and initial domain without double-counting parameterized cases.
+- [x] 1.5 Record every pytest file repeated by current aggregate Make/CI paths and every repeated `openstock-verify --ci` invocation.
 - [ ] 1.6 Record measurable full migration invocation counts and docs/OpenSpec-only PR lane behavior/runtime.
 
 ## 2. Canonical ownership and H+1 policy
