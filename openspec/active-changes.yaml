@@ -26,8 +26,9 @@ changes:
       shutdown proof remain incomplete. Commits
       85caa5da2481822c84cbac45594feb94abad9176 and
       079c32dfa3d59fd9bb345d5b730a0112035c2d45 and
-      031aef766584d14493b3835dc65baf69705098e3 add durable lifecycle,
-      active-stage lease safety and canonical provisioner locking; queue-backed application behavior remains
+      031aef766584d14493b3835dc65baf69705098e3 and
+      555a7b772e4a0d47edc4f4248b8bc7e185c42b06 add durable lifecycle,
+      active-stage lease safety and shared-inode provisioner locking; queue-backed application behavior remains
       incomplete.
 
   consolidate-authoritative-test-suite:
