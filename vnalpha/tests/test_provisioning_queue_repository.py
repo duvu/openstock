@@ -61,12 +61,16 @@ def test_durable_provisioning_queue_contract(tmp_path) -> None:
     queue = ProvisioningQueue(tmp_path / "provisioning.sqlite3", max_attempts=2)
 
     settings = queue.initialize()
-    with pytest.raises(ProvisioningQueueValidationError):
-        queue.submit_or_join(
-            symbol_goal.model_copy(update={"contract_version": "current-symbol-v2"}),
-            priority=5,
-            now=now,
-        )
+    for field, unsupported_version in (
+        ("source_policy_version", "policy-v2"),
+        ("contract_version", "current-symbol-v2"),
+    ):
+        with pytest.raises(ProvisioningQueueValidationError):
+            queue.submit_or_join(
+                symbol_goal.model_copy(update={field: unsupported_version}),
+                priority=5,
+                now=now,
+            )
     assert not queue.list()
     submitted_symbol = queue.submit_or_join(
         symbol_goal, priority=5, origin="interactive", now=now
