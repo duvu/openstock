@@ -21,7 +21,8 @@ changes:
       readiness across interactive and maintenance callers.
     evidence: >-
       Warehouse ownership (#343), readiness contracts (#320) and typed
-      provisioning goals (#338) are implemented. Commit 43656b4 adds bounded
+      provisioning goals (#338) are implemented. Commit
+      43656b4a8294f3dc0677235acf0531ecbc089c12 adds bounded
       finite payloads and passes the focused goal-contract test;
       queue repository, worker and application behavior remain incomplete.
 
