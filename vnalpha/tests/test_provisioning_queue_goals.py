@@ -124,13 +124,14 @@ def test_provisioning_goal_contract() -> None:
         parse_goal_payload(
             first.payload_json().replace("VALUATION_CONTEXT", "UNKNOWN_CONTEXT")
         )
-    for unsupported_version in ("policy-v2", "current-symbol-v2"):
+    for field, unsupported_version in (
+        ("source_policy_version", "policy-v2"),
+        ("contract_version", "current-symbol-v2"),
+    ):
+        payload = loads(first.payload_json())
+        payload[field] = unsupported_version
         with pytest.raises(InvalidProvisioningGoalError):
-            parse_goal_payload(
-                first.payload_json()
-                .replace("policy-v1", unsupported_version)
-                .replace("current-symbol-v1", unsupported_version)
-            )
+            parse_goal_payload(dumps(payload))
     with pytest.raises(InvalidProvisioningGoalError):
         parse_goal_payload(
             range_goal.payload_json().replace("index.ohlcv", "equity.ohlcv")
