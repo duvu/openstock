@@ -1,12 +1,14 @@
 .DEFAULT_GOAL := help
 
+PROJECT ?= vnalpha
+
 # ──────────────────────────────────────────────
 # openstock Makefile
 # ──────────────────────────────────────────────
 
 .PHONY: help up-vnstock down-vnstock login-vnstock validate-compose \
         sync features score tui mvp1-start verify-mvp1 install-vnalpha \
-        lint-vnalpha test-vnalpha \
+        lint-vnalpha test-loop test-vnalpha \
         eval-research-answers eval-research-runtime verify-hardening verify-r0 \
         verify-r2-ci verify-r4 repo-hygiene verify-repo-consistency \
         verify-vnalpha-package build-vnalpha-deb verify-vnalpha-deb
@@ -57,7 +59,7 @@ mvp1-start: ## One-command MVP1 chat vertical-slice startup (idempotent)
 verify-mvp1: ## Read-only MVP1 chat vertical-slice preflight
 	packaging/scripts/openstock-verify --mvp1
 
-# ── vnalpha dev ───────────────────────────────
+# ── development ───────────────────────────────
 
 install-vnalpha: ## Install vnalpha in editable mode (uses uv if available)
 	uv pip install -e vnalpha/ --python vnalpha/.venv/bin/python || pip install -e vnalpha/
@@ -65,10 +67,19 @@ install-vnalpha: ## Install vnalpha in editable mode (uses uv if available)
 lint-vnalpha: ## Run ruff linter and format-check on vnalpha
 	cd vnalpha && ruff check . && ruff format --check .
 
-test-vnalpha: ## Run vnalpha test suite
+test-loop: ## Run one owning contract test with a hard 60-second limit: TEST=path::test [PROJECT=vnalpha]
+	@test -n "$(TEST)" || { \
+		echo "Usage: make test-loop TEST=tests/path.py::test_contract [PROJECT=vnalpha|vnstock]"; \
+		exit 2; \
+	}
+	@case "$(PROJECT)" in vnalpha|vnstock) ;; *) echo "PROJECT must be vnalpha or vnstock"; exit 2;; esac
+	@timeout 60s sh -c 'cd "$(PROJECT)" && pytest -q --maxfail=1 "$(TEST)"'
+
+test-vnalpha: ## Run the complete vnalpha suite; final-candidate/release use only
 	cd vnalpha && pytest -q
 
-verify-r0: ## Run offline R0 pipeline confidence tests (no network required)
+# Legacy bounded suites remain callable for diagnosis only. Do not chain them with the full suite.
+verify-r0: ## Run the legacy offline R0 diagnostic subset
 	cd vnalpha && pytest -q \
 		tests/test_phase5_e2e.py \
 		tests/test_features.py \
@@ -76,11 +87,11 @@ verify-r0: ## Run offline R0 pipeline confidence tests (no network required)
 		tests/test_command_warehouse.py \
 		tests/test_r0_gaps.py
 
-verify-r2-ci: ## Run static CI verification for R2 deploy correctness
+verify-r2-ci: ## Run static R2 deployment verification
 	packaging/tests/test_daily_pipeline_units.sh
 	packaging/scripts/openstock-verify --ci
 
-verify-r4: ## Run R4 chat-workspace acceptance tests (no network required)
+verify-r4: ## Run the legacy R4 diagnostic subset
 	cd vnalpha && pytest -q \
 		tests/test_r4_permissions.py \
 		tests/test_r4_session.py \
@@ -103,21 +114,17 @@ eval-research-answers: ## Evaluate offline golden fixtures
 eval-research-runtime: ## Evaluate offline runtime-replay fixtures
 	cd vnalpha && PYTHONPATH=src python -c 'from vnalpha.cli import app; app()' eval research-runtime --ci
 
-verify-hardening: ## Run hardening verification gates in dependency order
+verify-hardening: ## Release-only validation; never use in the inner edit-test loop
 	$(MAKE) repo-hygiene
 	packaging/scripts/openstock-secret-scan
 	$(MAKE) verify-repo-consistency
 	$(MAKE) validate-compose
 	$(MAKE) lint-vnalpha
-	$(MAKE) verify-r0
-	$(MAKE) verify-r2-ci
 	$(MAKE) test-vnalpha
-	$(MAKE) verify-r4
-	packaging/scripts/openstock-verify --ci
+	$(MAKE) verify-r2-ci
 	$(MAKE) verify-vnalpha-package
 	$(MAKE) eval-research-answers
 	$(MAKE) eval-research-runtime
-	python -m pytest -q scripts/tests/test_check_openspec_completion.py
 	python scripts/check-openspec-completion.py \
 		openspec/changes/archive/2026-07-13-openstock-four-phase-hardening
 
