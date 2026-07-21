@@ -6,8 +6,10 @@ import pytest
 
 from vnalpha.data_availability.artifact_readiness_models import ReadinessCapability
 from vnalpha.provisioning_queue import (
+    MAX_GOAL_PAYLOAD_BYTES,
     InvalidProvisioningGoalError,
     QueueDataset,
+    QueueEntityType,
     goal_type,
 )
 from vnalpha.provisioning_queue.models import (
@@ -62,7 +64,7 @@ def test_provisioning_goal_contract() -> None:
     )
     range_goal = SyncDatasetRangeGoal(
         dataset=QueueDataset.INDEX_OHLCV,
-        entity_type="index",
+        entity_type=QueueEntityType.INDEX,
         entity_id="VNINDEX",
         start_date=date(2026, 7, 20),
         end_date=date(2026, 7, 21),
@@ -93,7 +95,6 @@ def test_provisioning_goal_contract() -> None:
     assert parse_goal_payload(first.payload_json()) == first
     assert parse_goal_payload(finalization_goal.payload_json()) == finalization_goal
     for distinct_range_goal in (
-        range_goal.model_copy(update={"entity_type": "benchmark"}),
         range_goal.model_copy(update={"entity_id": "HNXINDEX"}),
         range_goal.model_copy(update={"start_date": date(2026, 7, 19)}),
         range_goal.model_copy(update={"end_date": date(2026, 7, 22)}),
@@ -117,3 +118,14 @@ def test_provisioning_goal_contract() -> None:
         parse_goal_payload(
             first.payload_json().replace("ENSURE_CURRENT_SYMBOL", "UNKNOWN_GOAL")
         )
+    for payload in (
+        first.payload_json().replace("FPT", "PASSWORD=secret-value"),
+        range_goal.payload_json().replace("VNINDEX", "index; DROP TABLE jobs"),
+        range_goal.payload_json().replace("2026-07-20", "2020-07-20"),
+        first.payload_json().replace("policy-v1", "https://example.invalid/$(curl)"),
+        first.payload_json()[:-1] + ',"credential":"Bearer secret-value"}',
+        "x" * (MAX_GOAL_PAYLOAD_BYTES + 1),
+    ):
+        with pytest.raises(InvalidProvisioningGoalError) as error:
+            parse_goal_payload(payload)
+        assert "secret-value" not in str(error.value)
