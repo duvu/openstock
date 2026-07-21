@@ -13,7 +13,7 @@
 - [x] 2.2 Add a consistency checker that rejects missing paths, unassigned or multiply assigned test files, unsupported roles/categories and contracts without H+1.
 - [x] 2.3 Add RED/GREEN checker tests for valid inventory, unassigned files, duplicate ownership, missing H/+1 and invalid exception categories.
 - [x] 2.4 Inventory every `vnalpha/tests/test_*.py` file under exactly one `vnalpha-data`, `vnalpha-research`, `vnalpha-application`, `shared-smoke` or `migration` owner.
-- [ ] 2.5 Record canonical contract ownership for `vnstock-contracts` and packaging validation lanes.
+- [x] 2.5 Record canonical contract ownership for `vnstock-contracts` and packaging validation lanes.
 - [x] 2.6 Integrate suite ownership validation into repository consistency and the every-PR consistency lane.
 
 ## 3. Deduplicated execution lanes
