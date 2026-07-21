@@ -22,7 +22,7 @@ changes:
     evidence: >-
       Warehouse ownership (#343), readiness contracts (#320) and typed
       provisioning goals (#338) are implemented. Commit
-      43656b4a8294f3dc0677235acf0531ecbc089c12 adds bounded
+      817ebb9c36e951f6f719ab0f3694c4f4c48ceca1 adds bounded
       finite payloads and passes the focused goal-contract test;
       queue repository, worker and application behavior remain incomplete.
 
