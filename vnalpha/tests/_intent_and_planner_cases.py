@@ -218,14 +218,15 @@ def test_parse_intent_response_recovers_embedded_json() -> None:
     response = 'Here is the JSON payload: {"intent":"explain_symbol","entities":{"symbol":"FPT"}}. End.'
     parsed = parse_intent_response(response)
     assert parsed.intent == "explain_symbol"
-    assert parsed.entities == {"symbol": "FPT"}
+    # Symbol-requiring intents canonicalize to {"symbol":"FPT","symbols":["FPT"]}.
+    assert parsed.entities == {"symbol": "FPT", "symbols": ["FPT"]}
 
 
 def test_parse_intent_response_maps_legacy_json_intents() -> None:
     response = '{"intent": "GET_STOCK_INFO", "entities": {"symbol": "FPT"}}'
     parsed = parse_intent_response(response)
     assert parsed.intent == "explain_symbol"
-    assert parsed.entities == {"symbol": "FPT"}
+    assert parsed.entities == {"symbol": "FPT", "symbols": ["FPT"]}
 
 
 def test_parse_json_response_rejects_non_object_payload() -> None:
