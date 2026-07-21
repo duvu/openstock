@@ -2,6 +2,28 @@
 
 OpenStock is developed spec-first. GitHub Issues define active scope and dependencies; OpenSpec defines behavior, design and implementation evidence for material changes.
 
+## Development method: implementation first, tests after
+
+OpenStock does **not** require test-driven development, test-first coding or red–green–refactor.
+
+Use this order:
+
+```text
+specify or understand the public contract
+→ implement the complete behavior
+→ inspect or smoke-check the result
+→ add or update one authoritative automated test
+→ run that test once
+```
+
+Guidelines:
+
+- Do not create a failing test before implementation solely as process ceremony.
+- Do not add production abstractions, mocks or dependency seams only to make tests easier to write.
+- Tests should validate stable externally observable behavior after the implementation and failure model are understood.
+- Temporary exploratory tests, scripts and diagnostics must be removed before completion unless they become the one authoritative contract test.
+- Spec-first and test-after are compatible: the specification defines expected behavior; the automated test verifies the implemented contract.
+
 ## Test policy: 1:1
 
 The repository uses a **1:1 public feature/function-to-authoritative-test policy**:
@@ -24,7 +46,7 @@ This is a contract-to-test ratio. It is not a line-coverage target and it does n
    - a new public feature/function contract;
    - a newly identified independent risk contract;
    - replacement of an obsolete authoritative test.
-7. Bug fixes update or replace the owning contract test. Do not normally add permanent issue-specific regression files.
+7. Bug fixes update or replace the owning contract test after the fix is implemented and understood. Do not normally add permanent issue-specific regression files.
 8. Equivalent parameter combinations must not be expanded solely to increase test counts.
 
 ## Test budget
@@ -38,7 +60,7 @@ Issue [#348](https://github.com/duvu/openstock/issues/348) owns consolidation of
 A pull request that adds or changes behavior must identify:
 
 - the public feature/function or risk contract being changed;
-- the one authoritative test that owns the contract;
+- the one authoritative test that owns the implemented contract;
 - obsolete or duplicate tests removed or replaced;
 - exact validation commands and results for the final SHA.
 
