@@ -225,7 +225,8 @@ def test_sequential_provisioning_worker_contract(
     release_stage.set()
     worker_thread.join(timeout=5)
     assert not worker_thread.is_alive()
-    assert overrun_result[0].status is ProvisioningJobStatus.SUCCEEDED
+    assert overrun_result[0].status is ProvisioningJobStatus.FAILED
+    assert overrun_result[0].error == "STAGE_TIMEOUT"
 
     exclusive_queue = ProvisioningQueue(tmp_path / "exclusive.sqlite3")
     exclusive_queue.initialize()

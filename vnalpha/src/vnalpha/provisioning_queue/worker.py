@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event, Lock, current_thread, main_thread
+from time import monotonic
 from types import FrameType
 from typing import Callable, Final, Iterator
 
@@ -31,6 +32,7 @@ from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 MAX_CONCURRENCY: Final = 1
 _CANCELLATION_REASON: Final = "CANCELLED_AT_SAFE_BOUNDARY"
 _UNSUPPORTED_HANDLER: Final = "UNSUPPORTED_GOAL_HANDLER"
+_STAGE_TIMEOUT: Final = "STAGE_TIMEOUT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,12 +152,16 @@ class ProvisioningWorker:
                 with self._lease_heartbeat(job):
                     if self._cancellation_requested(job):
                         return HandlerResult(False, _CANCELLATION_REASON)
+                    started_at = monotonic()
                     result = handler.execute(job.goal, connection)
         else:
             with self._lease_heartbeat(job):
                 if self._cancellation_requested(job):
                     return HandlerResult(False, _CANCELLATION_REASON)
+                started_at = monotonic()
                 result = handler.execute(job.goal, None)
+        if monotonic() - started_at > self._settings.stage_timeout_seconds:
+            return HandlerResult(False, _STAGE_TIMEOUT)
         return result
 
     def _lease_heartbeat(self, job: ProvisioningJob) -> LeaseHeartbeat:
