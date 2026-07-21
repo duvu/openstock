@@ -17,6 +17,30 @@ OpenStock is one repository containing `vnalpha`, `vnstock`, OpenSpec, packaging
 
 OpenStock is research-only. Do not add broker login, order placement, account mutation, margin, transfers or autonomous trading execution. Deterministic application services own provisioning and mutation. Fresh warehouse and tool output outrank summaries and model prose.
 
+## Development method: no TDD
+
+OpenStock does **not** use test-driven development or a mandatory red–green–refactor workflow.
+
+The required order is:
+
+```text
+understand or specify the public contract
+→ implement the smallest complete change
+→ inspect or smoke-check the behavior
+→ add or update the single authoritative contract test
+→ run the bounded development test once
+```
+
+Rules:
+
+- Do not write failing tests before implementation merely to satisfy TDD ceremony.
+- Do not design production code around mocks or test-only seams.
+- Tests validate stable externally observable behavior after the implementation shape is understood.
+- A bug fix updates the owning authoritative contract test after the root cause and fix are established.
+- Exploratory implementation may use manual commands, logs, fixtures or temporary diagnostics before the final automated test is written.
+- Temporary diagnostics and exploratory tests must be removed before completion unless they represent the one authoritative public or risk contract.
+- Spec-first remains required for material changes; spec-first is not test-first.
+
 ## Development loop: hard limit 60 seconds
 
 The inner edit-test loop MUST finish within 60 seconds.
