@@ -20,7 +20,7 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 
 ## 3. Queue repository — #323
 
-- [x] 3.1 Add SQLite schema, migrations and explicit WAL/busy-timeout settings. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820` and separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`.
+- [x] 3.1 Add SQLite schema, migrations and explicit WAL/busy-timeout settings. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820`, separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`, and boundary-corrected by `7729b21e9d4d52d64390d4ffea29b8f5e24c2bb1`.
 - [x] 3.2 Implement submit-or-join with priority escalation. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820` and separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`.
 - [x] 3.3 Implement atomic claim, lease, heartbeat and bounded retry. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820` and separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`.
 - [x] 3.4 Implement status, terminal result, cancellation and size limits. Evidence: `3726ac8a8dad484084e493765be02849f8fe4a84`, hardened by `5797cca25482ffb0d5a62e86c4531eb0fb8b2820` and separated by `ecc729c9f569a5e09a66688cee4cb55c8d5f6a84`.
