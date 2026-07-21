@@ -78,7 +78,7 @@ test-loop: ## Run one owning contract test with a hard 60-second limit: TEST=pat
 	@timeout 60s sh -c 'cd "$(PROJECT)" && pytest -q --maxfail=1 "$(TEST)"'
 
 test-vnalpha: ## Run the canonical complete vnalpha suite; final-candidate/release use only
-	cd vnalpha && uv run python ../scripts/run-test-suite.py \
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py; else python ../scripts/run-test-suite.py; fi \
 		--suite shared-smoke \
 		--suite migration \
 		--suite vnalpha-data \
@@ -86,19 +86,19 @@ test-vnalpha: ## Run the canonical complete vnalpha suite; final-candidate/relea
 		--suite vnalpha-application
 
 test-vnalpha-smoke: ## Run canonical R0/R4 smoke coverage
-	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite shared-smoke
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --suite shared-smoke; else python ../scripts/run-test-suite.py --suite shared-smoke; fi
 
 test-vnalpha-data: ## Run canonical vnalpha data coverage
-	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite vnalpha-data
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --suite vnalpha-data; else python ../scripts/run-test-suite.py --suite vnalpha-data; fi
 
 test-vnalpha-research: ## Run canonical vnalpha research coverage
-	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite vnalpha-research
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --suite vnalpha-research; else python ../scripts/run-test-suite.py --suite vnalpha-research; fi
 
 test-vnalpha-application: ## Run canonical vnalpha application coverage
-	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite vnalpha-application
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --suite vnalpha-application; else python ../scripts/run-test-suite.py --suite vnalpha-application; fi
 
 test-vnalpha-migration: ## Run canonical vnalpha migration coverage
-	cd vnalpha && uv run python ../scripts/run-test-suite.py --suite migration
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --suite migration; else python ../scripts/run-test-suite.py --suite migration; fi
 
 # Legacy bounded suites remain callable for diagnosis only. Do not chain them with the full suite.
 verify-r0: ## Run the legacy offline R0 diagnostic subset
