@@ -118,11 +118,8 @@ class WarehouseWritePathConflictError(Exception):
 
 
 def _warehouse_lock_path(warehouse_path: Path) -> Path:
-    state_home = Path(
-        os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")
-    )
     identity = hashlib.sha256(os.fsencode(str(warehouse_path))).hexdigest()
-    return state_home / "vnalpha" / "warehouse-locks" / f"{identity}.lock"
+    return warehouse_path.parent / ".vnalpha-locks" / f"{identity}.lock"
 
 
 __all__ = ["WarehouseWriteCoordinator", "WarehouseWritePathConflictError"]
