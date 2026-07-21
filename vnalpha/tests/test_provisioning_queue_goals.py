@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from json import dumps, loads
+from traceback import format_exception
 
 import pytest
 
@@ -135,3 +136,4 @@ def test_provisioning_goal_contract() -> None:
         with pytest.raises(InvalidProvisioningGoalError) as error:
             parse_goal_payload(payload)
         assert "secret-value" not in str(error.value)
+        assert "secret-value" not in "".join(format_exception(error.value))

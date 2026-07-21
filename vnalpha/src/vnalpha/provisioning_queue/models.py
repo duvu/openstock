@@ -179,10 +179,10 @@ def parse_goal_payload(payload_json: str) -> ProvisioningGoal:
         if not isinstance(payload, dict) or "schema_version" not in payload:
             raise ValueError("schema_version is required")
         return _GOAL_PAYLOAD_ADAPTER.validate_python(payload)
-    except (JSONDecodeError, ValidationError, ValueError) as error:
+    except (JSONDecodeError, ValidationError, ValueError):
         raise InvalidProvisioningGoalError(
             "invalid provisioning goal payload"
-        ) from error
+        ) from None
 
 
 def goal_identity(goal: ProvisioningGoal) -> str:
