@@ -18,9 +18,9 @@ def watchlist(
         from vnalpha.warehouse.connection import get_connection
         from vnalpha.warehouse.repositories import get_watchlist as _get_watchlist
 
-        conn = get_connection()
-        target_date = resolve_date(date, conn=conn)
-        rows = _get_watchlist(conn, target_date)
+        with get_connection() as conn:
+            target_date = resolve_date(date, conn=conn)
+            rows = _get_watchlist(conn, target_date)
 
         if not rows:
             typer.echo(

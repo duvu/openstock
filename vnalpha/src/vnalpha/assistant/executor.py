@@ -192,6 +192,8 @@ class AssistantExecutor:
         conn,
         assistant_session_id: str,
         on_trace_event: "Callable[[TraceEvent], None] | None" = None,
+        deferred_traces: bool = False,
+        prestarted_trace_ids: tuple[str, ...] = (),
     ) -> None:
         self._conn = conn
         self._assistant_session_id = assistant_session_id
@@ -203,9 +205,19 @@ class AssistantExecutor:
             assistant_session_id=assistant_session_id,
             trace_parent_type="assistant",
             trace_event_callback=on_trace_event,
+            deferred=deferred_traces,
+            prestarted_trace_ids=prestarted_trace_ids,
         )
 
-    def execute(self, plan: AssistantPlan) -> dict[str, Any]:
+    def flush_traces(self, conn) -> None:
+        self._tool_executor.flush(conn)
+
+    def execute(
+        self,
+        plan: AssistantPlan,
+        *,
+        explicitly_provisioned: bool | None = None,
+    ) -> dict[str, Any]:
         if plan.is_refusal():
             raise RefusalError(
                 reason=plan.refusal_reason or "Unsupported request",
@@ -217,9 +229,10 @@ class AssistantExecutor:
         if not correlation_id or correlation_id == "unset":
             correlation_id = set_correlation_id()
 
-        explicitly_provisioned = any(
-            step.tool_name == _PROVISION_TOOL for step in plan.steps
-        )
+        if explicitly_provisioned is None:
+            explicitly_provisioned = any(
+                step.tool_name == _PROVISION_TOOL for step in plan.steps
+            )
         results: dict[str, Any] = {}
         for step in plan.steps:
             assert_safe_tool(step.tool_name)

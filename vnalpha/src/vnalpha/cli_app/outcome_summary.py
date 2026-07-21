@@ -17,12 +17,9 @@ def outcome_candidates(
         from vnalpha.core.dates import resolve_date
         from vnalpha.outcomes.repositories import get_candidate_outcomes
         from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        rows = get_candidate_outcomes(conn, resolve_date(date), horizon)
-        conn.close()
+        with get_connection() as conn:
+            rows = get_candidate_outcomes(conn, resolve_date(date), horizon)
 
         console = Console()
         if not rows:
@@ -98,12 +95,9 @@ def outcome_watchlist(
         from vnalpha.core.dates import resolve_date
         from vnalpha.outcomes.repositories import get_watchlist_outcome
         from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        result = get_watchlist_outcome(conn, resolve_date(date), horizon)
-        conn.close()
+        with get_connection() as conn:
+            result = get_watchlist_outcome(conn, resolve_date(date), horizon)
 
         console = Console()
         if result is None:

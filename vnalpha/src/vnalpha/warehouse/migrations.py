@@ -10,7 +10,6 @@ import duckdb
 
 from vnalpha.core.logging import get_logger
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
-from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.corporate_action_schema import ALL_DDL_CORPORATE_ACTIONS
 from vnalpha.warehouse.disclosure_schema import ALL_DDL_DISCLOSURES
 from vnalpha.warehouse.fundamentals_schema import ALL_DDL_FUNDAMENTALS
@@ -56,7 +55,14 @@ def run_migrations(
         emit_observability: Emit migration logs and audit events when true.
     """
     if conn is None:
-        conn = get_connection(path=path)
+        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
+
+        with WarehouseWriteCoordinator(path=path).transaction() as write_connection:
+            run_migrations(
+                conn=write_connection,
+                emit_observability=emit_observability,
+            )
+        return
     conn.execute("SET TimeZone = 'Asia/Ho_Chi_Minh'")
     if emit_observability:
         logger.info("Running warehouse migrations...")

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import duckdb
 
+from vnalpha.warehouse.connection import WarehouseOpenError, read_connection
 from vnalpha.warehouse.migrations import run_migrations
 
 _MAX_REPORTED_SCHEMA_GAPS = 20
@@ -53,10 +54,10 @@ def inspect_warehouse(path: Path) -> WarehouseStatus:
         )
 
     try:
-        with duckdb.connect(str(resolved_path), read_only=True) as connection:
+        with read_connection(path=resolved_path) as connection:
             connection.execute("SELECT 1").fetchone()
             actual_schema = _schema_snapshot(connection)
-    except (duckdb.Error, OSError) as exc:
+    except (WarehouseOpenError, duckdb.Error, OSError) as exc:
         return WarehouseStatus(
             display_path,
             WarehouseStatusCode.UNREADABLE,

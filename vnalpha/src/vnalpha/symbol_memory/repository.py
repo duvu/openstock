@@ -19,37 +19,17 @@ from vnalpha.symbol_memory.models import (
 )
 from vnalpha.symbol_memory.paths import normalize_symbol
 from vnalpha.symbol_memory.validators import validate_claim
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 
 class SymbolMemoryRepository:
     def __init__(self, connection: duckdb.DuckDBPyConnection) -> None:
         self.connection = connection
-        self._transaction_depth = 0
 
     @contextmanager
     def transaction(self):
-        outermost = self._transaction_depth == 0
-        if outermost:
-            self.connection.execute("BEGIN TRANSACTION")
-        self._transaction_depth += 1
-        try:
+        with warehouse_transaction(self.connection):
             yield
-        except BaseException:
-            self._transaction_depth -= 1
-            if outermost:
-                self.connection.execute("ROLLBACK")
-            raise
-        else:
-            self._transaction_depth -= 1
-            if outermost:
-                try:
-                    self.connection.execute("COMMIT")
-                except BaseException:
-                    try:
-                        self.connection.execute("ROLLBACK")
-                    except duckdb.Error:
-                        pass
-                    raise
 
     def append_event(self, event: MemoryEvent) -> bool:
         entity = event.entity

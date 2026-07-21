@@ -2,26 +2,20 @@
 
 from __future__ import annotations
 
-import dataclasses
 import time
-from dataclasses import dataclass
 from typing import Any, Callable
 
 from vnalpha.core.text_safety import sanitize_error_summary
-from vnalpha.tools.errors import ToolPermissionError
+from vnalpha.tools.errors import DeferredToolTraceStateError, ToolPermissionError
 from vnalpha.tools.models import ToolPermission
 from vnalpha.tools.registry import LocalToolRegistry
+from vnalpha.tools.trace_support import (
+    PendingToolTrace,
+    TraceEvent,
+    json_safe,
+    summarize_output,
+)
 from vnalpha.warehouse.session_repo import create_tool_trace, finish_tool_trace
-
-
-@dataclass
-class TraceEvent:
-    """A snapshot of a single tool call's lifecycle stage."""
-
-    tool_name: str
-    status: str  # "RUNNING" | "SUCCESS" | "FAILED"
-    duration_ms: float | None  # None while RUNNING
-    tool_trace_id: str
 
 
 class TracedLocalToolExecutor:
@@ -36,6 +30,8 @@ class TracedLocalToolExecutor:
         assistant_session_id: str | None = None,
         trace_parent_type: str = "command",
         trace_event_callback: Callable[[TraceEvent], None] | None = None,
+        deferred: bool = False,
+        prestarted_trace_ids: tuple[str, ...] = (),
     ) -> None:
         self._conn = conn
         self._registry = registry
@@ -43,6 +39,10 @@ class TracedLocalToolExecutor:
         self._assistant_session_id = assistant_session_id
         self._trace_parent_type = trace_parent_type
         self._trace_event_callback = trace_event_callback
+        self._deferred = deferred
+        self._pending_traces: list[PendingToolTrace] = []
+        self._prestarted_trace_ids = list(prestarted_trace_ids)
+        self._all_prestarted_trace_ids = frozenset(prestarted_trace_ids)
 
     def call(
         self,
@@ -53,14 +53,22 @@ class TracedLocalToolExecutor:
         """Call a local tool and persist success/failure trace rows."""
         spec = self._registry.get_spec(name)
         granted = granted_permissions or {spec.permission}
-        trace_id = create_tool_trace(
-            self._conn,
-            session_id=self._session_id,
-            assistant_session_id=self._assistant_session_id,
-            trace_parent_type=self._trace_parent_type,
-            tool_name=name,
-            input_data=_json_safe(kwargs),
-        )
+        input_data = json_safe(kwargs)
+        if self._deferred:
+            if not self._prestarted_trace_ids:
+                raise DeferredToolTraceStateError(
+                    "Deferred tool execution requires a started trace."
+                )
+            trace_id = self._prestarted_trace_ids.pop(0)
+        else:
+            trace_id = create_tool_trace(
+                self._conn,
+                session_id=self._session_id,
+                assistant_session_id=self._assistant_session_id,
+                trace_parent_type=self._trace_parent_type,
+                tool_name=name,
+                input_data=input_data,
+            )
 
         # Emit RUNNING event
         if self._trace_event_callback is not None:
@@ -85,11 +93,12 @@ class TracedLocalToolExecutor:
         try:
             output = self._registry.call(name, granted, **kwargs)
             duration_ms = (time.monotonic() - start) * 1000
-            finish_tool_trace(
-                self._conn,
+            self._finish_trace(
                 trace_id,
+                tool_name=name,
+                input_data=input_data,
                 status="SUCCESS",
-                output_summary=_summarize_output(output),
+                output_summary=summarize_output(output),
             )
             # Emit SUCCESS event
             if self._trace_event_callback is not None:
@@ -116,9 +125,10 @@ class TracedLocalToolExecutor:
             return output
         except ToolPermissionError as exc:
             duration_ms = (time.monotonic() - start) * 1000
-            finish_tool_trace(
-                self._conn,
+            self._finish_trace(
                 trace_id,
+                tool_name=name,
+                input_data=input_data,
                 status="FAILED",
                 error={
                     "message": sanitize_error_summary(exc),
@@ -155,9 +165,10 @@ class TracedLocalToolExecutor:
             raise
         except Exception as exc:
             duration_ms = (time.monotonic() - start) * 1000
-            finish_tool_trace(
-                self._conn,
+            self._finish_trace(
                 trace_id,
+                tool_name=name,
+                input_data=input_data,
                 status="FAILED",
                 error={
                     "message": sanitize_error_summary(exc),
@@ -190,21 +201,65 @@ class TracedLocalToolExecutor:
                 pass
             raise
 
+    def _finish_trace(
+        self,
+        trace_id: str,
+        *,
+        tool_name: str,
+        input_data: dict[str, Any],
+        status: str,
+        output_summary: dict[str, Any] | None = None,
+        error: dict[str, str] | None = None,
+    ) -> None:
+        if self._deferred:
+            self._pending_traces.append(
+                PendingToolTrace(
+                    trace_id=trace_id,
+                    tool_name=tool_name,
+                    input_data=input_data,
+                    status=status,
+                    output_summary=output_summary,
+                    error=error,
+                )
+            )
+            return
+        finish_tool_trace(
+            self._conn,
+            trace_id,
+            status=status,
+            output_summary=output_summary,
+            error=error,
+        )
 
-def _summarize_output(output: Any) -> dict[str, Any]:
-    if dataclasses.is_dataclass(output):
-        data = dataclasses.asdict(output)
-        payload = data.get("data")
-        rows = len(payload) if isinstance(payload, list) else None
-        return {"summary": data.get("summary"), "rows": rows}
-    return {"result": str(output)[:200]}
-
-
-def _json_safe(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe(v) for v in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
+    def flush(self, conn) -> None:
+        for trace in self._pending_traces:
+            if trace.trace_id not in self._all_prestarted_trace_ids:
+                create_tool_trace(
+                    conn,
+                    session_id=self._session_id,
+                    assistant_session_id=self._assistant_session_id,
+                    trace_parent_type=self._trace_parent_type,
+                    tool_name=trace.tool_name,
+                    input_data=trace.input_data,
+                    trace_id=trace.trace_id,
+                )
+            finish_tool_trace(
+                conn,
+                trace.trace_id,
+                status=trace.status,
+                output_summary=trace.output_summary,
+                error=trace.error,
+                input_data=trace.input_data,
+            )
+        for trace_id in self._prestarted_trace_ids:
+            finish_tool_trace(
+                conn,
+                trace_id,
+                status="FAILED",
+                error={
+                    "error_type": "ToolNotExecuted",
+                    "message": "Command ended before the planned tool call.",
+                },
+            )
+        self._pending_traces.clear()
+        self._prestarted_trace_ids.clear()

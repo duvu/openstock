@@ -550,7 +550,6 @@ def _persist(
                 ),
             ],
         )
-    conn.commit()
 
 
 def get_ranking_evaluation(

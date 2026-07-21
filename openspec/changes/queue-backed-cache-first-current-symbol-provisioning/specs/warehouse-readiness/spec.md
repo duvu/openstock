@@ -62,6 +62,7 @@ The readiness operation SHALL perform no provider call, write, migration or writ
 - **AND** warehouse row counts remain unchanged.
 
 ### Requirement: Historical workflows SHALL NOT propose current acquisition
+Historical replay and backtest readiness SHALL report missing persisted evidence without proposing or submitting current-data acquisition.
 
 #### Scenario: Replay requests missing evidence
 - **WHEN** a replay or backtest request encounters missing persisted evidence

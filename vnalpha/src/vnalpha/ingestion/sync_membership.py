@@ -21,6 +21,7 @@ from vnalpha.clients.vnstock.source_policy import validate_persistence_source
 from vnalpha.ingestion.persistence import bind_ingestion_run_correlation
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
 from vnalpha.warehouse.repositories import create_ingestion_run, finish_ingestion_run
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 _DATASETS = {
     "index": "reference.index_membership_snapshot",
@@ -196,8 +197,7 @@ def _persist_response(
     status = MembershipSyncStatus.SUCCESS if members else MembershipSyncStatus.EMPTY
     snapshot_id = f"{run_id}:{membership_type}:{entity_id}"
     correlation_id = get_correlation_id()
-    conn.execute("BEGIN TRANSACTION")
-    try:
+    with warehouse_transaction(conn):
         conn.execute(
             """
             INSERT INTO reference_membership_snapshot
@@ -233,10 +233,6 @@ def _persist_response(
                 [(snapshot_id, member) for member in members],
             )
         finish_ingestion_run(conn, run_id, status.value)
-        conn.execute("COMMIT")
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
     return MembershipSyncResult(
         ingestion_run_id=run_id,
         snapshot_id=snapshot_id,

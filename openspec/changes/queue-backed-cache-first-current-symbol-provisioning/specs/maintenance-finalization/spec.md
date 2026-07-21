@@ -27,6 +27,7 @@ The producer SHALL persist expected goal identities before queue submission and 
 - **AND** transitions to `ACQUIRING` only when every expected goal is mapped.
 
 ### Requirement: Queue job identity SHALL be independent of maintenance-run membership
+Queue job identity SHALL represent only normalized desired persisted state, while `maintenance_run_job` records run membership separately.
 
 #### Scenario: Interactive and maintenance callers request equivalent work
 - **WHEN** both callers request the same normalized desired state
@@ -35,6 +36,7 @@ The producer SHALL persist expected goal identities before queue submission and 
 - **AND** the queue job identity does not include one authoritative maintenance-run ID.
 
 ### Requirement: Session finalization SHALL be submitted only after acquisition is terminal
+`maybe_submit_session_finalization()` SHALL submit or join a finalization job only after every expected acquisition goal is mapped to a terminal job.
 
 #### Scenario: An expected acquisition job remains active
 - **WHEN** `maybe_submit_session_finalization()` evaluates the run
@@ -56,6 +58,7 @@ The finalizer SHALL NOT reacquire data or change the run universe.
 - **AND** determines eligible coverage and exclusions from that evidence.
 
 ### Requirement: Session-wide derived artifacts SHALL be built once
+One finalization attempt for a frozen session SHALL build each session-wide derived artifact at most once before dependent outcome and memory stages.
 
 #### Scenario: Acquisition is complete
 - **WHEN** finalization has an eligible universe
@@ -65,6 +68,7 @@ The finalizer SHALL NOT reacquire data or change the run universe.
 - **AND** then matures outcomes and projects approved memory.
 
 ### Requirement: Final maintenance status SHALL be truthful
+The finalizer SHALL persist `SUCCESS`, `PARTIAL` or `FAILED` from required-stage outcomes, coverage and exclusions without representing incomplete work as successful.
 
 #### Scenario: Some symbols are excluded but minimum coverage is met
 - **WHEN** required final stages succeed
@@ -78,6 +82,7 @@ The finalizer SHALL NOT reacquire data or change the run universe.
 - **AND** no success status is recorded.
 
 ### Requirement: Finalization SHALL be idempotent and resumable
+Finalization SHALL persist stage evidence sufficient to reuse completed deterministic work after interruption without duplicating artifacts.
 
 #### Scenario: Finalization resumes after an interrupted stage
 - **WHEN** deterministic stage output already exists for the same run and contract version

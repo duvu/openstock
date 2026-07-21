@@ -30,6 +30,10 @@ class ToolExecutionError(ToolError):
     """Raised when a tool execution fails."""
 
 
+class DeferredToolTraceStateError(ToolError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class PublicToolFailure:
     """Allowlisted tool-failure fields that may cross a public boundary."""

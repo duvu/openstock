@@ -15,12 +15,9 @@ def outcome_buckets(
 
         from vnalpha.outcomes.repositories import list_score_bucket_performance
         from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        rows = list_score_bucket_performance(conn, horizon)
-        conn.close()
+        with get_connection() as conn:
+            rows = list_score_bucket_performance(conn, horizon)
         console = Console()
         if not rows:
             console.print(f"[dim]No score bucket data for horizon={horizon}[/dim]")
@@ -66,12 +63,9 @@ def outcome_setups(
 
         from vnalpha.outcomes.repositories import list_setup_type_performance
         from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        rows = list_setup_type_performance(conn, horizon)
-        conn.close()
+        with get_connection() as conn:
+            rows = list_setup_type_performance(conn, horizon)
         console = Console()
         if not rows:
             console.print(f"[dim]No setup type data for horizon={horizon}[/dim]")
@@ -117,12 +111,9 @@ def outcome_risks(
 
         from vnalpha.outcomes.repositories import list_risk_flag_performance
         from vnalpha.warehouse.connection import get_connection
-        from vnalpha.warehouse.migrations import run_migrations
 
-        conn = get_connection()
-        run_migrations(conn=conn)
-        rows = list_risk_flag_performance(conn, horizon)
-        conn.close()
+        with get_connection() as conn:
+            rows = list_risk_flag_performance(conn, horizon)
         console = Console()
         if not rows:
             console.print(f"[dim]No risk flag data for horizon={horizon}[/dim]")

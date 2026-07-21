@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from typing import Iterator
 
 import duckdb
 import typer
@@ -72,10 +74,7 @@ def daily(
         index_source=index_source,
         membership_source=membership_source,
     )
-    conn = _maintenance_connection(ephemeral=dry_run)
-    try:
-        if not dry_run:
-            run_migrations(conn=conn)
+    with _maintenance_connection(ephemeral=dry_run) as conn:
         set_correlation_id()
         started_at = datetime.now(timezone.utc)
         service = DailyMaintenanceService(
@@ -127,8 +126,6 @@ def daily(
             raise typer.Exit(code=1)
         if result.status is MaintenanceRunStatus.PARTIAL:
             raise typer.Exit(code=3)
-    finally:
-        conn.close()
 
 
 def _resolve_maintenance_policy(
@@ -168,10 +165,17 @@ def _resolve_source_policy(source: str | None) -> dict[str, object]:
     ).to_dict()
 
 
-def _maintenance_connection(*, ephemeral: bool) -> duckdb.DuckDBPyConnection:
+@contextmanager
+def _maintenance_connection(*, ephemeral: bool) -> Iterator[duckdb.DuckDBPyConnection]:
     if ephemeral:
-        return duckdb.connect(":memory:")
-    return get_connection()
+        with duckdb.connect(":memory:") as connection:
+            run_migrations(conn=connection)
+            yield connection
+        return
+    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
+
+    with WarehouseWriteCoordinator().transaction() as connection:
+        yield connection
 
 
 def _parse_symbols(value: str | None) -> tuple[str, ...] | None:

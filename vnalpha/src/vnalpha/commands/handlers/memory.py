@@ -22,7 +22,6 @@ from vnalpha.symbol_memory.retrieval import (
     SymbolMemoryRetrievalService,
 )
 from vnalpha.symbol_memory.storage import ensure_knowledge_layout
-from vnalpha.warehouse.migrations import run_migrations
 
 
 def handle_memory(
@@ -40,7 +39,7 @@ def handle_memory(
     if not parsed.positional:
         raise CommandValidationError(_usage())
     try:
-        run_migrations(conn)
+        conn.execute("SELECT 1 FROM memory_claim LIMIT 0")
     except duckdb.Error:
         return CommandResult(
             status="PARTIAL",

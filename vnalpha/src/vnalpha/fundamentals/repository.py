@@ -135,7 +135,6 @@ def upsert_fundamental_fact(
             """,
             [revision_id, prior[0]],
         )
-    conn.commit()
     return revision_id
 
 

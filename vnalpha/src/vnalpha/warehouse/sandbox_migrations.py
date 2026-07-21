@@ -4,10 +4,11 @@ from datetime import datetime
 from typing import ClassVar, Final, TypedDict
 
 import duckdb
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict
 
 from vnalpha.sandbox.contracts import SandboxFilesystemPolicy, SandboxOutputSchema
 from vnalpha.warehouse.sandbox_schema import SANDBOX_DDL, sandbox_job_table_ddl
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 _DEFAULT_SANDBOX_OUTPUT_SCHEMA: Final = SandboxOutputSchema()
 _DEFAULT_SANDBOX_FILESYSTEM_POLICY: Final = SandboxFilesystemPolicy()
@@ -52,8 +53,7 @@ def migrate_sandbox_contract_columns(conn: duckdb.DuckDBPyConnection) -> None:
 
     has_created_at = _has_sandbox_job_column(conn, "created_at")
     has_updated_at = _has_sandbox_job_column(conn, "updated_at")
-    _ = conn.execute("BEGIN TRANSACTION")
-    try:
+    with warehouse_transaction(conn):
         _ = conn.execute(sandbox_job_table_ddl("sandbox_job_upgrade"))
         _copy_legacy_rows(
             conn,
@@ -65,10 +65,6 @@ def migrate_sandbox_contract_columns(conn: duckdb.DuckDBPyConnection) -> None:
         _ = conn.execute("DROP TABLE sandbox_job")
         _ = conn.execute("ALTER TABLE sandbox_job_upgrade RENAME TO sandbox_job")
         _ = conn.execute(SANDBOX_DDL[-1])
-    except (ValidationError, duckdb.Error):
-        _ = conn.execute("ROLLBACK")
-        raise
-    _ = conn.execute("COMMIT")
 
 
 def _copy_legacy_rows(

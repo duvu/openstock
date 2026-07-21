@@ -96,7 +96,6 @@ def upsert_share_count_fact(
             """,
             [revision_id, prior[0]],
         )
-    conn.commit()
     return revision_id
 
 

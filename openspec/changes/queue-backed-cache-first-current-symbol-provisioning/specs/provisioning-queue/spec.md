@@ -50,6 +50,7 @@ Every provider, build or finalization stage SHALL have a configured timeout comp
 - **AND** heartbeats at safe boundaries.
 
 ### Requirement: Worker stop behavior SHALL preserve recoverability
+On a stop request, the worker SHALL stop claiming new jobs and finish or roll back only at a safe transaction boundary while retaining recoverable lease state.
 
 #### Scenario: The provisioner receives a stop request
 - **WHEN** the worker is running a job
@@ -58,6 +59,7 @@ Every provider, build or finalization stage SHALL have a configured timeout comp
 - **AND** leaves recoverable lease and job state.
 
 ### Requirement: Ready same-date requests SHALL avoid queue work
+When persisted evidence already satisfies the requested capability for the effective session, the caller SHALL not create a queue job or trigger provider/build work.
 
 #### Scenario: Required evidence is already ready
 - **WHEN** readiness reports the requested capability ready
@@ -65,6 +67,7 @@ Every provider, build or finalization stage SHALL have a configured timeout comp
 - **AND** performs no provider or build action.
 
 ### Requirement: Provisioning SHALL acquire only bounded missing data
+Provisioning SHALL request only the missing bounded session range and limit canonical promotion to its affected range.
 
 #### Scenario: One new market session is missing
 - **WHEN** persisted OHLCV coverage ends at the preceding session
@@ -72,6 +75,7 @@ Every provider, build or finalization stage SHALL have a configured timeout comp
 - **AND** canonical promotion processes only the affected range.
 
 ### Requirement: Action execution SHALL stop dependent work after failure
+After a required action fails, the executor SHALL preserve that failure as primary evidence and record dependent actions as `BLOCKED` without invoking them.
 
 #### Scenario: A required upstream action fails
 - **WHEN** an action fails its execution or postcondition

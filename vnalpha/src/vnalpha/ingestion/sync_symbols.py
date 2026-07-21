@@ -23,6 +23,7 @@ from vnalpha.warehouse.symbol_lifecycle import (
     persist_symbol_taxonomy,
     start_symbol_source_snapshot,
 )
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 logger = get_logger("ingestion.sync_symbols")
 
@@ -76,7 +77,6 @@ def sync_symbols(
     errors = 0
     observed = 0
     deactivated = 0
-    transaction_started = False
     try:
         response = client.get_symbols(source=source)
         response_meta = getattr(response, "meta", None)
@@ -97,45 +97,43 @@ def sync_symbols(
             raise ValueError("symbol provider quality did not pass")
         if not response.data:
             raise ValueError("symbol source response is empty")
-        conn.execute("BEGIN TRANSACTION")
-        transaction_started = True
-        if snapshot_source != response_source:
-            snapshot_source = response_source
-            conn.execute(
-                "UPDATE symbol_source_snapshot SET source = ? WHERE snapshot_id = ?",
-                [snapshot_source, run_id],
-            )
-        for record in response.data:
-            observed += 1
-            try:
-                if not isinstance(record, Mapping):
-                    raise ValueError("Symbol source record must be an object.")
-                taxonomy = normalize_symbol_taxonomy(record, snapshot_source)
-                persist_symbol_taxonomy(
-                    conn,
-                    run_id,
-                    taxonomy,
+        with warehouse_transaction(conn):
+            if snapshot_source != response_source:
+                snapshot_source = response_source
+                conn.execute(
+                    "UPDATE symbol_source_snapshot SET source = ? "
+                    "WHERE snapshot_id = ?",
+                    [snapshot_source, run_id],
                 )
-                synced += 1
-            except (TypeError, ValueError) as error:
-                logger.warning("Failed to persist source symbol: %s", error)
-                errors += 1
+            for record in response.data:
+                observed += 1
+                try:
+                    if not isinstance(record, Mapping):
+                        raise ValueError("Symbol source record must be an object.")
+                    taxonomy = normalize_symbol_taxonomy(record, snapshot_source)
+                    persist_symbol_taxonomy(
+                        conn,
+                        run_id,
+                        taxonomy,
+                    )
+                    synced += 1
+                except (TypeError, ValueError) as error:
+                    logger.warning("Failed to persist source symbol: %s", error)
+                    errors += 1
 
-        snapshot_status = "SUCCESS" if errors == 0 else "PARTIAL"
-        if authoritative_snapshot and snapshot_status == "SUCCESS":
-            deactivated = deactivate_unseen_symbols(conn, run_id, snapshot_source)
-        complete_symbol_source_snapshot(
-            conn,
-            run_id,
-            snapshot_status,
-            observed,
-            synced,
-            errors,
-            deactivated,
-        )
-        finish_ingestion_run(conn, run_id, snapshot_status)
-        conn.execute("COMMIT")
-        transaction_started = False
+            snapshot_status = "SUCCESS" if errors == 0 else "PARTIAL"
+            if authoritative_snapshot and snapshot_status == "SUCCESS":
+                deactivated = deactivate_unseen_symbols(conn, run_id, snapshot_source)
+            complete_symbol_source_snapshot(
+                conn,
+                run_id,
+                snapshot_status,
+                observed,
+                synced,
+                errors,
+                deactivated,
+            )
+            finish_ingestion_run(conn, run_id, snapshot_status)
         log_audit(
             "SYMBOL_SNAPSHOT_COMPLETED",
             "Symbol lifecycle snapshot completed.",
@@ -151,9 +149,6 @@ def sync_symbols(
             "Synced %d symbols, %d errors, %d deactivated", synced, errors, deactivated
         )
     except Exception:  # noqa: BLE001
-        if transaction_started:
-            conn.execute("ROLLBACK")
-            transaction_started = False
         complete_symbol_source_snapshot(
             conn, run_id, "FAILED", observed, synced, errors, deactivated
         )

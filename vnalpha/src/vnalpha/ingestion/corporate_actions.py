@@ -13,6 +13,7 @@ from vnalpha.clients.vnstock.errors import VnstockClientError, VnstockHTTPError
 from vnalpha.clients.vnstock.source_policy import validate_persistence_source
 from vnalpha.ingestion.corporate_action_reconciliation import _ingest_record
 from vnalpha.warehouse.repositories import create_ingestion_run, finish_ingestion_run
+from vnalpha.warehouse.transaction import warehouse_transaction
 
 
 def sync_corporate_actions(
@@ -62,36 +63,34 @@ def sync_corporate_actions(
         quality_status = (response.meta.quality_status or "").strip().upper()
         if quality_status not in {"PASS", "SUCCESS"}:
             raise ValueError("Corporate-action provider quality did not pass.")
-        conn.execute("BEGIN TRANSACTION")
-        for record in response.data:
-            counts["observed"] += 1
-            record_outcome = _ingest_record(
-                conn,
-                run_id=run_id,
-                provider=provider,
-                requested_symbol=symbol,
-                record=record,
+        with warehouse_transaction(conn):
+            for record in response.data:
+                counts["observed"] += 1
+                record_outcome = _ingest_record(
+                    conn,
+                    run_id=run_id,
+                    provider=provider,
+                    requested_symbol=symbol,
+                    record=record,
+                )
+                counts[record_outcome.outcome] += 1
+                counts["raw_inserted"] += int(record_outcome.raw_inserted)
+                counts["conflicts"] += int(record_outcome.conflict)
+                counts["affected_ranges"] += int(record_outcome.affected)
+            status = (
+                "EMPTY"
+                if counts["observed"] == 0
+                else "COMPLETE"
+                if counts["quarantined"] == 0 and counts["conflicts"] == 0
+                else "PARTIAL"
             )
-            counts[record_outcome.outcome] += 1
-            counts["raw_inserted"] += int(record_outcome.raw_inserted)
-            counts["conflicts"] += int(record_outcome.conflict)
-            counts["affected_ranges"] += int(record_outcome.affected)
-        status = (
-            "EMPTY"
-            if counts["observed"] == 0
-            else "COMPLETE"
-            if counts["quarantined"] == 0 and counts["conflicts"] == 0
-            else "PARTIAL"
-        )
-        _persist_run_outcome(conn, run_id=run_id, status=status, counts=counts)
-        finish_ingestion_run(conn, run_id, status)
-        conn.execute("COMMIT")
+            _persist_run_outcome(conn, run_id=run_id, status=status, counts=counts)
+            finish_ingestion_run(conn, run_id, status)
         return {"run_id": run_id, "status": status, **counts}
     except VnstockHTTPError as exc:
-        try:
-            conn.execute("ROLLBACK")
-        except duckdb.Error:
-            pass
+        _ensure_run_for_failure(
+            conn, run_id=run_id, symbol=symbol, start=start, end=end, source=source
+        )
         unsupported = exc.status_code == 404 and "unsupported" in exc.body.lower()
         status = "UNSUPPORTED" if unsupported else "FAILED"
         error = {
@@ -112,10 +111,9 @@ def sync_corporate_actions(
             **counts,
         }
     except VnstockClientError as exc:
-        try:
-            conn.execute("ROLLBACK")
-        except duckdb.Error:
-            pass
+        _ensure_run_for_failure(
+            conn, run_id=run_id, symbol=symbol, start=start, end=end, source=source
+        )
         error = {"stage": "corporate_actions", "type": type(exc).__name__}
         _persist_run_outcome(
             conn, run_id=run_id, status="FAILED", counts=counts, error=error
@@ -128,10 +126,9 @@ def sync_corporate_actions(
             **counts,
         }
     except Exception as exc:
-        try:
-            conn.execute("ROLLBACK")
-        except duckdb.Error:
-            pass
+        _ensure_run_for_failure(
+            conn, run_id=run_id, symbol=symbol, start=start, end=end, source=source
+        )
         error = {"stage": "corporate_actions", "type": type(exc).__name__}
         _persist_run_outcome(
             conn, run_id=run_id, status="FAILED", counts=counts, error=error
@@ -141,6 +138,32 @@ def sync_corporate_actions(
     finally:
         if owned:
             client.close()
+
+
+def _ensure_run_for_failure(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    run_id: str,
+    symbol: str,
+    start: str | None,
+    end: str | None,
+    source: str | None,
+) -> None:
+    conn.execute(
+        "INSERT INTO ingestion_run "
+        "(ingestion_run_id, started_at, status, source_service, "
+        "source_endpoint, universe, params_json) VALUES "
+        "(?, current_timestamp, 'RUNNING', 'vnstock-service', "
+        "'/v1/reference/corporate-actions', ?, ?) "
+        "ON CONFLICT (ingestion_run_id) DO NOTHING",
+        [
+            run_id,
+            symbol,
+            json.dumps(
+                {"symbol": symbol, "start": start, "end": end, "source": source}
+            ),
+        ],
+    )
 
 
 def _persist_run_outcome(

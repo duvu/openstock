@@ -475,7 +475,6 @@ def _persist(
                 period.source_outcome_hash,
             ],
         )
-    conn.commit()
 
 
 def get_replay(

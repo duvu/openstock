@@ -18,6 +18,7 @@ Active jobs SHALL never be pruned. Terminal details MAY be pruned only after ret
 - **AND** historical status distinguishes pruned detail from an unknown job ID.
 
 ### Requirement: Queue checkpoint and storage failures SHALL be explicit
+Queue checkpoint and persistence operations SHALL return typed storage failures while preserving previously committed state.
 
 #### Scenario: Queue storage becomes read-only or full
 - **WHEN** SQLite cannot persist a queue update
@@ -26,6 +27,7 @@ Active jobs SHALL never be pruned. Terminal details MAY be pruned only after ret
 - **AND** the system does not report the requested update as successful.
 
 ### Requirement: Queue migration and recovery SHALL be non-destructive
+Queue migration and recovery SHALL preserve the original queue file on failure and SHALL never silently replace it with an empty queue.
 
 #### Scenario: A queue schema migration cannot complete
 - **WHEN** package or operator migration fails
@@ -41,6 +43,7 @@ The package SHALL create queue and lock paths with documented ownership, install
 - **AND** it uses the configured queue, warehouse and global lock paths.
 
 ### Requirement: Backup and restore SHALL cover both state stores
+The supported backup and restore procedure SHALL include DuckDB, SQLite queue state and required configuration and permission metadata.
 
 #### Scenario: An operator performs a supported backup
 - **WHEN** the provisioner reaches a safe boundary
@@ -56,6 +59,7 @@ Canonical architecture, data-pipeline, deployment, CLI/TUI help and operator doc
 - **THEN** the consistency check fails.
 
 ### Requirement: Live proof SHALL cover ten consecutive sessions
+Completion evidence for the queue-runtime program SHALL cover ten consecutive supported market sessions with persisted acquisition, finalization, queue-health and research-result records.
 
 #### Scenario: Program completion is evaluated
 - **WHEN** implementation tests pass but the ten-session installed-host evidence is absent

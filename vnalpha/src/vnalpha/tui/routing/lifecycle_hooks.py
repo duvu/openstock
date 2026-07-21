@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
 
     from vnalpha.chat.controller import ChatController
+    from vnalpha.commands.coordinated_executor import CoordinatedCommandExecutor
     from vnalpha.commands.executor import CommandExecutor
     from vnalpha.tui.routing.status_adapter import StatusAdapter, TraceEvent
     from vnalpha.tui.widgets.output_stream import OutputStream
@@ -28,7 +29,7 @@ class ExecutorResources:
     """The command executor and connection owned by one router."""
 
     connection: DuckDBPyConnection | None
-    executor: CommandExecutor | None
+    executor: CommandExecutor | CoordinatedCommandExecutor | None
 
 
 class LifecycleHooks:
@@ -51,19 +52,14 @@ class LifecycleHooks:
     def bootstrap_session(self) -> str | None:
         try:
             from vnalpha.warehouse.chat_repo import get_or_create_active_chat_session
-            from vnalpha.warehouse.connection import get_connection
-            from vnalpha.warehouse.migrations import run_migrations
+            from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-            connection = get_connection()
-            try:
-                run_migrations(conn=connection)
+            with WarehouseWriteCoordinator().transaction() as connection:
                 return get_or_create_active_chat_session(
                     connection,
                     surface="tui-workspace",
                     target_date=self._target_date,
                 )
-            finally:
-                self.close_connection(connection)
         except Exception as exc:
             _capture_exception_safely(exc)
             return None
@@ -122,18 +118,14 @@ class LifecycleHooks:
         return answer  # type: ignore[return-value]
 
     def setup_executor(self) -> ExecutorResources:
-        connection: DuckDBPyConnection | None = None
         try:
-            from vnalpha.commands.executor import CommandExecutor
-            from vnalpha.warehouse.connection import get_connection
-            from vnalpha.warehouse.migrations import run_migrations
+            from vnalpha.commands.coordinated_executor import (
+                CoordinatedCommandExecutor,
+            )
 
-            connection = get_connection()
-            run_migrations(conn=connection)
             return ExecutorResources(
-                connection=connection,
-                executor=CommandExecutor(
-                    connection,
+                connection=None,
+                executor=CoordinatedCommandExecutor(
                     surface="tui",
                     default_date=self._target_date,
                     default_date_is_implicit=self._target_date_is_implicit,
@@ -141,8 +133,6 @@ class LifecycleHooks:
             )
         except Exception as exc:
             _capture_exception_safely(exc)
-            if connection is not None:
-                self.close_connection(connection)
             return ExecutorResources(connection=None, executor=None)
 
     def dispatch_ui(self, callback: Callable[[], None]) -> None:

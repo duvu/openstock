@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Callable, Literal
+from contextlib import contextmanager
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable, Iterator, Literal
 
 from vnalpha.assistant.errors import (
     ActionableToolExecutionError,
@@ -29,13 +31,16 @@ from vnalpha.chat.events import (
 )
 from vnalpha.chat.modes import ExecutionMode, format_plan_preview
 from vnalpha.chat.safety import is_tool_approval_pending_eligible
+from vnalpha.commands.coordinated_executor import CoordinatedCommandExecutor
 from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
 from vnalpha.core.text_safety import redact_structure, sanitize_text
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
-from vnalpha.warehouse import migrations as _chat_schema_migrations
+from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
 if TYPE_CHECKING:
+    from duckdb import DuckDBPyConnection
+
     from vnalpha.assistant.models import (
         AssistantPlan,
         PreparedAssistantTurn,
@@ -48,15 +53,6 @@ CHAT_LOCAL_COMMANDS: frozenset[str] = frozenset(
 )
 
 
-def _make_connection_factory(path: str | None = None) -> Callable:
-    from vnalpha.warehouse.connection import get_connection
-
-    def factory():
-        return get_connection(path=path)
-
-    return factory
-
-
 def _capture_exception_safely(exc: Exception) -> None:
     try:
         from vnalpha.observability.errors import capture_exception
@@ -64,6 +60,16 @@ def _capture_exception_safely(exc: Exception) -> None:
         capture_exception(exc)
     except Exception:  # noqa: BLE001
         pass
+
+
+def _connection_warehouse_path(connection: DuckDBPyConnection) -> Path | None:
+    try:
+        database_path = connection.execute("PRAGMA database_list").fetchone()[2]
+    except Exception as exc:
+        raise RuntimeError(
+            "A supplied chat connection must identify its warehouse path."
+        ) from exc
+    return Path(database_path) if database_path else None
 
 
 class ChatController:
@@ -80,7 +86,7 @@ class ChatController:
         chat_session_id: str | None = None,
         execution_mode: ExecutionMode = ExecutionMode.AUTO_EXECUTE_SAFE_TOOLS,
     ) -> None:
-        self._connection_factory = connection_factory or _make_connection_factory()
+        self._connection_factory = connection_factory
         self._target_date = target_date
         self._target_date_is_implicit = target_date_is_implicit
         self._surface = surface
@@ -103,16 +109,26 @@ class ChatController:
             )
 
     def _ensure_chat_schema_ready(self) -> bool:
-        if self._chat_schema_ready:
-            return True
+        self._chat_schema_ready = True
+        return True
 
-        conn = self._connection_factory()
-        try:
-            _chat_schema_migrations.run_migrations(conn=conn)
-            self._chat_schema_ready = True
-            return True
-        finally:
-            conn.close()
+    @contextmanager
+    def _write_connection(self) -> Iterator[DuckDBPyConnection]:
+        if self._connection_factory is not None:
+            connection = self._connection_factory()
+            warehouse_path = _connection_warehouse_path(connection)
+            if warehouse_path is not None:
+                connection.close()
+                with WarehouseWriteCoordinator(path=warehouse_path).transaction() as managed:
+                    yield managed
+                return
+            try:
+                yield connection
+            finally:
+                connection.close()
+            return
+        with WarehouseWriteCoordinator().transaction() as connection:
+            yield connection
 
     def _wrap_trace_with_persistence(
         self, original: Callable[["TraceEvent"], None] | None
@@ -132,9 +148,7 @@ class ChatController:
                 try:
                     from vnalpha.warehouse.chat_repo import append_trace_event
 
-                    conn = self._connection_factory()
-                    try:
-                        self._ensure_chat_schema_ready()
+                    with self._write_connection() as conn:
                         append_trace_event(
                             conn,
                             chat_session_id=self._chat_session_id,
@@ -143,8 +157,6 @@ class ChatController:
                             elapsed_ms=safe_event.duration_ms,
                             tool_trace_id=safe_event.tool_trace_id,
                         )
-                    finally:
-                        conn.close()
                 except Exception as exc:
                     _capture_exception_safely(exc)
 
@@ -198,18 +210,27 @@ class ChatController:
                 pass
             return error_text
 
-    def handle_slash_command(self, raw: str) -> str | None:
+    def handle_slash_command(self, raw: str, *, _connection=None) -> str | None:
+        if _connection is None and self._connection_factory is not None:
+            with self._write_connection() as connection:
+                return self.handle_slash_command(raw, _connection=connection)
         self._persist_message("user", raw, "slash_command")
         self._ensure_chat_schema_ready()
-        conn = self._connection_factory()
         try:
-            registry = build_default_registry()
-            executor = CommandExecutor(
-                conn=conn,
-                surface=self._surface,
-                registry=registry,
-                default_date=self._target_date,
-                default_date_is_implicit=self._target_date_is_implicit,
+            executor = (
+                CommandExecutor(
+                    conn=_connection,
+                    surface=self._surface,
+                    registry=build_default_registry(),
+                    default_date=self._target_date,
+                    default_date_is_implicit=self._target_date_is_implicit,
+                )
+                if _connection is not None
+                else CoordinatedCommandExecutor(
+                    surface=self._surface,
+                    default_date=self._target_date,
+                    default_date_is_implicit=self._target_date_is_implicit,
+                )
             )
             execute_parameters = inspect.signature(executor.execute).parameters
             if self._chat_session_id and "session_scope_id" in execute_parameters:
@@ -274,8 +295,6 @@ class ChatController:
             except Exception:  # noqa: BLE001
                 pass
             return error_text
-        finally:
-            conn.close()
 
     def handle_natural_language(
         self, question: str, *, workspace_context: str | None = None
@@ -598,12 +617,9 @@ class ChatController:
             try:
                 from vnalpha.assistant.app import AssistantApp
 
-                conn = self._connection_factory()
-                try:
+                with self._write_connection() as conn:
                     self._ensure_chat_schema_ready()
                     AssistantApp(conn, surface=self._surface).cancel_prepared(prepared)
-                finally:
-                    conn.close()
             except Exception as exc:
                 _capture_exception_safely(exc)
                 error_text = format_runtime_error(
@@ -669,8 +685,7 @@ class ChatController:
     def _cmd_new(self) -> str:
         from vnalpha.warehouse.chat_repo import create_chat_session
 
-        conn = self._connection_factory()
-        try:
+        with self._write_connection() as conn:
             self._ensure_chat_schema_ready()
             new_id = create_chat_session(
                 conn,
@@ -682,8 +697,6 @@ class ChatController:
             self._pending_plan_turn_context = None
             self._pending_prepared_turn = None
             return f"New chat session started. (id={new_id[:8]}…)"
-        finally:
-            conn.close()
 
     def _cmd_clear(self, *, forget: bool = False) -> str:
         """Clear visible messages for the current session.
@@ -696,8 +709,7 @@ class ChatController:
 
         from vnalpha.warehouse.chat_repo import clear_visible_messages
 
-        conn = self._connection_factory()
-        try:
+        with self._write_connection() as conn:
             self._ensure_chat_schema_ready()
             count = clear_visible_messages(conn, self._chat_session_id, forget=forget)
             if forget:
@@ -706,8 +718,6 @@ class ChatController:
                 )
             else:
                 return f"Chat log cleared ({count} message(s) removed from view)."
-        finally:
-            conn.close()
 
     def _cmd_context(self) -> str:
         """Return a formatted string showing the current ChatContext state."""
@@ -762,12 +772,9 @@ class ChatController:
 
         from vnalpha.warehouse.chat_repo import list_trace_events_for_session
 
-        conn = self._connection_factory()
-        try:
+        with self._write_connection() as conn:
             self._ensure_chat_schema_ready()
             events = list_trace_events_for_session(conn, self._chat_session_id)
-        finally:
-            conn.close()
 
         if not events:
             return "No trace events for current session."
@@ -793,8 +800,7 @@ class ChatController:
         try:
             from vnalpha.warehouse.chat_repo import append_chat_message
 
-            conn = self._connection_factory()
-            try:
+            with self._write_connection() as conn:
                 self._ensure_chat_schema_ready()
                 append_chat_message(
                     conn,
@@ -809,8 +815,6 @@ class ChatController:
                     ),
                     research_session_id=research_session_id,
                 )
-            finally:
-                conn.close()
         except Exception as exc:
             _capture_exception_safely(exc)
 
@@ -864,20 +868,25 @@ class ChatController:
         from vnalpha.assistant.app import AssistantApp
 
         self._ensure_chat_schema_ready()
-
-        conn = self._connection_factory()
-        try:
-            app = AssistantApp(conn, surface="tui-chat")
-            return app.ask(
-                question,
-                date=self._target_date,
-                date_is_implicit=self._target_date_is_implicit,
-                no_execute=no_execute,
-                on_trace_event=self._on_trace,
-                workspace_context=workspace_context,
-            )
-        finally:
-            conn.close()
+        if self._connection_factory is not None:
+            with self._write_connection() as connection:
+                app = AssistantApp(connection, surface="tui-chat")
+                return app.ask(
+                    question,
+                    date=self._target_date,
+                    date_is_implicit=self._target_date_is_implicit,
+                    no_execute=no_execute,
+                    on_trace_event=self._on_trace,
+                    workspace_context=workspace_context,
+                )
+        return AssistantApp.managed(surface="tui-chat").ask(
+            question,
+            date=self._target_date,
+            date_is_implicit=self._target_date_is_implicit,
+            no_execute=no_execute,
+            on_trace_event=self._on_trace,
+            workspace_context=workspace_context,
+        )
 
     def _legacy_run_ask_override(self) -> bool:
         return getattr(self._run_ask, "__func__", None) is not ChatController._run_ask
@@ -890,48 +899,45 @@ class ChatController:
 
         self._ensure_chat_schema_ready()
 
-        conn = self._connection_factory()
-        try:
-            app = AssistantApp(conn, surface=self._surface)
-            return app.prepare(
-                AssistantRequest(
-                    current_user_prompt=question,
-                    workspace_context=workspace_context,
-                    date=self._target_date,
-                    date_is_implicit=self._target_date_is_implicit,
-                    routing_session_id=self._chat_session_id,
-                )
-            )
-        finally:
-            conn.close()
+        request = AssistantRequest(
+            current_user_prompt=question,
+            workspace_context=workspace_context,
+            date=self._target_date,
+            date_is_implicit=self._target_date_is_implicit,
+            routing_session_id=self._chat_session_id,
+        )
+        if self._connection_factory is not None:
+            with self._write_connection() as connection:
+                return AssistantApp(connection, surface=self._surface).prepare(request)
+        return AssistantApp.managed(surface=self._surface).prepare(request)
 
     def _execute_prepared_turn(self, prepared: "PreparedAssistantTurn"):
         from vnalpha.assistant.app import AssistantApp
 
         self._ensure_chat_schema_ready()
 
-        conn = self._connection_factory()
-        try:
-            return AssistantApp(conn, surface=self._surface).execute_prepared(
-                prepared,
-                on_trace_event=self._on_trace,
-                on_synthesizing=lambda: self._emit_stage(AssistantStage.SYNTHESIZING),
-            )
-        finally:
-            conn.close()
+        kwargs = {
+            "on_trace_event": self._on_trace,
+            "on_synthesizing": lambda: self._emit_stage(AssistantStage.SYNTHESIZING),
+        }
+        if self._connection_factory is not None:
+            with self._write_connection() as connection:
+                return AssistantApp(connection, surface=self._surface).execute_prepared(
+                    prepared, **kwargs
+                )
+        return AssistantApp.managed(surface=self._surface).execute_prepared(
+            prepared, **kwargs
+        )
 
     def _approve_prepared_turn(self, prepared: "PreparedAssistantTurn") -> None:
         from vnalpha.sandbox.execution_service import SandboxExecutionService
 
         self._ensure_chat_schema_ready()
 
-        conn = self._connection_factory()
-        try:
+        with self._write_connection() as conn:
             SandboxExecutionService(conn, surface=self._surface).approve_prepared_turn(
                 prepared
             )
-        finally:
-            conn.close()
 
     def _handle_prepared_natural_language(
         self, question: str, *, workspace_context: str | None
