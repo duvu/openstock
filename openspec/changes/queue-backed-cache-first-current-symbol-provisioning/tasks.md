@@ -28,11 +28,11 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 
 ## 4. Sequential worker — #324
 
-- [ ] 4.1 Add one worker and explicit handler registry.
-- [ ] 4.2 Open writable DuckDB only through #343 after lock acquisition.
-- [ ] 4.3 Re-read and re-plan after claim.
-- [ ] 4.4 Add bounded stage timeouts, lease extension and cooperative stop behavior.
-- [ ] 4.5 Prove retry after process interruption creates no duplicate persisted artifacts.
+- [x] 4.1 Add one worker and explicit handler registry. Evidence: `21c53513663a960d7334606bd035fcd4c4f9f016`; authoritative `vnalpha/tests/test_provisioning_queue_worker.py::test_sequential_provisioning_worker_contract`.
+- [x] 4.2 Open writable DuckDB only through #343 after lock acquisition. Evidence: `21c53513663a960d7334606bd035fcd4c4f9f016`; the worker injects `WarehouseWriteCoordinator` and the contract verifies an unregistered goal creates no warehouse file.
+- [x] 4.3 Re-read and re-plan after claim. Evidence: `21c53513663a960d7334606bd035fcd4c4f9f016`; the current-symbol handler delegates to the existing verified current-symbol operation and the restart contract proves persisted effects are reused.
+- [x] 4.4 Add bounded stage timeouts, lease extension and cooperative stop behavior. Evidence: `21c53513663a960d7334606bd035fcd4c4f9f016`; the worker validates stage-timeout-plus-safety against the live lease, heartbeats before each stage, acknowledges cancellation at a safe boundary, and stops future claims on SIGINT/SIGTERM.
+- [x] 4.5 Prove retry after process interruption creates no duplicate persisted artifacts. Evidence: `21c53513663a960d7334606bd035fcd4c4f9f016`; `make test-loop TEST=tests/test_provisioning_queue_worker.py::test_sequential_provisioning_worker_contract` passed with committed-effect/expired-lease restart reuse.
 
 ## 5. Provisioning behavior — #318, #319, #321
 
