@@ -1,87 +1,97 @@
 # Agent notes for the OpenStock repository
 
-OpenStock is a single Git repository containing two Python projects plus repository-level specifications, packaging, deployment, and validation assets.
+OpenStock is one repository containing `vnalpha`, `vnstock`, OpenSpec, packaging and CI assets.
 
 ## Repository structure
 
 | Path | Responsibility |
 |---|---|
-| `vnalpha/` | Primary runnable research workspace: CLI, Textual TUI, assistant, deterministic tools, warehouse pipeline, evaluation, and tests. |
-| `vnstock/` | Vietnamese market-data library/service used as a data provider. Keep it data-focused. |
-| `openspec/` | Active changes, archived change history, and accepted capability specifications. |
-| `packaging/` | Debian/package verification, deployment scripts, service assets, backup, and structural checks. |
-| `.github/` | Repository CI and release gates. |
-| `Makefile` | Authoritative cross-repository validation targets. |
-
-Run component-specific commands from the relevant project directory when required, but use root Make targets for release and integration gates.
+| `vnalpha/` | Research workspace, DuckDB pipeline, CLI/TUI, assistant and tests. |
+| `vnstock/` | Provider-independent market-data library/service. |
+| `openspec/` | Active changes, archive and accepted specifications. |
+| `packaging/` | Package and deployment assets. |
+| `.github/` | CI and release workflows. |
+| `Makefile` | Repository commands. |
 
 ## Product boundary
 
-The system is research-only. Do not add broker integration, order placement, account management, portfolio allocation, margin, transfers, or trading execution. Do not give the assistant unrestricted SQL, filesystem, shell, or code execution. The assistant must not autonomously call `data.fetch`; deterministic application services own data provisioning.
+OpenStock is research-only. Do not add broker login, order placement, account mutation, margin, transfers or autonomous trading execution. Deterministic application services own provisioning and mutation. Fresh warehouse and tool output outrank summaries and model prose.
 
-Fresh warehouse and tool output is authoritative over workspace summaries and model prose.
+## Development loop: hard limit 60 seconds
 
-## Mandatory implementation playbook
+The inner edit-test loop MUST finish within 60 seconds.
 
-Before implementing, reviewing, merging, or closing any OpenStock ticket, read:
+```text
+edit
+→ lint only changed files when practical
+→ run the single owning authoritative contract test
+→ stop
+```
 
-- [`vnalpha/docs/common-implementation-failures.md`](vnalpha/docs/common-implementation-failures.md)
+Use:
 
-Use its mandatory checklist explicitly. In particular:
+```bash
+make test-loop TEST=tests/path/to/test_file.py::test_contract
+```
 
-- verify runtime semantics rather than file or command presence;
-- inspect real callable signatures and boundary types;
-- inspect every affected CLI, TUI, assistant, legacy, readiness, and packaged path, but test shared domain behavior once at its owning public contract rather than repeating the same behavior matrix through every surface;
-- preserve truthful `SUCCESS`/`PARTIAL`/`FAILED` and optional/required semantics;
-- cover the complete fail-closed boundary, audit correlation, evidence, remediation, and backward compatibility through explicit public or risk contracts;
-- do not infer that focused tests, local commands, or skipped CI gates prove completion;
-- create and link a follow-up issue for intentionally deferred defects.
+Rules:
 
-When a review reveals a new recurring failure pattern, update the playbook in the same change or its immediate follow-up.
+- Do not run `make test-vnalpha`, `verify-r0`, `verify-r4`, `verify-hardening`, package installation, research evals, repository-wide script checks or GitHub Actions after each patch.
+- Do not rerun the same test through repository, service, CLI, TUI and assistant layers.
+- If the selected test cannot finish within 60 seconds, treat that as test-architecture debt. Stop and report it instead of expanding the loop.
+- Documentation-only changes require no runtime tests.
+- OpenSpec-only changes require only the relevant strict OpenSpec validation when preparing the final candidate, not after every edit.
+- Full component, package and release gates run only after the implementation candidate is frozen, and only once per final SHA.
+- Package install/upgrade/rollback checks run only for packaging, installation, dependency-layout or release changes.
 
 ## Authoritative test policy
 
-OpenStock uses a **1:1 public-contract-to-authoritative-test policy**:
+OpenStock uses a 1:1 public-contract-to-authoritative-test policy:
 
 ```text
-one public feature, public function, or independent risk contract
+one public feature, public function or independent risk contract
 → one authoritative automated test
 ```
 
-Apply the policy as follows:
-
-- Count externally observable public contracts, not private helper functions, implementation branches, issue numbers, or source files.
-- Do not create separate tests for private helpers when their behavior is already exercised through the owning public contract.
-- One authoritative test may use table-driven cases and multiple assertions to cover equivalent inputs, edge conditions, and invariants without generating a large parameterized test matrix.
-- Domain and application services own behavioral coverage. CLI, TUI, assistant, repository, and packaging layers receive separate tests only when they expose a distinct public adapter or operational contract.
-- High-impact boundaries such as point-in-time exclusion, transaction rollback, queue crash recovery, lease recovery, writer exclusion, policy approval/rollback, security boundaries, and package state preservation are independent risk contracts. Each may own one authoritative test.
-- A bug fix should update or replace the authoritative test for the owning contract. Do not normally retain permanent issue-specific regression files in parallel with the contract test.
-- Adding an authoritative test requires a new public/risk contract or the replacement of an obsolete test. Identify the contract ID and remove or merge duplicate coverage in the same change where practical.
-- Do not preserve duplicate or obsolete tests by moving them to another required or nightly suite.
-- Required validation should execute each authoritative test once per applicable lane; do not run overlapping R0, regression, R4, and full-suite selections sequentially.
+- Count externally observable contracts, not private helpers, branches, issue numbers or files.
+- One authoritative test may use table-driven cases and multiple assertions.
+- Domain/application services own behavior tests. Surfaces receive a separate test only for a distinct adapter contract.
+- Point-in-time exclusion, transaction rollback, crash/lease recovery, writer exclusion, policy approval/rollback, security and package-state preservation may be independent risk contracts.
+- A bug fix updates or replaces the owning contract test; do not accumulate permanent issue-specific regression tests.
+- Adding a test requires a new contract or replacement of obsolete coverage.
+- Do not move duplicate tests to nightly as a substitute for deleting them.
 
 Repository budget:
 
 ```text
-target: approximately 200 authoritative automated tests
-hard cap: 250 authoritative automated tests
+target: approximately 200 authoritative tests
+hard cap: 250 authoritative tests
 ```
 
-Issue [#348](https://github.com/duvu/openstock/issues/348) owns consolidation of the existing suite, the authoritative contract manifest, and CI enforcement. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributor-facing rules.
+Issue [#348](https://github.com/duvu/openstock/issues/348) owns consolidation and CI enforcement. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Implementation guidance
+
+[`vnalpha/docs/common-implementation-failures.md`](vnalpha/docs/common-implementation-failures.md) is a reference catalogue, not mandatory reading for every task. Read only the sections directly relevant to the changed contract or an observed failure. Do not load the full document into an agent context by default.
+
+For implementation and review:
+
+- verify runtime semantics rather than file or command presence;
+- inspect real callable signatures and typed boundaries;
+- preserve truthful statuses, evidence, remediation and fail-closed behavior;
+- inspect every affected surface, but test shared behavior once at its owner;
+- create a follow-up issue for intentionally deferred defects.
 
 ## OpenSpec workflow
 
-- `openspec/active-changes.yaml` is the authoritative registry for non-archived changes.
-- `openspec/changes/` contains only unresolved active/partial/planned work.
-- `openspec/changes/archive/` preserves completed, superseded, duplicate, abandoned, or conflicted changes.
-- `openspec/specs/` contains accepted implemented capability contracts.
-- Search all three locations before creating a new change. Update overlapping active work instead of adding another remediation/closure spec.
-- Never mark tasks complete from prose alone; use the evidence required by each task.
-- `openstock-four-phase-hardening` is completed and archived; its accepted hardening contract remains the prerequisite baseline for later sandbox, automation, persistence, and TUI expansion.
+- `openspec/active-changes.yaml` is the registry for non-archived changes.
+- Search `openspec/changes/`, `openspec/changes/archive/` and `openspec/specs/` before creating a change.
+- Update overlapping work instead of creating parallel remediation specs.
+- Never mark tasks complete from prose alone; attach the evidence required by the task.
 
 Relevant slash workflows when explicitly requested:
 
-- `/opsx-propose` — create or revise a change proposal/design/tasks.
+- `/opsx-propose` — create or revise proposal/design/tasks.
 - `/opsx-apply` — implement an active change in dependency order.
 - `/opsx-explore` — investigate without implementation.
-- `/opsx-archive` — archive a completed or superseded change and synchronize accepted specs.
+- `/opsx-archive` — archive completed or superseded work and synchronize accepted specs.
