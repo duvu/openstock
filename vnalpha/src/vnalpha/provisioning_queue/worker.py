@@ -124,7 +124,7 @@ class ProvisioningWorker:
     def _process_claimed(self, job: ProvisioningJob) -> ProvisioningJob | None:
         handler = self._handlers.get(goal_type(job.goal))
         if handler is None:
-            return self._queue.fail(job.job_id, self._worker_id, _UNSUPPORTED_HANDLER)
+            return self._fail_or_cancel(job, _UNSUPPORTED_HANDLER)
         if self._cancellation_requested(job):
             return self._cancel_at_safe_boundary(job)
         try:
@@ -140,7 +140,7 @@ class ProvisioningWorker:
                 return self._cancel_at_safe_boundary(job)
             return None
         except WarehouseOpenError as error:
-            return self._queue.fail(job.job_id, self._worker_id, str(error))
+            return self._fail_or_cancel(job, str(error))
 
     def _execute_handler(
         self, job: ProvisioningJob, handler: ProvisioningGoalHandler
@@ -176,6 +176,16 @@ class ProvisioningWorker:
                 job.job_id, self._worker_id, _CANCELLATION_REASON
             )
         except ProvisioningJobLeaseError:
+            return None
+
+    def _fail_or_cancel(
+        self, job: ProvisioningJob, detail: str
+    ) -> ProvisioningJob | None:
+        try:
+            return self._queue.fail(job.job_id, self._worker_id, detail)
+        except ProvisioningJobLeaseError:
+            if self._cancellation_requested(job):
+                return self._cancel_at_safe_boundary(job)
             return None
 
 

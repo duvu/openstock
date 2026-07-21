@@ -98,6 +98,18 @@ def test_sequential_provisioning_worker_contract(
     )
     assert not (tmp_path / "never-opened.duckdb").exists()
 
+    cancellation_race_unknown_queue = _CancelBeforeFailureQueue(
+        tmp_path / "cancellation-race-unknown.sqlite3"
+    )
+    cancellation_race_unknown_queue.initialize()
+    cancellation_race_unknown_queue.submit_or_join(_range_goal("VN30"), priority=1)
+    unknown_cancellation_result = ProvisioningWorker(
+        cancellation_race_unknown_queue,
+        worker_id="cancellation-race-unknown",
+        handlers=(),
+    ).process_one()
+    assert unknown_cancellation_result.status is ProvisioningJobStatus.CANCELLED
+
     unsupported_enrichment = restarted_queue.submit_or_join(
         _current_goal("VIC").model_copy(
             update={"requested_enrichments": (GoalEnrichment.FLOW_CONTEXT,)}
@@ -317,6 +329,12 @@ class _CancelBeforeCompletionQueue(ProvisioningQueue):
     def complete(self, job_id, worker_id: str, result: str):
         self.cancel(job_id)
         return super().complete(job_id, worker_id, result)
+
+
+class _CancelBeforeFailureQueue(ProvisioningQueue):
+    def fail(self, job_id, worker_id: str, error: str):
+        self.cancel(job_id)
+        return super().fail(job_id, worker_id, error)
 
 
 def _current_goal(symbol: str) -> EnsureCurrentSymbolGoal:
