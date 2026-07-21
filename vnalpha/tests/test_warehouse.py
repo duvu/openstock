@@ -1,5 +1,6 @@
 """Tests for the DuckDB warehouse."""
 
+import os
 import threading
 
 import duckdb
@@ -52,11 +53,18 @@ def test_configured_warehouse_connection_fails_closed(
 def test_warehouse_writers_are_exclusive_and_release_lock(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    from vnalpha.warehouse.connection import read_connection
+    from vnalpha.warehouse.connection import (
+        WarehouseOpenError,
+        WarehouseOpenFailureKind,
+        read_connection,
+    )
     from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    warehouse_path = tmp_path / "warehouse.duckdb"
+    approved_parent = tmp_path / "approved"
+    approved_parent.mkdir(mode=0o770)
+    os.chmod(approved_parent, 0o770)
+    warehouse_path = approved_parent / "warehouse.duckdb"
     coordinator = WarehouseWriteCoordinator(path=warehouse_path)
     with coordinator.transaction() as database:
         database.execute("CREATE TABLE writes(value INTEGER)")
@@ -97,6 +105,18 @@ def test_warehouse_writers_are_exclusive_and_release_lock(
             (2,),
             (3,),
         ]
+
+    exposed_parent = tmp_path / "exposed"
+    exposed_parent.mkdir(mode=0o777)
+    os.chmod(exposed_parent, 0o777)
+    with pytest.raises(WarehouseOpenError) as raised:
+        with WarehouseWriteCoordinator(
+            path=exposed_parent / "warehouse.duckdb"
+        ).transaction():
+            pass
+    assert raised.value.kind is WarehouseOpenFailureKind.PERMISSION
+    assert not (exposed_parent / ".vnalpha-locks").exists()
+    assert not (exposed_parent / "warehouse.duckdb").exists()
 
 
 def test_nested_warehouse_failure_rolls_back_outer_transaction(tmp_path) -> None:
