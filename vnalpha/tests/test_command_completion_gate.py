@@ -9,16 +9,14 @@ import duckdb
 import pytest
 
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
-from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.repositories import save_candidate_score
 
 
 @pytest.fixture
-def conn():
-    c = duckdb.connect(":memory:")
-    run_migrations(conn=c)
-    yield c
-    c.close()
+def conn(
+    migrated_warehouse_connection: duckdb.DuckDBPyConnection,
+) -> duckdb.DuckDBPyConnection:
+    return migrated_warehouse_connection
 
 
 def _seed_watchlist(conn, target_date: str) -> None:

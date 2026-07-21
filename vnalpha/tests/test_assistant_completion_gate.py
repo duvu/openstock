@@ -10,15 +10,13 @@ import pytest
 
 from vnalpha.assistant.app import AssistantApp
 from vnalpha.assistant.gateway import FakeLLMClient, LLMGatewayClient, LLMGatewayConfig
-from vnalpha.warehouse.migrations import run_migrations
 
 
 @pytest.fixture
-def conn():
-    c = duckdb.connect(":memory:")
-    run_migrations(conn=c)
-    yield c
-    c.close()
+def conn(
+    migrated_warehouse_connection: duckdb.DuckDBPyConnection,
+) -> duckdb.DuckDBPyConnection:
+    return migrated_warehouse_connection
 
 
 def _fake_scan_llm() -> FakeLLMClient:
