@@ -53,8 +53,8 @@ class WarehouseWriteCoordinator:
         lock_path = _warehouse_lock_path(warehouse_path)
         try:
             warehouse_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            if warehouse_path.parent.stat().st_mode & 0o022:
-                raise PermissionError("Warehouse parent must not be group-writable.")
+            if warehouse_path.parent.stat().st_mode & 0o002:
+                raise PermissionError("Warehouse parent must not be world-writable.")
             lock_path.parent.mkdir(parents=True, exist_ok=True)
             os.chmod(lock_path.parent, 0o700)
             descriptor = os.open(
