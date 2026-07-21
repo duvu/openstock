@@ -15,7 +15,7 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 - [x] 2.1 Add artifact states and capability-scoped readiness.
 - [x] 2.2 Add source/provider/auth/persistence-aware repairability.
 - [x] 2.3 Report exact missing ranges and bounded actions without writing or calling providers.
-- [x] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`. Evidence: `9a6f516843eda890bd5d13e9bbfc4a7612e2eecc`, hardened by `d09efd351c9297c91bda18355b13979c02635036` and `e423e585646b4676dc7034430861e741a5abe1c8`; supported source-policy and contract versions fail closed before queue persistence or handler execution, proven by the goal and queue contract tests.
+- [x] 2.4 Add versioned models for `ENSURE_CURRENT_SYMBOL`, `SYNC_DATASET_RANGE` and `FINALIZE_MARKET_SESSION`. Evidence: `9a6f516843eda890bd5d13e9bbfc4a7612e2eecc`, hardened by `d09efd351c9297c91bda18355b13979c02635036`, `e423e585646b4676dc7034430861e741a5abe1c8` and `0b3fef7bc820d2995bbbafe2ee49fb99d87cfe88`; supported source-policy and contract versions fail closed before queue persistence or handler execution, proven by the goal and queue contract tests.
 - [x] 2.5 Add deterministic identities, enrichment normalization and collision tests. Evidence: `d09efd351c9297c91bda18355b13979c02635036`; authoritative `vnalpha/tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract`; `make test-loop TEST=tests/test_provisioning_queue_goals.py::test_provisioning_goal_contract` passed; `uv run python ../scripts/run_test_suite.py --plan --domain application` validates the authoritative inventory.
 
 ## 3. Queue repository — #323
