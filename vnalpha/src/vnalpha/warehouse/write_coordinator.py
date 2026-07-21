@@ -52,6 +52,9 @@ class WarehouseWriteCoordinator:
             return
         lock_path = _warehouse_lock_path(warehouse_path)
         try:
+            warehouse_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if warehouse_path.parent.stat().st_mode & 0o022:
+                raise PermissionError("Warehouse parent must not be group-writable.")
             lock_path.parent.mkdir(parents=True, exist_ok=True)
             os.chmod(lock_path.parent, 0o700)
             descriptor = os.open(
@@ -67,7 +70,6 @@ class WarehouseWriteCoordinator:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX)
                 locked = True
-                warehouse_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             except OSError as exc:
                 raise warehouse_open_error(exc) from exc
             connection = _open_connection(warehouse_path, read_only=False)

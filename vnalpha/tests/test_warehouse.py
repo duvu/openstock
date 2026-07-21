@@ -9,36 +9,52 @@ from vnalpha.warehouse.connection import in_memory_connection
 from vnalpha.warehouse.migrations import run_migrations
 
 
-def test_warehouse_lifecycle_fails_closed_serializes_writers_and_rolls_back(
+def test_configured_warehouse_connection_fails_closed(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     from vnalpha.core.config import AppConfig, WarehouseConfig
     from vnalpha.warehouse import connection
-    from vnalpha.warehouse.connection import read_connection
-    from vnalpha.warehouse.transaction import WarehouseTransactionRollbackOnlyError
-    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
     configured_path = tmp_path / "configured" / "warehouse.duckdb"
-    attempts: list[tuple[str, bool]] = []
-
-    def unavailable(database: str, *, read_only: bool = False):
-        attempts.append((database, read_only))
-        raise duckdb.IOException("configured warehouse unavailable")
 
     monkeypatch.setattr(
         connection,
         "get_config",
         lambda: AppConfig(warehouse=WarehouseConfig(path=configured_path)),
     )
-    monkeypatch.setattr(connection.duckdb, "connect", unavailable)
 
-    with pytest.raises(connection.WarehouseOpenError) as raised:
-        connection.get_connection()
+    cases = [
+        (duckdb.IOException("Could not set lock on file"), "busy"),
+        (duckdb.PermissionException("private path"), "permission"),
+        (duckdb.InvalidInputException("unsupported database schema"), "schema"),
+        (duckdb.IOException("configured warehouse unavailable"), "unavailable"),
+    ]
+    for cause, expected_kind in cases:
+        attempts: list[tuple[str, bool]] = []
 
-    assert raised.value.kind is connection.WarehouseOpenFailureKind.UNAVAILABLE
-    assert attempts == [(str(configured_path), True)]
+        def unavailable(
+            database: str,
+            *,
+            read_only: bool = False,
+            recorded_attempts: list[tuple[str, bool]] = attempts,
+            open_cause: duckdb.Error = cause,
+        ) -> None:
+            recorded_attempts.append((database, read_only))
+            raise open_cause
 
-    monkeypatch.undo()
+        monkeypatch.setattr(connection.duckdb, "connect", unavailable)
+        with pytest.raises(connection.WarehouseOpenError) as raised:
+            connection.get_connection()
+        assert raised.value.kind.value == expected_kind
+        assert attempts == [(str(configured_path), True)]
+
+
+def test_warehouse_writers_are_exclusive_and_release_lock(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from vnalpha.warehouse.connection import read_connection
+    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
+
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     warehouse_path = tmp_path / "warehouse.duckdb"
     coordinator = WarehouseWriteCoordinator(path=warehouse_path)
@@ -72,21 +88,39 @@ def test_warehouse_lifecycle_fails_closed_serializes_writers_and_rolls_back(
     assert not first.is_alive()
     assert not second.is_alive()
 
-    with pytest.raises(WarehouseTransactionRollbackOnlyError):
-        with coordinator.transaction() as database:
-            database.execute("INSERT INTO writes VALUES (3)")
-            try:
-                with coordinator.transaction() as nested:
-                    nested.execute("INSERT INTO writes VALUES (4)")
-                    raise RuntimeError("force nested rollback")
-            except RuntimeError:
-                database.execute("INSERT INTO writes VALUES (5)")
+    with coordinator.transaction() as database:
+        database.execute("INSERT INTO writes VALUES (3)")
 
     with read_connection(warehouse_path) as database:
         assert database.execute("SELECT value FROM writes ORDER BY value").fetchall() == [
             (1,),
             (2,),
+            (3,),
         ]
+
+
+def test_nested_warehouse_failure_rolls_back_outer_transaction(tmp_path) -> None:
+    from vnalpha.warehouse.connection import read_connection
+    from vnalpha.warehouse.transaction import WarehouseTransactionRollbackOnlyError
+    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
+
+    warehouse_path = tmp_path / "warehouse.duckdb"
+    coordinator = WarehouseWriteCoordinator(path=warehouse_path)
+    with coordinator.transaction() as database:
+        database.execute("CREATE TABLE writes(value INTEGER)")
+
+    with pytest.raises(WarehouseTransactionRollbackOnlyError):
+        with coordinator.transaction() as database:
+            database.execute("INSERT INTO writes VALUES (1)")
+            try:
+                with coordinator.transaction() as nested:
+                    nested.execute("INSERT INTO writes VALUES (2)")
+                    raise RuntimeError("force nested rollback")
+            except RuntimeError:
+                database.execute("INSERT INTO writes VALUES (3)")
+
+    with read_connection(warehouse_path) as database:
+        assert database.execute("SELECT value FROM writes").fetchall() == []
 
 
 @pytest.fixture
