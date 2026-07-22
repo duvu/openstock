@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import duckdb
+import typer
 from typer.testing import CliRunner
 
+from vnalpha.cli_app import common as cli_common
 from vnalpha.cli_app import maintain as maintain_cli
 from vnalpha.core.config import reset_config
 from vnalpha.maintenance.models import (
@@ -13,7 +16,12 @@ from vnalpha.maintenance.models import (
     MaintenanceStageResult,
     MaintenanceStageStatus,
 )
+from vnalpha.maintenance.runtime_identity import (
+    RuntimeBuildMatchStatus,
+    collect_runtime_identity,
+)
 from vnalpha.maintenance.software_identity import SoftwareIdentity
+from vnalpha.observability.context import reset_run_context
 
 
 def test_daily_cli_persists_noop_invocation(tmp_path, monkeypatch) -> None:
@@ -41,6 +49,111 @@ def test_daily_cli_persists_noop_invocation(tmp_path, monkeypatch) -> None:
         assert row == ("NOOP", "1.2.3", "a" * 40, "clean")
     finally:
         reset_config()
+
+
+def test_cli_records_effective_runtime_identity_in_metadata_mode(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        runtime_identity,
+        "_source_checkout_commit",
+        lambda _path: "b" * 40,
+    )
+    identity = collect_runtime_identity(
+        config=AppConfig(
+            vnstock=VnstockServiceConfig(
+                base_url=(
+                    "http://svcuser:supersecret@vnstock.test:6900/v1?"
+                    "signature=supersecret"
+                )
+            ),
+            warehouse=WarehouseConfig(path=tmp_path / "warehouse.duckdb"),
+        ),
+        software_identity=SoftwareIdentity("1.2.3", "a" * 40, "clean"),
+        source_policy_resolver=SourcePolicyResolver(
+            configured_sources={"equity.ohlcv": "vci"}
+        ),
+        current_checkout_path=tmp_path,
+    )
+    assert identity.build_match_status is RuntimeBuildMatchStatus.STALE
+
+    monkeypatch.setattr(cli_common, "collect_runtime_identity", lambda: identity)
+    monkeypatch.setenv("VNALPHA_LOG_ROOT", str(tmp_path / "logs"))
+    monkeypatch.setenv("VNALPHA_LOG_CONTENT_MODE", "metadata")
+    app = typer.Typer()
+    cli_common.configure_app(app)
+
+    @app.command()
+    def status() -> None:
+        typer.echo("ready")
+
+    reset_run_context()
+    try:
+        result = CliRunner().invoke(app, ["status"])
+    finally:
+        reset_run_context()
+
+    assert result.exit_code == 0, result.output
+    app_log = next((tmp_path / "logs" / "runs").glob("*/app.jsonl"))
+    records = [json.loads(line) for line in app_log.read_text().splitlines()]
+    fields = next(
+        record for record in records if record["event_type"] == "RUNTIME_IDENTITY"
+    )
+    assert fields["application_version"] == "1.2.3"
+    assert fields["source_commit"] == "a" * 40
+    assert fields["current_source_commit"] == "b" * 40
+    assert fields["build_match_status"] == "STALE"
+    assert fields["warehouse_path"] == str(tmp_path / "warehouse.duckdb")
+    assert "vnstock_service_url" not in fields
+    assert fields["provider_source_policy"] == {
+        "reference.symbols": {
+            "source": None,
+            "mode": "AUTO",
+            "fallback_allowed": True,
+        },
+        "equity.ohlcv": {
+            "source": "vci",
+            "mode": "CONFIGURED",
+            "fallback_allowed": True,
+        },
+        "index.ohlcv": {
+            "source": None,
+            "mode": "AUTO",
+            "fallback_allowed": True,
+        },
+        "reference.index_membership_snapshot": {
+            "source": "vci",
+            "mode": "CONFIGURED",
+            "fallback_allowed": False,
+        },
+        "reference.sector_membership_snapshot": {
+            "source": "vci",
+            "mode": "CONFIGURED",
+            "fallback_allowed": False,
+        },
+    }
+    assert fields["package_installation_path"].endswith("/vnalpha")
+    assert fields["process_started_at"] is not None
+
+    monkeypatch.setenv("VNALPHA_LOG_ROOT", str(tmp_path / "redacted-logs"))
+    monkeypatch.setenv("VNALPHA_LOG_CONTENT_MODE", "redacted")
+    reset_run_context()
+    try:
+        redacted_result = CliRunner().invoke(app, ["status"])
+    finally:
+        reset_run_context()
+
+    assert redacted_result.exit_code == 0, redacted_result.output
+    redacted_log = next((tmp_path / "redacted-logs" / "runs").glob("*/app.jsonl"))
+    redacted_records = [
+        json.loads(line) for line in redacted_log.read_text().splitlines()
+    ]
+    redacted_identity = next(
+        record
+        for record in redacted_records
+        if record["event_type"] == "RUNTIME_IDENTITY"
+    )
+    assert redacted_identity["vnstock_service_url"] == "http://vnstock.test:6900"
 
 
 def _maintenance_result(

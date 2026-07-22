@@ -364,9 +364,14 @@ domain = "application"
 test = "tests/test_dates.py::TestResolveDateToday::test_none_returns_today"
 
 [[contract]]
-id = "deep-analysis-readiness-test-readiness-reports-cache-hit-for-every-required-core-artifact"
+id = "deep-analysis-readiness-test-readiness-reports-actionable-core-status"
 domain = "data"
-test = "tests/test_deep_analysis_readiness.py::test_readiness_reports_cache_hit_for_every_required_core_artifact"
+test = "tests/test_deep_analysis_readiness.py::test_readiness_reports_actionable_core_status"
+
+[[contract]]
+id = "deep-analysis-readiness-test-live-deep-analysis-plan-reuses-fresh-evidence"
+domain = "application"
+test = "tests/test_deep_analysis_readiness.py::test_live_deep_analysis_plan_reuses_fresh_evidence"
 
 [[contract]]
 id = "deploy-testdeployevents-test-verify-started-event-written"
@@ -629,6 +634,11 @@ domain = "application"
 test = "tests/test_p0_operations_truthfulness.py::test_daily_cli_persists_noop_invocation"
 
 [[contract]]
+id = "p0-operations-truthfulness-test-cli-records-effective-runtime-identity-in-metadata-mode"
+domain = "application"
+test = "tests/test_p0_operations_truthfulness.py::test_cli_records_effective_runtime_identity_in_metadata_mode"
+
+[[contract]]
 id = "persistence-testsaveandgetcandidatescore-test-save-then-get-returns-record"
 domain = "application"
 test = "tests/test_persistence.py::TestSaveAndGetCandidateScore::test_save_then_get_returns_record"
@@ -664,9 +674,9 @@ domain = "data"
 test = "tests/test_research_answer_audit_completion.py::test_migrations_create_research_answer_audit_table"
 
 [[contract]]
-id = "research-automation-migrations-test-run-migrations-adds-lifecycle-state-to-legacy-research-artifact"
+id = "research-automation-migrations-test-run-migrations-upgrades-legacy-research-and-outcome-tables"
 domain = "data"
-test = "tests/test_research_automation_migrations.py::test_run_migrations_adds_lifecycle_state_to_legacy_research_artifact"
+test = "tests/test_research_automation_migrations.py::test_run_migrations_upgrades_legacy_research_and_outcome_tables"
 
 [[contract]]
 id = "research-context-commands-test-market-regime-reads-latest-and-exact-persisted-context"

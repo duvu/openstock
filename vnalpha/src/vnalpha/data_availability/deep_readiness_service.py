@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 import duckdb
 
@@ -27,7 +28,12 @@ from vnalpha.data_availability.deep_readiness_models import (
     ReadinessResult,
 )
 from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
-from vnalpha.data_availability.models import EnsureDataResult, EnsureDataStatus
+from vnalpha.data_availability.models import (
+    EnsureDataActionStatus,
+    EnsureDataResult,
+    EnsureDataStatus,
+)
+from vnalpha.data_availability.policy import DEFAULT_POLICY
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,13 +41,14 @@ class DeepAnalysisReadinessService:
     ensure: Callable[[duckdb.DuckDBPyConnection, str, str | None], EnsureDataResult] = (
         ensure_symbol_analysis_ready
     )
+    max_reused_session_age_days: int = DEFAULT_POLICY.stale_after_calendar_days
 
     def ensure_ready(self, request: DeepAnalysisReadinessRequest) -> ReadinessResult:
         current_correlation_id = correlation_id()
         normalized_symbol = request.symbol.upper().strip()
         try:
             resolved_date = resolve_market_session_date(request.requested_date)
-        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+        except Exception as exc:  # noqa: BLE001
             return self._terminal_failure(
                 symbol=normalized_symbol,
                 requested_date=request.requested_date,
@@ -50,6 +57,14 @@ class DeepAnalysisReadinessService:
                 message="Deep-analysis date could not be resolved.",
                 exception_type=type(exc).__name__,
             )
+        resolved_date = _resolve_available_session_date(
+            request.conn,
+            normalized_symbol,
+            request.requested_date,
+            resolved_date,
+            self.max_reused_session_age_days,
+        )
+        fallback_warning = _fallback_warning(request.requested_date, resolved_date)
 
         audit_started(
             symbol=normalized_symbol,
@@ -71,7 +86,7 @@ class DeepAnalysisReadinessService:
                 requested_date=request.requested_date,
                 resolved_date=resolved_date,
             )
-        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+        except Exception as exc:  # noqa: BLE001
             return self._terminal_failure(
                 symbol=normalized_symbol,
                 requested_date=request.requested_date,
@@ -92,7 +107,7 @@ class DeepAnalysisReadinessService:
         )
         try:
             context_artifacts = evaluate_context_readiness(context_input)
-        except Exception:  # noqa: BROAD_EXCEPT_OK
+        except Exception:  # noqa: BLE001
             context_artifacts = unavailable_context_artifacts(
                 context_input, ContextIssue.CONTEXT_BUILD_FAILED
             )
@@ -104,19 +119,13 @@ class DeepAnalysisReadinessService:
             if artifact.error is not None
         )
         if not result.is_ready and not errors:
-            # Preserve the first actionable root cause instead of flattening it
-            # into a generic wrapper (issue #305). Prefer a failed provisioning
-            # stage; otherwise fall back to the first blocking core artifact
-            # whose evidence is not ready (e.g. a stale benchmark that every
-            # action "succeeded" on but that still did not reach the target
-            # session).
             root_cause = _first_actionable_failure(result) or _first_blocking_artifact(
                 core_artifacts
             )
             errors = (
                 (root_cause,)
                 if root_cause is not None
-                else ("Required deep-analysis data could not be made ready.",)
+                else (_undetailed_provisioning_failure(result, resolved_date),)
             )
         readiness = ReadinessResult(
             symbol=result.symbol,
@@ -126,6 +135,7 @@ class DeepAnalysisReadinessService:
             actions=actions,
             warnings=(
                 *_sanitized_warnings(result.warnings),
+                *fallback_warning,
                 *(
                     artifact.error_code
                     for artifact in context_artifacts
@@ -149,7 +159,7 @@ class DeepAnalysisReadinessService:
     ) -> EnsureDataResult:
         try:
             return self.ensure(request.conn, symbol, resolved_date)
-        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+        except Exception as exc:  # noqa: BLE001
             audit_ensure_exception(
                 symbol=symbol,
                 requested_date=request.requested_date,
@@ -161,7 +171,11 @@ class DeepAnalysisReadinessService:
                 symbol=symbol,
                 target_date=resolved_date,
                 status=EnsureDataStatus.FAILED,
-                errors=["Core data readiness could not be evaluated."],
+                errors=[
+                    "Deep-analysis preparation failed at stage core_provisioning "
+                    f"(dataset=core, symbol={symbol}, effective_date={resolved_date}, "
+                    f"category=ENSURE_EXCEPTION): {type(exc).__name__}"
+                ],
             )
 
     def _terminal_failure(
@@ -223,14 +237,6 @@ def ensure_deep_analysis_ready(
 
 
 def _first_actionable_failure(result: EnsureDataResult) -> str | None:
-    """Summarize the first failed stage, retaining its stage and sanitized cause.
-
-    The top-level error summarizes the failure but keeps the failed stage name,
-    affected dataset/symbol and sanitized root cause, so the message is
-    actionable rather than a static full-pipeline wrapper (issue #305).
-    """
-    from vnalpha.data_availability.models import EnsureDataActionStatus
-
     for outcome in result.action_outcomes:
         if outcome.status is EnsureDataActionStatus.FAILED:
             dataset = outcome.dataset or "unknown"
@@ -242,6 +248,77 @@ def _first_actionable_failure(result: EnsureDataResult) -> str | None:
                 f"(dataset={dataset}, symbol={symbol}, category={category}): {cause}"
             )
     return None
+
+
+def _resolve_available_session_date(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    requested_date: str | None,
+    resolved_date: str,
+    max_session_age_days: int,
+) -> str:
+    if requested_date is not None and requested_date.strip().lower() != "today":
+        return resolved_date
+    minimum_date = (
+        date.fromisoformat(resolved_date) - timedelta(days=max_session_age_days)
+    ).isoformat()
+    try:
+        row = conn.execute(
+            """
+        SELECT cs.date::VARCHAR
+        FROM candidate_score cs
+        WHERE cs.symbol = ?
+          AND cs.date <= ?
+          AND cs.date >= ?
+          AND EXISTS (
+              SELECT 1 FROM feature_snapshot fs
+              WHERE fs.symbol = cs.symbol AND fs.date = cs.date
+          )
+          AND (
+              SELECT COUNT(*) FROM canonical_ohlcv price
+              WHERE price.symbol = cs.symbol
+                AND price.interval = '1D'
+                AND CAST(price.time AS DATE) BETWEEN cs.date - INTERVAL 420 DAY AND cs.date
+          ) >= 120
+          AND (
+              SELECT COUNT(*) FROM canonical_ohlcv benchmark
+              WHERE benchmark.symbol = 'VNINDEX'
+                AND benchmark.interval = '1D'
+                AND CAST(benchmark.time AS DATE) BETWEEN cs.date - INTERVAL 420 DAY AND cs.date
+          ) >= 120
+        ORDER BY cs.date DESC
+        LIMIT 1
+        """,
+            [symbol, resolved_date, minimum_date],
+        ).fetchone()
+    except duckdb.CatalogException:
+        return resolved_date
+    return str(row[0]) if row is not None and row[0] is not None else resolved_date
+
+
+def _fallback_warning(
+    requested_date: str | None, resolved_date: str
+) -> tuple[str, ...]:
+    if requested_date is None or requested_date.strip().lower() == "today":
+        calendar_date = resolve_market_session_date(requested_date)
+        if calendar_date != resolved_date:
+            return (
+                "Current-session data is unavailable; using the latest validated "
+                f"market session {resolved_date}.",
+            )
+    return ()
+
+
+def _undetailed_provisioning_failure(
+    result: EnsureDataResult, resolved_date: str
+) -> str:
+    category = result.failure_code or "PROVISIONING_RESULT_INCONSISTENT"
+    return (
+        "Deep-analysis preparation failed without a stage diagnostic "
+        f"(symbol={result.symbol}, effective_date={resolved_date}, "
+        f"status={result.status.value}, category={category}): "
+        "the provisioning result reported not-ready without error evidence"
+    )
 
 
 def _first_blocking_artifact(artifacts: tuple) -> str | None:

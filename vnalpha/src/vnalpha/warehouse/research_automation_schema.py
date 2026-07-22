@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS research_experiment (
     transformation VARCHAR,
     experiment_hash VARCHAR,
     capability_status VARCHAR,
-    capability_payload VARCHAR,
+    capability_payload VARCHAR DEFAULT '{}',
     universe VARCHAR,
     start_date DATE,
     end_date DATE,
