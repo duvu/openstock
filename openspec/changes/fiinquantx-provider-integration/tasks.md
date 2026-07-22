@@ -22,7 +22,7 @@
 
 ## 2. FQ-0B licensed runtime and commercial contract verification
 
-- [ ] 2.1 Install one approved exact FiinQuantX version in an isolated licensed environment using the reviewed secure installation procedure. [depends: 0.5] [evidence: exact runtime install recorded at `0bd6a5d`; commercial approval remains pending]
+- [ ] 2.1 Install one supported exact FiinQuantX version in an isolated environment using the reviewed secure installation procedure. [depends: 0.5] [evidence: exact runtime install recorded at `0bd6a5d`]
 - [x] 2.2 Record installed package metadata, import name, supported Python versions and operating systems. [evidence: runtime contract inventory at `0bd6a5d`]
 - [x] 2.3 Probe the documented positive allowlist and confirm actual classes, methods, call signatures and return object types without extracting proprietary implementation source. [evidence: redacted API probe at `0bd6a5d`]
 - [ ] 2.4 Verify login success/failure, session reuse, expiry, concurrent-session behavior and safe cleanup. [evidence: auth probe]
@@ -85,9 +85,9 @@
 
 - [x] 5A.1 Enforce raw-unadjusted equity/index OHLCV requests with `adjusted=False`, `lasted=False`, and explicit `RAW_UNADJUSTED` lineage through provider response, raw warehouse, canonical selection, and research disclosure; fail closed on missing/adjusted FiinQuantX basis. [evidence: exact SDK-call, persistence, canonical-validation, and grounded-answer tests]
 - [x] 5A.2 Persist index and sector membership as atomic current observations with separate snapshot/member tables, valid-empty status, correlation, and safe lineage. [evidence: `vnalpha/tests/test_fiinquantx_membership_ingestion.py`]
-- [x] 5A.3 Expose typed vnalpha client and CLI paths for both membership datasets, with the persistence approval gate applied before ingestion-run creation. [evidence: client-route, source-policy, and CLI tests]
+- [x] 5A.3 Expose typed vnalpha client and CLI paths for both membership datasets, with explicit-source validation before ingestion-run creation. [evidence: client-route, source-policy, and CLI tests]
 - [x] 5A.4 Document the non-FiinQuantX complete-universe/company-reference bootstrap and prohibit synthesizing a universe from membership lists. [evidence: `vnstock/docs/providers/FIINQUANTX.md`]
-- [x] 5A.5 Add installed-host readiness checks for both approval booleans, a separately approved non-FiinQuantX reference source, and all four Gate A service capabilities. [evidence: `packaging/tests/test_verify_mvp1_warehouse.sh`]
+- [x] 5A.5 Add installed-host readiness checks for the optional image, the VCI reference source, and all four Gate A service capabilities. [evidence: `packaging/tests/test_verify_mvp1_warehouse.sh`]
 - [ ] 5A.6 Re-run bounded licensed equity/index OHLCV and membership probes against the exact final commit and SDK version, including timestamp/timezone/price/volume/value/incomplete/valid-empty semantics. [evidence: current licensed environment unavailable]
 - [ ] 5A.7 Record reviewed commercial permission for runtime and DuckDB persistence, then run a sanitized fresh-host service-to-vnalpha smoke. [evidence: commercial decision and licensed host unavailable]
 
@@ -148,7 +148,7 @@
 - [x] 11.2 Add dataset contract and versioned normalizer tests for every enabled capability. [evidence: provider, contract and service tests at `0bd6a5d`]
 - [x] 11.3 Add documentation-inconsistency regression fixtures: timestamp variants, field casing, return-object variants, `fb/fs` direction and free-float unit.
 - [ ] 11.4 Add auth, access, version, limits, schema, empty-result, secret-redaction, forbidden-member and runtime-path tests.
-- [x] 11.5 Add opt-in bounded live tests guarded by `VNSTOCK_LIVE_TESTS`, `VNSTOCK_LIVE_PROVIDERS=FIINQUANTX` and licensed acknowledgement. [evidence: `tests/live/providers/test_fiinquantx_live.py` at `0bd6a5d`]
+- [x] 11.5 Add opt-in bounded live tests guarded by `VNSTOCK_LIVE_TESTS` and `VNSTOCK_LIVE_PROVIDERS=FIINQUANTX`. [evidence: `tests/live/providers/test_fiinquantx_live.py` at `0bd6a5d`]
 - [x] 11.6 Ensure live tests record only SDK version, method, shape, row count, hashes and safe statuses, not raw licensed rows. [evidence: live test assertions and redacted run at `0bd6a5d`]
 - [x] 11.7 Run targeted FiinQuantX unit/contract tests. [evidence: focused suite at `0bd6a5d`]
 - [ ] 11.8 Run all provider, auth, router, runtime, service, quality and contract tests.

@@ -289,7 +289,7 @@ Start from [`.env.example`](.env.example). Important groups include:
 | `VNALPHA_UNIVERSE` | Default research universe |
 | `VNALPHA_LLM_*` | Optional LLM gateway configuration |
 | `VNALPHA_MODEL_*` | Explicit model profiles, fallbacks and capabilities |
-| `VNSTOCK_FIINQUANTX_*` | Optional licensed-runtime controls; disabled by default |
+| `VNSTOCK_INSTALL_FIINQUANTX` | Optional FiinQuantX SDK image build control; disabled by default |
 
 Model capabilities are explicit and fail closed. OpenStock does not infer strict JSON Schema support from a provider or model name.
 

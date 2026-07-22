@@ -924,9 +924,9 @@ domain = "application"
 test = "tests/test_vnstock_corporate_action_client.py::test_get_corporate_actions_uses_canonical_bounded_endpoint"
 
 [[contract]]
-id = "vnstock-source-policy-test-fiinquantx-is-rejected-without-commercial-persistence-approval"
+id = "vnstock-source-policy-test-fiinquantx-is-accepted-for-persistence"
 domain = "application"
-test = "tests/test_vnstock_source_policy.py::test_fiinquantx_is_rejected_without_commercial_persistence_approval"
+test = "tests/test_vnstock_source_policy.py::test_fiinquantx_is_accepted_for_persistence"
 
 [[contract]]
 id = "warehouse-test-all-tables-created"

@@ -8,7 +8,6 @@ from vnstock.core.provider.exceptions import ProviderFetchError
 class FiinQuantXFailureKind(str, Enum):
     NOT_INSTALLED = "not_installed"
     UNTESTED_VERSION = "untested_version"
-    LICENSE_NOT_ACKNOWLEDGED = "license_not_acknowledged"
     CREDENTIALS_MISSING = "credentials_missing"
     AUTHENTICATION = "authentication"
     ENTITLEMENT = "entitlement"
@@ -46,10 +45,6 @@ class FiinQuantXProviderError(ProviderFetchError):
 
 class FiinQuantXCredentialsMissingError(FiinQuantXProviderError):
     kind = FiinQuantXFailureKind.CREDENTIALS_MISSING
-
-
-class FiinQuantXLicenseNotAcknowledgedError(FiinQuantXProviderError):
-    kind = FiinQuantXFailureKind.LICENSE_NOT_ACKNOWLEDGED
 
 
 class FiinQuantXNotInstalledError(FiinQuantXProviderError):
@@ -168,7 +163,6 @@ __all__ = [
     "FiinQuantXEntitlementError",
     "FiinQuantXFailureKind",
     "FiinQuantXInvalidRequestError",
-    "FiinQuantXLicenseNotAcknowledgedError",
     "FiinQuantXNotInstalledError",
     "FiinQuantXProviderError",
     "FiinQuantXQuotaError",

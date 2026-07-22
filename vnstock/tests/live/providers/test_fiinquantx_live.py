@@ -4,19 +4,12 @@ import pandas as pd
 import pytest
 
 from tests.live.conftest import skip_if_provider_excluded
-from vnstock.providers.fiinquantx.approval import fiinquantx_license_approval
 from vnstock.providers.fiinquantx.plugin import FiinQuantXProviderPlugin
 
 pytestmark = [pytest.mark.live, pytest.mark.provider]
 
-_APPROVED = fiinquantx_license_approval().approved
-
 
 @skip_if_provider_excluded("FIINQUANTX")
-@pytest.mark.skipif(
-    not _APPROVED,
-    reason="Set VNSTOCK_FIINQUANTX_LICENSED=true.",
-)
 class TestFiinQuantXLive:
     def test_bounded_equity_ohlcv_has_canonical_schema(self) -> None:
         result = FiinQuantXProviderPlugin().fetch(

@@ -619,21 +619,11 @@ check_mvp1_fiinquantx() {
   _CURRENT_CHECK="check_mvp1_fiinquantx"
   local requested=false
   local reference_source="${OPENSTOCK_REFERENCE_SOURCE:-}"
-  if truthy "${VNSTOCK_INSTALL_FIINQUANTX:-false}" || \
-     truthy "${VNSTOCK_FIINQUANTX_LICENSED:-false}" || \
-     truthy "${VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED:-false}"; then
+  if truthy "${VNSTOCK_INSTALL_FIINQUANTX:-false}"; then
     requested=true
   fi
   if ! "$requested"; then
     warn "MVP1 FiinQuantX: optional Gate A path is not configured"
-    return
-  fi
-  if ! truthy "${VNSTOCK_FIINQUANTX_LICENSED:-false}"; then
-    fail "MVP1 FiinQuantX: runtime approval boolean is required"
-    return
-  fi
-  if ! truthy "${VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED:-false}"; then
-    fail "MVP1 FiinQuantX: persistence approval boolean is required"
     return
   fi
   if [ "${reference_source^^}" != "VCI" ]; then
@@ -668,9 +658,9 @@ for dataset in required:
     if capability.get("explicit_only") is not True:
         raise SystemExit(1)
 '; then
-    ok "MVP1 FiinQuantX: approvals and Gate A capability inventory are configured; reference source=${reference_source^^}"
+    ok "MVP1 FiinQuantX: Gate A capability inventory is configured; reference source=${reference_source^^}"
   else
-    fail "MVP1 FiinQuantX: service capability inventory does not expose all approved Gate A datasets"
+    fail "MVP1 FiinQuantX: service capability inventory does not expose all Gate A datasets"
   fi
 }
 

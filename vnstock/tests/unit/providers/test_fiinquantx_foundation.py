@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+from pathlib import Path
 from types import ModuleType
 
 import pandas as pd
@@ -9,18 +11,16 @@ import pytest
 from vnstock.core.contracts import CONTRACT_REGISTRY
 from vnstock.core.provider.plugin import ProviderPlugin
 from vnstock.core.runtime.bootstrap import default_plugin_registry
-from vnstock.providers.fiinquantx.approval import fiinquantx_license_approval
 from vnstock.providers.fiinquantx.bridge import FiinQuantXSDK, FiinQuantXState
-from vnstock.providers.fiinquantx.exceptions import (
-    FiinQuantXLicenseNotAcknowledgedError,
-    FiinQuantXNotInstalledError,
-)
+from vnstock.providers.fiinquantx.exceptions import FiinQuantXNotInstalledError
 from vnstock.providers.fiinquantx.normalize import normalize_membership
 from vnstock.providers.fiinquantx.plugin import FiinQuantXProviderPlugin
-
-
-def _approve_runtime(monkeypatch) -> None:
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
+from vnstock.providers.fiinquantx.policy import (
+    ALLOWED_MEMBER_NAMES,
+    DOCUMENTED_DATASETS,
+    FORBIDDEN_MEMBER_NAMES,
+    IMPLEMENTED_DATASETS,
+)
 
 
 def test_default_registry_constructs_without_fiinquantx() -> None:
@@ -28,6 +28,68 @@ def test_default_registry_constructs_without_fiinquantx() -> None:
 
     assert "FIINQUANTX" in registry.names()
     assert importlib.util.find_spec("fiinquantx") is None
+
+
+def test_fiinquantx_capability_inventory_owns_documented_and_implemented_states() -> (
+    None
+):
+    inventory_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "providers"
+        / "fiinquantx-capability-inventory.json"
+    )
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    required_fields = {
+        "sdk_method",
+        "sdk_version",
+        "request_mode",
+        "verified_signature",
+        "entity_scope",
+        "candidate_canonical_dataset",
+        "named_consumer",
+        "license_scope",
+        "entitlement_state",
+        "runtime_probe_state",
+        "contract_state",
+        "service_state",
+        "persistence_state",
+        "point_in_time_semantics",
+        "streaming_or_sync",
+        "row_request_range_limits",
+        "known_units_and_signs",
+        "known_revision_behavior",
+        "blocking_reason",
+        "evidence_reference",
+    }
+    synchronous_entries = [
+        entry for entry in inventory["entries"] if entry["streaming_or_sync"] == "SYNC"
+    ]
+    inventory_members = {
+        entry["sdk_method"].split(".", maxsplit=1)[0] for entry in synchronous_entries
+    }
+    documented_datasets = {
+        entry["candidate_canonical_dataset"] for entry in synchronous_entries
+    }
+    implemented_datasets = {
+        entry["candidate_canonical_dataset"]
+        for entry in synchronous_entries
+        if entry["service_state"] == "IMPLEMENTED"
+    }
+
+    assert all(required_fields <= entry.keys() for entry in inventory["entries"])
+    assert inventory_members == ALLOWED_MEMBER_NAMES - {"FiinSession"}
+    assert documented_datasets == DOCUMENTED_DATASETS
+    assert implemented_datasets == IMPLEMENTED_DATASETS
+    capabilities = FiinQuantXProviderPlugin().capabilities()
+    capability_implemented_datasets = {
+        dataset
+        for dataset, capability in capabilities.items()
+        if capability["inventory_state"] == "IMPLEMENTED"
+    }
+
+    assert set(capabilities) == documented_datasets
+    assert capability_implemented_datasets == implemented_datasets
 
 
 def test_fiinquantx_is_fail_closed_until_runtime_evidence() -> None:
@@ -50,8 +112,6 @@ def test_fiinquantx_conforms_to_provider_plugin() -> None:
 
 
 def test_fiinquantx_does_not_expose_forbidden_sdk_surfaces() -> None:
-    from vnstock.providers.fiinquantx.policy import FORBIDDEN_MEMBER_NAMES
-
     assert "order" in FORBIDDEN_MEMBER_NAMES
     assert "positions" in FORBIDDEN_MEMBER_NAMES
     assert "account" in FORBIDDEN_MEMBER_NAMES
@@ -95,7 +155,6 @@ def test_fiinquantx_normalizes_licensed_equity_ohlcv(monkeypatch) -> None:
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -135,7 +194,6 @@ def test_fiinquantx_normalizes_current_membership_snapshot(monkeypatch) -> None:
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -191,7 +249,6 @@ def test_fiinquantx_rejects_unbounded_history_before_session_login(monkeypatch) 
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -204,38 +261,40 @@ def test_fiinquantx_rejects_unbounded_history_before_session_login(monkeypatch) 
         )
 
 
-def test_fiinquantx_requires_license_acknowledgement_before_login(monkeypatch) -> None:
+def test_fiinquantx_logs_in_with_supported_sdk_and_credentials(monkeypatch) -> None:
+    session_constructed = False
+
+    class FakeSession:
+        def TickerList(self, **_kwargs) -> list[str]:
+            return ["VCB"]
+
     class FakeFiinSession:
         def __init__(self, **_kwargs) -> None:
-            raise AssertionError("session factory must not be called")
+            nonlocal session_constructed
+            session_constructed = True
+
+        def login(self) -> FakeSession:
+            return FakeSession()
 
     module = ModuleType("FiinQuantX")
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    monkeypatch.delenv("VNSTOCK_FIINQUANTX_LICENSED", raising=False)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
     )
 
-    with pytest.raises(FiinQuantXLicenseNotAcknowledgedError):
-        FiinQuantXProviderPlugin().fetch("equity.ohlcv", {"symbol": "VCB"})
+    result = FiinQuantXProviderPlugin().fetch(
+        "reference.index_membership_snapshot", {"symbol": "VN30"}
+    )
 
-
-def test_boolean_acknowledgement_enables_runtime(monkeypatch) -> None:
-    monkeypatch.setenv("VNSTOCK_FIINQUANTX_LICENSED", "true")
-
-    approval = fiinquantx_license_approval()
-
-    assert approval.acknowledged is True
-    assert approval.approved is True
-    assert approval.diagnostics() == {"acknowledged": True, "approved": True}
+    assert session_constructed is True
+    assert result["member_symbol"].tolist() == ["VCB"]
 
 
 def test_fiinquantx_capabilities_require_credentials(monkeypatch) -> None:
     module = ModuleType("FiinQuantX")
-    _approve_runtime(monkeypatch)
     monkeypatch.delenv("FIINQUANT_USERNAME", raising=False)
     monkeypatch.delenv("FIINQUANT_PASSWORD", raising=False)
     monkeypatch.setattr(
@@ -249,11 +308,10 @@ def test_fiinquantx_capabilities_require_credentials(monkeypatch) -> None:
     assert capabilities["equity.ohlcv"]["status"] == "unsupported"
 
 
-def test_fiinquantx_diagnostics_publish_boolean_activation(monkeypatch) -> None:
+def test_fiinquantx_diagnostics_report_runtime_evidence(monkeypatch) -> None:
     module = ModuleType("FiinQuantX")
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -261,10 +319,7 @@ def test_fiinquantx_diagnostics_publish_boolean_activation(monkeypatch) -> None:
 
     diagnostics = FiinQuantXProviderPlugin().diagnostics()
 
-    assert diagnostics["licensed_runtime_approved"] is True
-    assert diagnostics["licensed_runtime_acknowledged"] is True
-    assert all("approval_reference" not in key for key in diagnostics)
-    assert all("approval_fingerprint" not in key for key in diagnostics)
+    assert diagnostics["state"] == "INSTALLED_SUPPORTED"
 
 
 @pytest.mark.parametrize(
@@ -289,7 +344,6 @@ def test_fiinquantx_rejects_unverified_or_unbounded_controls_before_login(
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),
@@ -329,7 +383,6 @@ def test_fiinquantx_enforces_requested_ohlcv_row_limit(monkeypatch) -> None:
     module.FiinSession = FakeFiinSession
     monkeypatch.setenv("FIINQUANT_USERNAME", "configured-user")
     monkeypatch.setenv("FIINQUANT_PASSWORD", "configured-password")
-    _approve_runtime(monkeypatch)
     monkeypatch.setattr(
         "vnstock.providers.fiinquantx.plugin.load_fiinquantx_sdk",
         lambda: FiinQuantXSDK(FiinQuantXState.INSTALLED_SUPPORTED, module, "0.1.64"),

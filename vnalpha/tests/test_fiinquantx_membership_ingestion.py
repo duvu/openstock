@@ -50,11 +50,6 @@ def conn() -> duckdb.DuckDBPyConnection:
     return connection
 
 
-@pytest.fixture(autouse=True)
-def approved_persistence(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED", "true")
-
-
 def test_client_requests_typed_membership_endpoints(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

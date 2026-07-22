@@ -66,8 +66,8 @@ Responsibilities:
 - safe provider diagnostics.
 
 Commercial providers remain optional. FiinQuantX is built only when
-`VNSTOCK_INSTALL_FIINQUANTX=true` and requires separate licensed-runtime and
-commercial-policy evidence.
+`VNSTOCK_INSTALL_FIINQUANTX=true`; its runtime then requires the exact
+supported SDK and local credentials.
 
 ### `vnstock-login`
 
@@ -157,17 +157,6 @@ VNALPHA_MODEL_LONG_CONTEXT=
 
 When all profiles resolve to one model, status surfaces must report single-model
 routing rather than a false fallback chain.
-
-## FiinQuantX persistence
-
-The worker defaults to:
-
-```bash
-VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=false
-```
-
-An environment acknowledgement is not commercial approval. Enable persistence
-only after a reviewed decision covers the actual storage and exposure mode.
 
 ## DuckDB concurrency
 

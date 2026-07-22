@@ -11,12 +11,10 @@ from typing import Iterator, Protocol
 
 import pandas as pd
 
-from vnstock.providers.fiinquantx.approval import fiinquantx_license_approval
 from vnstock.providers.fiinquantx.exceptions import (
     FiinQuantXAuthenticationError,
     FiinQuantXConcurrencyError,
     FiinQuantXCredentialsMissingError,
-    FiinQuantXLicenseNotAcknowledgedError,
     FiinQuantXProviderError,
     map_fiinquantx_exception,
 )
@@ -90,8 +88,6 @@ def reset_fiinquantx_runtime_state() -> None:
 class FiinQuantXSessionProvider:
     def get_session(self, module: ModuleType, dataset: str) -> FiinQuantXSession:
         global _SESSION_ENTRY
-        if not fiinquantx_license_approval().approved:
-            raise FiinQuantXLicenseNotAcknowledgedError(dataset)
         username = os.environ.get("FIINQUANT_USERNAME")
         password = os.environ.get("FIINQUANT_PASSWORD")
         if not username or not password:

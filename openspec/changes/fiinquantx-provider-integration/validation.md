@@ -6,7 +6,7 @@
 OpenSpec authored: yes
 Detailed documentation inventory: complete
 Licensed SDK runtime verification: Gate A live evidence passed for the current remediation
-Commercial/license decision: runtime acknowledgement enforced; agreement review pending
+Commercial/license decision: no runtime or persistence approval gate
 Runtime implementation: four experimental, explicit-only datasets enabled
 Offline runtime validation: passed for raw-request, safe-lineage, membership-persistence, contract and service slices
 Licensed live validation: current bounded Gate A provider, persistence and localhost smoke passed
@@ -22,17 +22,15 @@ runtime without recording their values. The exact implementation commit is the
 PR head containing this ledger; required CI and merge-SHA evidence remain PR
 checks rather than being inferred here.
 
-The approved policy for this acceptance is boolean-only acknowledgement:
-`VNSTOCK_FIINQUANTX_LICENSED=true` and
-`VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true`. Both retired
-approval-reference environment inputs, their values and fingerprints are
-absent. All other provider, persistence and fail-closed gates remain enforced.
+The current policy has no FiinQuantX runtime or persistence approval
+configuration. All other provider, persistence and fail-closed safeguards
+remain enforced.
 
 | Check | Result | Safe evidence |
 |---|---|---|
 | localhost service deployment | passed | health passed after build and again after restart; host publish is loopback-only |
 | base image without proprietary SDK | passed | `vnstock` imports; FiinQuantX distribution is absent; five documented capabilities are unsupported |
-| licensed image/runtime | passed | exact distribution `fiinquantx==0.1.64`; four implemented capabilities available only with SDK, credentials and boolean acknowledgement |
+| licensed image/runtime | passed | exact distribution `fiinquantx==0.1.64`; four implemented capabilities available with SDK and credentials |
 | equity and index OHLCV | passed | bounded FPT and VNINDEX requests returned two canonical rows each with `FIINQUANTX`, `RAW_UNADJUSTED`, `PASS` and `plugin_runtime` lineage |
 | index and sector membership | passed | VN30 returned 30 canonical members and `BANKS_L2` returned 28; the SDK iterable wrapper is normalized without retaining vendor objects |
 | stable reference universe | passed | strict VCI symbol reference returned and persisted 1,745 STOCK symbols with exchange; Fiin company reference remained disabled |
@@ -366,7 +364,6 @@ Live validation is opt-in and bounded:
 cd vnstock
 VNSTOCK_LIVE_TESTS=true \
 VNSTOCK_LIVE_PROVIDERS=FIINQUANTX \
-VNSTOCK_FIINQUANTX_LICENSED=true \
 PYTHONPATH=. pytest -q tests/live/providers/test_fiinquantx_live.py -m live
 ```
 

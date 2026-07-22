@@ -67,14 +67,14 @@ The built-in registry currently includes:
 | FMARKET | Fund NAV/fund data |
 | MSN | Experimental selected global market data |
 | FMP | Authenticated global data via API key |
-| FIINQUANTX | Experimental licensed provider, explicit source only for bounded daily equity/index OHLCV and current index/sector membership snapshots |
+| FIINQUANTX | Experimental provider, explicit source only for bounded daily equity/index OHLCV and current index/sector membership snapshots; exact SDK and credentials required |
 
 The base package and default registry remain functional when FiinQuantX is not installed. The SDK is loaded lazily and is never vendored.
 
 Current FiinQuantX limitations:
 
 - exact approved SDK version and local credentials required;
-- `VNSTOCK_FIINQUANTX_LICENSED=true` required as an operational acknowledgement;
+- no runtime approval acknowledgement or approval reference;
 - no automatic selection as a general default provider;
 - no synchronous quote, company information, flow, fundamentals or broader contracts until separately verified and implemented;
 - no streaming/WebSocket/order-book subscription path;

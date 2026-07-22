@@ -6,11 +6,9 @@ licensed rows, or proprietary source.
 
 ## Current evidence state
 
-The provider is an optional integration. It stays disabled unless the approved
-SDK version, both credential environment variables,
-and `VNSTOCK_FIINQUANTX_LICENSED=true` are present. The boolean acknowledgement
-is an operational guard; it is not a substitute for commercial approval and
-does not create or expand license rights.
+The provider is an optional integration. Its runtime requires the exact
+supported SDK version and both local credential environment variables. It has
+no runtime approval flag, approval reference, or expiry gate.
 
 The runtime-verified, experimental datasets are:
 
@@ -25,6 +23,36 @@ The runtime-verified, experimental datasets are:
 not establish a stable reference contract, so the provider will return an
 explicit unsupported-dataset error instead of falling back to another source.
 
+## Capability inventory and licensed probes
+
+[`fiinquantx-capability-inventory.json`](fiinquantx-capability-inventory.json)
+is the authoritative method-to-dataset inventory. It records every positive-list
+SDK surface, lifecycle state, named consumer, request boundary, and the unknown
+unit, timing, revision, entitlement, and evidence fields that keep a candidate
+disabled.
+
+[The 2026-07-22 licensed probe summary](fiinquantx-licensed-probe-2026-07-22.md)
+records the safe runtime evidence for the exact supported SDK. It certifies the
+four existing datasets through their canonical plugin paths and records why all
+other candidates remain deferred.
+
+Run the opt-in probe only in a licensed local environment and write its sanitized
+report outside the checkout:
+
+```bash
+PYTHONPATH=vnstock uv run scripts/probe-fiinquantx.py \
+  --output /secure/operator-evidence/fiinquantx-probe.json \
+  --account-scope LICENSED_LOCAL_ACCOUNT
+```
+
+The probe uses fixed representative symbols, two-bar/two-date requests, one
+bounded snapshot or statement period, a spawned-worker per-call deadline, and
+only the positive-list method plan. Its report contains SDK/Python/OS metadata,
+method signatures, outer shapes, columns, dtypes, row counts, timings and
+redacted typed outcome classes. It never writes credentials, session state or
+licensed row values. Missing SDK, credentials, authentication, entitlement,
+quota, schema, valid-empty and transient outcomes remain distinct.
+
 ## Licensed installation
 
 Install the reviewed exact version in an isolated environment using the
@@ -34,13 +62,15 @@ official package index:
 python -m venv .venv-fiinquantx
 . .venv-fiinquantx/bin/activate
 python -m pip install --upgrade pip
+python -m pip install matplotlib==3.10.9
 python -m pip install --extra-index-url https://fiinquant.github.io/fiinquantx/simple fiinquantx==0.1.64
 python -c "import importlib.metadata; print(importlib.metadata.version('fiinquantx'))"
 ```
 
-The operator must record the wheel hash or equivalent integrity decision,
-Python/OS compatibility, and the approved commercial license before enabling a
-capability. Do not use an unpinned mixed-index installation.
+Verify the wheel hash or equivalent integrity evidence and Python/OS
+compatibility before use. The exact wheel imports `matplotlib` without declaring
+it as an install dependency; install the pinned prerequisite first, as the
+optional image build does. Do not use an unpinned mixed-index installation.
 
 ## Runtime configuration
 
@@ -50,14 +80,12 @@ fixtures, request parameters, logs, or responses:
 ```text
 FIINQUANT_USERNAME=<licensed-account>
 FIINQUANT_PASSWORD=<licensed-secret>
-VNSTOCK_FIINQUANTX_LICENSED=true
 VNSTOCK_FIINQUANTX_SESSION_TTL=900
 VNSTOCK_FIINQUANTX_ACQUIRE_TIMEOUT=30
 ```
 
-The runtime boolean defaults to false and fails closed when absent, malformed,
-or false. Commercial decision records remain in the organization's approved
-document system rather than runtime configuration or provider diagnostics.
+Provider diagnostics expose SDK and credential readiness only; credentials are
+never included in diagnostics.
 
 The runtime caches one authenticated session for the configured TTL, allows one
 provider request at a time, closes expired sessions on replacement, and clears
@@ -99,35 +127,11 @@ vnalpha sync company-info \
 The command above fails as `unsupported_dataset_for_provider` and does not fall
 back to another source.
 
-## Commercial and persistence decisions
+## Storage policy
 
-Use [`FIINQUANTX_LICENSE_DECISION.md`](FIINQUANTX_LICENSE_DECISION.md) to record
-the non-secret decision metadata and usage-scope matrix. The agreement and legal
-advice remain in the organization's approved document system, not Git.
-
-| Mode | Decision before licensed approval |
-|---|---|
-| In-memory cache | Allowed only for the local process and approved account |
-| SQLite or normalized files | Disabled until the license explicitly permits persistence |
-| DuckDB/Postgres | Disabled until commercial and multi-user terms are reviewed |
-| Raw archive | Prohibited by default |
-| Local REST | Only a licensed, credential-isolated operator may enable it |
-| Multi-user/public exposure | Prohibited by default |
-| Bulk export | Prohibited by default |
-| Model training and derived analytics | Require a separate written license decision |
-| Synthetic fixtures | Allowed only after review; must contain no credentials or licensed production values |
-
-`vnalpha` additionally requires:
-
-```text
-VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true
-```
-
-before it accepts `--source FIINQUANTX` for warehouse-bound sync or repair. The
-default is false. The operator must separately confirm that the commercial
-decision permits the actual storage target and downstream use. Runtime access
-approval does not automatically permit persistence, bulk export, derived
-analytics or model training.
+`vnalpha` accepts normalized FiinQuantX rows for warehouse-bound sync and
+repair without a separate approval gate. Do not commit credentials, session
+state, raw licensed payloads, or proprietary source to this repository.
 
 ## Boundary and capabilities
 
@@ -174,10 +178,9 @@ vnalpha sync ohlcv --symbols <BOUNDED_LIST> --start <DATE> --end <DATE> --source
 vnalpha sync index --symbol VNINDEX --start <DATE> --end <DATE> --source FIINQUANTX
 ```
 
-The two approval gates must be configured before the FiinQuantX steps. A
-successful offline unit test, a valid empty snapshot, or a historical live
-probe does not prove current entitlement, commercial permission, universe
-completeness, or the semantics of a newly changed request.
+A successful offline unit test, a valid empty snapshot, or a historical live
+probe does not prove current credentials, universe completeness, or the
+semantics of a newly changed request.
 
 For OHLCV, supported request modes are:
 
