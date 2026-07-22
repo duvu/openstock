@@ -100,7 +100,8 @@ def _seed_cached_deep_analysis(
         "INSERT INTO canonical_ohlcv "
         "(symbol, time, interval, close, selected_provider, quality_status, "
         "ingestion_run_id, source_service_run_id) "
-        "VALUES (?, ?, '1D', 100.0, 'fixture', 'pass', 'fixture-run', 'service-run')",
+        "VALUES (?, ?, '1D', 100.0, 'fixture', 'pass', 'fixture-run', 'service-run') "
+        "ON CONFLICT DO NOTHING",
         [
             (seed_symbol, (target_session - timedelta(days=offset)).isoformat())
             for seed_symbol in ((symbol, "VNINDEX") if include_benchmark else (symbol,))
@@ -182,14 +183,15 @@ def test_live_deep_analysis_plan_reuses_fresh_evidence(tmp_path: Path) -> None:
             entities={"symbol": "FPT", "date": "today"},
         )
     )
-    plan.steps.append(
+    plan.steps.insert(
+        1,
         ToolPlanStep(
             step_id="deep_hpg",
             tool_name="analysis.deep_symbol",
             arguments={"symbol": "HPG", "date": "today"},
             purpose="Analyze HPG using its requested session",
             required_permission="READ_WAREHOUSE",
-        )
+        ),
     )
     request = AssistantRequest(
         current_user_prompt="phan tich co phieu FPT",
@@ -203,7 +205,7 @@ def test_live_deep_analysis_plan_reuses_fresh_evidence(tmp_path: Path) -> None:
             conn,
             requested_date,
             symbol="HPG",
-            include_benchmark=False,
+            include_benchmark=True,
         )
         session_id = create_assistant_session(
             conn,
@@ -261,6 +263,6 @@ def test_live_deep_analysis_plan_reuses_fresh_evidence(tmp_path: Path) -> None:
     ]
     assert answer.summary
     assert [json.loads(trace[0])["date"] for trace in deep_traces] == [
-        latest_validated_date,
         "today",
+        latest_validated_date,
     ]

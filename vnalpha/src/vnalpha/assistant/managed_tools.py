@@ -35,10 +35,6 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
     ) -> dict[str, Any]:
         results: dict[str, Any] = {}
         events: list[TraceEvent] = []
-        explicitly_provisioned = any(
-            step.tool_name == "data.ensure_current_symbol"
-            for step in prepared.plan.steps
-        )
         provisioned_session: _ProvisionedSession | None = None
         for index, (step, trace_id) in enumerate(
             zip(prepared.plan.steps, trace_ids, strict=True)
@@ -59,7 +55,9 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
                         results.update(
                             executor.execute(
                                 step_plan,
-                                explicitly_provisioned=explicitly_provisioned,
+                                explicitly_provisioned=_is_provisioned_symbol(
+                                    step, provisioned_session
+                                ),
                             )
                         )
                         executor.flush_traces(connection)
@@ -75,7 +73,9 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
                         results.update(
                             executor.execute(
                                 step_plan,
-                                explicitly_provisioned=explicitly_provisioned,
+                                explicitly_provisioned=_is_provisioned_symbol(
+                                    step, provisioned_session
+                                ),
                             )
                         )
                     with self._coordinator.transaction() as connection:
@@ -92,7 +92,9 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
                     )
                 self._replay_trace_events(events, on_trace_event)
                 raise
-            provisioned_session = _provisioned_session(step, results.get(step.step_id))
+            resolved_session = _provisioned_session(step, results.get(step.step_id))
+            if resolved_session is not None:
+                provisioned_session = resolved_session
         self._replay_trace_events(events, on_trace_event)
         return results
 
@@ -119,6 +121,16 @@ def _with_provisioned_date(
     return replace(
         step,
         arguments={**step.arguments, "date": provisioned_session.resolved_date},
+    )
+
+
+def _is_provisioned_symbol(
+    step: ToolPlanStep, provisioned_session: _ProvisionedSession | None
+) -> bool:
+    return (
+        step.tool_name == "analysis.deep_symbol"
+        and provisioned_session is not None
+        and step.arguments.get("symbol") == provisioned_session.symbol
     )
 
 
