@@ -114,6 +114,7 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                 stage=AssistantFailureStage.TOOL_EXECUTION,
                 category="TOOL_EXECUTION_FAILURE",
                 correlation_id=get_correlation_id(),
+                model_route=self._llm_model(),
             ) from exc
         if on_synthesizing is not None:
             on_synthesizing()
@@ -166,18 +167,40 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                 session_status = "DEGRADED_SUCCESS"
         except Exception as exc:
             if synthesis_trace_id is not None:
-                finish_llm_trace(
+                try:
+                    finish_llm_trace(
+                        self._conn,
+                        synthesis_trace_id,
+                        status="FAILED",
+                        error={
+                            "message": sanitize_error_summary(exc),
+                            **self._raw_response_summary(
+                                self._synthesizer.last_raw_responses
+                            ),
+                        },
+                    )
+                except Exception:
+                    pass
+            try:
+                finish_prepared_turn(
+                    self._conn, prepared.prepared_turn_id, status="FAILED"
+                )
+            except Exception:
+                pass
+            try:
+                finish_assistant_session(
                     self._conn,
-                    synthesis_trace_id,
+                    prepared.assistant_session_id,
                     status="FAILED",
+                    intent=prepared.intent_result.intent,
+                    plan=prepared.plan.to_dict(),
                     error={
+                        "error_type": type(exc).__name__,
                         "message": sanitize_error_summary(exc),
-                        **self._raw_response_summary(
-                            self._synthesizer.last_raw_responses
-                        ),
                     },
                 )
-            finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="FAILED")
+            except Exception:
+                pass
             raise AssistantLifecycleError(
                 stage=AssistantFailureStage.ANSWER_VALIDATION,
                 category="SYNTHESIS_FAIL_CLOSED",
@@ -267,6 +290,16 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                 ),
             )
             session_status = "DEGRADED_SUCCESS"
+            if synthesis_trace_id is not None:
+                try:
+                    finish_llm_trace(
+                        self._conn,
+                        synthesis_trace_id,
+                        status=session_status,
+                        error=answer.research_metadata["degradation"],
+                    )
+                except Exception:
+                    pass
         try:
             finish_assistant_session(
                 self._conn,
@@ -287,6 +320,16 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                 ),
             )
             session_status = "DEGRADED_SUCCESS"
+            if synthesis_trace_id is not None:
+                try:
+                    finish_llm_trace(
+                        self._conn,
+                        synthesis_trace_id,
+                        status=session_status,
+                        error=answer.research_metadata["degradation"],
+                    )
+                except Exception:
+                    pass
         _log_assistant_lifecycle(
             "ASSISTANT_EXECUTED", "execute_prepared", status=session_status
         )

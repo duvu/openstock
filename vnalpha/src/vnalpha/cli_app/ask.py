@@ -9,7 +9,6 @@ from rich.text import Text
 
 from vnalpha.assistant.app import AssistantApp
 from vnalpha.assistant.degraded_answer import (
-    AssistantFailureStage,
     degradation_warning,
     lifecycle_warning,
 )
@@ -83,9 +82,8 @@ def register(app: typer.Typer) -> None:
                 capture_exception(exc)
                 error_console.print(
                     Text(
-                        lifecycle_warning(
-                            AssistantFailureStage.CLASSIFY, "CONNECTION_FAILURE", None
-                        ),
+                        "Assistant request could not be started. "
+                        "Check workspace access and retry.",
                         style="red",
                     )
                 )
@@ -139,11 +137,8 @@ def register(app: typer.Typer) -> None:
                 capture_exception(exc)
                 error_console.print(
                     Text(
-                        lifecycle_warning(
-                            AssistantFailureStage.ANSWER_VALIDATION,
-                            "ASSISTANT_FAILURE",
-                            None,
-                        ),
+                        "Assistant request did not produce a usable answer. "
+                        "Check logs and retry.",
                         style="red",
                     )
                 )
@@ -152,11 +147,8 @@ def register(app: typer.Typer) -> None:
                 capture_exception(exc)
                 error_console.print(
                     Text(
-                        lifecycle_warning(
-                            AssistantFailureStage.ANSWER_VALIDATION,
-                            "UNEXPECTED_FAILURE",
-                            None,
-                        ),
+                        "Assistant request did not produce a usable answer. "
+                        "Check logs and retry.",
                         style="red",
                     )
                 )

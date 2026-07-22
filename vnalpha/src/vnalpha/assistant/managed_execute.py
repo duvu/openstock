@@ -94,6 +94,8 @@ class ManagedAssistantExecution(
                 stage=AssistantFailureStage.TOOL_EXECUTION,
                 category="TOOL_EXECUTION_FAILURE",
                 correlation_id=get_correlation_id(),
+                trace_id=trace_ids[0] if trace_ids else None,
+                model_route=self._engine._llm_model(),
             ) from exc
         synthesis_trace_id: str | None = None
         trace_creation_failed = False
@@ -121,33 +123,44 @@ class ManagedAssistantExecution(
                 ),
             )
         except Exception as exc:
-            with self._coordinator.transaction() as connection:
-                if synthesis_trace_id is not None:
-                    finish_llm_trace(
+            if synthesis_trace_id is not None:
+                try:
+                    with self._coordinator.transaction() as connection:
+                        finish_llm_trace(
+                            connection,
+                            synthesis_trace_id,
+                            status="FAILED",
+                            error={
+                                "message": sanitize_error_summary(exc),
+                                **self._engine._raw_response_summary(
+                                    self._engine._synthesizer.last_raw_responses
+                                ),
+                            },
+                        )
+                except Exception:
+                    pass
+            try:
+                with self._coordinator.transaction() as connection:
+                    finish_prepared_turn(
+                        connection, prepared.prepared_turn_id, status="FAILED"
+                    )
+            except Exception:
+                pass
+            try:
+                with self._coordinator.transaction() as connection:
+                    finish_assistant_session(
                         connection,
-                        synthesis_trace_id,
+                        prepared.assistant_session_id,
                         status="FAILED",
+                        intent=prepared.intent_result.intent,
+                        plan=prepared.plan.to_dict(),
                         error={
+                            "error_type": type(exc).__name__,
                             "message": sanitize_error_summary(exc),
-                            **self._engine._raw_response_summary(
-                                self._engine._synthesizer.last_raw_responses
-                            ),
                         },
                     )
-                finish_prepared_turn(
-                    connection, prepared.prepared_turn_id, status="FAILED"
-                )
-                finish_assistant_session(
-                    connection,
-                    prepared.assistant_session_id,
-                    status="FAILED",
-                    intent=prepared.intent_result.intent,
-                    plan=prepared.plan.to_dict(),
-                    error={
-                        "error_type": type(exc).__name__,
-                        "message": sanitize_error_summary(exc),
-                    },
-                )
+            except Exception:
+                pass
             raise AssistantLifecycleError(
                 stage=AssistantFailureStage.ANSWER_VALIDATION,
                 category="SYNTHESIS_FAIL_CLOSED",
@@ -264,6 +277,17 @@ class ManagedAssistantExecution(
                 ),
             )
             session_status = "DEGRADED_SUCCESS"
+            if synthesis_trace_id is not None:
+                try:
+                    with self._coordinator.transaction() as connection:
+                        finish_llm_trace(
+                            connection,
+                            synthesis_trace_id,
+                            status=session_status,
+                            error=answer.research_metadata["degradation"],
+                        )
+                except Exception:
+                    pass
         try:
             with self._coordinator.transaction() as connection:
                 finish_assistant_session(
@@ -285,6 +309,17 @@ class ManagedAssistantExecution(
                 ),
             )
             session_status = "DEGRADED_SUCCESS"
+            if synthesis_trace_id is not None:
+                try:
+                    with self._coordinator.transaction() as connection:
+                        finish_llm_trace(
+                            connection,
+                            synthesis_trace_id,
+                            status=session_status,
+                            error=answer.research_metadata["degradation"],
+                        )
+                except Exception:
+                    pass
         _log_assistant_lifecycle(
             "ASSISTANT_EXECUTED", "execute_prepared", status=session_status
         )

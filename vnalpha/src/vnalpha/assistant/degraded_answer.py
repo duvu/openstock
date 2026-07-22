@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from os import environ
 from pathlib import Path
+from re import fullmatch
 from subprocess import DEVNULL, check_output
 from typing import Any, Final
 
@@ -12,12 +13,32 @@ from vnalpha.assistant.research_templates import (
     build_deterministic_research_answer,
     is_research_intent,
 )
-from vnalpha.core.text_safety import sanitize_text
 from vnalpha.maintenance.software_identity import resolve_software_identity
 from vnalpha.observability.context import get_correlation_id
 from vnalpha.tools.setup import TOOL_PERMISSIONS
 
 _PUBLIC_WARNING: Final = "AI synthesis unavailable; showing deterministic result."
+_LIFECYCLE_WARNING: Final = "Assistant request did not produce a usable answer."
+_PUBLIC_WARNINGS: Final = frozenset({_PUBLIC_WARNING, _LIFECYCLE_WARNING})
+_PUBLIC_CATEGORIES: Final = frozenset(
+    {
+        "AUDIT_PERSIST_FAILURE",
+        "CLASSIFICATION_FAILURE",
+        "CONTEXT_POLICY_REJECTED",
+        "GATEWAY_FAILURE",
+        "GROUNDEDNESS_OR_POLICY_REJECTED",
+        "KNOWLEDGE_PROJECTION_FAILURE",
+        "INPUT_VALIDATION",
+        "PLAN_BUILD_FAILURE",
+        "SYNTHESIS_FAIL_CLOSED",
+        "SYNTHESIS_PARSE_FAILURE",
+        "SYNTHESIS_TRACE_CREATE_FAILURE",
+        "SYNTHESIS_TRACE_PERSIST_FAILURE",
+        "SESSION_FINALIZE_FAILURE",
+        "STRUCTURED_OUTPUT_INVALID",
+        "TOOL_EXECUTION_FAILURE",
+    }
+)
 
 
 class AssistantFailureStage(StrEnum):
@@ -47,10 +68,14 @@ class AssistantDegradation:
             "stage": self.stage.value,
             "category": self.category,
             "warning": self.warning,
-            "correlation_id": self.correlation_id or get_correlation_id(),
-            "trace_id": self.trace_id or "",
-            "model_route": self.model_route or "",
-            "build_sha": self.build_sha or _runtime_build_sha() or "unavailable",
+            "correlation_id": _public_identifier(
+                "correlation_id", self.correlation_id or get_correlation_id()
+            ),
+            "trace_id": _public_identifier("trace_id", self.trace_id),
+            "model_route": _public_identifier("model_route", self.model_route),
+            "build_sha": _public_identifier(
+                "build_sha", self.build_sha or _runtime_build_sha()
+            ),
         }
         return {key: value for key, value in values.items() if value}
 
@@ -145,7 +170,7 @@ def lifecycle_warning(
     return (
         diagnostic_warning(
             {
-                "warning": "Assistant request did not produce a usable answer.",
+                "warning": _LIFECYCLE_WARNING,
                 "stage": stage.value,
                 "category": category,
                 "correlation_id": correlation_id or get_correlation_id(),
@@ -162,17 +187,33 @@ def diagnostic_warning(diagnostic: dict[str, Any]) -> str | None:
     warning = diagnostic.get("warning")
     stage = diagnostic.get("stage")
     category = diagnostic.get("category")
-    correlation_id = diagnostic.get("correlation_id")
-    if not all(
-        isinstance(value, str) and value for value in (warning, stage, category)
+    if (
+        warning not in _PUBLIC_WARNINGS
+        or category not in _PUBLIC_CATEGORIES
+        or not isinstance(stage, str)
     ):
         return None
-    suffix = f" stage={stage} category={category}"
+    try:
+        public_stage = AssistantFailureStage(stage)
+    except ValueError:
+        return None
+    suffix = f" stage={public_stage.value} category={category}"
     for key in ("correlation_id", "trace_id", "model_route", "build_sha"):
-        value = diagnostic.get(key)
-        if isinstance(value, str) and value:
-            suffix += f" {key}={sanitize_text(value)}"
-    return sanitize_text(warning) + suffix
+        if value := _public_identifier(key, diagnostic.get(key)):
+            suffix += f" {key}={value}"
+    return warning + suffix
+
+
+def _public_identifier(key: str, value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    patterns = {
+        "correlation_id": r"[0-9a-f]{16,64}",
+        "trace_id": r"[0-9a-f-]{16,64}",
+        "model_route": r"[A-Za-z0-9._:/-]{1,120}",
+        "build_sha": r"[0-9a-f]{7,64}",
+    }
+    return value if fullmatch(patterns[key], value) else ""
 
 
 def _is_read_only_plan(plan: AssistantPlan) -> bool:
@@ -232,11 +273,11 @@ def _data_summary(plan: AssistantPlan, tool_outputs: dict[str, Any]) -> str:
 def _runtime_build_sha() -> str | None:
     configured = environ.get("VNALPHA_BUILD_SHA") or environ.get("GITHUB_SHA")
     if configured:
-        return sanitize_text(configured)
+        return _public_identifier("build_sha", configured) or None
     try:
         source_commit = resolve_software_identity().source_commit
         if source_commit:
-            return sanitize_text(source_commit)
+            return _public_identifier("build_sha", source_commit) or None
         return (
             check_output(
                 ["git", "-C", str(Path(__file__).parents[4]), "rev-parse", "HEAD"],

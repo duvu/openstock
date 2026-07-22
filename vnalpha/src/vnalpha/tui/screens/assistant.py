@@ -5,11 +5,7 @@ from __future__ import annotations
 from rich.text import Text
 
 from vnalpha.assistant.app import AssistantApp
-from vnalpha.assistant.degraded_answer import (
-    AssistantFailureStage,
-    degradation_warning,
-    lifecycle_warning,
-)
+from vnalpha.assistant.degraded_answer import degradation_warning, lifecycle_warning
 from vnalpha.assistant.errors import (
     AssistantInputValidationError,
     AssistantLifecycleError,
@@ -127,11 +123,8 @@ if _TEXTUAL_AVAILABLE:
                 capture_exception(exc)
                 answer_panel.update(
                     Text(
-                        lifecycle_warning(
-                            AssistantFailureStage.ANSWER_VALIDATION,
-                            "UNEXPECTED_FAILURE",
-                            None,
-                        ),
+                        "Assistant request did not produce a usable answer. "
+                        "Check logs and retry.",
                         style="red",
                     )
                 )

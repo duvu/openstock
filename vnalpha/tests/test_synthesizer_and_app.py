@@ -161,7 +161,7 @@ class TestAnswerSynthesizer:
     def test_synthesizer_preserves_read_only_results_when_degraded(
         self, conn, monkeypatch
     ):
-        monkeypatch.setenv("VNALPHA_BUILD_SHA", "test-build-sha")
+        monkeypatch.setenv("VNALPHA_BUILD_SHA", "0123456789abcdef")
         client = FakeLLMClient(responses=[(VALID_SYNTHESIS_JSON, {})])
         synth = AnswerSynthesizer(client)
         plan = _make_scan_plan()
@@ -280,7 +280,9 @@ class TestAnswerSynthesizer:
         assert result.research_metadata["degradation"]["model_route"] == (
             "FailingSynthesisGateway"
         )
-        assert result.research_metadata["degradation"]["build_sha"] == "test-build-sha"
+        assert result.research_metadata["degradation"]["build_sha"] == (
+            "0123456789abcdef"
+        )
         warning = degradation_warning(result)
         assert warning is not None
         assert "stage=SYNTHESIS_CALL" in warning
@@ -288,7 +290,7 @@ class TestAnswerSynthesizer:
         assert "correlation_id=" in warning
         assert "trace_id=" in warning
         assert "model_route=FailingSynthesisGateway" in warning
-        assert "build_sha=test-build-sha" in warning
+        assert "build_sha=0123456789abcdef" in warning
         rendered_tui_answer = render_assistant_answer(result).plain
         assert "Warning: AI synthesis unavailable" in rendered_tui_answer
         assert "stage=SYNTHESIS_CALL" in rendered_tui_answer
@@ -375,12 +377,34 @@ class TestAnswerSynthesizer:
         lifecycle = lifecycle_warning(
             AssistantFailureStage.CLASSIFY,
             "CLASSIFICATION_FAILURE",
-            "corr-1",
+            "0123456789abcdef",
         )
         assert "stage=CLASSIFY" in lifecycle
         assert "category=CLASSIFICATION_FAILURE" in lifecycle
-        assert "correlation_id=corr-1" in lifecycle
+        assert "correlation_id=0123456789abcdef" in lifecycle
         assert "build-secret" not in lifecycle
+
+        unsafe_answer = AssistantAnswer(
+            summary="safe",
+            basis="safe",
+            risks_caveats="safe",
+            tool_trace_summary="safe",
+            research_metadata={
+                "degradation": {
+                    "warning": "AI synthesis unavailable; showing deterministic result.",
+                    "stage": "SYNTHESIS_CALL",
+                    "category": "GATEWAY_FAILURE",
+                    "correlation_id": "prompt=secret",
+                    "trace_id": "provider-payload",
+                    "model_route": "payload=secret",
+                    "build_sha": "api_key=secret",
+                }
+            },
+        )
+        unsafe_warning = degradation_warning(unsafe_answer)
+        assert unsafe_warning is not None
+        assert "secret" not in unsafe_warning
+        assert "trace_id=" not in unsafe_warning
 
         with monkeypatch.context() as finalization_patch:
             finalization_patch.setattr(

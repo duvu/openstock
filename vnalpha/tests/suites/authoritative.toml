@@ -846,7 +846,7 @@ test = "tests/test_symbol_memory_runtime_evaluation.py::test_symbol_memory_runti
 [[contract]]
 id = "synthesizer-and-app-testanswersynthesizer-test-synthesizer-returns-answer-with-summary"
 domain = "application"
-test = "tests/test_synthesizer_and_app.py::TestAnswerSynthesizer::test_synthesizer_returns_answer_with_summary"
+test = "tests/test_synthesizer_and_app.py::TestAnswerSynthesizer::test_synthesizer_preserves_read_only_results_when_degraded"
 
 [[contract]]
 id = "textual-renderer-research-test-deep-analysis-renderer-surfaces-workflow-metadata"

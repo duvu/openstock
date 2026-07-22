@@ -345,6 +345,8 @@ class LLMGatewayClient:
         for decision in routes:
             if previous is not None:
                 emit_fallback_used(previous, decision, safe_metadata)
+            self._last_route_decision = decision
+            set_last_route_decision(decision)
             try:
                 content, usage = self._call_model(
                     decision,
@@ -357,8 +359,6 @@ class LLMGatewayClient:
                 last_error = exc.error
                 previous = decision
                 continue
-            self._last_route_decision = decision
-            set_last_route_decision(decision)
             usage_payload = dict(usage)
             usage_payload["model_route"] = decision.to_dict()
             return content, usage_payload
