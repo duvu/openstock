@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 
 import duckdb
 
 from vnalpha.assistant.executor import AssistantExecutor
 from vnalpha.assistant.models import IntentResult
 from vnalpha.assistant.planner import PlanBuilder
-from vnalpha.data_availability import ensure as availability_ensure
 from vnalpha.data_availability.deep_readiness import (
     DeepAnalysisReadinessRequest,
     DeepAnalysisReadinessService,
@@ -17,10 +17,6 @@ from vnalpha.data_availability.models import (
     EnsureDataAction,
     EnsureDataResult,
     EnsureDataStatus,
-)
-from vnalpha.data_availability.policy import DataAvailabilityPolicy
-from vnalpha.data_provisioning import (
-    ensure_current_symbol as current_symbol_provisioning,
 )
 from vnalpha.warehouse.assistant_repo import create_assistant_session
 from vnalpha.warehouse.migrations import run_migrations
@@ -59,7 +55,8 @@ def _ensure_result(
 
 
 def _seed_cached_deep_analysis(conn: duckdb.DuckDBPyConnection) -> None:
-    target_date = "2026-07-10"
+    target_date = "2026-07-22"
+    target_session = date.fromisoformat(target_date)
     lineage = {
         "as_of_bar_date": target_date,
         "scoring_version": "v1",
@@ -82,7 +79,11 @@ def _seed_cached_deep_analysis(conn: duckdb.DuckDBPyConnection) -> None:
         "(symbol, time, interval, close, selected_provider, quality_status, "
         "ingestion_run_id, source_service_run_id) "
         "VALUES (?, ?, '1D', 100.0, 'fixture', 'pass', 'fixture-run', 'service-run')",
-        [("FPT", target_date), ("VNINDEX", target_date)],
+        [
+            (symbol, (target_session - timedelta(days=offset)).isoformat())
+            for symbol in ("FPT", "VNINDEX")
+            for offset in range(120)
+        ],
     )
     conn.execute(
         "INSERT INTO feature_snapshot "
@@ -90,7 +91,7 @@ def _seed_cached_deep_analysis(conn: duckdb.DuckDBPyConnection) -> None:
         "source_row_count, benchmark_row_count, feature_data_status, "
         "feature_build_version, lineage_json, feature_profile, neutral_completeness, "
         "relative_strength_completeness) "
-        "VALUES ('FPT', ?, 100.0, ?, ?, 1, 1, 'EXACT_DATE', 'v1', ?, "
+        "VALUES ('FPT', ?, 100.0, ?, ?, 120, 120, 'EXACT_DATE', 'v1', ?, "
         "'STANDARD_120', 'COMPLETE', 'COMPLETE')",
         [target_date, target_date, target_date, json.dumps(lineage)],
     )
@@ -115,7 +116,7 @@ def _seed_cached_deep_analysis(conn: duckdb.DuckDBPyConnection) -> None:
     )
 
 
-def test_readiness_reports_actionable_core_status(monkeypatch) -> None:
+def test_readiness_reports_actionable_core_status() -> None:
     conn = duckdb.connect()
     run_migrations(conn=conn)
     service = DeepAnalysisReadinessService(
@@ -165,36 +166,11 @@ def test_readiness_reports_actionable_core_status(monkeypatch) -> None:
     )
 
     _seed_cached_deep_analysis(conn)
-    cache_policy = DataAvailabilityPolicy(
-        min_required_bars=1,
-        lookback_days=1,
-    )
-
-    def _ensure_cached_symbol(
-        ensure_conn: duckdb.DuckDBPyConnection,
-        symbol: str,
-        target_date: str | None,
-        *,
-        force_refresh: bool = False,
-    ):
-        return availability_ensure.ensure_symbol_analysis_ready(
-            ensure_conn,
-            symbol,
-            target_date,
-            policy=cache_policy,
-            force_refresh=force_refresh,
-        )
-
-    monkeypatch.setattr(
-        current_symbol_provisioning,
-        "ensure_symbol_analysis_ready",
-        _ensure_cached_symbol,
-    )
     plan = PlanBuilder().build(
         IntentResult(
             intent="deep_analyze_symbol",
             confidence=1.0,
-            entities={"symbol": "FPT", "date": "2026-07-10"},
+            entities={"symbol": "FPT", "date": "2026-07-22"},
         )
     )
     session_id = create_assistant_session(
@@ -214,7 +190,7 @@ def test_readiness_reports_actionable_core_status(monkeypatch) -> None:
     assert provisioning["reused_fresh_data"] is True
     assert analysis["symbol"] == "FPT"
     assert analysis["available"] is True
-    assert analysis["as_of_date"] == "2026-07-10"
+    assert analysis["as_of_date"] == "2026-07-22"
     assert analysis["candidate"]["score"] == 0.75
     assert analysis["missing_data"] == []
     conn.close()
