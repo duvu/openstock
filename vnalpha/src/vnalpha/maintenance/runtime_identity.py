@@ -84,7 +84,11 @@ def collect_runtime_identity(
     source_commit = resolved_software_identity.source_commit or _source_checkout_commit(
         Path(__file__).resolve().parents[1]
     )
-    current_source_commit = _source_checkout_commit(current_checkout_path or Path.cwd())
+    current_source_commit = (
+        _source_checkout_commit(current_checkout_path)
+        if current_checkout_path is not None
+        else None
+    )
     return RuntimeIdentity(
         application_version=resolved_software_identity.package_version,
         source_commit=source_commit,

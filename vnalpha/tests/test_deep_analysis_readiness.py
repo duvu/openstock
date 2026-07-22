@@ -20,6 +20,7 @@ from vnalpha.core.dates import resolve_market_session_date
 from vnalpha.data_availability.deep_readiness import (
     DeepAnalysisReadinessRequest,
     DeepAnalysisReadinessService,
+    ReadinessArtifactStatus,
 )
 from vnalpha.data_availability.models import (
     EnsureDataAction,
@@ -141,7 +142,23 @@ def _seed_cached_deep_analysis(
 
 def test_readiness_reports_actionable_core_status() -> None:
     conn = duckdb.connect()
-    run_migrations(conn=conn)
+    cache_result = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, _date: _ensure_result(
+            status=EnsureDataStatus.READY,
+            actions=[EnsureDataAction.CACHE_HIT],
+        )
+    ).ensure_ready(DeepAnalysisReadinessRequest(conn, "FPT", "2026-07-10"))
+
+    assert cache_result.is_ready is True
+    assert {
+        artifact.status for artifact in cache_result.artifacts if artifact.blocking
+    } == {ReadinessArtifactStatus.READY}
+    assert {
+        artifact.status for artifact in cache_result.artifacts if not artifact.blocking
+    } == {ReadinessArtifactStatus.NOT_REQUESTED}
+    assert cache_result.actions == (EnsureDataAction.CACHE_HIT.value,)
+    assert cache_result.correlation_id
+
     failed_result = DeepAnalysisReadinessService(
         ensure=lambda _conn, _symbol, _date: (_ for _ in ()).throw(RuntimeError())
     ).ensure_ready(DeepAnalysisReadinessRequest(conn, "FPT", "2026-07-10"))
