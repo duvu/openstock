@@ -126,6 +126,7 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                             ),
                         },
                         usage=self._engine._classifier.last_usage,
+                        model=self._engine._llm_model(),
                     )
             except Exception as exc:
                 raise AssistantLifecycleError(

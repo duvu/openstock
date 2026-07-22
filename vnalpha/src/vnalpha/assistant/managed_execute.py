@@ -262,6 +262,7 @@ class ManagedAssistantExecution(
                         error=degradation.to_dict()
                         if degradation is not None
                         else None,
+                        model=self._engine._llm_model(),
                     )
             except Exception:
                 answer = with_degradation(
@@ -342,6 +343,7 @@ class ManagedAssistantExecution(
                             synthesis_trace_id,
                             status=session_status,
                             error=answer.research_metadata["degradation"],
+                            model=self._engine._llm_model(),
                         )
                 except Exception:
                     self._record_persistence_failure()
@@ -374,6 +376,7 @@ class ManagedAssistantExecution(
                             synthesis_trace_id,
                             status=session_status,
                             error=answer.research_metadata["degradation"],
+                            model=self._engine._llm_model(),
                         )
                 except Exception:
                     self._record_persistence_failure()

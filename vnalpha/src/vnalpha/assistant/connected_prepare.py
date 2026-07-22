@@ -130,6 +130,7 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                         ),
                     },
                     usage=self._classifier.last_usage,
+                    model=self._llm_model(),
                 )
             except Exception as exc:
                 raise AssistantLifecycleError(

@@ -235,6 +235,7 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                     },
                     usage=self._synthesizer.last_usage,
                     error=degradation.to_dict() if degradation is not None else None,
+                    model=self._llm_model(),
                 )
             except Exception:
                 answer = with_degradation(
@@ -310,6 +311,7 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                         synthesis_trace_id,
                         status=session_status,
                         error=answer.research_metadata["degradation"],
+                        model=self._llm_model(),
                     )
                 except Exception:
                     self._record_persistence_failure()
@@ -340,6 +342,7 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                         synthesis_trace_id,
                         status=session_status,
                         error=answer.research_metadata["degradation"],
+                        model=self._llm_model(),
                     )
                 except Exception:
                     self._record_persistence_failure()
