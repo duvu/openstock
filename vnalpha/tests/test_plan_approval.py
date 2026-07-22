@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import duckdb
+
 from vnalpha.assistant.models import (
     AssistantPlan,
     AssistantRequest,
@@ -12,6 +14,7 @@ from vnalpha.assistant.models import (
     PreparedAssistantTurn,
     ToolPlanStep,
 )
+from vnalpha.chat.controller import ChatController
 from vnalpha.chat.modes import (
     ExecutionMode,
 )
@@ -62,10 +65,7 @@ def _make_controller(
     def on_message(style: str, text: str) -> None:
         messages.append((style, text))
 
-    # Import here so tests fail loudly if the module is broken
-    from vnalpha.chat.controller import ChatController
-
-    schema_connection = MagicMock()
+    schema_connection = duckdb.connect(":memory:")
     connection_factory = MagicMock(return_value=schema_connection)
     ctrl = ChatController(
         on_message=on_message,
@@ -80,12 +80,7 @@ def test_prepare_turn_routes_with_chat_session_identity() -> None:
     controller._chat_session_id = "chat-session"
     app = MagicMock()
 
-    with (
-        patch("vnalpha.assistant.app.AssistantApp", return_value=app),
-        patch("vnalpha.warehouse.connection.get_connection") as get_connection,
-        patch("vnalpha.warehouse.migrations.run_migrations"),
-    ):
-        get_connection.return_value.close = MagicMock()
+    with patch("vnalpha.assistant.app.AssistantApp", return_value=app):
         controller._prepare_turn("show candidates", None)
 
     request = app.prepare.call_args.args[0]

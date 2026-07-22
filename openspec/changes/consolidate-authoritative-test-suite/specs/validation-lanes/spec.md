@@ -40,8 +40,9 @@ after that aggregate.
 - **THEN** manifest validation fails before pytest executes.
 
 ### Requirement: CI routing SHALL remain out of scope
-Issue #348 SHALL NOT add, modify, require or use GitHub Actions jobs,
-path-aware routing, required gates or hosted workflow evidence.
+Issue #348 SHALL NOT add, require or use GitHub Actions jobs, path-aware
+routing, required gates or hosted workflow evidence. It MAY remove the
+#348-owned routing artifacts solely to restore the pre-#349 generic workflow.
 
 #### Scenario: The active change is completed
 

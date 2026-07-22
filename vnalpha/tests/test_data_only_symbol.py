@@ -13,9 +13,7 @@ from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.repositories import create_ingestion_run
 
 
-def test_data_only_symbol_updates_only_missing_tails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_raw_ready_canonical_stale_promotes_only_the_missing_tail() -> None:
     connection = in_memory_connection()
     run_migrations(conn=connection, emit_observability=False)
     connection.execute("INSERT INTO symbol_master (symbol) VALUES ('FPT')")
@@ -52,6 +50,10 @@ def test_data_only_symbol_updates_only_missing_tails(
     assert [action.action for action in result.actions] == ["build_canonical"]
     assert rows == [("2026-01-05",), ("2026-01-06",)]
 
+
+def test_stale_raw_evidence_syncs_only_the_missing_session_tail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     connection = in_memory_connection()
     run_migrations(conn=connection, emit_observability=False)
     connection.execute("INSERT INTO symbol_master (symbol) VALUES ('FPT')")

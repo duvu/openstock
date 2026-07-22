@@ -27,15 +27,13 @@ is separately demonstrated.
 
 The source-aware validator found five unrecorded #370 contract nodes and one
 moved intent node. The intent entry was retargeted without adding coverage.
-Equivalent #370 scenarios were merged at their public boundaries, reducing
-five split functions to two owners plus the existing canonical-promotion owner:
-
-- canonical promotion now proves invalid-data quarantine and date-bound
-  promotion in one contract;
-- current-symbol research proves ready evidence reuse and missing-work queue
-  joining in one contract;
-- data-only provisioning proves both canonical and raw-evidence missing-tail
-  updates in one contract.
+The five #370 nodes are distinct public or risk contracts and remain separate:
+bounded canonical promotion, ready-evidence reuse, queue joining/escalation,
+canonical-tail promotion and raw-evidence-tail sync.
+To preserve the budget without weakening those contracts, three duplicate
+Textual app-mount smoke tests were removed; the retained workspace-context
+startup contract mounts the same application path and verifies the stronger
+workspace lifecycle result.
 
 The resulting source-aware inventory is 220 nodes with no unclassified test
 definitions.

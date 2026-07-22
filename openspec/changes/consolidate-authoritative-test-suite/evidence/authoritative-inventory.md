@@ -8,7 +8,7 @@ emits 220 unique nodes.
 | Disposition | Scope | Evidence |
 | --- | --- | --- |
 | KEEP | Every node in `vnalpha/tests/suites/authoritative.toml` | One public or distinct approved risk contract per exact source node. |
-| MERGE | Equivalent canonical-promotion, current-symbol and data-only-symbol scenarios | Their public-boundary assertions are retained in one owner per feature. |
+| MERGE | Three duplicate Textual app-mount smoke tests | One workspace-context startup owner mounts the same public application path. |
 | REPLACE | Broad file-glob suite and aggregate wrappers | Local domain selection resolves exact manifest nodes. |
 | DELETE | Legacy duplicate, issue-labelled, literal and implementation-detail test nodes absent from the source-aware inventory | The validator rejects any remaining unclassified `test_*` definition. |
 

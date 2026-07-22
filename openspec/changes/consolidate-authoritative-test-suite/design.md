@@ -33,8 +33,8 @@ recovery, migration, package and fail-closed risks retain a dedicated owner.
 ### 4. CI routing is not part of this change
 
 The prior #348 path classifier and conditional workflow jobs are removed. This
-change neither adds nor modifies required CI policy; the existing generic
-workflow remains issue #147's concern. Local evidence is sufficient for this
+one-time rollback restores the pre-#349 generic jobs and gate exactly; it does
+not add or modify their policy. Local evidence is sufficient for this
 development-only issue.
 
 ### 5. Package acceptance remains manual and input-scoped

@@ -19,13 +19,14 @@ out of scope and must not be expanded, required or used as closure evidence.
 - Correct the manifest, runner dependencies and owning tests as subsequent
   feature work changes source nodes.
 - Remove the #348-owned CI path-routing artifacts introduced by the earlier
-  snapshot. Existing generic merge-gate workflow behavior remains owned by
-  issue #147 and is not changed or relied upon here.
+  snapshot and restore the pre-#349 generic workflow unchanged. The retained
+  generic merge-gate policy is not relied upon as #348 evidence.
 
 ## Non-goals
 
-- Adding, changing, requiring or observing GitHub Actions, workflow artifacts,
-  path-aware routing, hosted evidence, nightly enforcement or CI expansion.
+- Adding, requiring or observing GitHub Actions, path-aware routing, hosted
+  evidence, nightly enforcement or CI expansion. The one-time removal of
+  #348-owned routing artifacts is a rollback, not a new CI policy.
 - Product behavior, warehouse schema, packaging/release acceptance, broker,
   trading, account or autonomous execution capability changes.
 

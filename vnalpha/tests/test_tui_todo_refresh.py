@@ -8,20 +8,12 @@ from rich.console import Console, Group
 from textual.widgets import Input
 
 from vnalpha.commands.coordinated_executor import CoordinatedCommandExecutor
+from vnalpha.core.config import reset_config
 from vnalpha.tui.app import VnAlphaApp
 from vnalpha.tui.widgets.todo_panel import TodoPanel
+from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.workspace_context.lifecycle import get_or_create_latest_workspace
 from vnalpha.workspace_context.models import WorkspaceState
-
-
-def _connection():
-    return duckdb.connect(":memory:")
-
-
-@pytest.fixture
-def mock_get_connection():
-    with patch("vnalpha.warehouse.connection.get_connection", side_effect=_connection):
-        yield
 
 
 def _workspace_state():
@@ -43,8 +35,16 @@ def _renderable_text(renderable: Group) -> str:
 
 @pytest.mark.asyncio
 async def test_todo_add_updates_workspace_without_side_panel(
-    mock_get_connection, tmp_path, monkeypatch
+    tmp_path, monkeypatch
 ) -> None:
+    warehouse_path = tmp_path / "warehouse.duckdb"
+    monkeypatch.setenv("VNALPHA_WAREHOUSE_PATH", str(warehouse_path))
+    reset_config()
+    connection = duckdb.connect(str(warehouse_path))
+    try:
+        run_migrations(conn=connection, emit_observability=False)
+    finally:
+        connection.close()
     monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     task_text = "Persist TODO after routing"
     app = VnAlphaApp(date="2024-01-10")
