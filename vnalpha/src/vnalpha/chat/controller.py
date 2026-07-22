@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator, Literal
 
-from vnalpha.assistant.app import AssistantApp
+import vnalpha.assistant.app as assistant_app
 from vnalpha.assistant.degraded_answer import degradation_warning, lifecycle_warning
 from vnalpha.assistant.errors import (
     ActionableToolExecutionError,
@@ -605,7 +605,9 @@ class ChatController:
             try:
                 with self._write_connection() as conn:
                     self._ensure_chat_schema_ready()
-                    AssistantApp(conn, surface=self._surface).cancel_prepared(prepared)
+                    assistant_app.AssistantApp(
+                        conn, surface=self._surface
+                    ).cancel_prepared(prepared)
             except Exception as exc:
                 _capture_exception_safely(exc)
                 error_text = format_runtime_error(
@@ -844,7 +846,7 @@ class ChatController:
         self._ensure_chat_schema_ready()
         if self._connection_factory is not None:
             with self._write_connection() as connection:
-                app = AssistantApp(connection, surface="tui-chat")
+                app = assistant_app.AssistantApp(connection, surface="tui-chat")
                 return app.ask(
                     question,
                     date=self._target_date,
@@ -853,7 +855,7 @@ class ChatController:
                     on_trace_event=self._on_trace,
                     workspace_context=workspace_context,
                 )
-        return AssistantApp.managed(surface="tui-chat").ask(
+        return assistant_app.AssistantApp.managed(surface="tui-chat").ask(
             question,
             date=self._target_date,
             date_is_implicit=self._target_date_is_implicit,
@@ -879,8 +881,12 @@ class ChatController:
         )
         if self._connection_factory is not None:
             with self._write_connection() as connection:
-                return AssistantApp(connection, surface=self._surface).prepare(request)
-        return AssistantApp.managed(surface=self._surface).prepare(request)
+                return assistant_app.AssistantApp(
+                    connection, surface=self._surface
+                ).prepare(request)
+        return assistant_app.AssistantApp.managed(surface=self._surface).prepare(
+            request
+        )
 
     def _execute_prepared_turn(self, prepared: "PreparedAssistantTurn"):
         self._ensure_chat_schema_ready()
@@ -891,12 +897,12 @@ class ChatController:
         }
         if self._connection_factory is not None:
             with self._write_connection() as connection:
-                return AssistantApp(connection, surface=self._surface).execute_prepared(
-                    prepared, **kwargs
-                )
-        return AssistantApp.managed(surface=self._surface).execute_prepared(
-            prepared, **kwargs
-        )
+                return assistant_app.AssistantApp(
+                    connection, surface=self._surface
+                ).execute_prepared(prepared, **kwargs)
+        return assistant_app.AssistantApp.managed(
+            surface=self._surface
+        ).execute_prepared(prepared, **kwargs)
 
     def _approve_prepared_turn(self, prepared: "PreparedAssistantTurn") -> None:
         self._ensure_chat_schema_ready()
