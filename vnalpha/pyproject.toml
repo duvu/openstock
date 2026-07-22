@@ -26,7 +26,7 @@ dependencies = [
 dev = [
     "pytest>=8",
     "pytest-asyncio",
-    "ruff>=0.4",
+    "ruff>=0.12.0",
     "setuptools>=68",
     "respx>=0.21",
     "build>=1.2",
@@ -54,6 +54,10 @@ src = ["src"]
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "C4", "T201"]
 ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
