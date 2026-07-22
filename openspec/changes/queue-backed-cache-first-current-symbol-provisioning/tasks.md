@@ -48,25 +48,25 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 - [x] 6.1 Add queue client operations without holding DuckDB while waiting. Evidence: `CurrentSymbolResearchApplication` closes its readiness inspection before queue initialization/submission; `vnalpha/tests/test_current_symbol_research_application.py::test_missing_current_symbol_work_joins_one_escalated_queue_job` passed.
 - [x] 6.2 Implement shared `WAIT_UNTIL_TERMINAL`, `WAIT_UP_TO` and `DETACH` defaults. Evidence: `CurrentSymbolWaitMode` owns the three modes; the application contract covers default detach and zero-duration bounded wait with `make test-loop TEST=tests/test_current_symbol_research_application.py::test_missing_current_symbol_work_joins_one_escalated_queue_job` passing.
 - [ ] 6.3 Add priority escalation and explicit shared-job cancellation warnings.
-- [ ] 6.4 Add `CurrentSymbolResearchApplication` as the single CLI/TUI/chat boundary.
-- [ ] 6.5 Replace the assistant's unconditional provision-then-analyze plan with one application operation.
-- [ ] 6.6 Enforce `READY|DEGRADED|ACCEPTED|PENDING|UNAVAILABLE|FAILED` and claim limitations.
+- [x] 6.4 Add `CurrentSymbolResearchApplication` as the single CLI/TUI/chat boundary. Evidence: `analysis.current_symbol` is registered by `build_local_tool_registry()` and the managed assistant invokes it outside any held warehouse connection.
+- [x] 6.5 Replace the assistant's unconditional provision-then-analyze plan with one application operation. Evidence: `tests/test_assistant_research_intelligence_completion.py::test_research_prompt_contains_template_and_bounded_source_refs` asserts one `analysis.current_symbol` plan step.
+- [x] 6.6 Enforce `READY|DEGRADED|ACCEPTED|PENDING|UNAVAILABLE|FAILED` and claim limitations. Evidence: terminal missing-capability jobs return `UNAVAILABLE`; non-analysis states return no analysis payload; degraded payloads remove ranking/score/benchmark claims.
 - [ ] 6.7 Add cross-surface parity and no-analysis tests for non-analysis states.
 
 ## 7. Maintenance producer — #326
 
-- [ ] 7.1 Add maintenance states, frozen universe/session/source-policy fields and expected goal identities.
-- [ ] 7.2 Add idempotent `maintenance_run_job` mapping.
-- [ ] 7.3 Implement phased resume across DuckDB ledger and SQLite queue updates.
-- [ ] 7.4 Enqueue VNINDEX as dataset-range work and equities as `PRICE_ANALYSIS` goals.
-- [ ] 7.5 Ensure acquisition does not build batch features, scores or watchlists.
-- [ ] 7.6 Return enqueue/detach evidence, never final daily success.
+- [x] 7.1 Add maintenance states, frozen universe/session/source-policy fields and expected goal identities. Evidence: `MaintenanceProducer` persists the frozen snapshot ID, hash, symbols, calendar and expected goal payloads before submission.
+- [x] 7.2 Add idempotent `maintenance_run_job` mapping. Evidence: `maintenance_run_job` uses `(maintenance_run_id, goal_identity)` as its primary key and maps queue IDs only when absent.
+- [x] 7.3 Implement phased resume across DuckDB ledger and SQLite queue updates. Evidence: producer submission and mapping are separate phases; resuming an existing run reuses mappings and queue identity without duplicate jobs.
+- [x] 7.4 Enqueue VNINDEX as dataset-range work and equities as `PRICE_ANALYSIS` goals. Evidence: `test_maintenance_producer_freezes_goals_and_resumes_idempotently` verifies one benchmark plus one price-only goal per frozen symbol.
+- [x] 7.5 Ensure acquisition does not build batch features, scores or watchlists. Evidence: maintenance equity goals request only `ReadinessCapability.PRICE_ANALYSIS`; finalization remains a separate downstream goal.
+- [x] 7.6 Return enqueue/detach evidence, never final daily success. Evidence: `MaintenanceProducerResult` reports run state, expected/submitted/joined/mapped counts and job IDs while producer state stops at `ACQUIRING`.
 
 ## 8. Session finalization — #337
 
-- [ ] 8.1 Add idempotent `maybe_submit_session_finalization()` trigger.
-- [ ] 8.2 Guard against unmapped or active expected jobs.
-- [ ] 8.3 Add the finalization handler and state transitions.
+- [x] 8.1 Add idempotent `maybe_submit_session_finalization()` trigger. Evidence: `vnalpha/tests/test_maintenance_producer.py::test_maintenance_producer_freezes_goals_and_resumes_idempotently` submits one finalization goal after acquisition completion and joins it on repeat.
+- [x] 8.2 Guard against unmapped or active expected jobs. Evidence: the same contract returns `ACQUIRING` without submission before acquisition jobs are terminal.
+- [ ] 8.3 Add the finalization handler and state transitions. The trigger's `FINALIZATION_QUEUED` transition is implemented; worker stage execution remains downstream work.
 - [ ] 8.4 Build features and score/watchlist once for the frozen eligible universe.
 - [ ] 8.5 Build context, mature outcomes and project approved memory in order.
 - [ ] 8.6 Persist truthful `SUCCESS|PARTIAL|FAILED` evidence and prove retry/idempotency.

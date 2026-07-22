@@ -2,45 +2,53 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from vnalpha.data_availability.deep_readiness_models import ContextRequirement
 from vnalpha.policy.tool_policy import TOOL_PERMISSIONS_BY_NAME
+from vnalpha.provisioning_queue import DEFAULT_QUEUE_PATH
+from vnalpha.tools.current_symbol_research import current_symbol_research
+from vnalpha.tools.ensure_current_symbol import ensure_current_symbol
 from vnalpha.tools.errors import ToolExecutionError
+from vnalpha.tools.fetch import fetch_symbol_data
+from vnalpha.tools.lineage import get_symbol_lineage
 from vnalpha.tools.models import ToolPermission, ToolSpec
+from vnalpha.tools.notes import create_note, list_sessions
+from vnalpha.tools.quality import get_many_quality_status, get_quality_status
 from vnalpha.tools.registry import LocalToolRegistry
+from vnalpha.tools.research_automation import (
+    create_feature,
+    run_event_study,
+    run_indicator,
+    scan_pattern,
+    test_hypothesis,
+    validate_feature,
+)
+from vnalpha.tools.research_context import (
+    get_market_regime,
+    get_sector_strength,
+    get_symbol_alignment,
+)
+from vnalpha.tools.research_intelligence import (
+    deep_symbol_analysis,
+    generate_research_scenario,
+    generate_shortlist,
+    get_setup_history,
+    summarize_watchlist_deep,
+)
+from vnalpha.tools.scoring import compare_candidates, explain_candidate
+from vnalpha.tools.watchlist import filter_watchlist, scan_watchlist
 
 TOOL_PERMISSIONS: dict[str, ToolPermission] = dict(TOOL_PERMISSIONS_BY_NAME)
 
 
-def build_local_tool_registry(conn) -> LocalToolRegistry:
+def build_local_tool_registry(
+    conn,
+    *,
+    warehouse_path: Path | str | None = None,
+    queue_path: Path | None = DEFAULT_QUEUE_PATH,
+) -> LocalToolRegistry:
     """Build a LocalToolRegistry wired to a live DuckDB connection."""
-    from vnalpha.tools.ensure_current_symbol import ensure_current_symbol
-    from vnalpha.tools.fetch import fetch_symbol_data
-    from vnalpha.tools.lineage import get_symbol_lineage
-    from vnalpha.tools.notes import create_note, list_sessions
-    from vnalpha.tools.quality import get_many_quality_status, get_quality_status
-    from vnalpha.tools.research_automation import (
-        create_feature,
-        run_event_study,
-        run_indicator,
-        scan_pattern,
-        test_hypothesis,
-        validate_feature,
-    )
-    from vnalpha.tools.research_context import (
-        get_market_regime,
-        get_sector_strength,
-        get_symbol_alignment,
-    )
-    from vnalpha.tools.research_intelligence import (
-        deep_symbol_analysis,
-        generate_research_scenario,
-        generate_shortlist,
-        get_setup_history,
-        summarize_watchlist_deep,
-    )
-    from vnalpha.tools.scoring import compare_candidates, explain_candidate
-    from vnalpha.tools.watchlist import filter_watchlist, scan_watchlist
-
     registry = LocalToolRegistry()
 
     research_tools = (
@@ -255,6 +263,18 @@ def build_local_tool_registry(conn) -> LocalToolRegistry:
             permission=ToolPermission.WRITE_DATA,
         ),
         lambda **kwargs: _fetch_data(fetch_symbol_data, conn, **kwargs),
+    )
+    registry.register(
+        ToolSpec(
+            name="analysis.current_symbol",
+            description="Provision current-symbol evidence once and compose permitted research context",
+            permission=ToolPermission.READ_SCORE,
+        ),
+        lambda **kwargs: current_symbol_research(
+            warehouse_path=warehouse_path,
+            queue_path=queue_path,
+            **kwargs,
+        ),
     )
     return registry
 

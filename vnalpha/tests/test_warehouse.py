@@ -6,16 +6,22 @@ import threading
 import duckdb
 import pytest
 
-from vnalpha.warehouse.connection import in_memory_connection
+from vnalpha.core.config import AppConfig, WarehouseConfig
+from vnalpha.warehouse import connection
+from vnalpha.warehouse.connection import (
+    WarehouseOpenError,
+    WarehouseOpenFailureKind,
+    in_memory_connection,
+    read_connection,
+)
 from vnalpha.warehouse.migrations import run_migrations
+from vnalpha.warehouse.transaction import WarehouseTransactionRollbackOnlyError
+from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
 
 def test_configured_warehouse_connection_fails_closed(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    from vnalpha.core.config import AppConfig, WarehouseConfig
-    from vnalpha.warehouse import connection
-
     configured_path = tmp_path / "configured" / "warehouse.duckdb"
 
     monkeypatch.setattr(
@@ -53,13 +59,6 @@ def test_configured_warehouse_connection_fails_closed(
 def test_warehouse_writers_are_exclusive_and_release_lock(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    from vnalpha.warehouse.connection import (
-        WarehouseOpenError,
-        WarehouseOpenFailureKind,
-        read_connection,
-    )
-    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
-
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     approved_parent = tmp_path / "approved"
     approved_parent.mkdir(mode=0o770)
@@ -100,7 +99,9 @@ def test_warehouse_writers_are_exclusive_and_release_lock(
         database.execute("INSERT INTO writes VALUES (3)")
 
     with read_connection(warehouse_path) as database:
-        assert database.execute("SELECT value FROM writes ORDER BY value").fetchall() == [
+        assert database.execute(
+            "SELECT value FROM writes ORDER BY value"
+        ).fetchall() == [
             (1,),
             (2,),
             (3,),
@@ -120,10 +121,6 @@ def test_warehouse_writers_are_exclusive_and_release_lock(
 
 
 def test_nested_warehouse_failure_rolls_back_outer_transaction(tmp_path) -> None:
-    from vnalpha.warehouse.connection import read_connection
-    from vnalpha.warehouse.transaction import WarehouseTransactionRollbackOnlyError
-    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
-
     warehouse_path = tmp_path / "warehouse.duckdb"
     coordinator = WarehouseWriteCoordinator(path=warehouse_path)
     with coordinator.transaction() as database:
@@ -220,6 +217,7 @@ def test_all_tables_created(conn):
         "group_context_snapshot",
         "maintenance_run",
         "maintenance_stage_run",
+        "maintenance_run_job",
         "fundamental_fact",
         "valuation_snapshot",
         "valuation_snapshot_revision",

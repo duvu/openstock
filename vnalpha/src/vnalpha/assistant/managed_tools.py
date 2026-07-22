@@ -14,6 +14,8 @@ from vnalpha.assistant.models import ToolPlanStep
 from vnalpha.tools.setup import TOOL_PERMISSIONS
 from vnalpha.warehouse.connection import read_connection
 
+_CURRENT_SYMBOL_TOOL = "analysis.current_symbol"
+
 
 def _is_write_step(step: ToolPlanStep) -> bool:
     return TOOL_PERMISSIONS[step.tool_name].value.startswith("WRITE_")
@@ -43,11 +45,25 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
             step_plan = replace(prepared.plan, steps=[executable_step])
             executor: AssistantExecutor | None = None
             try:
+                if step.tool_name == _CURRENT_SYMBOL_TOOL:
+                    executor = AssistantExecutor(
+                        None,
+                        assistant_session_id=prepared.assistant_session_id,
+                        warehouse_path=self._warehouse_path,
+                        on_trace_event=events.append,
+                        deferred_traces=True,
+                        prestarted_trace_ids=(trace_id,),
+                    )
+                    results.update(executor.execute(step_plan))
+                    with self._coordinator.transaction() as connection:
+                        executor.flush_traces(connection)
+                    continue
                 if _is_write_step(step):
                     with self._coordinator.transaction() as connection:
                         executor = AssistantExecutor(
                             connection,
                             assistant_session_id=prepared.assistant_session_id,
+                            warehouse_path=self._warehouse_path,
                             on_trace_event=events.append,
                             deferred_traces=True,
                             prestarted_trace_ids=(trace_id,),
@@ -66,6 +82,7 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
                         executor = AssistantExecutor(
                             connection,
                             assistant_session_id=prepared.assistant_session_id,
+                            warehouse_path=self._warehouse_path,
                             on_trace_event=events.append,
                             deferred_traces=True,
                             prestarted_trace_ids=(trace_id,),

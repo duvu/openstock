@@ -10,6 +10,7 @@ from vnalpha.assistant.models import AssistantPlan, IntentResult, ToolPlanStep
 from vnalpha.assistant.research_automation_plans import (
     RESEARCH_AUTOMATION_PLAN_BUILDERS,
 )
+from vnalpha.assistant.tool_policy import assert_assistant_plan_tool
 from vnalpha.core.symbols import SymbolFormatError, canonicalize_symbol_entities
 
 
@@ -186,11 +187,10 @@ def _build_deep_analysis_plan(entities: dict) -> AssistantPlan:
     return AssistantPlan(
         intent="deep_analyze_symbol",
         steps=[
-            _provision_step(entities, symbol),
             _step(
-                "analysis.deep_symbol",
+                "analysis.current_symbol",
                 args,
-                "Compose score, feature, level, market, sector, freshness, and lineage context",
+                "Inspect readiness, queue one repair if needed, and compose permitted research context",
                 "READ_SCORE",
             ),
         ],
@@ -501,8 +501,6 @@ def _validate_plan(plan: AssistantPlan) -> None:
     if plan.is_refusal():
         return
     for step in plan.steps:
-        from vnalpha.assistant.tool_policy import assert_assistant_plan_tool
-
         assert_assistant_plan_tool(step.tool_name, error_type=PlanValidationError)
 
 
