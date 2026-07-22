@@ -54,8 +54,10 @@ _TOOL_PERMISSIONS = TOOL_PERMISSIONS
 logger = get_logger("assistant.executor")
 
 
-def _build_tool_registry(conn):
-    return build_local_tool_registry(conn)
+def _build_tool_registry(conn, warehouse_path=None, queue_path=DEFAULT_QUEUE_PATH):
+    return build_local_tool_registry(
+        conn, warehouse_path=warehouse_path, queue_path=queue_path
+    )
 
 
 def _ensure_data_for_step(
@@ -194,10 +196,15 @@ class AssistantExecutor:
         on_trace_event: "Callable[[TraceEvent], None] | None" = None,
         deferred_traces: bool = False,
         prestarted_trace_ids: tuple[str, ...] = (),
+        *,
+        warehouse_path=None,
+        queue_path=DEFAULT_QUEUE_PATH,
     ) -> None:
         self._conn = conn
         self._assistant_session_id = assistant_session_id
-        self._registry = _build_tool_registry(conn)
+        self._registry = _build_tool_registry(
+            conn, warehouse_path=warehouse_path, queue_path=queue_path
+        )
         self._tool_executor = TracedLocalToolExecutor(
             conn,
             self._registry,
