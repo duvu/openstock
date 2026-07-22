@@ -14,7 +14,7 @@ from vnalpha.assistant.degraded_answer import (
     degradation_warning,
     lifecycle_warning,
 )
-from vnalpha.assistant.errors import SynthesisError
+from vnalpha.assistant.errors import AssistantLifecycleError, SynthesisError
 from vnalpha.assistant.gateway import FakeLLMClient
 from vnalpha.assistant.models import (
     AssistantAnswer,
@@ -277,9 +277,7 @@ class TestAnswerSynthesizer:
         assert result.research_metadata["synthesis_status"] == "DEGRADED_SUCCESS"
         assert result.research_metadata["degradation"]["stage"] == "SYNTHESIS_CALL"
         assert result.research_metadata["degradation"]["trace_id"]
-        assert result.research_metadata["degradation"]["model_route"] == (
-            "FailingSynthesisGateway"
-        )
+        assert result.research_metadata["degradation"]["model_route"] == ("client")
         assert result.research_metadata["degradation"]["build_sha"] == (
             "0123456789abcdef"
         )
@@ -289,7 +287,7 @@ class TestAnswerSynthesizer:
         assert "category=GATEWAY_FAILURE" in warning
         assert "correlation_id=" in warning
         assert "trace_id=" in warning
-        assert "model_route=FailingSynthesisGateway" in warning
+        assert "model_route=client" in warning
         assert "build_sha=0123456789abcdef" in warning
         rendered_tui_answer = render_assistant_answer(result).plain
         assert "Warning: AI synthesis unavailable" in rendered_tui_answer
@@ -396,7 +394,7 @@ class TestAnswerSynthesizer:
                     "category": "GATEWAY_FAILURE",
                     "correlation_id": "prompt=secret",
                     "trace_id": "provider-payload",
-                    "model_route": "payload=secret",
+                    "model_route": "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd",
                     "build_sha": "api_key=secret",
                 }
             },
@@ -405,6 +403,7 @@ class TestAnswerSynthesizer:
         assert unsafe_warning is not None
         assert "secret" not in unsafe_warning
         assert "trace_id=" not in unsafe_warning
+        assert "model_route=" not in unsafe_warning
 
         with monkeypatch.context() as finalization_patch:
             finalization_patch.setattr(
@@ -422,6 +421,27 @@ class TestAnswerSynthesizer:
         assert conn.execute(
             "SELECT status FROM assistant_session ORDER BY started_at DESC LIMIT 1"
         ).fetchone() == ("DEGRADED_SUCCESS",)
+
+        class FailingClassificationGateway:
+            last_raw_responses: tuple[dict, ...] = ()
+
+            def chat(self, *_args, **_kwargs):
+                raise RuntimeError("gateway unavailable")
+
+        with monkeypatch.context() as classify_patch:
+            classify_patch.setattr(
+                "vnalpha.assistant.connected_prepare.finish_llm_trace",
+                trace_failure,
+            )
+            with pytest.raises(AssistantLifecycleError) as lifecycle_error:
+                AssistantApp(conn, llm_client=FailingClassificationGateway()).ask(
+                    "thi truong hom nay"
+                )
+        assert lifecycle_error.value.stage == AssistantFailureStage.CLASSIFY
+        assert lifecycle_error.value.category == "CLASSIFICATION_FAILURE"
+        assert conn.execute(
+            "SELECT status FROM assistant_session ORDER BY started_at DESC LIMIT 1"
+        ).fetchone() == ("FAILED",)
 
         def session_failure(*_args, **_kwargs):
             raise RuntimeError("session unavailable")

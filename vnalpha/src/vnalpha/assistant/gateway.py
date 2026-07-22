@@ -10,6 +10,16 @@ from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlparse
 
+import httpx
+import structlog
+
+from vnalpha.assistant.errors import (
+    LLMConfigError,
+    LLMGatewayError,
+    LLMNoCompatibleFallbackError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
 from vnalpha.model_routing.config import ModelRoutingConfig
 from vnalpha.model_routing.integration import GatewayRouteRequest, resolve_gateway_route
 from vnalpha.model_routing.models import (
@@ -40,8 +50,6 @@ def _log_llm_error(
     finish_reason: str | None = None,
 ) -> None:
     try:
-        import structlog
-
         log = structlog.get_logger("assistant.gateway")
         log.error(
             "LLM call failed",
@@ -73,8 +81,6 @@ RETRY_AFTER_MAX_SECONDS = 300
 
 
 def _integer_env(name: str, default: int) -> int:
-    from vnalpha.assistant.errors import LLMConfigError
-
     raw = os.environ.get(name, "").strip()
     if not raw:
         return default
@@ -176,8 +182,6 @@ class LLMGatewayConfig:
         return config
 
     def validate(self) -> None:
-        from vnalpha.assistant.errors import LLMConfigError
-
         missing: list[str] = []
         if not self.endpoint.strip():
             missing.append("VNALPHA_LLM_ENDPOINT")
@@ -257,8 +261,6 @@ class LLMGatewayClient:
                 default_model_id=self._config.model
             )
         except ValueError as exc:
-            from vnalpha.assistant.errors import LLMConfigError
-
             raise LLMConfigError(f"Invalid model routing configuration: {exc}") from exc
         self._override_store = override_store or DEFAULT_OVERRIDE_STORE
         self._last_route_decision: ModelRouteDecision | None = None
@@ -297,12 +299,6 @@ class LLMGatewayClient:
         model_profile: ModelProfile | str | None = None,
         route_metadata: Mapping[str, Any] | None = None,
     ) -> tuple[str, dict]:
-        from vnalpha.assistant.errors import (
-            LLMConfigError,
-            LLMGatewayError,
-            LLMResponseError,
-        )
-
         api_key = (
             self._api_key
             if self._api_key is not None
@@ -364,8 +360,6 @@ class LLMGatewayClient:
             return content, usage_payload
 
         if strict_schema and last_error is not None and not compatible_fallbacks:
-            from vnalpha.assistant.errors import LLMNoCompatibleFallbackError
-
             if isinstance(last_error, LLMResponseError) and not (
                 last_error.error_kind == "structured_output_unsupported"
                 or last_error.status_code == 404
@@ -396,10 +390,6 @@ class LLMGatewayClient:
         api_key: str,
         route_metadata: Mapping[str, Any],
     ) -> tuple[str, dict]:
-        import httpx
-
-        from vnalpha.assistant.errors import LLMResponseError, LLMTimeoutError
-
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",

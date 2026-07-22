@@ -77,18 +77,21 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                     session_id=request.routing_session_id or session_id,
                 )
             except Exception as exc:
-                with self._coordinator.transaction() as connection:
-                    finish_llm_trace(
-                        connection,
-                        classify_trace_id,
-                        status="FAILED",
-                        error={
-                            "message": sanitize_error_summary(exc),
-                            **self._engine._raw_response_summary(
-                                self._engine._classifier.last_raw_responses
-                            ),
-                        },
-                    )
+                try:
+                    with self._coordinator.transaction() as connection:
+                        finish_llm_trace(
+                            connection,
+                            classify_trace_id,
+                            status="FAILED",
+                            error={
+                                "message": sanitize_error_summary(exc),
+                                **self._engine._raw_response_summary(
+                                    self._engine._classifier.last_raw_responses
+                                ),
+                            },
+                        )
+                except Exception:
+                    pass
                 raise AssistantLifecycleError(
                     stage=AssistantFailureStage.CLASSIFY,
                     category="CLASSIFICATION_FAILURE",
@@ -184,13 +187,16 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
     def _finish_prepare_failure(
         self, session_id: str, exc: Exception, status: str
     ) -> None:
-        with self._coordinator.transaction() as connection:
-            finish_assistant_session(
-                connection,
-                session_id,
-                status=status,
-                error={
-                    "error_type": type(exc).__name__,
-                    "message": sanitize_error_summary(exc),
-                },
-            )
+        try:
+            with self._coordinator.transaction() as connection:
+                finish_assistant_session(
+                    connection,
+                    session_id,
+                    status=status,
+                    error={
+                        "error_type": type(exc).__name__,
+                        "message": sanitize_error_summary(exc),
+                    },
+                )
+        except Exception:
+            pass

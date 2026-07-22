@@ -20,6 +20,9 @@ from vnalpha.tools.setup import TOOL_PERMISSIONS
 _PUBLIC_WARNING: Final = "AI synthesis unavailable; showing deterministic result."
 _LIFECYCLE_WARNING: Final = "Assistant request did not produce a usable answer."
 _PUBLIC_WARNINGS: Final = frozenset({_PUBLIC_WARNING, _LIFECYCLE_WARNING})
+_PUBLIC_MODEL_ROUTES: Final = frozenset(
+    {"small", "default", "reasoning", "long_context", "client"}
+)
 _PUBLIC_CATEGORIES: Final = frozenset(
     {
         "AUDIT_PERSIST_FAILURE",
@@ -210,9 +213,10 @@ def _public_identifier(key: str, value: object) -> str:
     patterns = {
         "correlation_id": r"[0-9a-f]{16,64}",
         "trace_id": r"[0-9a-f-]{16,64}",
-        "model_route": r"[A-Za-z0-9._:/-]{1,120}",
         "build_sha": r"[0-9a-f]{7,64}",
     }
+    if key == "model_route":
+        return value if value in _PUBLIC_MODEL_ROUTES else ""
     return value if fullmatch(patterns[key], value) else ""
 
 

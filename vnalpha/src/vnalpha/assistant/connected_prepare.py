@@ -95,17 +95,20 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                     usage=self._classifier.last_usage,
                 )
             except Exception as exc:
-                finish_llm_trace(
-                    self._conn,
-                    classify_trace_id,
-                    status="FAILED",
-                    error={
-                        "message": sanitize_error_summary(exc),
-                        **self._raw_response_summary(
-                            self._classifier.last_raw_responses
-                        ),
-                    },
-                )
+                try:
+                    finish_llm_trace(
+                        self._conn,
+                        classify_trace_id,
+                        status="FAILED",
+                        error={
+                            "message": sanitize_error_summary(exc),
+                            **self._raw_response_summary(
+                                self._classifier.last_raw_responses
+                            ),
+                        },
+                    )
+                except Exception:
+                    pass
                 raise AssistantLifecycleError(
                     stage=AssistantFailureStage.CLASSIFY,
                     category="CLASSIFICATION_FAILURE",
@@ -179,15 +182,18 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
             )
             raise
         except AssistantError as exc:
-            finish_assistant_session(
-                self._conn,
-                session_id,
-                status="FAILED",
-                error={
-                    "error_type": type(exc).__name__,
-                    "message": sanitize_error_summary(exc),
-                },
-            )
+            try:
+                finish_assistant_session(
+                    self._conn,
+                    session_id,
+                    status="FAILED",
+                    error={
+                        "error_type": type(exc).__name__,
+                        "message": sanitize_error_summary(exc),
+                    },
+                )
+            except Exception:
+                pass
             raise
 
     def _with_symbol_memory_context(

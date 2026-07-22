@@ -7,6 +7,7 @@ from vnalpha.assistant.errors import SynthesisError
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
 from vnalpha.assistant.research_audit import persist_research_answer_audit
 from vnalpha.core.logging import get_logger
+from vnalpha.model_routing.models import ModelProfile
 from vnalpha.observability.context import get_correlation_id
 from vnalpha.symbol_memory.projection import project_analysis_evidence
 
@@ -91,12 +92,11 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
 
     def _llm_model(self) -> str:
         decision = getattr(self._llm, "last_route_decision", None)
-        model_id = getattr(decision, "model_id", None)
-        if model_id:
-            return str(model_id)
-        config = getattr(self._llm, "config", None)
-        model = getattr(config, "model", None)
-        return str(model or type(self._llm).__name__)
+        profile = getattr(decision, "profile", None)
+        try:
+            return ModelProfile.parse(profile).value
+        except ValueError:
+            return "client"
 
     def _raw_response_summary(
         self, raw_responses: list[dict[str, Any]]
