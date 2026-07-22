@@ -15,7 +15,10 @@ from vnalpha.warehouse.corporate_action_schema import ALL_DDL_CORPORATE_ACTIONS
 from vnalpha.warehouse.disclosure_schema import ALL_DDL_DISCLOSURES
 from vnalpha.warehouse.fundamentals_schema import ALL_DDL_FUNDAMENTALS
 from vnalpha.warehouse.ingestion_migrations import migrate_ingestion_run_outcome_columns
-from vnalpha.warehouse.maintenance_ledger_schema import ALL_DDL_MAINTENANCE_LEDGER
+from vnalpha.warehouse.maintenance_ledger_schema import (
+    ALL_DDL_MAINTENANCE_LEDGER,
+    DDL_MAINTENANCE_RUN_QUEUE_COLUMNS,
+)
 from vnalpha.warehouse.ranking_evaluation_schema import ALL_DDL_RANKING_EVALUATION
 from vnalpha.warehouse.ranking_policy_decision_schema import (
     ALL_DDL_RANKING_POLICY_DECISION,
@@ -145,6 +148,8 @@ def _migrate_maintenance_run_columns(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         "ALTER TABLE maintenance_run ADD COLUMN IF NOT EXISTS source_policy JSON"
     )
+    for ddl in DDL_MAINTENANCE_RUN_QUEUE_COLUMNS:
+        conn.execute(ddl)
 
 
 def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:

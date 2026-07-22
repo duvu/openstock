@@ -28,6 +28,7 @@ from vnalpha.data_availability import ensure_symbol_analysis_ready
 from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
 from vnalpha.data_availability.deep_readiness_models import ContextRequirement
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
+from vnalpha.provisioning_queue import DEFAULT_QUEUE_PATH
 from vnalpha.tools.errors import ActionableToolError, ToolError
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import TOOL_PERMISSIONS, build_local_tool_registry
