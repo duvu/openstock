@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from vnalpha.assistant.models import PreparedAssistantTurn, ToolPlanStep
+    from vnalpha.assistant.models import PreparedAssistantTurn
     from vnalpha.tools.executor import TraceEvent
 
 from vnalpha.assistant.executor import AssistantExecutor
 from vnalpha.assistant.managed_context import ManagedAssistantContext
 from vnalpha.assistant.managed_failures import finish_execution_failure
+from vnalpha.assistant.models import ToolPlanStep
 from vnalpha.tools.setup import TOOL_PERMISSIONS
 from vnalpha.warehouse.connection import read_connection
 
@@ -18,6 +19,12 @@ _CURRENT_SYMBOL_TOOL = "analysis.current_symbol"
 
 def _is_write_step(step: ToolPlanStep) -> bool:
     return TOOL_PERMISSIONS[step.tool_name].value.startswith("WRITE_")
+
+
+@dataclass(frozen=True, slots=True)
+class _ProvisionedSession:
+    symbol: str
+    resolved_date: str
 
 
 class ManagedAssistantToolExecution(ManagedAssistantContext):
@@ -30,14 +37,12 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
     ) -> dict[str, Any]:
         results: dict[str, Any] = {}
         events: list[TraceEvent] = []
-        explicitly_provisioned = any(
-            step.tool_name == "data.ensure_current_symbol"
-            for step in prepared.plan.steps
-        )
+        provisioned_session: _ProvisionedSession | None = None
         for index, (step, trace_id) in enumerate(
             zip(prepared.plan.steps, trace_ids, strict=True)
         ):
-            step_plan = replace(prepared.plan, steps=[step])
+            executable_step = _with_provisioned_date(step, provisioned_session)
+            step_plan = replace(prepared.plan, steps=[executable_step])
             executor: AssistantExecutor | None = None
             try:
                 if step.tool_name == _CURRENT_SYMBOL_TOOL:
@@ -66,7 +71,9 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
                         results.update(
                             executor.execute(
                                 step_plan,
-                                explicitly_provisioned=explicitly_provisioned,
+                                explicitly_provisioned=_is_provisioned_symbol(
+                                    step, provisioned_session
+                                ),
                             )
                         )
                         executor.flush_traces(connection)
@@ -83,7 +90,9 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
                         results.update(
                             executor.execute(
                                 step_plan,
-                                explicitly_provisioned=explicitly_provisioned,
+                                explicitly_provisioned=_is_provisioned_symbol(
+                                    step, provisioned_session
+                                ),
                             )
                         )
                     with self._coordinator.transaction() as connection:
@@ -100,6 +109,9 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
                     )
                 self._replay_trace_events(events, on_trace_event)
                 raise
+            resolved_session = _provisioned_session(step, results.get(step.step_id))
+            if resolved_session is not None:
+                provisioned_session = resolved_session
         self._replay_trace_events(events, on_trace_event)
         return results
 
@@ -111,3 +123,40 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
         if callback is not None:
             for event in events:
                 callback(event)
+
+
+def _with_provisioned_date(
+    step: ToolPlanStep, provisioned_session: _ProvisionedSession | None
+) -> ToolPlanStep:
+    if (
+        provisioned_session is None
+        or step.tool_name != "analysis.deep_symbol"
+        or step.arguments.get("symbol") != provisioned_session.symbol
+        or step.arguments.get("date") not in (None, "today")
+    ):
+        return step
+    return replace(
+        step,
+        arguments={**step.arguments, "date": provisioned_session.resolved_date},
+    )
+
+
+def _is_provisioned_symbol(
+    step: ToolPlanStep, provisioned_session: _ProvisionedSession | None
+) -> bool:
+    return (
+        step.tool_name == "analysis.deep_symbol"
+        and provisioned_session is not None
+        and step.arguments.get("symbol") == provisioned_session.symbol
+    )
+
+
+def _provisioned_session(step: ToolPlanStep, result: Any) -> _ProvisionedSession | None:
+    if step.tool_name != "data.ensure_current_symbol" or not isinstance(result, dict):
+        return None
+    data = result.get("data")
+    resolved_date = data.get("resolved_date") if isinstance(data, dict) else None
+    symbol = step.arguments.get("symbol")
+    if not isinstance(symbol, str) or not isinstance(resolved_date, str):
+        return None
+    return _ProvisionedSession(symbol=symbol, resolved_date=resolved_date)

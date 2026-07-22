@@ -399,6 +399,28 @@ def _migrate_research_artifact_columns(conn: duckdb.DuckDBPyConnection) -> None:
             "SET lifecycle_state = 'RUN' "
             "WHERE lifecycle_state IS NULL"
         )
+    if _column_is_nullable(conn, "research_artifact", "lifecycle_state"):
+        for index_name in (
+            "research_artifact_status_idx",
+            "research_artifact_lifecycle_state_idx",
+            "research_artifact_type_idx",
+        ):
+            conn.execute(f"DROP INDEX IF EXISTS {index_name}")
+        conn.execute(
+            "ALTER TABLE research_artifact ALTER COLUMN lifecycle_state SET NOT NULL"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS research_artifact_status_idx "
+            "ON research_artifact (status)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS research_artifact_lifecycle_state_idx "
+            "ON research_artifact (lifecycle_state)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS research_artifact_type_idx "
+            "ON research_artifact (artifact_type)"
+        )
 
 
 def _migrate_research_experiment_columns(conn: duckdb.DuckDBPyConnection) -> None:
@@ -439,6 +461,15 @@ def _migrate_research_experiment_columns(conn: duckdb.DuckDBPyConnection) -> Non
     conn.execute(
         "ALTER TABLE research_experiment ADD COLUMN IF NOT EXISTS capability_payload VARCHAR "
         "DEFAULT '{}' "
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ALTER COLUMN entitlement_json SET DEFAULT '{}'"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ALTER COLUMN missingness_json SET DEFAULT '{}'"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ALTER COLUMN capability_payload SET DEFAULT '{}'"
     )
     conn.execute(
         "UPDATE research_experiment "
@@ -575,11 +606,11 @@ def _migrate_candidate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
         ("observation_end_date", "DATE"),
         ("symbol_bar_count", "INTEGER"),
         ("benchmark_bar_count", "INTEGER"),
-        ("price_basis", "VARCHAR"),
-        ("benchmark_price_basis", "VARCHAR"),
-        ("adjustment_methodology", "VARCHAR"),
+        ("price_basis", "VARCHAR DEFAULT 'UNKNOWN'"),
+        ("benchmark_price_basis", "VARCHAR DEFAULT 'UNKNOWN'"),
+        ("adjustment_methodology", "VARCHAR DEFAULT 'UNKNOWN'"),
         ("adjustment_version", "VARCHAR DEFAULT 'UNKNOWN'"),
-        ("action_overlap_status", "VARCHAR"),
+        ("action_overlap_status", "VARCHAR DEFAULT 'NOT_EVALUATED'"),
         ("invalidation_reason", "VARCHAR"),
         ("corporate_action_lineage_json", "VARCHAR DEFAULT '[]'"),
         ("scoring_policy_id", "VARCHAR"),
@@ -590,6 +621,30 @@ def _migrate_candidate_outcome_columns(conn: duckdb.DuckDBPyConnection) -> None:
     for col, col_type in cols:
         conn.execute(
             f"ALTER TABLE candidate_outcome ADD COLUMN IF NOT EXISTS {col} {col_type}"
+        )
+    _enforce_candidate_outcome_column_contracts(conn)
+
+
+def _enforce_candidate_outcome_column_contracts(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    required_columns = (
+        ("price_basis", "'UNKNOWN'"),
+        ("benchmark_price_basis", "'UNKNOWN'"),
+        ("adjustment_methodology", "'UNKNOWN'"),
+        ("adjustment_version", "'UNKNOWN'"),
+        ("action_overlap_status", "'NOT_EVALUATED'"),
+        ("corporate_action_lineage_json", "'[]'"),
+    )
+    for column, default in required_columns:
+        conn.execute(
+            f"UPDATE candidate_outcome SET {column} = {default} WHERE {column} IS NULL"
+        )
+        conn.execute(
+            f"ALTER TABLE candidate_outcome ALTER COLUMN {column} SET DEFAULT {default}"
+        )
+        conn.execute(
+            f"ALTER TABLE candidate_outcome ALTER COLUMN {column} SET NOT NULL"
         )
 
 
