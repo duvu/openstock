@@ -4,17 +4,16 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime
 
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.ingestion.canonical_quarantine import persist_quarantine
 from vnalpha.ingestion.canonical_storage import (
-    count_canonical_rows,
     delete_canonical_bar,
     delete_stray_intraday_canonical_rows,
     load_ranked_candidates,
-    persist_quarantine,
     resolve_quarantines,
     upsert_canonical,
 )
@@ -33,6 +32,9 @@ def build_canonical_ohlcv(
     conn: duckdb.DuckDBPyConnection,
     symbol: str | None = None,
     interval: str = "1D",
+    *,
+    start: str | None = None,
+    end: str | None = None,
 ) -> dict[str, int]:
     """Promote only validated raw OHLCV observations into canonical storage.
 
@@ -41,24 +43,37 @@ def build_canonical_ohlcv(
     quarantined and any canonical bar for that key is removed.
     """
 
+    if (start is None) != (end is None):
+        raise ValueError("canonical promotion range requires both start and end")
+    if start is not None and end is not None:
+        if date.fromisoformat(start) > date.fromisoformat(end):
+            raise ValueError("canonical promotion range start must not exceed end")
     if get_correlation_id() in {"", "unset"}:
         set_correlation_id()
     log_audit(
         "CANONICAL_OHLCV_BUILD_STARTED",
         "Canonical OHLCV validation started.",
-        extra={"interval": interval, "symbol": symbol or "ALL"},
+        extra={
+            "interval": interval,
+            "symbol": symbol or "ALL",
+            "start": start,
+            "end": end,
+        },
     )
     try:
         with warehouse_transaction(conn):
             grouped: defaultdict[
                 tuple[str, datetime, str], list[CanonicalCandidate]
             ] = defaultdict(list)
-            for candidate in load_ranked_candidates(conn, symbol, interval):
+            for candidate in load_ranked_candidates(
+                conn, symbol, interval, start=start, end=end
+            ):
                 grouped[
                     (candidate.symbol, candidate.timestamp, candidate.interval)
                 ].append(candidate)
 
             rejected = 0
+            upserted = 0
             for candidates in grouped.values():
                 selected_candidate = candidates[0]
                 rules = validate_candidate(selected_candidate, tuple(candidates[1:]))
@@ -71,16 +86,15 @@ def build_canonical_ohlcv(
                         conn, replace(selected_candidate, quality_status="pass")
                     )
                     resolve_quarantines(conn, selected_candidate)
+                    upserted += 1
 
-            if interval == "1D":
+            if interval == "1D" and start is None:
                 delete_stray_intraday_canonical_rows(conn, symbol, interval)
-
-            canonical_count = count_canonical_rows(conn, symbol, interval)
         log_audit(
             "CANONICAL_OHLCV_BUILD_COMPLETED",
             "Canonical OHLCV validation completed.",
             extra={
-                "canonical_count": canonical_count,
+                "canonical_count": upserted,
                 "interval": interval,
                 "rejected_count": rejected,
                 "symbol": symbol or "ALL",
@@ -88,17 +102,22 @@ def build_canonical_ohlcv(
         )
         logger.info(
             "Canonical OHLCV built: upserted=%d rejected=%d symbol=%s interval=%s",
-            canonical_count,
+            upserted,
             rejected,
             symbol or "ALL",
             interval,
         )
-        return {"upserted": canonical_count, "rejected": rejected}
+        return {"upserted": upserted, "rejected": rejected}
     except Exception:  # noqa: BLE001
         log_audit(
             "CANONICAL_OHLCV_BUILD_FAILED",
             "Canonical OHLCV validation failed.",
             status="FAILED",
-            extra={"interval": interval, "symbol": symbol or "ALL"},
+            extra={
+                "interval": interval,
+                "symbol": symbol or "ALL",
+                "start": start,
+                "end": end,
+            },
         )
         raise
