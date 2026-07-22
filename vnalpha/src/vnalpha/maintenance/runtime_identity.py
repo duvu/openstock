@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Mapping
+from urllib.parse import urlsplit, urlunsplit
 
 from vnalpha.core.config import AppConfig, get_config
 from vnalpha.data_provisioning.source_policy import (
@@ -92,7 +93,7 @@ def collect_runtime_identity(
         tree_state=resolved_software_identity.tree_state,
         package_installation_path=str(Path(__file__).resolve().parents[1]),
         warehouse_path=str(resolved_config.warehouse.path.expanduser().resolve()),
-        vnstock_service_url=resolved_config.vnstock.base_url,
+        vnstock_service_url=_service_origin(resolved_config.vnstock.base_url),
         provider_source_policy=source_policy,
         process_started_at=_process_started_at(),
     )
@@ -134,6 +135,20 @@ def _source_checkout_commit(package_path: Path) -> str | None:
     if result.returncode != 0 or len(commit) != 40:
         return None
     return commit
+
+
+def _service_origin(service_url: str) -> str:
+    parsed = urlsplit(service_url)
+    try:
+        port = parsed.port
+    except ValueError:
+        return ""
+    if not parsed.scheme or parsed.hostname is None:
+        return ""
+    host = parsed.hostname
+    host_display = f"[{host}]" if ":" in host else host
+    netloc = f"{host_display}:{port}" if port is not None else host_display
+    return urlunsplit((parsed.scheme, netloc, "", "", ""))
 
 
 def _build_match_status(

@@ -64,7 +64,10 @@ def test_cli_records_effective_runtime_identity_in_metadata_mode(
     identity = collect_runtime_identity(
         config=AppConfig(
             vnstock=VnstockServiceConfig(
-                base_url="http://svcuser:supersecret@vnstock.test:6900"
+                base_url=(
+                    "http://svcuser:supersecret@vnstock.test:6900/v1?"
+                    "signature=supersecret"
+                )
             ),
             warehouse=WarehouseConfig(path=tmp_path / "warehouse.duckdb"),
         ),
@@ -152,9 +155,7 @@ def test_cli_records_effective_runtime_identity_in_metadata_mode(
         for record in redacted_records
         if record["event_type"] == "RUNTIME_IDENTITY"
     )
-    assert redacted_identity["vnstock_service_url"] == (
-        "http://[REDACTED]@vnstock.test:6900"
-    )
+    assert redacted_identity["vnstock_service_url"] == "http://vnstock.test:6900"
 
 
 def _maintenance_result(
