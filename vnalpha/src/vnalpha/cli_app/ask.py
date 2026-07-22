@@ -41,6 +41,7 @@ def register(app: typer.Typer) -> None:
             from rich.text import Text
 
             from vnalpha.assistant.app import AssistantApp
+            from vnalpha.assistant.degraded_answer import degradation_warning
             from vnalpha.assistant.errors import (
                 AssistantError,
                 AssistantInputValidationError,
@@ -167,6 +168,10 @@ def register(app: typer.Typer) -> None:
             if result.risks_caveats:
                 answer_text.append("Risks/caveats: ", style="dim yellow")
                 answer_text.append(sanitize_text(result.risks_caveats) + "\n")
+            warning = degradation_warning(result)
+            if warning is not None:
+                answer_text.append("Warning: ", style="bold yellow")
+                answer_text.append(sanitize_text(warning) + "\n", style="yellow")
             if result.missing_data:
                 answer_text.append("\nMissing data:\n", style="dim red")
                 for item in result.missing_data:

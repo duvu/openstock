@@ -2,194 +2,37 @@
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
+from vnalpha.assistant.degraded_answer import (
+    AssistantDegradation,
+    AssistantFailureStage,
+    build_deterministic_tool_answer,
+)
 from vnalpha.assistant.errors import SynthesisError
 from vnalpha.assistant.groundedness import (
     GroundednessResult,
     GroundednessValidator,
-    available_source_refs,
 )
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan, AssistantRequest
 from vnalpha.assistant.policy import (
-    TRADING_EXECUTION_PHRASES,
     ResearchPolicyResult,
     validate_research_answer_policy,
 )
-from vnalpha.assistant.research_templates import (
-    build_deterministic_research_answer,
-    is_research_intent,
-    research_prompt_fragment,
-)
+from vnalpha.assistant.research_templates import is_research_intent
 from vnalpha.assistant.response_parser import parse_synthesis_response
+from vnalpha.assistant.synthesis_prompt import (
+    CONTEXT_INTENTS,
+    SYNTHESIS_RESPONSE_SCHEMA,
+    UNSAFE_CONTEXT_TERMS,
+    _build_synthesis_messages,
+    _symbol_count,
+    task_type_for_plan,
+)
 from vnalpha.model_routing.models import ModelTaskType
 
 if TYPE_CHECKING:
     from vnalpha.assistant.gateway import LLMGatewayClient
-
-MISSING_DATA_TEMPLATES = {
-    "no_candidate_score": (
-        "No candidate score found for {symbol} on {date}. "
-        "Run `vnalpha score --date {date}` first."
-    ),
-    "no_feature_snapshot": (
-        "No feature snapshot found for {symbol}. "
-        "Run `vnalpha build features --date {date}` first."
-    ),
-    "no_canonical_ohlcv": (
-        "No canonical OHLCV found for {symbol}. Run `vnalpha build canonical` first."
-    ),
-    "no_watchlist": (
-        "No watchlist found for {date}. Run `vnalpha score --date {date}` first."
-    ),
-    "generic": "Required data is not available. {detail}",
-}
-
-CONTEXT_INTENT_DISCLOSURES = {
-    "review_market_regime": (
-        "Describe the persisted market-regime snapshot, its methodology version, "
-        "benchmark freshness, quality, lineage, and caveats."
-    ),
-    "review_sector_strength": (
-        "Describe persisted sector ranking order, methodology version, freshness, "
-        "quality or coverage, lineage, and caveats."
-    ),
-    "review_symbol_sector_alignment": (
-        "Describe only persisted symbol metadata and matching sector snapshot; state "
-        "missing metadata or snapshot context without inference."
-    ),
-}
-
-CONTEXT_INTENTS = frozenset(CONTEXT_INTENT_DISCLOSURES)
-UNSAFE_CONTEXT_TERMS = TRADING_EXECUTION_PHRASES | frozenset(
-    {
-        "rebalance",
-        "position",
-        "invest",
-        "purchase",
-        "allocate",
-        "allocation",
-        "margin",
-    }
-)
-
-SYNTHESIS_RESPONSE_SCHEMA: dict[str, Any] = {
-    "title": "vnalpha_grounded_answer",
-    "type": "object",
-    "additionalProperties": False,
-    "required": [
-        "summary",
-        "basis",
-        "risks_caveats",
-        "tool_trace_summary",
-        "missing_data",
-        "grounded_source_refs",
-        "claim_source_refs",
-        "research_metadata",
-    ],
-    "properties": {
-        "summary": {"type": "string"},
-        "basis": {"type": "string"},
-        "risks_caveats": {"type": "string"},
-        "tool_trace_summary": {"type": "string"},
-        "missing_data": {"type": "array", "items": {"type": "string"}},
-        "grounded_source_refs": {
-            "type": "array",
-            "items": {"type": "string"},
-        },
-        # Dynamic claim identifiers are intentionally disabled in strict mode.
-        # Groundedness remains enforced through the bounded source-reference list.
-        "claim_source_refs": {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {},
-        },
-        # Runtime validation metadata is added deterministically after the model call.
-        "research_metadata": {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {},
-        },
-    },
-}
-
-SYNTHESIZER_SYSTEM_PROMPT = """You are a research assistant for a Vietnamese stock market screening tool.
-
-Your role is to explain deterministic pipeline outputs as persisted research context.
-
-STRICT RULES:
-1. Use only the supplied tool outputs as factual data.
-2. MUST NOT override persisted scores, classes, setup types, quality, lineage, or methodology.
-3. Do not give action guidance, personalized advice, or execution instructions.
-4. Do not claim certainty or guaranteed future outcomes.
-5. State missing, partial, stale, or unavailable evidence explicitly.
-6. Include basis, freshness, methodology, quality, lineage, risks, caveats, and missing data when available.
-7. Follow the supplied research template for research-intelligence intents.
-8. Use only values listed in valid_grounded_source_refs for grounded_source_refs.
-9. Return claim_source_refs and research_metadata as empty objects; validation metadata is added by the application.
-10. Shortlist and scenario outputs are research-prioritization artifacts requiring human review.
-
-Respond only with JSON matching the supplied response schema.
-"""
-
-
-def _build_synthesis_messages(
-    user_prompt: str,
-    plan: AssistantPlan,
-    tool_outputs: dict[str, Any],
-    request: AssistantRequest | None = None,
-) -> list[dict]:
-    context = {
-        "user_question": user_prompt,
-        "intent": plan.intent,
-        "required_artifacts": plan.required_artifacts,
-        "context_intent_disclosure": CONTEXT_INTENT_DISCLOSURES.get(plan.intent),
-        "research_template": research_prompt_fragment(plan.intent),
-        "valid_grounded_source_refs": available_source_refs(plan, tool_outputs),
-        "tool_outputs": tool_outputs,
-    }
-    messages = [
-        {"role": "system", "content": SYNTHESIZER_SYSTEM_PROMPT},
-    ]
-    if request is not None:
-        from vnalpha.assistant.context import build_context_message
-
-        context_message = build_context_message(request)
-        if context_message is not None:
-            messages.append(context_message)
-    messages.append(
-        {
-            "role": "user",
-            "content": json.dumps(context, default=str, ensure_ascii=False),
-        }
-    )
-    return messages
-
-
-def _symbol_count(plan: AssistantPlan) -> int:
-    symbols: set[str] = set()
-    for step in plan.steps:
-        value = step.arguments.get("symbol")
-        if value:
-            symbols.add(str(value))
-        values = step.arguments.get("symbols")
-        if isinstance(values, (list, tuple, set)):
-            symbols.update(str(item) for item in values if item)
-    return len(symbols)
-
-
-def task_type_for_plan(plan: AssistantPlan) -> str:
-    mapping = {
-        "summarize_watchlist": ModelTaskType.WATCHLIST_SUMMARY.value,
-        "summarize_watchlist_deep": ModelTaskType.WATCHLIST_SUMMARY.value,
-        "compare_symbols": ModelTaskType.MULTI_SYMBOL_COMPARISON.value,
-        "deep_analyze_symbol": ModelTaskType.DEEP_SYMBOL_ANALYSIS.value,
-        "generate_shortlist": ModelTaskType.SHORTLIST_GENERATION.value,
-        "generate_research_scenario": ModelTaskType.RESEARCH_SCENARIO.value,
-        "review_setup_evidence": ModelTaskType.DEEP_SYMBOL_ANALYSIS.value,
-    }
-    return mapping.get(plan.intent, ModelTaskType.NORMAL_ANSWER.value)
 
 
 class AnswerSynthesizer:
@@ -200,6 +43,7 @@ class AnswerSynthesizer:
         self.last_groundedness: GroundednessResult | None = None
         self.last_policy: ResearchPolicyResult | None = None
         self.last_fallback_used = False
+        self.last_degradation: AssistantDegradation | None = None
 
     def synthesize(
         self,
@@ -210,13 +54,12 @@ class AnswerSynthesizer:
         request: AssistantRequest | None = None,
         session_id: str | None = None,
     ) -> AssistantAnswer:
-        """Synthesize and validate a grounded, policy-safe answer."""
-
         self.last_usage = None
         self.last_raw_responses = []
         self.last_groundedness = None
         self.last_policy = None
         self.last_fallback_used = False
+        self.last_degradation = None
         research_intent = is_research_intent(plan.intent)
         validator = GroundednessValidator()
 
@@ -224,8 +67,15 @@ class AnswerSynthesizer:
             input_result = validator.validate_inputs(plan, tool_outputs)
             if not input_result.can_synthesize:
                 detail = "; ".join(input_result.messages) or "invalid research inputs"
-                raise SynthesisError(
-                    f"Research tool payload validation failed before synthesis: {detail}"
+                return self._deterministic_fallback(
+                    plan,
+                    tool_outputs,
+                    validator,
+                    reasons=[detail],
+                    degradation=AssistantDegradation(
+                        AssistantFailureStage.ANSWER_VALIDATION,
+                        "INPUT_VALIDATION",
+                    ),
                 )
 
         messages = _build_synthesis_messages(
@@ -260,31 +110,45 @@ class AnswerSynthesizer:
             )
             self._capture_gateway_raw_responses()
             self.last_usage = usage
-            answer = parse_synthesis_response(response_text)
         except Exception as exc:
             if not self.last_raw_responses:
                 self._capture_gateway_raw_responses()
-            if not research_intent:
-                if isinstance(exc, SynthesisError):
-                    raise
-                raise SynthesisError(f"LLM synthesis call failed: {exc}") from exc
             return self._deterministic_fallback(
                 plan,
                 tool_outputs,
                 validator,
                 reasons=[f"Model synthesis was unavailable: {type(exc).__name__}."],
+                degradation=AssistantDegradation(
+                    AssistantFailureStage.SYNTHESIS_CALL,
+                    "GATEWAY_FAILURE",
+                ),
+            )
+        try:
+            answer = parse_synthesis_response(response_text)
+        except SynthesisError:
+            return self._deterministic_fallback(
+                plan,
+                tool_outputs,
+                validator,
+                reasons=["Model synthesis returned an invalid structured answer."],
+                degradation=AssistantDegradation(
+                    AssistantFailureStage.SYNTHESIS_PARSE,
+                    "STRUCTURED_OUTPUT_INVALID",
+                ),
             )
 
         try:
             _validate_context_answer(plan, tool_outputs, answer)
         except SynthesisError:
-            if plan.intent in CONTEXT_INTENTS:
-                raise
             return self._deterministic_fallback(
                 plan,
                 tool_outputs,
                 validator,
                 reasons=["The model answer violated the research-language contract."],
+                degradation=AssistantDegradation(
+                    AssistantFailureStage.ANSWER_VALIDATION,
+                    "CONTEXT_POLICY_REJECTED",
+                ),
             )
 
         if not research_intent:
@@ -310,6 +174,10 @@ class AnswerSynthesizer:
             tool_outputs,
             validator,
             reasons=reasons,
+            degradation=AssistantDegradation(
+                AssistantFailureStage.ANSWER_VALIDATION,
+                "GROUNDEDNESS_OR_POLICY_REJECTED",
+            ),
         )
 
     def _deterministic_fallback(
@@ -319,12 +187,16 @@ class AnswerSynthesizer:
         validator: GroundednessValidator,
         *,
         reasons: list[str],
+        degradation: AssistantDegradation,
     ) -> AssistantAnswer:
-        answer = build_deterministic_research_answer(
+        answer = build_deterministic_tool_answer(
             plan,
             tool_outputs,
+            degradation,
             reasons=list(dict.fromkeys(reason for reason in reasons if reason)),
         )
+        if answer is None:
+            raise SynthesisError("No safe deterministic answer is available.")
         groundedness = validator.validate(answer, plan, tool_outputs)
         policy = validate_research_answer_policy(answer, plan.intent)
         if not groundedness.passed or not policy.passed:
@@ -335,6 +207,7 @@ class AnswerSynthesizer:
             raise SynthesisError(
                 f"Research answer failed closed after deterministic fallback: {detail}"
             )
+        self.last_degradation = degradation
         return self._record_validation(
             answer,
             groundedness,

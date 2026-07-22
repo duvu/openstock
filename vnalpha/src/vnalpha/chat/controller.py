@@ -119,7 +119,9 @@ class ChatController:
             warehouse_path = _connection_warehouse_path(connection)
             if warehouse_path is not None:
                 connection.close()
-                with WarehouseWriteCoordinator(path=warehouse_path).transaction() as managed:
+                with WarehouseWriteCoordinator(
+                    path=warehouse_path
+                ).transaction() as managed:
                     yield managed
                 return
             try:
@@ -1059,10 +1061,14 @@ class ChatController:
         self._on_message(stage_to_style(stage), format_stage_event(event))
 
     def _emit_assistant_answer(self, answer: object) -> None:
+        from vnalpha.assistant.degraded_answer import degradation_warning
         from vnalpha.assistant.models import AssistantAnswer
 
         if not isinstance(answer, AssistantAnswer):
             return
+        warning = degradation_warning(answer)
+        if warning is not None:
+            self._on_message("yellow", warning)
 
         self._persist_message("assistant", answer.summary, "answer")
 
