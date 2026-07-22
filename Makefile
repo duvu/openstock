@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
 
 PROJECT ?= vnalpha
+FILES ?=
 
 # ──────────────────────────────────────────────
 # openstock Makefile
@@ -8,7 +9,7 @@ PROJECT ?= vnalpha
 
 .PHONY: help up-vnstock down-vnstock login-vnstock validate-compose \
         sync features score tui mvp1-start verify-mvp1 install-vnalpha \
-        lint-vnalpha test-vnalpha test-vnalpha-data \
+        lint-vnalpha lint-files test-vnalpha test-vnalpha-data \
         test-vnalpha-research test-vnalpha-application \
         test-loop \
         eval-research-answers eval-research-runtime verify-hardening \
@@ -68,6 +69,16 @@ install-vnalpha: ## Install vnalpha in editable mode (uses uv if available)
 
 lint-vnalpha: ## Run ruff linter and format-check on vnalpha
 	cd vnalpha && ruff check . && ruff format --check .
+
+lint-files: ## Check coding conventions on touched files: FILES="src/a.py tests/b.py" [PROJECT=vnalpha]
+	@test -n "$(FILES)" || { \
+		echo 'Usage: make lint-files FILES="src/path.py tests/path.py" [PROJECT=vnalpha|vnstock]'; \
+		exit 2; \
+	}
+	@case "$(PROJECT)" in vnalpha|vnstock) ;; *) echo "PROJECT must be vnalpha or vnstock"; exit 2;; esac
+	@cd "$(PROJECT)" && \
+		ruff check --select E402,F401,F403,F405,I,PLC0415 $(FILES) && \
+		ruff format --check $(FILES)
 
 test-loop: ## Run one owning contract test with a hard 60-second limit: TEST=path::test [PROJECT=vnalpha]
 	@test -n "$(TEST)" || { \
