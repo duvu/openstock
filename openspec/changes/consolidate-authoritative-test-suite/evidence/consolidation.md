@@ -22,3 +22,20 @@ exact duplicate test functions. The scan is not
 used to classify financial, migration, package, recovery or security cases as
 deletable; those boundaries remain retained unless a contract-level replacement
 is separately demonstrated.
+
+## Current-main reconciliation
+
+The source-aware validator found five unrecorded #370 contract nodes and one
+moved intent node. The intent entry was retargeted without adding coverage.
+Equivalent #370 scenarios were merged at their public boundaries, reducing
+five split functions to two owners plus the existing canonical-promotion owner:
+
+- canonical promotion now proves invalid-data quarantine and date-bound
+  promotion in one contract;
+- current-symbol research proves ready evidence reuse and missing-work queue
+  joining in one contract;
+- data-only provisioning proves both canonical and raw-evidence missing-tail
+  updates in one contract.
+
+The resulting source-aware inventory is 220 nodes with no unclassified test
+definitions.

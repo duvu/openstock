@@ -184,9 +184,9 @@ domain = "research"
 test = "tests/test_benchmark_relative_strength.py::test_vn30_reference_is_not_written_as_vnindex"
 
 [[contract]]
-id = "canonical-quarantine-test-invalid-close-is-quarantined-before-canonical-promotion"
-domain = "application"
-test = "tests/test_canonical_quarantine.py::test_invalid_close_is_quarantined_before_canonical_promotion"
+id = "canonical-quarantine-test-canonical-promotion-quarantines-invalid-and-respects-date-bounds"
+domain = "data"
+test = "tests/test_canonical_quarantine.py::test_canonical_promotion_quarantines_invalid_and_respects_date_bounds"
 
 [[contract]]
 id = "chat-context-testchatcontextdefaults-test-all-optional-fields-are-none-or-empty"
@@ -471,7 +471,17 @@ test = "tests/test_input_history.py::TestPush::test_push_stores_text"
 [[contract]]
 id = "intent-and-planner-testdeterministicprecheck-test-deterministic-precheck-buy-refused"
 domain = "application"
-test = "tests/test_intent_and_planner.py::TestDeterministicPrecheck::test_deterministic_precheck_buy_refused"
+test = "tests/_intent_and_planner_cases.py::TestDeterministicPrecheck::test_deterministic_precheck_buy_refused"
+
+[[contract]]
+id = "current-symbol-research-application-test-reuses-ready-evidence-and-joins-missing-work"
+domain = "application"
+test = "tests/test_current_symbol_research_application.py::test_current_symbol_research_application_reuses_ready_evidence_and_joins_missing_work"
+
+[[contract]]
+id = "data-only-symbol-test-updates-only-missing-tails"
+domain = "data"
+test = "tests/test_data_only_symbol.py::test_data_only_symbol_updates_only_missing_tails"
 
 [[contract]]
 id = "llm-capability-fallback-test-route-decision-carries-configured-capabilities"

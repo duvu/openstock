@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import duckdb
 import pytest
 from rich.console import Console, Group
+from textual.widgets import Input
+
+from vnalpha.commands.coordinated_executor import CoordinatedCommandExecutor
+from vnalpha.tui.app import VnAlphaApp
+from vnalpha.tui.widgets.todo_panel import TodoPanel
+from vnalpha.workspace_context.lifecycle import get_or_create_latest_workspace
+from vnalpha.workspace_context.models import WorkspaceState
 
 
 def _connection():
-    import duckdb
-
     return duckdb.connect(":memory:")
 
 
@@ -19,8 +25,6 @@ def mock_get_connection():
 
 
 def _workspace_state():
-    from vnalpha.workspace_context.models import WorkspaceState
-
     return WorkspaceState(
         workspace_id="ws-refresh",
         title="Refresh workspace",
@@ -41,12 +45,6 @@ def _renderable_text(renderable: Group) -> str:
 async def test_todo_add_updates_workspace_without_side_panel(
     mock_get_connection, tmp_path, monkeypatch
 ) -> None:
-    from textual.widgets import Input
-
-    from vnalpha.tui.app import VnAlphaApp
-    from vnalpha.tui.widgets.todo_panel import TodoPanel
-    from vnalpha.workspace_context.lifecycle import get_or_create_latest_workspace
-
     monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     task_text = "Persist TODO after routing"
     app = VnAlphaApp(date="2024-01-10")
@@ -63,11 +61,11 @@ async def test_todo_add_updates_workspace_without_side_panel(
         composer.value = f'/todo add "{task_text}"'
         results = []
         workers = []
-        original_execute = executor.execute
+        original_execute = CoordinatedCommandExecutor.execute
         original_run_worker = app.run_worker
 
-        def capture_result(*args, **kwargs):
-            result = original_execute(*args, **kwargs)
+        def capture_result(executor_instance, *args, **kwargs):
+            result = original_execute(executor_instance, *args, **kwargs)
             results.append(result)
             return result
 
@@ -76,7 +74,7 @@ async def test_todo_add_updates_workspace_without_side_panel(
             workers.append(worker)
             return worker
 
-        with patch.object(executor, "execute", side_effect=capture_result):
+        with patch.object(CoordinatedCommandExecutor, "execute", new=capture_result):
             with patch.object(app, "run_worker", side_effect=capture_worker):
                 await pilot.press("enter")
                 await pilot.pause()

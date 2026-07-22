@@ -20,7 +20,7 @@ from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
 
-def test_ready_current_symbol_reuses_persisted_evidence_without_a_queue_job(
+def test_current_symbol_research_application_reuses_ready_evidence_and_joins_missing_work(
     tmp_path: Path,
 ) -> None:
     warehouse_path = tmp_path / "warehouse.duckdb"
@@ -63,17 +63,15 @@ def test_ready_current_symbol_reuses_persisted_evidence_without_a_queue_job(
     assert before == after
     assert not (tmp_path / "provisioning.sqlite3").exists()
 
-
-def test_missing_current_symbol_work_joins_one_escalated_queue_job(
-    tmp_path: Path,
-) -> None:
-    warehouse_path = tmp_path / "warehouse.duckdb"
-    queue_path = tmp_path / "provisioning.sqlite3"
-    with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
+    missing_warehouse_path = tmp_path / "missing-warehouse.duckdb"
+    queue_path = tmp_path / "missing-provisioning.sqlite3"
+    with WarehouseWriteCoordinator(
+        path=missing_warehouse_path
+    ).transaction() as connection:
         run_migrations(conn=connection, emit_observability=False)
         connection.execute("INSERT INTO symbol_master (symbol) VALUES ('FPT')")
     application = CurrentSymbolResearchApplication(
-        warehouse_path=warehouse_path,
+        warehouse_path=missing_warehouse_path,
         queue_path=queue_path,
         policy=DataAvailabilityPolicy(min_required_bars=1),
     )

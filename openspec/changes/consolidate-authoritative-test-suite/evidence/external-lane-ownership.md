@@ -1,21 +1,14 @@
-# External validation-lane ownership
+# Non-pytest validation ownership
 
-This record assigns the non-`vnalpha` lanes that are intentionally outside the
-pytest suite manifest. The ownership is narrow and has no duplicate aggregate
-runner.
+Issue #348 is development-only. It owns no GitHub Actions job, required gate,
+path router, workflow artifact or hosted validation evidence.
 
-| Lane | Canonical owner | Routing trigger | Contract boundary |
-| --- | --- | --- | --- |
-| `vnstock-contracts` | `openstock-ci` job `vnstock` | `domains` contains `vnstock-contracts` or `full` is true | provider capability, provider runtime hardening, corporate-action, and built-in-provider contracts; then source/wheel build |
-| `packaging` | `vnalpha-debian-package` workflow job `package` | package source, `vnalpha/src/**`, project metadata/lockfile, Makefile, or workflow change | source contract, packaging groups, Debian build, installed offline runtime, install/upgrade/broken-wheel rollback |
+| Concern | Local owner | Selection rule |
+| --- | --- | --- |
+| One contract | `make test-loop TEST=<node>` | normal edit loop |
+| `vnalpha` domain | `make test-vnalpha-{data,research,application}` | affected source contract |
+| Frozen `vnalpha` candidate | `make test-vnalpha` | once, after local changes are frozen |
+| Package acceptance | existing manual package commands | only package, installation, dependency-layout, service-unit or release inputs |
 
-The `vnstock` job's exact contract selection is the six paths listed in
-`.github/workflows/openstock-ci.yml` under `Provider and canonical contract tests`;
-it is not included in a `vnalpha` pytest plan. The Debian workflow is
-path-filtered because it is an additional package-acceptance workflow, not a
-required check that must exist for documentation-only pull requests.
-
-`make verify-vnalpha-package` remains the local/release equivalent and owns the
-source-contract, structural, package-build and built-artifact checks once per
-invocation. `make verify-hardening` calls that target once after the canonical
-`vnalpha` runner and one `openstock-verify --ci` invocation.
+The generic workflow and merge-gate policy remain outside this change and are
+not a prerequisite for #348 closure.

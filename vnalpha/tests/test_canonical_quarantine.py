@@ -66,7 +66,7 @@ def _insert_raw_bar(
     return run_id
 
 
-def test_invalid_close_is_quarantined_before_canonical_promotion(
+def test_canonical_promotion_quarantines_invalid_and_respects_date_bounds(
     conn: duckdb.DuckDBPyConnection,
 ) -> None:
     """A non-positive close is rejected instead of becoming canonical data."""
@@ -86,10 +86,6 @@ def test_invalid_close_is_quarantined_before_canonical_promotion(
     assert result["upserted"] == 0
     assert result["rejected"] == 1
 
-
-def test_bounded_canonical_promotion_leaves_outside_dates_unchanged(
-    conn: duckdb.DuckDBPyConnection,
-) -> None:
     _insert_raw_bar(conn, symbol="FPT", close=10.0, timestamp="2026-01-05")
     _insert_raw_bar(conn, symbol="FPT", close=11.0, timestamp="2026-01-06")
     build_canonical_ohlcv(conn, symbol="FPT", start="2026-01-05", end="2026-01-05")

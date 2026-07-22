@@ -24,7 +24,7 @@ A retained test with an overlapping observable result SHALL identify one materia
 - **THEN** consistency fails with the contract and file requiring consolidation.
 
 ### Requirement: Every retained test SHALL have one canonical owner
-Every retained `vnalpha` node SHALL appear exactly once in the authoritative inventory. Domain ownership SHALL distinguish `data`, `research` and `application`; repository routing SHALL also recognize `vnstock-contracts` and `packaging` lanes.
+Every retained `vnalpha` node SHALL appear exactly once in the authoritative inventory. Local domain ownership SHALL distinguish `data`, `research` and `application`.
 
 #### Scenario: A retained test is unassigned
 - **WHEN** repository consistency evaluates the authoritative inventory

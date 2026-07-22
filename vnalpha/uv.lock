@@ -1170,7 +1170,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "respx", marker = "extra == 'dev'", specifier = ">=0.21" },
     { name = "rich", specifier = ">=13" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.0" },
     { name = "setuptools", marker = "extra == 'dev'", specifier = ">=68" },
     { name = "structlog", specifier = ">=24" },
     { name = "textual", specifier = ">=0.60" },
