@@ -90,6 +90,28 @@ class ManagedAssistantExecution(
                 prepared, trace_ids, on_trace_event=on_trace_event
             )
         except Exception as exc:
+            try:
+                with self._coordinator.transaction() as connection:
+                    finish_prepared_turn(
+                        connection, prepared.prepared_turn_id, status="FAILED"
+                    )
+            except Exception:
+                self._record_persistence_failure()
+            try:
+                with self._coordinator.transaction() as connection:
+                    finish_assistant_session(
+                        connection,
+                        prepared.assistant_session_id,
+                        status="FAILED",
+                        intent=prepared.intent_result.intent,
+                        plan=prepared.plan.to_dict(),
+                        error={
+                            "error_type": type(exc).__name__,
+                            "message": sanitize_error_summary(exc),
+                        },
+                    )
+            except Exception:
+                self._record_persistence_failure()
             raise AssistantLifecycleError(
                 stage=AssistantFailureStage.TOOL_EXECUTION,
                 category="TOOL_EXECUTION_FAILURE",
@@ -138,14 +160,14 @@ class ManagedAssistantExecution(
                             },
                         )
                 except Exception:
-                    pass
+                    self._record_persistence_failure()
             try:
                 with self._coordinator.transaction() as connection:
                     finish_prepared_turn(
                         connection, prepared.prepared_turn_id, status="FAILED"
                     )
             except Exception:
-                pass
+                self._record_persistence_failure()
             try:
                 with self._coordinator.transaction() as connection:
                     finish_assistant_session(
@@ -160,7 +182,7 @@ class ManagedAssistantExecution(
                         },
                     )
             except Exception:
-                pass
+                self._record_persistence_failure()
             raise AssistantLifecycleError(
                 stage=AssistantFailureStage.ANSWER_VALIDATION,
                 category="SYNTHESIS_FAIL_CLOSED",
@@ -287,7 +309,7 @@ class ManagedAssistantExecution(
                             error=answer.research_metadata["degradation"],
                         )
                 except Exception:
-                    pass
+                    self._record_persistence_failure()
         try:
             with self._coordinator.transaction() as connection:
                 finish_assistant_session(
@@ -319,11 +341,16 @@ class ManagedAssistantExecution(
                             error=answer.research_metadata["degradation"],
                         )
                 except Exception:
-                    pass
+                    self._record_persistence_failure()
         _log_assistant_lifecycle(
             "ASSISTANT_EXECUTED", "execute_prepared", status=session_status
         )
         return answer, prepared.plan
+
+    def _record_persistence_failure(self) -> None:
+        _log_assistant_lifecycle(
+            "ASSISTANT_PERSISTENCE_FAILED", "execute_prepared", status="FAILED"
+        )
 
     def _finish_execution_failure(
         self, prepared: PreparedAssistantTurn, exc: Exception

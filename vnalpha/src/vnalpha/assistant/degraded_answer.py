@@ -32,6 +32,7 @@ _PUBLIC_CATEGORIES: Final = frozenset(
         "AUDIT_PERSIST_FAILURE",
         "CLASSIFICATION_FAILURE",
         "CLASSIFY_TRACE_PERSIST_FAILURE",
+        "PREPARE_PERSIST_FAILURE",
         "CONTEXT_POLICY_REJECTED",
         "GATEWAY_FAILURE",
         "GROUNDEDNESS_OR_POLICY_REJECTED",
@@ -43,6 +44,7 @@ _PUBLIC_CATEGORIES: Final = frozenset(
         "SYNTHESIS_TRACE_CREATE_FAILURE",
         "SYNTHESIS_TRACE_PERSIST_FAILURE",
         "SESSION_FINALIZE_FAILURE",
+        "SESSION_CREATE_FAILURE",
         "STRUCTURED_OUTPUT_INVALID",
         "TOOL_EXECUTION_FAILURE",
     }
@@ -74,8 +76,12 @@ class AssistantDegradation:
     def to_dict(self) -> dict[str, str]:
         values = {
             "stage": self.stage.value,
-            "category": self.category,
-            "warning": self.warning,
+            "category": (
+                self.category if self.category in _PUBLIC_CATEGORIES else "UNSPECIFIED"
+            ),
+            "warning": (
+                self.warning if self.warning in _PUBLIC_WARNINGS else _PUBLIC_WARNING
+            ),
             "correlation_id": _public_identifier(
                 "correlation_id", self.correlation_id or get_correlation_id()
             ),
@@ -95,7 +101,11 @@ def build_deterministic_tool_answer(
     *,
     reasons: list[str] | None = None,
 ) -> AssistantAnswer | None:
-    if not tool_outputs or not _is_read_only_plan(plan):
+    if (
+        not tool_outputs
+        or not _is_read_only_plan(plan)
+        or any(step.step_id not in tool_outputs for step in plan.steps)
+    ):
         return None
     summaries, warnings, source_refs = _tool_result_details(plan, tool_outputs)
     fallback_reasons = [_public_fallback_reasons(degradation, reasons, warnings)]
@@ -239,9 +249,14 @@ def _public_fallback_reasons(
 
 
 def _is_read_only_plan(plan: AssistantPlan) -> bool:
-    return all(
-        TOOL_PERMISSIONS[step.tool_name].value.startswith("READ_")
-        for step in plan.steps
+    return (
+        bool(plan.steps)
+        and not plan.is_refusal()
+        and all(
+            (permission := TOOL_PERMISSIONS.get(step.tool_name)) is not None
+            and permission.value.startswith("READ_")
+            for step in plan.steps
+        )
     )
 
 

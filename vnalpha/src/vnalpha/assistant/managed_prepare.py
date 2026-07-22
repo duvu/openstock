@@ -51,13 +51,21 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
     ) -> PreparedAssistantTurn | tuple[RefusalMessage, AssistantPlan]:
         prompt = request.current_user_prompt
         persistence = _prompt_projection(request)
-        with self._coordinator.transaction() as connection:
-            session_id = create_assistant_session(
-                connection,
-                surface=self._surface,
-                user_prompt=persistence.prompt_summary,
-                prompt=persistence,
-            )
+        try:
+            with self._coordinator.transaction() as connection:
+                session_id = create_assistant_session(
+                    connection,
+                    surface=self._surface,
+                    user_prompt=persistence.prompt_summary,
+                    prompt=persistence,
+                )
+        except Exception as exc:
+            raise AssistantLifecycleError(
+                stage=AssistantFailureStage.AUDIT_PERSIST,
+                category="SESSION_CREATE_FAILURE",
+                correlation_id=get_correlation_id(),
+                model_route=self._engine._llm_model(),
+            ) from exc
         _log_assistant_lifecycle("ASSISTANT_PREPARED", "prepare", status="RUNNING")
         try:
             request = replace(request, date=normalize_date_candidate(request.date))
@@ -183,9 +191,17 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
         except AssistantInputValidationError as exc:
             self._finish_prepare_failure(session_id, exc, "VALIDATION_ERROR")
             raise
-        except Exception as exc:
+        except AssistantLifecycleError as exc:
             self._finish_prepare_failure(session_id, exc, "FAILED")
             raise
+        except Exception as exc:
+            self._finish_prepare_failure(session_id, exc, "FAILED")
+            raise AssistantLifecycleError(
+                stage=AssistantFailureStage.AUDIT_PERSIST,
+                category="PREPARE_PERSIST_FAILURE",
+                correlation_id=get_correlation_id(),
+                model_route=self._engine._llm_model(),
+            ) from exc
 
     def _with_symbol_memory_context(
         self, request: AssistantRequest, entities: dict[str, Any]

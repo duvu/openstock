@@ -98,18 +98,26 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
         try:
             tool_outputs = executor.execute(prepared.plan)
         except Exception as exc:
-            finish_assistant_session(
-                self._conn,
-                prepared.assistant_session_id,
-                status="FAILED",
-                intent=prepared.intent_result.intent,
-                plan=prepared.plan.to_dict(),
-                error={
-                    "error_type": type(exc).__name__,
-                    "message": sanitize_error_summary(exc),
-                },
-            )
-            finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="FAILED")
+            try:
+                finish_assistant_session(
+                    self._conn,
+                    prepared.assistant_session_id,
+                    status="FAILED",
+                    intent=prepared.intent_result.intent,
+                    plan=prepared.plan.to_dict(),
+                    error={
+                        "error_type": type(exc).__name__,
+                        "message": sanitize_error_summary(exc),
+                    },
+                )
+            except Exception:
+                self._record_persistence_failure()
+            try:
+                finish_prepared_turn(
+                    self._conn, prepared.prepared_turn_id, status="FAILED"
+                )
+            except Exception:
+                self._record_persistence_failure()
             raise AssistantLifecycleError(
                 stage=AssistantFailureStage.TOOL_EXECUTION,
                 category="TOOL_EXECUTION_FAILURE",
@@ -180,13 +188,13 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                         },
                     )
                 except Exception:
-                    pass
+                    self._record_persistence_failure()
             try:
                 finish_prepared_turn(
                     self._conn, prepared.prepared_turn_id, status="FAILED"
                 )
             except Exception:
-                pass
+                self._record_persistence_failure()
             try:
                 finish_assistant_session(
                     self._conn,
@@ -200,7 +208,7 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                     },
                 )
             except Exception:
-                pass
+                self._record_persistence_failure()
             raise AssistantLifecycleError(
                 stage=AssistantFailureStage.ANSWER_VALIDATION,
                 category="SYNTHESIS_FAIL_CLOSED",
@@ -299,7 +307,7 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                         error=answer.research_metadata["degradation"],
                     )
                 except Exception:
-                    pass
+                    self._record_persistence_failure()
         try:
             finish_assistant_session(
                 self._conn,
@@ -329,8 +337,13 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                         error=answer.research_metadata["degradation"],
                     )
                 except Exception:
-                    pass
+                    self._record_persistence_failure()
         _log_assistant_lifecycle(
             "ASSISTANT_EXECUTED", "execute_prepared", status=session_status
         )
         return answer, prepared.plan
+
+    def _record_persistence_failure(self) -> None:
+        _log_assistant_lifecycle(
+            "ASSISTANT_PERSISTENCE_FAILED", "execute_prepared", status="FAILED"
+        )

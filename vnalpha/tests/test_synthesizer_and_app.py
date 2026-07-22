@@ -161,7 +161,7 @@ def _market_snapshot(as_of_date: date) -> MarketRegimeSnapshot:
 
 class TestAnswerSynthesizer:
     def test_synthesizer_preserves_read_only_results_when_degraded(
-        self, conn, monkeypatch
+        self, conn, monkeypatch, tmp_path
     ):
         monkeypatch.setenv("VNALPHA_BUILD_SHA", "0123456789abcdef")
         client = FakeLLMClient(responses=[(VALID_SYNTHESIS_JSON, {})])
@@ -201,6 +201,42 @@ class TestAnswerSynthesizer:
         )
         assert untrusted_fallback is not None
         assert "ghp_" not in untrusted_fallback.risks_caveats
+        assert "ghp_" not in untrusted_fallback.research_metadata["degradation"]
+
+        assert (
+            build_deterministic_tool_answer(
+                AssistantPlan(intent="scan_candidates", steps=[]),
+                {"step_1": {"summary": "available"}},
+                AssistantDegradation(
+                    AssistantFailureStage.SYNTHESIS_CALL, "GATEWAY_FAILURE"
+                ),
+            )
+            is None
+        )
+        assert (
+            build_deterministic_tool_answer(
+                AssistantPlan(
+                    intent="scan_candidates",
+                    steps=[],
+                    refusal_reason="unsafe request",
+                ),
+                {"step_1": {"summary": "available"}},
+                AssistantDegradation(
+                    AssistantFailureStage.SYNTHESIS_CALL, "GATEWAY_FAILURE"
+                ),
+            )
+            is None
+        )
+        assert (
+            build_deterministic_tool_answer(
+                plan,
+                {"unrelated": {"summary": "available"}},
+                AssistantDegradation(
+                    AssistantFailureStage.SYNTHESIS_CALL, "GATEWAY_FAILURE"
+                ),
+            )
+            is None
+        )
 
         malformed = AnswerSynthesizer(
             FakeLLMClient(responses=[("{not-json", {})])
@@ -456,6 +492,42 @@ class TestAnswerSynthesizer:
         assert conn.execute(
             "SELECT status FROM assistant_session ORDER BY started_at DESC LIMIT 1"
         ).fetchone() == ("FAILED",)
+
+        with monkeypatch.context() as trace_patch:
+            trace_patch.setattr(
+                "vnalpha.assistant.connected_prepare.finish_llm_trace",
+                trace_failure,
+            )
+            with pytest.raises(AssistantLifecycleError) as lifecycle_error:
+                AssistantApp(conn, llm_client=ValidSynthesisGateway()).ask(
+                    "thi truong hom nay"
+                )
+        assert lifecycle_error.value.stage == AssistantFailureStage.AUDIT_PERSIST
+        assert lifecycle_error.value.category == "CLASSIFY_TRACE_PERSIST_FAILURE"
+        assert conn.execute(
+            "SELECT status FROM assistant_session ORDER BY started_at DESC LIMIT 1"
+        ).fetchone() == ("FAILED",)
+
+        warehouse_path = tmp_path / "managed-assistant.duckdb"
+        managed_conn = duckdb.connect(str(warehouse_path))
+        run_migrations(conn=managed_conn)
+        managed_conn.close()
+        with monkeypatch.context() as trace_patch:
+            trace_patch.setattr(
+                "vnalpha.assistant.managed_prepare.finish_llm_trace",
+                trace_failure,
+            )
+            with pytest.raises(AssistantLifecycleError) as lifecycle_error:
+                AssistantApp.managed(
+                    llm_client=ValidSynthesisGateway(), warehouse_path=warehouse_path
+                ).ask("thi truong hom nay")
+        assert lifecycle_error.value.stage == AssistantFailureStage.AUDIT_PERSIST
+        assert lifecycle_error.value.category == "CLASSIFY_TRACE_PERSIST_FAILURE"
+        managed_conn = duckdb.connect(str(warehouse_path), read_only=True)
+        assert managed_conn.execute(
+            "SELECT status FROM assistant_session ORDER BY started_at DESC LIMIT 1"
+        ).fetchone() == ("FAILED",)
+        managed_conn.close()
 
         def session_failure(*_args, **_kwargs):
             raise RuntimeError("session unavailable")

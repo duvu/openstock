@@ -59,12 +59,20 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
 
         prompt = request.current_user_prompt
         persistence = _prompt_projection(request)
-        session_id = create_assistant_session(
-            self._conn,
-            surface=self._surface,
-            user_prompt=persistence.prompt_summary,
-            prompt=persistence,
-        )
+        try:
+            session_id = create_assistant_session(
+                self._conn,
+                surface=self._surface,
+                user_prompt=persistence.prompt_summary,
+                prompt=persistence,
+            )
+        except Exception as exc:
+            raise AssistantLifecycleError(
+                stage=AssistantFailureStage.AUDIT_PERSIST,
+                category="SESSION_CREATE_FAILURE",
+                correlation_id=get_correlation_id(),
+                model_route=self._llm_model(),
+            ) from exc
         _log_assistant_lifecycle("ASSISTANT_PREPARED", "prepare", status="RUNNING")
         try:
             request = replace(request, date=normalize_date_candidate(request.date))
@@ -208,6 +216,27 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                     "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="FAILED"
                 )
             raise
+        except Exception as exc:
+            try:
+                finish_assistant_session(
+                    self._conn,
+                    session_id,
+                    status="FAILED",
+                    error={
+                        "error_type": type(exc).__name__,
+                        "message": sanitize_error_summary(exc),
+                    },
+                )
+            except Exception:
+                _log_assistant_lifecycle(
+                    "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="FAILED"
+                )
+            raise AssistantLifecycleError(
+                stage=AssistantFailureStage.AUDIT_PERSIST,
+                category="PREPARE_PERSIST_FAILURE",
+                correlation_id=get_correlation_id(),
+                model_route=self._llm_model(),
+            ) from exc
 
     def _with_symbol_memory_context(
         self, request: AssistantRequest, entities: dict[str, Any]
