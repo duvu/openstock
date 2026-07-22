@@ -6,9 +6,9 @@ selected domains are disjoint subsets of that inventory.
 | Check | Result |
 | --- | ---: |
 | Authoritative contracts | 220 |
-| Data contracts | 76 |
+| Data contracts | 78 |
 | Research contracts | 24 |
-| Application contracts | 120 |
+| Application contracts | 118 |
 | Unique nodes in local plan | 220 |
 | R0/R4/Phase aggregate wrappers | 0 |
 

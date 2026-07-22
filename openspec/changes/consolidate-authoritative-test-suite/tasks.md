@@ -29,7 +29,7 @@
 
 ## 5. Final local evidence and closure
 
-- [ ] 5.1 Freeze one final SHA; run strict OpenSpec validation, the bounded owning contract, relevant local domains and the complete authoritative suite once.
-- [ ] 5.2 Record final local count, duration and fixture/consolidation evidence on that SHA.
+- [x] 5.1 Freeze one final SHA; run strict OpenSpec validation, the bounded owning contract, relevant local domains and the complete authoritative suite once.
+- [x] 5.2 Record final local count, duration and fixture/consolidation evidence on that SHA.
 - [ ] 5.3 Obtain independent specification, code-quality, security and QA review; push a branch and open a PR referencing #348 without CI closure claims.
 - [ ] 5.4 Merge the approved PR, confirm #348 closed, archive the OpenSpec and validate the archived state on `main`.

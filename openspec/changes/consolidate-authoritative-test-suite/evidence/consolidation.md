@@ -37,3 +37,18 @@ workspace lifecycle result.
 
 The resulting source-aware inventory is 220 nodes with no unclassified test
 definitions.
+
+## Frozen local candidate
+
+The executable candidate `71ce2f3097d73af8955b6c84bf8de58cbd28f3b7` was
+validated locally on 2026-07-22. Strict OpenSpec validation and repository
+consistency passed. The affected data and application lanes passed, as did the
+bounded TODO-persistence and plan-preview owners. The complete
+`make test-vnalpha` aggregate selected all 220 nodes and completed in 57.1
+seconds without pytest failures or a generated `vnalpha/MagicMock` artifact.
+
+The two formerly mock-derived warehouse paths are now concrete test-owned
+connections: a migrated temporary warehouse for the Textual TODO contract and
+an in-memory DuckDB connection for the plan-preview contract. The retained
+workspace-context startup contract continues to own the duplicate Textual
+mount behavior removed above.

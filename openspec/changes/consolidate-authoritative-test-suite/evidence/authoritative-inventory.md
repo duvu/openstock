@@ -2,7 +2,7 @@
 
 The pre-consolidation baseline was 3,303 collected pytest nodes across 275
 `vnalpha` test files. The current local manifest contains 220 exact source
-nodes: 120 application, 76 data and 24 research. `run-test-suite.py --plan`
+nodes: 118 application, 78 data and 24 research. `run-test-suite.py --plan`
 emits 220 unique nodes.
 
 | Disposition | Scope | Evidence |
