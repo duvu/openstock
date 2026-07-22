@@ -3,16 +3,31 @@
 from __future__ import annotations
 
 import inspect
+import json
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator, Literal
 
+import vnalpha.assistant.app as assistant_app
+from vnalpha.assistant.degraded_answer import degradation_warning, lifecycle_warning
 from vnalpha.assistant.errors import (
     ActionableToolExecutionError,
     AssistantInputValidationError,
+    AssistantLifecycleError,
     PlanValidationError,
 )
-from vnalpha.assistant.tool_policy import is_approval_required_plan, is_safe_plan
+from vnalpha.assistant.models import (
+    AssistantAnswer,
+    AssistantPlan,
+    AssistantRequest,
+    PreparedAssistantTurn,
+    RefusalMessage,
+)
+from vnalpha.assistant.tool_policy import (
+    is_approval_required_plan,
+    is_safe_plan,
+    unsafe_tools_in_plan,
+)
 from vnalpha.chat.errors import (
     MAX_PUBLIC_ERROR_CHARS,
     ChatErrorKind,
@@ -35,18 +50,25 @@ from vnalpha.commands.coordinated_executor import CoordinatedCommandExecutor
 from vnalpha.commands.executor import CommandExecutor
 from vnalpha.commands.setup import build_default_registry
 from vnalpha.core.text_safety import redact_structure, sanitize_text
+from vnalpha.model_routing import DEFAULT_OVERRIDE_STORE
+from vnalpha.observability.audit import log_audit
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
+from vnalpha.observability.errors import capture_exception
+from vnalpha.sandbox.execution_service import SandboxExecutionService
+from vnalpha.tools.executor import TraceEvent
+from vnalpha.tui.models.conversation import AssistantAnswerMessage
+from vnalpha.warehouse.chat_repo import (
+    append_chat_message,
+    append_trace_event,
+    clear_visible_messages,
+    create_chat_session,
+    list_trace_events_for_session,
+)
 from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
 
-    from vnalpha.assistant.models import (
-        AssistantPlan,
-        PreparedAssistantTurn,
-        RefusalMessage,
-    )
-    from vnalpha.tools.executor import TraceEvent
 
 CHAT_LOCAL_COMMANDS: frozenset[str] = frozenset(
     {"clear", "context", "plan", "trace", "help"}
@@ -55,8 +77,6 @@ CHAT_LOCAL_COMMANDS: frozenset[str] = frozenset(
 
 def _capture_exception_safely(exc: Exception) -> None:
     try:
-        from vnalpha.observability.errors import capture_exception
-
         capture_exception(exc)
     except Exception:  # noqa: BLE001
         pass
@@ -102,8 +122,6 @@ class ChatController:
 
     def close(self) -> None:
         if self._chat_session_id:
-            from vnalpha.model_routing import DEFAULT_OVERRIDE_STORE
-
             DEFAULT_OVERRIDE_STORE.clear_override(
                 scope="session", session_id=self._chat_session_id
             )
@@ -136,8 +154,6 @@ class ChatController:
         self, original: Callable[["TraceEvent"], None] | None
     ) -> Callable[["TraceEvent"], None] | None:
         def _persisting_trace(event: "TraceEvent") -> None:
-            from vnalpha.tools.executor import TraceEvent
-
             safe_event = TraceEvent(
                 tool_name=sanitize_text(event.tool_name),
                 status=event.status,
@@ -148,8 +164,6 @@ class ChatController:
                 original(safe_event)
             if self._chat_session_id:
                 try:
-                    from vnalpha.warehouse.chat_repo import append_trace_event
-
                     with self._write_connection() as conn:
                         append_trace_event(
                             conn,
@@ -182,8 +196,6 @@ class ChatController:
         workspace_context: str | None = None,
         correlation_id: str | None = None,
     ) -> str | None:
-        from vnalpha.observability.context import set_correlation_id
-
         set_correlation_id(
             parent=correlation_id
         ) if correlation_id else set_correlation_id()
@@ -205,8 +217,6 @@ class ChatController:
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             try:
-                from vnalpha.observability.errors import capture_exception
-
                 capture_exception(exc)
             except Exception:  # noqa: BLE001
                 pass
@@ -257,8 +267,6 @@ class ChatController:
                         self._chat_session_id
                         and self._chat_session_id != chat_session_id
                     ):
-                        from vnalpha.model_routing import DEFAULT_OVERRIDE_STORE
-
                         DEFAULT_OVERRIDE_STORE.clear_override(
                             scope="session", session_id=self._chat_session_id
                         )
@@ -291,8 +299,6 @@ class ChatController:
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             try:
-                from vnalpha.observability.errors import capture_exception
-
                 capture_exception(exc)
             except Exception:  # noqa: BLE001
                 pass
@@ -307,8 +313,6 @@ class ChatController:
                 question, workspace_context=workspace_context
             )
         try:
-            from vnalpha.observability.audit import log_audit
-
             log_audit("CHAT_TURN_STARTED", f"question_chars={len(question)}")
         except Exception:  # noqa: BLE001
             pass
@@ -322,9 +326,7 @@ class ChatController:
                     question, no_execute=True, workspace_context=workspace_context
                 )
 
-            from vnalpha.assistant.models import RefusalMessage as _RefusalMessage
-
-            if isinstance(answer, _RefusalMessage):
+            if isinstance(answer, RefusalMessage):
                 self._emit_stage(AssistantStage.FINAL, text=answer.reason)
                 refusal_text = format_refusal(answer.reason)
                 self._on_message("yellow", refusal_text)
@@ -332,8 +334,6 @@ class ChatController:
                     refusal_text, ChatErrorKind.REFUSAL, role="assistant"
                 )
                 try:
-                    from vnalpha.observability.audit import log_audit
-
                     log_audit("CHAT_REFUSAL", f"Refusal: {answer.reason[:120]}")
                 except Exception:  # noqa: BLE001
                     pass
@@ -350,12 +350,10 @@ class ChatController:
                 return refusal
 
             if self.execution_mode == ExecutionMode.PLAN_ONLY:
-                import json as _json
-
                 plan_json_str: str | None = None
                 if plan is not None:
                     try:
-                        plan_json_str = _json.dumps(
+                        plan_json_str = json.dumps(
                             [
                                 getattr(s, "tool_name", None) or str(s)
                                 for s in getattr(plan, "steps", [])
@@ -433,8 +431,6 @@ class ChatController:
                             )
                     finally:
                         self._on_trace = _original_on_trace
-                    from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
-
                     self._emit_stage(AssistantStage.SYNTHESIZING)
                     if isinstance(answer, AssistantAnswer):
                         self._emit_assistant_answer(answer)
@@ -447,8 +443,6 @@ class ChatController:
                             role="assistant",
                         )
                         try:
-                            from vnalpha.observability.audit import log_audit
-
                             log_audit("CHAT_REFUSAL", f"Refusal: {answer.reason[:120]}")
                         except Exception:  # noqa: BLE001
                             pass
@@ -460,8 +454,6 @@ class ChatController:
                             refusal_text, ChatErrorKind.REFUSAL, role="assistant"
                         )
                         try:
-                            from vnalpha.observability.audit import log_audit
-
                             log_audit("CHAT_REFUSAL", refusal_text[:120])
                         except Exception:  # noqa: BLE001
                             pass
@@ -473,6 +465,8 @@ class ChatController:
             return self._present_actionable_tool_failure(exc)
         except (AssistantInputValidationError, PlanValidationError) as exc:
             return self._present_validation_failure(exc)
+        except AssistantLifecycleError as exc:
+            return self._present_lifecycle_failure(exc)
         except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
@@ -480,8 +474,6 @@ class ChatController:
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             try:
-                from vnalpha.observability.errors import capture_exception
-
                 capture_exception(exc)
             except Exception:  # noqa: BLE001
                 pass
@@ -500,8 +492,6 @@ class ChatController:
 
         if is_safe_plan(plan):
             return None
-
-        from vnalpha.assistant.tool_policy import unsafe_tools_in_plan
 
         unsafe_tools = unsafe_tools_in_plan(plan)
         if unsafe_tools:
@@ -528,6 +518,8 @@ class ChatController:
                 self._present_actionable_tool_failure(exc)
             except (AssistantInputValidationError, PlanValidationError) as exc:
                 self._present_validation_failure(exc)
+            except AssistantLifecycleError as exc:
+                self._present_lifecycle_failure(exc)
             except Exception as exc:
                 error_text = format_runtime_error(
                     "Assistant request failed. Check logs and retry."
@@ -535,8 +527,6 @@ class ChatController:
                 self._on_message("red", error_text)
                 self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
                 try:
-                    from vnalpha.observability.errors import capture_exception
-
                     capture_exception(exc)
                 except Exception:  # noqa: BLE001
                     pass
@@ -562,8 +552,6 @@ class ChatController:
             set_correlation_id(originating_correlation_id)
         self._persist_message("user", "Approved.", "plan_approval")
         try:
-            from vnalpha.observability.audit import log_audit
-
             log_audit("PLAN_APPROVED", "User approved plan")
         except Exception:  # noqa: BLE001
             pass
@@ -578,8 +566,6 @@ class ChatController:
                     no_execute=False,
                     workspace_context=workspace_context,
                 )
-            from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
-
             if isinstance(answer, AssistantAnswer):
                 self._emit_assistant_answer(answer)
             elif isinstance(answer, RefusalMessage):
@@ -600,6 +586,8 @@ class ChatController:
             self._present_actionable_tool_failure(exc)
         except (AssistantInputValidationError, PlanValidationError) as exc:
             self._present_validation_failure(exc)
+        except AssistantLifecycleError as exc:
+            self._present_lifecycle_failure(exc)
         except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
@@ -607,8 +595,6 @@ class ChatController:
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             try:
-                from vnalpha.observability.errors import capture_exception
-
                 capture_exception(exc)
             except Exception:  # noqa: BLE001
                 pass
@@ -617,11 +603,11 @@ class ChatController:
         if self._pending_prepared_turn is not None:
             prepared = self._pending_prepared_turn
             try:
-                from vnalpha.assistant.app import AssistantApp
-
                 with self._write_connection() as conn:
                     self._ensure_chat_schema_ready()
-                    AssistantApp(conn, surface=self._surface).cancel_prepared(prepared)
+                    assistant_app.AssistantApp(
+                        conn, surface=self._surface
+                    ).cancel_prepared(prepared)
             except Exception as exc:
                 _capture_exception_safely(exc)
                 error_text = format_runtime_error(
@@ -639,8 +625,6 @@ class ChatController:
         if self._pending_plan is not None:
             self._persist_message("user", "Cancelled.", "plan_cancel")
             try:
-                from vnalpha.observability.audit import log_audit
-
                 log_audit("PLAN_CANCELLED", "User cancelled plan")
             except Exception:  # noqa: BLE001
                 pass
@@ -685,8 +669,6 @@ class ChatController:
     # ------------------------------------------------------------------
 
     def _cmd_new(self) -> str:
-        from vnalpha.warehouse.chat_repo import create_chat_session
-
         with self._write_connection() as conn:
             self._ensure_chat_schema_ready()
             new_id = create_chat_session(
@@ -708,8 +690,6 @@ class ChatController:
         """
         if not self._chat_session_id:
             return "No active chat session to clear."
-
-        from vnalpha.warehouse.chat_repo import clear_visible_messages
 
         with self._write_connection() as conn:
             self._ensure_chat_schema_ready()
@@ -772,8 +752,6 @@ class ChatController:
         if not self._chat_session_id:
             return "No active chat session — no trace available."
 
-        from vnalpha.warehouse.chat_repo import list_trace_events_for_session
-
         with self._write_connection() as conn:
             self._ensure_chat_schema_ready()
             events = list_trace_events_for_session(conn, self._chat_session_id)
@@ -800,8 +778,6 @@ class ChatController:
         if self._chat_session_id is None:
             return
         try:
-            from vnalpha.warehouse.chat_repo import append_chat_message
-
             with self._write_connection() as conn:
                 self._ensure_chat_schema_ready()
                 append_chat_message(
@@ -867,12 +843,10 @@ class ChatController:
         no_execute: bool = False,
         workspace_context: str | None = None,
     ):
-        from vnalpha.assistant.app import AssistantApp
-
         self._ensure_chat_schema_ready()
         if self._connection_factory is not None:
             with self._write_connection() as connection:
-                app = AssistantApp(connection, surface="tui-chat")
+                app = assistant_app.AssistantApp(connection, surface="tui-chat")
                 return app.ask(
                     question,
                     date=self._target_date,
@@ -881,7 +855,7 @@ class ChatController:
                     on_trace_event=self._on_trace,
                     workspace_context=workspace_context,
                 )
-        return AssistantApp.managed(surface="tui-chat").ask(
+        return assistant_app.AssistantApp.managed(surface="tui-chat").ask(
             question,
             date=self._target_date,
             date_is_implicit=self._target_date_is_implicit,
@@ -896,9 +870,6 @@ class ChatController:
     def _prepare_turn(
         self, question: str, workspace_context: str | None
     ) -> "PreparedAssistantTurn | tuple[RefusalMessage, AssistantPlan]":
-        from vnalpha.assistant.app import AssistantApp
-        from vnalpha.assistant.models import AssistantRequest
-
         self._ensure_chat_schema_ready()
 
         request = AssistantRequest(
@@ -910,12 +881,14 @@ class ChatController:
         )
         if self._connection_factory is not None:
             with self._write_connection() as connection:
-                return AssistantApp(connection, surface=self._surface).prepare(request)
-        return AssistantApp.managed(surface=self._surface).prepare(request)
+                return assistant_app.AssistantApp(
+                    connection, surface=self._surface
+                ).prepare(request)
+        return assistant_app.AssistantApp.managed(surface=self._surface).prepare(
+            request
+        )
 
     def _execute_prepared_turn(self, prepared: "PreparedAssistantTurn"):
-        from vnalpha.assistant.app import AssistantApp
-
         self._ensure_chat_schema_ready()
 
         kwargs = {
@@ -924,16 +897,14 @@ class ChatController:
         }
         if self._connection_factory is not None:
             with self._write_connection() as connection:
-                return AssistantApp(connection, surface=self._surface).execute_prepared(
-                    prepared, **kwargs
-                )
-        return AssistantApp.managed(surface=self._surface).execute_prepared(
-            prepared, **kwargs
-        )
+                return assistant_app.AssistantApp(
+                    connection, surface=self._surface
+                ).execute_prepared(prepared, **kwargs)
+        return assistant_app.AssistantApp.managed(
+            surface=self._surface
+        ).execute_prepared(prepared, **kwargs)
 
     def _approve_prepared_turn(self, prepared: "PreparedAssistantTurn") -> None:
-        from vnalpha.sandbox.execution_service import SandboxExecutionService
-
         self._ensure_chat_schema_ready()
 
         with self._write_connection() as conn:
@@ -994,6 +965,8 @@ class ChatController:
             return self._present_actionable_tool_failure(exc)
         except (AssistantInputValidationError, PlanValidationError) as exc:
             return self._present_validation_failure(exc)
+        except AssistantLifecycleError as exc:
+            return self._present_lifecycle_failure(exc)
         except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
@@ -1001,8 +974,6 @@ class ChatController:
             self._on_message("red", error_text)
             self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
             try:
-                from vnalpha.observability.errors import capture_exception
-
                 capture_exception(exc)
             except Exception:  # noqa: BLE001
                 pass
@@ -1029,9 +1000,19 @@ class ChatController:
         self._persist_error_message(error_text, ChatErrorKind.VALIDATION)
         return error_text
 
-    def _render_prepared_answer(self, answer) -> None:
-        from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
+    def _present_lifecycle_failure(self, exc: AssistantLifecycleError) -> str:
+        error_text = lifecycle_warning(
+            exc.stage,
+            exc.category,
+            exc.correlation_id,
+            trace_id=exc.trace_id,
+            model_route=exc.model_route,
+        )
+        self._on_message("red", error_text)
+        self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+        return error_text
 
+    def _render_prepared_answer(self, answer) -> None:
         if isinstance(answer, AssistantAnswer):
             self._emit_assistant_answer(answer)
         elif isinstance(answer, RefusalMessage):
@@ -1061,9 +1042,6 @@ class ChatController:
         self._on_message(stage_to_style(stage), format_stage_event(event))
 
     def _emit_assistant_answer(self, answer: object) -> None:
-        from vnalpha.assistant.degraded_answer import degradation_warning
-        from vnalpha.assistant.models import AssistantAnswer
-
         if not isinstance(answer, AssistantAnswer):
             return
         warning = degradation_warning(answer)
@@ -1081,8 +1059,6 @@ class ChatController:
         self._on_message("bold green", f"Assistant: {answer.summary}")
 
     def _build_assistant_answer_message(self, answer: object) -> "object":
-        from vnalpha.tui.models.conversation import AssistantAnswerMessage
-
         return AssistantAnswerMessage(
             text=sanitize_text(answer.summary),
             summary=sanitize_text(answer.summary),

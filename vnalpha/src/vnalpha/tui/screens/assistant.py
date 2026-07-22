@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
-from vnalpha.assistant.errors import AssistantInputValidationError
+from rich.text import Text
+
+from vnalpha.assistant.app import AssistantApp
+from vnalpha.assistant.degraded_answer import degradation_warning, lifecycle_warning
+from vnalpha.assistant.errors import (
+    AssistantInputValidationError,
+    AssistantLifecycleError,
+)
+from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
+from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
+from vnalpha.assistant.planner import PlanBuilder
+from vnalpha.core.logging import set_correlation_id
 from vnalpha.core.text_safety import sanitize_error_summary, sanitize_text
 from vnalpha.observability.errors import capture_exception
 
 try:
-    from rich.text import Text
     from textual.app import ComposeResult
     from textual.screen import Screen
     from textual.widgets import Footer, Header, Input, Label, Static
@@ -15,6 +25,20 @@ try:
     _TEXTUAL_AVAILABLE = True
 except ImportError:
     _TEXTUAL_AVAILABLE = False
+
+
+def render_assistant_answer(answer: AssistantAnswer) -> Text:
+    answer_text = Text(sanitize_text(answer.summary), style="bold")
+    answer_text.append("\n\nBasis: ", style="dim")
+    answer_text.append(sanitize_text(answer.basis))
+    answer_text.append("\nRisks: ", style="dim yellow")
+    answer_text.append(sanitize_text(answer.risks_caveats))
+    warning = degradation_warning(answer)
+    if warning is not None:
+        answer_text.append("\nWarning: ", style="bold yellow")
+        answer_text.append(sanitize_text(warning), style="yellow")
+    return answer_text
+
 
 if _TEXTUAL_AVAILABLE:
 
@@ -60,14 +84,11 @@ if _TEXTUAL_AVAILABLE:
             self._process_question(question)
 
         def _process_question(self, question: str) -> None:
+            set_correlation_id()
             answer_panel = self.query_one("#assistant-answer", Static)
             plan_panel = self.query_one("#assistant-plan", Static)
             answer_panel.update(Text("Processing...", style="dim"))
             try:
-                from vnalpha.assistant.app import AssistantApp
-                from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
-                from vnalpha.assistant.models import RefusalMessage
-
                 llm_client = LLMGatewayClient(LLMGatewayConfig.from_env())
                 app = AssistantApp.managed(surface="tui", llm_client=llm_client)
                 result, plan = app.ask(
@@ -80,28 +101,36 @@ if _TEXTUAL_AVAILABLE:
                     refusal_text.append(sanitize_text(result.reason))
                     answer_panel.update(refusal_text)
                     return
-                answer_text = Text(sanitize_text(result.summary), style="bold")
-                answer_text.append("\n\nBasis: ", style="dim")
-                answer_text.append(sanitize_text(result.basis))
-                answer_text.append("\nRisks: ", style="dim yellow")
-                answer_text.append(sanitize_text(result.risks_caveats))
-                answer_panel.update(answer_text)
-                from vnalpha.assistant.planner import PlanBuilder
-
+                answer_panel.update(render_assistant_answer(result))
                 plan_panel.update(
                     Text(sanitize_text(PlanBuilder().preview(plan)), style="dim")
                 )
             except AssistantInputValidationError as exc:
                 public_error = sanitize_error_summary(exc)
                 answer_panel.update(Text(f"Error: {public_error}", style="red"))
+            except AssistantLifecycleError as exc:
+                answer_panel.update(
+                    Text(
+                        lifecycle_warning(
+                            exc.stage,
+                            exc.category,
+                            exc.correlation_id,
+                            trace_id=exc.trace_id,
+                            model_route=exc.model_route,
+                        ),
+                        style="red",
+                    )
+                )
             except Exception as exc:
                 capture_exception(exc)
                 answer_panel.update(
                     Text(
-                        "Assistant request failed. Check logs and retry.",
+                        "Assistant request did not produce a usable answer. "
+                        "Check logs and retry.",
                         style="red",
                     )
                 )
+
 else:
 
     class AssistantScreen:  # type: ignore[no-redef]

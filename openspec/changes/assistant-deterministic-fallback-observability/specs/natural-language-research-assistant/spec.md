@@ -1,13 +1,8 @@
 ## ADDED Requirements
 
-### Requirement: Assistant shall preserve successful read-only tool evidence
+### Requirement: Assistant SHALL preserve successful read-only tool evidence
 
-For a completed safe read-only plan with deterministic renderable tool output, the
-assistant SHALL return a validated deterministic answer before treating LLM synthesis
-as an enhancement. Synthesis call, parse, groundedness, or policy failure SHALL return
-that deterministic answer with degraded metadata and a bounded public warning. Unsafe
-write/execution plans, failed tools, and turns without valid deterministic evidence
-SHALL remain fail-closed.
+For a completed safe read-only plan with deterministic renderable tool output, the assistant SHALL return a validated deterministic answer before treating LLM synthesis as an enhancement. Synthesis call, parse, groundedness, or policy failure SHALL return that deterministic answer with degraded metadata and a bounded public warning. Unsafe write/execution plans, failed tools, and turns without valid deterministic evidence SHALL remain fail-closed.
 
 #### Scenario: Market regime synthesis is unavailable
 - **GIVEN** `market.get_regime` completed successfully with persisted evidence

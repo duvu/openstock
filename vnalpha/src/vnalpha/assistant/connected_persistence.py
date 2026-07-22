@@ -5,6 +5,11 @@ from typing import Any
 from vnalpha.assistant.connected_context import ConnectedAssistantContext
 from vnalpha.assistant.errors import SynthesisError
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
+from vnalpha.assistant.research_audit import persist_research_answer_audit
+from vnalpha.core.logging import get_logger
+from vnalpha.model_routing.models import ModelProfile
+from vnalpha.observability.context import get_correlation_id
+from vnalpha.symbol_memory.projection import project_analysis_evidence
 
 
 class ConnectedAssistantPersistence(ConnectedAssistantContext):
@@ -29,10 +34,6 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
                 "Research answer failed validation and cannot be persisted."
             )
         try:
-            from vnalpha.assistant.research_audit import (
-                persist_research_answer_audit,
-            )
-
             return persist_research_answer_audit(
                 conn if conn is not None else self._conn,
                 assistant_session_id=session_id,
@@ -44,7 +45,7 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
             )
         except SynthesisError:
             raise
-        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+        except Exception as exc:
             raise SynthesisError(
                 f"Research answer audit persistence failed: {exc}"
             ) from exc
@@ -65,18 +66,13 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
         if plan.intent != "deep_analyze_symbol":
             return True
         try:
-            from vnalpha.observability.context import get_correlation_id
-            from vnalpha.symbol_memory.projection import project_analysis_evidence
-
             correlation_id = get_correlation_id() or plan.intent
             result = project_analysis_evidence(
                 conn if conn is not None else self._conn,
                 tool_outputs,
                 correlation_id=correlation_id,
             )
-        except Exception as exc:  # noqa: BROAD_EXCEPT_OK, BLE001
-            from vnalpha.core.logging import get_logger
-
+        except Exception as exc:
             get_logger("assistant.app").warning(
                 "Symbol knowledge projection failed: %s", exc
             )
@@ -84,7 +80,7 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
                 **answer.research_metadata,
                 "knowledge_projection": {
                     "projected": [],
-                    "warnings": [f"Symbol knowledge projection failed: {exc}"],
+                    "warnings": ["Symbol knowledge projection was unavailable."],
                 },
             }
             return False
@@ -95,9 +91,12 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
         return True
 
     def _llm_model(self) -> str:
-        config = getattr(self._llm, "config", None)
-        model = getattr(config, "model", None)
-        return str(model or type(self._llm).__name__)
+        decision = getattr(self._llm, "last_route_decision", None)
+        profile = getattr(decision, "profile", None)
+        try:
+            return ModelProfile.parse(profile).value
+        except ValueError:
+            return "client"
 
     def _raw_response_summary(
         self, raw_responses: list[dict[str, Any]]
@@ -105,4 +104,20 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
         config = getattr(self._llm, "config", None)
         if not getattr(config, "store_raw", False):
             return {}
-        return {"raw_responses": raw_responses}
+        evidence: list[dict[str, Any]] = []
+        for response in raw_responses:
+            if not isinstance(response, dict):
+                continue
+            item: dict[str, Any] = {}
+            route_profile = response.get("route_profile")
+            try:
+                item["route_profile"] = ModelProfile.parse(route_profile).value
+            except ValueError:
+                pass
+            for key in ("status_code", "response_chars"):
+                value = response.get(key)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    item[key] = value
+            if item:
+                evidence.append(item)
+        return {"response_evidence": evidence} if evidence else {}

@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Research answer audit
+### Requirement: Research answer audit SHALL preserve a valid answer
 
 The assistant SHALL persist compact answer-audit metadata for deep workflows. Failure
 to persist an audit, project knowledge, or finalize a session after a validated answer

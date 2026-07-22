@@ -10,6 +10,16 @@ from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlparse
 
+import httpx
+import structlog
+
+from vnalpha.assistant.errors import (
+    LLMConfigError,
+    LLMGatewayError,
+    LLMNoCompatibleFallbackError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
 from vnalpha.model_routing.config import ModelRoutingConfig
 from vnalpha.model_routing.integration import GatewayRouteRequest, resolve_gateway_route
 from vnalpha.model_routing.models import (
@@ -40,8 +50,6 @@ def _log_llm_error(
     finish_reason: str | None = None,
 ) -> None:
     try:
-        import structlog
-
         log = structlog.get_logger("assistant.gateway")
         log.error(
             "LLM call failed",
@@ -69,12 +77,18 @@ _SCHEMA_UNSUPPORTED_MARKERS = (
     "structured_output",
     "unsupported schema",
 )
+_USAGE_COUNTERS = frozenset(
+    {
+        "completion_tokens",
+        "prompt_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+    }
+)
 RETRY_AFTER_MAX_SECONDS = 300
 
 
 def _integer_env(name: str, default: int) -> int:
-    from vnalpha.assistant.errors import LLMConfigError
-
     raw = os.environ.get(name, "").strip()
     if not raw:
         return default
@@ -142,6 +156,19 @@ def _parse_retry_after(raw: str | None) -> int | None:
     return min(value, RETRY_AFTER_MAX_SECONDS)
 
 
+def _bounded_usage(usage: object) -> dict[str, int]:
+    if not isinstance(usage, dict):
+        return {}
+    return {
+        key: value
+        for key, value in usage.items()
+        if key in _USAGE_COUNTERS
+        and isinstance(value, int)
+        and not isinstance(value, bool)
+        and value >= 0
+    }
+
+
 @dataclass
 class LLMGatewayConfig:
     model: str
@@ -176,8 +203,6 @@ class LLMGatewayConfig:
         return config
 
     def validate(self) -> None:
-        from vnalpha.assistant.errors import LLMConfigError
-
         missing: list[str] = []
         if not self.endpoint.strip():
             missing.append("VNALPHA_LLM_ENDPOINT")
@@ -257,8 +282,6 @@ class LLMGatewayClient:
                 default_model_id=self._config.model
             )
         except ValueError as exc:
-            from vnalpha.assistant.errors import LLMConfigError
-
             raise LLMConfigError(f"Invalid model routing configuration: {exc}") from exc
         self._override_store = override_store or DEFAULT_OVERRIDE_STORE
         self._last_route_decision: ModelRouteDecision | None = None
@@ -297,12 +320,6 @@ class LLMGatewayClient:
         model_profile: ModelProfile | str | None = None,
         route_metadata: Mapping[str, Any] | None = None,
     ) -> tuple[str, dict]:
-        from vnalpha.assistant.errors import (
-            LLMConfigError,
-            LLMGatewayError,
-            LLMResponseError,
-        )
-
         api_key = (
             self._api_key
             if self._api_key is not None
@@ -345,6 +362,8 @@ class LLMGatewayClient:
         for decision in routes:
             if previous is not None:
                 emit_fallback_used(previous, decision, safe_metadata)
+            self._last_route_decision = decision
+            set_last_route_decision(decision)
             try:
                 content, usage = self._call_model(
                     decision,
@@ -357,15 +376,19 @@ class LLMGatewayClient:
                 last_error = exc.error
                 previous = decision
                 continue
-            self._last_route_decision = decision
-            set_last_route_decision(decision)
-            usage_payload = dict(usage)
-            usage_payload["model_route"] = decision.to_dict()
+            usage_payload = _bounded_usage(usage)
+            structured_mode = usage.get("structured_output_mode")
+            if structured_mode in {"none", "json_object", "json_schema"}:
+                usage_payload["structured_output_mode"] = structured_mode
+            structured_output_downgraded = usage.get("structured_output_downgraded")
+            if isinstance(structured_output_downgraded, bool):
+                usage_payload["structured_output_downgraded"] = (
+                    structured_output_downgraded
+                )
+            usage_payload["route_profile"] = decision.profile.value
             return content, usage_payload
 
         if strict_schema and last_error is not None and not compatible_fallbacks:
-            from vnalpha.assistant.errors import LLMNoCompatibleFallbackError
-
             if isinstance(last_error, LLMResponseError) and not (
                 last_error.error_kind == "structured_output_unsupported"
                 or last_error.status_code == 404
@@ -396,10 +419,6 @@ class LLMGatewayClient:
         api_key: str,
         route_metadata: Mapping[str, Any],
     ) -> tuple[str, dict]:
-        import httpx
-
-        from vnalpha.assistant.errors import LLMResponseError, LLMTimeoutError
-
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -434,9 +453,9 @@ class LLMGatewayClient:
                 if self._config.store_raw:
                     self._last_raw_responses.append(
                         {
-                            "model_id": decision.model_id,
+                            "route_profile": decision.profile.value,
                             "status_code": response.status_code,
-                            "body": response.text,
+                            "response_chars": len(response.text),
                         }
                     )
                 response.raise_for_status()
@@ -457,8 +476,7 @@ class LLMGatewayClient:
                         "LLM response from model "
                         f"'{decision.model_id}' has empty completion content."
                     )
-                usage = data.get("usage", {})
-                usage_payload = dict(usage) if isinstance(usage, dict) else {}
+                usage_payload = _bounded_usage(data.get("usage"))
                 usage_payload["structured_output_mode"] = structured_mode
                 usage_payload["structured_output_downgraded"] = schema_downgraded
                 latency_ms = (time.monotonic() - started) * 1000

@@ -22,7 +22,9 @@ changes:
       The focused owning contract covers gateway, parse, context-policy,
       groundedness, fallback-validation, synthesis-trace, audit, projection and
       session-finalization failures, including planner to market.get_regime.
-      Final PR and lifecycle-gate evidence remain pending.
+      Validation is recorded at implementation SHA
+      02f57a0af1c7749063b28a8543476a5402735f47; final PR and lifecycle-gate
+      evidence remain pending under issue 388.
 
   fiinquantx-full-data-expansion:
     status: partial

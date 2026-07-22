@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 from datetime import date
@@ -14,6 +15,7 @@ from vnalpha.assistant.models import (
     text_hash,
 )
 from vnalpha.data_availability.dates import normalize_optional_date
+from vnalpha.observability.trace import log_trace
 from vnalpha.workspace_context.redaction import redact_workspace_text
 
 
@@ -31,7 +33,7 @@ def _prompt_projection(request: AssistantRequest) -> PromptPersistenceRecord:
         else None
     )
     chat_payload = (
-        json.dumps(request.to_dict()["chat_context"], sort_keys=True)
+        json.dumps(dataclasses.asdict(request.chat_context), sort_keys=True)
         if request.chat_context is not None
         else None
     )
@@ -70,6 +72,4 @@ def _request_as_of_date(value: str | None) -> date:
 
 
 def _log_assistant_lifecycle(event_type: str, operation: str, *, status: str) -> None:
-    from vnalpha.observability.trace import log_trace
-
     log_trace(event_type, operation, status=status)
