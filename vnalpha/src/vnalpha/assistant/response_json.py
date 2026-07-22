@@ -224,9 +224,7 @@ def parse_synthesis_response(response_text: str) -> AssistantAnswer:
         risks_caveats=str(data.get("risks_caveats", "")),
         tool_trace_summary=str(data.get("tool_trace_summary", "")),
         missing_data=[str(item) for item in missing_data],
-        raw_tool_outputs=data.get("raw_tool_outputs", {})
-        if isinstance(data.get("raw_tool_outputs", {}), dict)
-        else {},
+        raw_tool_outputs={},
         grounded_source_refs=[str(item) for item in source_refs],
         research_metadata={},
         claim_source_refs=claim_source_refs,

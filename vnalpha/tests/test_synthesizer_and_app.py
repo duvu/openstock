@@ -206,8 +206,19 @@ class TestAnswerSynthesizer:
         assert "ghp_" not in untrusted_fallback.research_metadata["fallback_reason"]
         assert (
             parse_synthesis_response(
-                json.dumps({"research_metadata": {"warning": "ghp_secret"}})
+                json.dumps(
+                    {
+                        "research_metadata": {"warning": "ghp_secret"},
+                        "raw_tool_outputs": {"warning": "ghp_secret"},
+                    }
+                )
             ).research_metadata
+            == {}
+        )
+        assert (
+            parse_synthesis_response(
+                json.dumps({"raw_tool_outputs": {"warning": "ghp_secret"}})
+            ).raw_tool_outputs
             == {}
         )
 
