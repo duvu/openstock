@@ -20,10 +20,7 @@ def configure_app(app: typer.Typer) -> None:
         """Configure logging at the start of every CLI invocation."""
         _load_dotenv()
         configure_logging(surface=LogSurface.CLI)
-        try:
-            init_run_context(surface="cli", actor="cli")
-        except Exception:  # noqa: BLE001
-            return
+        init_run_context(surface="cli", actor="cli")
         log_app("CLI_STARTED", "vnalpha CLI started", module="vnalpha.cli")
         try:
             log_app(

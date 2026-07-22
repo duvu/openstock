@@ -8,7 +8,7 @@ import duckdb
 from vnalpha.assistant.executor import AssistantExecutor
 from vnalpha.assistant.models import IntentResult
 from vnalpha.assistant.planner import PlanBuilder
-from vnalpha.data_availability import deep_readiness_service
+from vnalpha.core.dates import resolve_market_session_date
 from vnalpha.data_availability.deep_readiness import (
     DeepAnalysisReadinessRequest,
     DeepAnalysisReadinessService,
@@ -54,8 +54,9 @@ def _ensure_result(
     )
 
 
-def _seed_cached_deep_analysis(conn: duckdb.DuckDBPyConnection) -> None:
-    target_date = "2026-07-21"
+def _seed_cached_deep_analysis(
+    conn: duckdb.DuckDBPyConnection, target_date: str
+) -> None:
     target_session = date.fromisoformat(target_date)
     lineage = {
         "as_of_bar_date": target_date,
@@ -146,20 +147,19 @@ def test_readiness_reports_actionable_core_status() -> None:
     conn.close()
 
 
-def test_live_deep_analysis_plan_reuses_fresh_evidence(monkeypatch) -> None:
+def test_live_deep_analysis_plan_reuses_fresh_evidence() -> None:
     conn = duckdb.connect()
     run_migrations(conn=conn)
-    _seed_cached_deep_analysis(conn)
-    monkeypatch.setattr(
-        deep_readiness_service,
-        "resolve_market_session_date",
-        lambda _requested_date: "2026-07-22",
-    )
+    requested_date = resolve_market_session_date("today")
+    latest_validated_date = (
+        date.fromisoformat(requested_date) - timedelta(days=1)
+    ).isoformat()
+    _seed_cached_deep_analysis(conn, latest_validated_date)
     plan = PlanBuilder().build(
         IntentResult(
             intent="deep_analyze_symbol",
             confidence=1.0,
-            entities={"symbol": "FPT"},
+            entities={"symbol": "FPT", "date": "today"},
         )
     )
     session_id = create_assistant_session(
@@ -177,10 +177,14 @@ def test_live_deep_analysis_plan_reuses_fresh_evidence(monkeypatch) -> None:
     analysis = execution[plan.steps[1].step_id]["data"]
     assert provisioning["outcome"] == "REUSED"
     assert provisioning["reused_fresh_data"] is True
-    assert provisioning["resolved_date"] == "2026-07-21"
+    assert provisioning["resolved_date"] == latest_validated_date
+    assert provisioning["warnings"] == [
+        "Current-session data is unavailable; using the latest validated "
+        f"market session {latest_validated_date}."
+    ]
     assert analysis["symbol"] == "FPT"
     assert analysis["available"] is True
-    assert analysis["as_of_date"] == "2026-07-21"
+    assert analysis["as_of_date"] == latest_validated_date
     assert analysis["candidate"]["score"] == 0.75
     assert analysis["missing_data"] == []
     conn.close()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 import duckdb
 
@@ -32,6 +33,7 @@ from vnalpha.data_availability.models import (
     EnsureDataResult,
     EnsureDataStatus,
 )
+from vnalpha.data_availability.policy import DEFAULT_POLICY
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +41,7 @@ class DeepAnalysisReadinessService:
     ensure: Callable[[duckdb.DuckDBPyConnection, str, str | None], EnsureDataResult] = (
         ensure_symbol_analysis_ready
     )
+    max_reused_session_age_days: int = DEFAULT_POLICY.stale_after_calendar_days
 
     def ensure_ready(self, request: DeepAnalysisReadinessRequest) -> ReadinessResult:
         current_correlation_id = correlation_id()
@@ -59,7 +62,9 @@ class DeepAnalysisReadinessService:
             normalized_symbol,
             request.requested_date,
             resolved_date,
+            self.max_reused_session_age_days,
         )
+        fallback_warning = _fallback_warning(request.requested_date, resolved_date)
 
         audit_started(
             symbol=normalized_symbol,
@@ -130,6 +135,7 @@ class DeepAnalysisReadinessService:
             actions=actions,
             warnings=(
                 *_sanitized_warnings(result.warnings),
+                *fallback_warning,
                 *(
                     artifact.error_code
                     for artifact in context_artifacts
@@ -249,16 +255,20 @@ def _resolve_available_session_date(
     symbol: str,
     requested_date: str | None,
     resolved_date: str,
+    max_session_age_days: int,
 ) -> str:
     if requested_date is not None and requested_date.strip().lower() != "today":
         return resolved_date
+    minimum_date = (
+        date.fromisoformat(resolved_date) - timedelta(days=max_session_age_days)
+    ).isoformat()
     row = conn.execute(
         """
         SELECT cs.date::VARCHAR
         FROM candidate_score cs
         WHERE cs.symbol = ?
           AND cs.date <= ?
-          AND cs.date >= ?::DATE - INTERVAL 7 DAY
+          AND cs.date >= ?
           AND EXISTS (
               SELECT 1 FROM feature_snapshot fs
               WHERE fs.symbol = cs.symbol AND fs.date = cs.date
@@ -278,9 +288,22 @@ def _resolve_available_session_date(
         ORDER BY cs.date DESC
         LIMIT 1
         """,
-        [symbol, resolved_date, resolved_date],
+        [symbol, resolved_date, minimum_date],
     ).fetchone()
     return str(row[0]) if row is not None and row[0] is not None else resolved_date
+
+
+def _fallback_warning(
+    requested_date: str | None, resolved_date: str
+) -> tuple[str, ...]:
+    if requested_date is None or requested_date.strip().lower() == "today":
+        calendar_date = resolve_market_session_date(requested_date)
+        if calendar_date != resolved_date:
+            return (
+                "Current-session data is unavailable; using the latest validated "
+                f"market session {resolved_date}.",
+            )
+    return ()
 
 
 def _undetailed_provisioning_failure(
