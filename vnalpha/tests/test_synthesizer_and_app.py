@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, timezone
 
 import duckdb
 import pytest
 
+from vnalpha.assistant.connection_runtime import AssistantApp
+from vnalpha.assistant.degraded_answer import degradation_warning
+from vnalpha.assistant.errors import SynthesisError
 from vnalpha.assistant.gateway import FakeLLMClient
 from vnalpha.assistant.models import (
     AssistantAnswer,
@@ -16,7 +20,9 @@ from vnalpha.assistant.models import (
 from vnalpha.assistant.synthesizer import (
     AnswerSynthesizer,
 )
+from vnalpha.research_intelligence.models import MarketRegimeSnapshot
 from vnalpha.warehouse.migrations import run_migrations
+from vnalpha.warehouse.repositories import upsert_market_regime_snapshot
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -78,14 +84,78 @@ def _make_scan_plan() -> AssistantPlan:
     )
 
 
+def _market_plan() -> AssistantPlan:
+    return AssistantPlan(
+        intent="review_market_regime",
+        steps=[
+            ToolPlanStep(
+                step_id="step_1",
+                tool_name="market.get_regime",
+                arguments={"date": "2026-07-01"},
+                purpose="Review persisted market regime research context",
+                required_permission="READ_FEATURES",
+            )
+        ],
+        required_artifacts=["market_regime_snapshot"],
+    )
+
+
+def _market_tool_output(*, summary: str = "Persisted market regime: CONSTRUCTIVE."):
+    return {
+        "step_1": {
+            "summary": summary,
+            "warnings": ["Persisted context may be stale."],
+            "data": {
+                "snapshot": {"regime": "CONSTRUCTIVE"},
+                "freshness": {"status": "CURRENT"},
+                "lineage": {"source": "warehouse"},
+                "quality": "COMPLETE",
+                "caveats": ["Persisted context may be stale."],
+                "artifact_refs": ["fixture://market-regime"],
+            },
+        }
+    }
+
+
+def _market_snapshot(as_of_date: date) -> MarketRegimeSnapshot:
+    return MarketRegimeSnapshot(
+        as_of_date=as_of_date,
+        benchmark_symbol="VNINDEX",
+        benchmark_bar_date=as_of_date,
+        close=1300.0,
+        ma20=1280.0,
+        ma50=1250.0,
+        ma50_slope=2.0,
+        return20=0.03,
+        return60=0.08,
+        volatility20=0.12,
+        breadth_active_count=100,
+        breadth_eligible_count=90,
+        breadth_excluded_count=10,
+        breadth_coverage=0.9,
+        pct_above_ma20=0.6,
+        pct_above_ma50=0.55,
+        pct_positive_return20=0.58,
+        regime="CONSTRUCTIVE",
+        trend="UPTREND",
+        volatility="NORMAL",
+        quality="COMPLETE",
+        caveats=("Persisted context may be stale.",),
+        lineage={"source": "fixture"},
+        methodology_version="test-v1",
+        generated_at=datetime.now(timezone.utc),
+    )
+
+
 # ===========================================================================
 # Synthesizer tests
 # ===========================================================================
 
 
 class TestAnswerSynthesizer:
-    def test_synthesizer_returns_answer_with_summary(self):
+    def test_synthesizer_returns_answer_with_summary(self, conn, monkeypatch):
         """Synthesizer returns an AssistantAnswer with non-empty summary."""
+        monkeypatch.setenv("VNALPHA_BUILD_SHA", "test-build-sha")
         client = FakeLLMClient(responses=[(VALID_SYNTHESIS_JSON, {})])
         synth = AnswerSynthesizer(client)
         plan = _make_scan_plan()
@@ -96,6 +166,200 @@ class TestAnswerSynthesizer:
         assert answer.basis == "Based on persisted score."
         assert answer.risks_caveats == "See risk flags."
         assert answer.tool_trace_summary == "Ran watchlist.scan."
+
+        class GatewayUnavailable:
+            last_raw_responses: tuple[dict, ...] = ()
+
+            def chat(self, *_args, **_kwargs):
+                raise RuntimeError("gateway unavailable")
+
+        fallback = AnswerSynthesizer(GatewayUnavailable()).synthesize(
+            "Show me today's candidates",
+            plan,
+            tool_outputs,
+        )
+        assert fallback.research_metadata["synthesis_status"] == "FALLBACK_SUCCESS"
+        assert fallback.research_metadata["degradation"]["stage"] == "SYNTHESIS_CALL"
+        assert "AI synthesis unavailable" in fallback.risks_caveats
+
+        malformed = AnswerSynthesizer(
+            FakeLLMClient(responses=[("{not-json", {})])
+        ).synthesize(
+            "Show me today's candidates",
+            plan,
+            tool_outputs,
+        )
+        assert malformed.research_metadata["degradation"]["stage"] == "SYNTHESIS_PARSE"
+
+        market_plan = _market_plan()
+        market_output = _market_tool_output()
+        context_rejected = AnswerSynthesizer(
+            FakeLLMClient(
+                responses=[
+                    (
+                        json.dumps(
+                            {
+                                "summary": "Caveat: buy now.",
+                                "basis": "Persisted market context.",
+                                "risks_caveats": "Research only.",
+                                "tool_trace_summary": "market.get_regime completed.",
+                                "missing_data": [],
+                            }
+                        ),
+                        {},
+                    )
+                ]
+            )
+        ).synthesize("thi truong hom nay", market_plan, market_output)
+        assert context_rejected.research_metadata["degradation"]["category"] == (
+            "CONTEXT_POLICY_REJECTED"
+        )
+
+        groundedness_rejected = AnswerSynthesizer(
+            FakeLLMClient(
+                responses=[
+                    (
+                        json.dumps(
+                            {
+                                "summary": "Caveat: persisted regime score is 99.",
+                                "basis": "Persisted market context.",
+                                "risks_caveats": "Research only.",
+                                "tool_trace_summary": "market.get_regime completed.",
+                                "missing_data": [],
+                                "grounded_source_refs": [
+                                    "tool:market.get_regime:step_1"
+                                ],
+                            }
+                        ),
+                        {},
+                    )
+                ]
+            )
+        ).synthesize("thi truong hom nay", market_plan, market_output)
+        assert groundedness_rejected.research_metadata["degradation"]["category"] == (
+            "GROUNDEDNESS_OR_POLICY_REJECTED"
+        )
+
+        with pytest.raises(SynthesisError, match="failed closed"):
+            AnswerSynthesizer(GatewayUnavailable()).synthesize(
+                "thi truong hom nay",
+                market_plan,
+                _market_tool_output(summary="buy now"),
+            )
+
+        class FailingSynthesisGateway:
+            last_raw_responses: tuple[dict, ...] = ()
+
+            def chat(self, _messages, *, stage, **_kwargs):
+                if stage == "synthesize":
+                    raise RuntimeError("gateway unavailable")
+                return (
+                    '{"intent":"review_market_regime","confidence":0.9,"entities":{}}',
+                    {},
+                )
+
+        upsert_market_regime_snapshot(conn, _market_snapshot(date(2026, 7, 1)))
+        result, executed_plan = AssistantApp(
+            conn, llm_client=FailingSynthesisGateway()
+        ).ask("thi truong hom nay", date="2026-07-01")
+        assert isinstance(result, AssistantAnswer)
+        assert executed_plan.steps[0].tool_name == "market.get_regime"
+        assert (
+            result.summary
+            == "Caveat: persisted context includes limitations. Persisted market regime: CONSTRUCTIVE."
+        )
+        assert result.research_metadata["synthesis_status"] == "DEGRADED_SUCCESS"
+        assert result.research_metadata["degradation"]["stage"] == "SYNTHESIS_CALL"
+        assert result.research_metadata["degradation"]["trace_id"]
+        assert result.research_metadata["degradation"]["model_route"] == (
+            "FailingSynthesisGateway"
+        )
+        assert result.research_metadata["degradation"]["build_sha"] == "test-build-sha"
+        warning = degradation_warning(result)
+        assert warning is not None
+        assert "stage=SYNTHESIS_CALL" in warning
+        assert "category=GATEWAY_FAILURE" in warning
+        assert "correlation_id=" in warning
+        assert conn.execute(
+            "SELECT status FROM assistant_session ORDER BY started_at DESC LIMIT 1"
+        ).fetchone() == ("DEGRADED_SUCCESS",)
+
+        class ValidSynthesisGateway:
+            last_raw_responses: tuple[dict, ...] = ()
+
+            def chat(self, _messages, *, stage, **_kwargs):
+                if stage == "synthesize":
+                    return (
+                        json.dumps(
+                            {
+                                "summary": "Caveat: persisted market context.",
+                                "basis": "Persisted market regime evidence.",
+                                "risks_caveats": "Research only; context may be stale.",
+                                "tool_trace_summary": "market.get_regime completed.",
+                                "missing_data": [],
+                                "grounded_source_refs": [
+                                    "tool:market.get_regime:step_1"
+                                ],
+                            }
+                        ),
+                        {},
+                    )
+                return (
+                    '{"intent":"review_market_regime","confidence":0.9,"entities":{}}',
+                    {},
+                )
+
+        def persist_failure(**_kwargs):
+            raise RuntimeError("audit unavailable")
+
+        audit_app = AssistantApp(conn, llm_client=ValidSynthesisGateway())
+        monkeypatch.setattr(audit_app, "_persist_research_audit", persist_failure)
+        audit_result, _ = audit_app.ask("thi truong hom nay", date="2026-07-01")
+        assert isinstance(audit_result, AssistantAnswer)
+        assert audit_result.research_metadata["degradation"]["stage"] == "AUDIT_PERSIST"
+
+        projection_app = AssistantApp(conn, llm_client=ValidSynthesisGateway())
+        monkeypatch.setattr(
+            projection_app, "_project_analysis_evidence", lambda *_args: False
+        )
+        projection_result, _ = projection_app.ask(
+            "thi truong hom nay", date="2026-07-01"
+        )
+        assert isinstance(projection_result, AssistantAnswer)
+        assert projection_result.research_metadata["degradation"]["stage"] == (
+            "KNOWLEDGE_PROJECTION"
+        )
+
+        def trace_failure(*_args, **_kwargs):
+            raise RuntimeError("trace unavailable")
+
+        with monkeypatch.context() as trace_patch:
+            trace_patch.setattr(
+                "vnalpha.assistant.connected_execute.finish_llm_trace",
+                trace_failure,
+            )
+            trace_result, _ = AssistantApp(
+                conn, llm_client=ValidSynthesisGateway()
+            ).ask("thi truong hom nay", date="2026-07-01")
+        assert isinstance(trace_result, AssistantAnswer)
+        assert trace_result.research_metadata["degradation"]["stage"] == (
+            "SYNTHESIS_PERSIST"
+        )
+
+        def session_failure(*_args, **_kwargs):
+            raise RuntimeError("session unavailable")
+
+        monkeypatch.setattr(
+            "vnalpha.assistant.connected_execute.finish_assistant_session",
+            session_failure,
+        )
+        finalize_result, _ = AssistantApp(conn, llm_client=ValidSynthesisGateway()).ask(
+            "thi truong hom nay", date="2026-07-01"
+        )
+        assert isinstance(finalize_result, AssistantAnswer)
+        assert finalize_result.research_metadata["degradation"]["stage"] == (
+            "SESSION_FINALIZE"
+        )
 
 
 # ===========================================================================

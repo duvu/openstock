@@ -6,6 +6,11 @@ if TYPE_CHECKING:
     from vnalpha.tools.executor import TraceEvent
 
 from vnalpha.assistant.connected_context import ConnectedAssistantContext
+from vnalpha.assistant.degraded_answer import (
+    AssistantDegradation,
+    AssistantFailureStage,
+    with_degradation,
+)
 from vnalpha.assistant.errors import PreparedPlanHashMismatchError
 from vnalpha.assistant.models import (
     AssistantAnswer,
@@ -124,16 +129,21 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                     prepared.request.routing_session_id or prepared.assistant_session_id
                 ),
             )
-            finish_llm_trace(
-                self._conn,
-                synthesis_trace_id,
-                status="SUCCESS",
-                output_summary={
-                    "summary_length": len(answer.summary),
-                    **self._raw_response_summary(self._synthesizer.last_raw_responses),
-                },
-                usage=self._synthesizer.last_usage,
+            degradation = self._synthesizer.last_degradation
+            session_status = (
+                "DEGRADED_SUCCESS" if degradation is not None else "SUCCESS"
             )
+            if degradation is not None:
+                degradation = AssistantDegradation(
+                    stage=degradation.stage,
+                    category=degradation.category,
+                    trace_id=synthesis_trace_id,
+                    model_route=self._llm_model(),
+                )
+                answer = with_degradation(
+                    answer,
+                    degradation,
+                )
         except Exception as exc:  # noqa: BROAD_EXCEPT_OK
             finish_llm_trace(
                 self._conn,
@@ -146,33 +156,96 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
             )
             finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="FAILED")
             raise
-        if is_research_intent(prepared.plan.intent):
-            audit_id = self._persist_research_audit(
-                session_id=prepared.assistant_session_id,
-                plan=prepared.plan,
-                tool_outputs=tool_outputs,
-                answer=answer,
+        try:
+            finish_llm_trace(
+                self._conn,
+                synthesis_trace_id,
+                status=session_status,
+                output_summary={
+                    "summary_length": len(answer.summary),
+                    **self._raw_response_summary(self._synthesizer.last_raw_responses),
+                },
+                usage=self._synthesizer.last_usage,
+                error=degradation.to_dict() if degradation is not None else None,
             )
-            answer.research_metadata = {
-                **answer.research_metadata,
-                "research_answer_audit_id": audit_id,
-            }
-            # The audit above raises unless groundedness and policy both passed,
-            # so reaching here means the answer is validated. Project its
-            # deterministic evidence into symbol knowledge (issue #164).
-            self._project_analysis_evidence(prepared.plan, tool_outputs, answer)
-        finish_assistant_session(
-            self._conn,
-            prepared.assistant_session_id,
-            status="SUCCESS",
-            intent=prepared.intent_result.intent,
-            plan=prepared.plan.to_dict(),
-            answer=answer.to_dict(),
-        )
-        finish_prepared_turn(self._conn, prepared.prepared_turn_id, status="EXECUTED")
+        except Exception:  # noqa: BROAD_EXCEPT_OK
+            answer = with_degradation(
+                answer,
+                AssistantDegradation(
+                    AssistantFailureStage.SYNTHESIS_PERSIST,
+                    "SYNTHESIS_TRACE_PERSIST_FAILURE",
+                    trace_id=synthesis_trace_id,
+                    model_route=self._llm_model(),
+                ),
+            )
+            session_status = "DEGRADED_SUCCESS"
+        if is_research_intent(prepared.plan.intent):
+            try:
+                audit_id = self._persist_research_audit(
+                    session_id=prepared.assistant_session_id,
+                    plan=prepared.plan,
+                    tool_outputs=tool_outputs,
+                    answer=answer,
+                )
+                answer.research_metadata = {
+                    **answer.research_metadata,
+                    "research_answer_audit_id": audit_id,
+                }
+            except Exception:  # noqa: BROAD_EXCEPT_OK
+                answer = with_degradation(
+                    answer,
+                    AssistantDegradation(
+                        AssistantFailureStage.AUDIT_PERSIST,
+                        "AUDIT_PERSIST_FAILURE",
+                        trace_id=synthesis_trace_id,
+                        model_route=self._llm_model(),
+                    ),
+                )
+                session_status = "DEGRADED_SUCCESS"
+            else:
+                try:
+                    projected = self._project_analysis_evidence(
+                        prepared.plan, tool_outputs, answer
+                    )
+                except Exception:  # noqa: BROAD_EXCEPT_OK
+                    projected = False
+                if not projected:
+                    answer = with_degradation(
+                        answer,
+                        AssistantDegradation(
+                            AssistantFailureStage.KNOWLEDGE_PROJECTION,
+                            "KNOWLEDGE_PROJECTION_FAILURE",
+                            trace_id=synthesis_trace_id,
+                            model_route=self._llm_model(),
+                        ),
+                    )
+                    session_status = "DEGRADED_SUCCESS"
+        try:
+            finish_assistant_session(
+                self._conn,
+                prepared.assistant_session_id,
+                status=session_status,
+                intent=prepared.intent_result.intent,
+                plan=prepared.plan.to_dict(),
+                answer=answer.to_dict(),
+            )
+            finish_prepared_turn(
+                self._conn, prepared.prepared_turn_id, status="EXECUTED"
+            )
+        except Exception:  # noqa: BROAD_EXCEPT_OK
+            answer = with_degradation(
+                answer,
+                AssistantDegradation(
+                    AssistantFailureStage.SESSION_FINALIZE,
+                    "SESSION_FINALIZE_FAILURE",
+                    trace_id=synthesis_trace_id,
+                    model_route=self._llm_model(),
+                ),
+            )
+            session_status = "DEGRADED_SUCCESS"
         from vnalpha.assistant.runtime_helpers import _log_assistant_lifecycle
 
         _log_assistant_lifecycle(
-            "ASSISTANT_EXECUTED", "execute_prepared", status="SUCCESS"
+            "ASSISTANT_EXECUTED", "execute_prepared", status=session_status
         )
         return answer, prepared.plan

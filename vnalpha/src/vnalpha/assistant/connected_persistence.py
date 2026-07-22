@@ -55,7 +55,7 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
         tool_outputs: dict,
         answer: AssistantAnswer,
         conn=None,
-    ) -> None:
+    ) -> bool:
         """Project a validated deep-analysis turn's evidence into symbol memory.
 
         Best-effort and fail-open: a projection failure is recorded on the
@@ -63,7 +63,7 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
         answer (issue #164).
         """
         if plan.intent != "deep_analyze_symbol":
-            return
+            return True
         try:
             from vnalpha.observability.context import get_correlation_id
             from vnalpha.symbol_memory.projection import project_analysis_evidence
@@ -87,11 +87,12 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
                     "warnings": [f"Symbol knowledge projection failed: {exc}"],
                 },
             }
-            return
+            return False
         answer.research_metadata = {
             **answer.research_metadata,
             "knowledge_projection": result.to_trace_dict(),
         }
+        return True
 
     def _llm_model(self) -> str:
         config = getattr(self._llm, "config", None)
