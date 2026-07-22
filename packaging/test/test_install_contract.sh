@@ -77,7 +77,6 @@ for helper in \
 done
 require_grep 'usr/share/doc/vnalpha/OPERATOR.md' "$BUILD_SCRIPT" "builder bundles the operator guide"
 
-require_grep '^VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=false$' "$ENV_FILE" "FiinQuantX persistence remains disabled by default"
 require_grep '^VNALPHA_LLM_API_KEY=$' "$ENV_FILE" "LLM credentials remain empty by default"
 
 if [[ -n "$DEB_FILE" ]]; then

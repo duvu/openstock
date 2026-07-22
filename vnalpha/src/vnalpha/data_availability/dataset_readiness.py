@@ -204,11 +204,7 @@ def _is_provider_configured(provider: str) -> bool:
         return False
     if not os.getenv("FIINQUANT_USERNAME") or not os.getenv("FIINQUANT_PASSWORD"):
         return False
-    return os.getenv("VNSTOCK_FIINQUANTX_LICENSED", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    return True
 
 
 def _explicit_provider_readiness(provider: str, dataset: str) -> tuple[bool, str]:
@@ -228,12 +224,6 @@ def _explicit_provider_readiness(provider: str, dataset: str) -> tuple[bool, str
         return False, "sdk_version_unsupported"
     if not os.getenv("FIINQUANT_USERNAME") or not os.getenv("FIINQUANT_PASSWORD"):
         return False, "credentials_missing"
-    if os.getenv("VNSTOCK_FIINQUANTX_LICENSED", "").strip().lower() not in {
-        "1",
-        "true",
-        "yes",
-    }:
-        return False, "license_acknowledgement_missing"
     return True, "ready"
 
 

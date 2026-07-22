@@ -11,6 +11,22 @@ policy:
 
 changes:
 
+  fiinquantx-full-data-expansion:
+    status: partial
+    github_issues: [356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367]
+    roadmap_state: scheduled
+    summary: >-
+      Expand synchronous, data-only FiinQuantX capabilities without runtime or
+      persistence approval gates
+      through canonical contracts, read-only service routes, optional
+      consumer-backed persistence and exact-SHA acceptance evidence.
+    evidence: >-
+      The bounded licensed probe records a supported SDK/runtime and certifies
+      the four implemented historical/current-snapshot datasets. All other
+      documented capabilities remain deferred with explicit entitlement,
+      valid-empty, schema, unit or lifecycle blockers until exact-SHA final
+      acceptance closes the program.
+
   queue-backed-cache-first-current-symbol-provisioning:
     status: partial
     github_issues: [317, 320, 323, 324, 338, 343]
@@ -198,16 +214,15 @@ changes:
       PR #122 merged an experimental explicit-source-only runtime for bounded
       daily equity/index OHLCV and current index/sector membership snapshots,
       with lazy SDK loading, exact-version checks, local credentials, canonical
-      output guards and bounded licensed smoke tests. Issue #136 hardens the
-      runtime and persistence gates so boolean acknowledgements also require
-      auditable non-secret approval references; it does not establish commercial
-      permission. GitHub issue 193 now owns the remaining closure work. Offline
+      output guards and bounded licensed smoke tests. Later policy work removes
+      all runtime and persistence approval gates. GitHub issue 193 now owns the
+      remaining closure work. Offline
       implementation and tests cover explicit raw/unadjusted OHLCV requests,
       basis-aware raw/canonical persistence and research disclosure, safe
       provider lineage, atomic membership persistence, CLI integration,
-      installed-host readiness checks and fail-closed approval semantics.
-      Current licensed equity/index/member probes, commercial-permission
-      approval and a fresh-host smoke remain pending and must not be inferred
+      installed-host readiness checks and explicit-source semantics. Current
+      licensed equity/index/member probes and a fresh-host smoke remain pending
+      and must not be inferred
       from historical evidence. The provider track is optional and does not
       block the default-provider roadmap.
 

@@ -26,14 +26,14 @@ The initial implementation SHALL support only explicitly approved SDK contract v
 
 #### Scenario: Approved version is installed
 
-- **WHEN** an approved exact FiinQuantX version is installed
+- **WHEN** a supported exact FiinQuantX version is installed
 - **AND** the corresponding normalizer and contract tests pass
 - **THEN** the provider may expose the capabilities enabled for that contract version
 - **AND** no FiinQuantX wheel or proprietary source is embedded into the OpenStock package
 
 ### Requirement: Secure installation shall be documented and bounded
 
-The system SHALL document the official FiinQuantX package source while requiring an approved exact version and an integrity decision. It SHALL NOT require an unpinned commercial package from a mixed package index as part of the base dependency set.
+The system SHALL document the official FiinQuantX package source while requiring a supported exact version and an integrity decision. It SHALL NOT require an unpinned commercial package from a mixed package index as part of the base dependency set.
 
 #### Scenario: Operator installs FiinQuantX
 
@@ -488,7 +488,8 @@ Adding FiinQuantX SHALL NOT remove or change established providers and defaults 
 
 ### Requirement: Live tests shall be licensed, bounded and opt-in
 
-Normal CI SHALL not call FiinQuantX live services. Licensed live tests SHALL require explicit acknowledgement and minimal requests.
+Normal CI SHALL not call FiinQuantX live services. Live tests SHALL require
+explicit opt-in and minimal requests.
 
 #### Scenario: Default CI runs
 

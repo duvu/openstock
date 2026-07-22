@@ -25,9 +25,6 @@ printf '%s\n' \
   'commit=0123456789abcdef0123456789abcdef01234567' \
   'tree_state=dirty' \
   >"${WORK}/dirty-release"
-printf '%s\n' \
-  'VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED=true' \
-  >"${WORK}/approved-vnalpha.env"
 
 cat >"${WORK}/bin/curl" <<'FAKE'
 #!/usr/bin/env bash
@@ -126,63 +123,31 @@ else
 fi
 
 fiinquantx_output="$(run_verify env \
-  VNALPHA_ENV_FILE="${WORK}/approved-vnalpha.env" \
   VNSTOCK_INSTALL_FIINQUANTX=true \
-  VNSTOCK_FIINQUANTX_LICENSED=true \
   OPENSTOCK_REFERENCE_SOURCE=VCI \
   WAREHOUSE_STATUS_RC=0 \
   WAREHOUSE_STATUS_JSON='{"ready":true,"code":"ready"}' 2>&1)"
 fiinquantx_rc=$?
 if [ "$fiinquantx_rc" -eq 0 ] && echo "$fiinquantx_output" | grep -q '^\[OK\]   MVP1 FiinQuantX:'; then
-  ok "configured FiinQuantX approvals and Gate A capabilities pass"
+  ok "configured FiinQuantX Gate A capabilities pass"
 else
   fail "configured FiinQuantX Gate A readiness did not pass"
 fi
 
-missing_persistence_approval_output="$(run_verify env \
-  VNSTOCK_INSTALL_FIINQUANTX=true \
-  VNSTOCK_FIINQUANTX_LICENSED=true \
-  OPENSTOCK_REFERENCE_SOURCE=VCI \
-  WAREHOUSE_STATUS_RC=0 \
-  WAREHOUSE_STATUS_JSON='{"ready":true,"code":"ready"}' 2>&1)"
-missing_persistence_approval_rc=$?
-if [ "$missing_persistence_approval_rc" -ne 0 ] && echo "$missing_persistence_approval_output" | grep -q '^\[FAIL\] MVP1 FiinQuantX:'; then
-  ok "missing persistence approval boolean fails FiinQuantX readiness"
-else
-  fail "missing persistence approval boolean passed FiinQuantX readiness"
-fi
-
-missing_runtime_approval_output="$(run_verify env \
-  VNALPHA_ENV_FILE="${WORK}/approved-vnalpha.env" \
-  VNSTOCK_INSTALL_FIINQUANTX=true \
-  OPENSTOCK_REFERENCE_SOURCE=VCI \
-  WAREHOUSE_STATUS_RC=0 \
-  WAREHOUSE_STATUS_JSON='{"ready":true,"code":"ready"}' 2>&1)"
-missing_runtime_approval_rc=$?
-if [ "$missing_runtime_approval_rc" -ne 0 ] && echo "$missing_runtime_approval_output" | grep -q '^\[FAIL\] MVP1 FiinQuantX:'; then
-  ok "missing runtime approval boolean fails FiinQuantX readiness"
-else
-  fail "missing runtime approval boolean passed FiinQuantX readiness"
-fi
-
 invalid_reference_output="$(run_verify env \
-  VNALPHA_ENV_FILE="${WORK}/approved-vnalpha.env" \
   VNSTOCK_INSTALL_FIINQUANTX=true \
-  VNSTOCK_FIINQUANTX_LICENSED=true \
   OPENSTOCK_REFERENCE_SOURCE=GARBAGE \
   WAREHOUSE_STATUS_RC=0 \
   WAREHOUSE_STATUS_JSON='{"ready":true,"code":"ready"}' 2>&1)"
 invalid_reference_rc=$?
 if [ "$invalid_reference_rc" -ne 0 ] && echo "$invalid_reference_output" | grep -q '^\[FAIL\] MVP1 FiinQuantX:'; then
-  ok "unapproved reference provider fails FiinQuantX readiness"
+  ok "unsupported reference provider fails FiinQuantX readiness"
 else
-  fail "unapproved reference provider passed FiinQuantX readiness"
+  fail "unsupported reference provider passed FiinQuantX readiness"
 fi
 
 cross_provider_output="$(run_verify env \
-  VNALPHA_ENV_FILE="${WORK}/approved-vnalpha.env" \
   VNSTOCK_INSTALL_FIINQUANTX=true \
-  VNSTOCK_FIINQUANTX_LICENSED=true \
   OPENSTOCK_REFERENCE_SOURCE=VCI \
   CAPABILITIES_JSON='{"capabilities":{"FIINQUANTX":{},"OTHER":{"equity.ohlcv":{},"index.ohlcv":{},"reference.index_membership_snapshot":{},"reference.sector_membership_snapshot":{}}}}' \
   WAREHOUSE_STATUS_RC=0 \

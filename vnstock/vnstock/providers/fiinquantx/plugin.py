@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import os
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pandas as pd
 
-from vnstock.providers.fiinquantx.approval import fiinquantx_license_approval
+from vnstock.core.auth.spec import AuthSpec
+from vnstock.core.auth.types import AuthType
 from vnstock.providers.fiinquantx.bridge import (
     SUPPORTED_VERSIONS,
     FiinQuantXState,
@@ -28,9 +29,6 @@ from vnstock.providers.fiinquantx.policy import (
 from vnstock.providers.fiinquantx.session import (
     DEFAULT_FIINQUANTX_SESSION_PROVIDER,
 )
-
-if TYPE_CHECKING:
-    from vnstock.core.auth.spec import AuthSpec
 
 _MAX_ROWS = 10_000
 _MAX_RANGE_DAYS = 3_660
@@ -69,10 +67,8 @@ class FiinQuantXProviderPlugin:
 
     def capabilities(self) -> dict[str, Any]:
         sdk = load_fiinquantx_sdk()
-        approval = fiinquantx_license_approval()
         runtime_ready = (
             sdk.state is FiinQuantXState.INSTALLED_SUPPORTED
-            and approval.approved
             and self._credentials_configured()
         )
         return {
@@ -82,6 +78,9 @@ class FiinQuantXProviderPlugin:
                     "experimental"
                     if runtime_ready and dataset in IMPLEMENTED_DATASETS
                     else "unsupported"
+                ),
+                "inventory_state": (
+                    "IMPLEMENTED" if dataset in IMPLEMENTED_DATASETS else "DOCUMENTED"
                 ),
                 "auth_required": True,
                 "explicit_only": True,
@@ -234,7 +233,6 @@ class FiinQuantXProviderPlugin:
     def diagnostics(self) -> dict[str, Any]:
         sdk = load_fiinquantx_sdk()
         runtime = DEFAULT_FIINQUANTX_SESSION_PROVIDER.diagnostics()
-        approval = fiinquantx_license_approval()
         return {
             "name": self.name,
             "state": sdk.state.value,
@@ -246,8 +244,6 @@ class FiinQuantXProviderPlugin:
                 if capability["supported"]
             ],
             "credentials_configured": self._credentials_configured(),
-            "licensed_runtime_acknowledged": approval.acknowledged,
-            "licensed_runtime_approved": approval.approved,
             "configured_limits": {
                 "max_concurrency": runtime["max_concurrency"],
                 "max_rows": _MAX_ROWS,
@@ -265,14 +261,6 @@ class FiinQuantXProviderPlugin:
         }
 
     @staticmethod
-    def _licensed_runtime_acknowledged() -> bool:
-        return fiinquantx_license_approval().acknowledged
-
-    @staticmethod
-    def _licensed_runtime_approved() -> bool:
-        return fiinquantx_license_approval().approved
-
-    @staticmethod
     def _credentials_configured() -> bool:
         return bool(
             os.environ.get("FIINQUANT_USERNAME")
@@ -280,11 +268,8 @@ class FiinQuantXProviderPlugin:
         )
 
     def _capability_note(self, dataset: str, state: FiinQuantXState) -> str:
-        approval = fiinquantx_license_approval()
         if dataset not in IMPLEMENTED_DATASETS:
-            return "Disabled until the licensed runtime contract is verified."
-        if not approval.acknowledged:
-            return "Disabled until the licensed runtime is explicitly acknowledged."
+            return "Disabled until the provider method contract is verified."
         if not self._credentials_configured():
             return (
                 "Disabled until both credential environment variables are configured."
@@ -293,10 +278,7 @@ class FiinQuantXProviderPlugin:
             return "Bounded historical contract verified for SDK 0.1.64."
         return f"SDK runtime is unavailable ({state.value})."
 
-    def auth_spec(self, dataset: str) -> "AuthSpec":
-        from vnstock.core.auth.spec import AuthSpec
-        from vnstock.core.auth.types import AuthType
-
+    def auth_spec(self, dataset: str) -> AuthSpec:
         return AuthSpec(
             auth_type=AuthType.CUSTOM,
             required=True,

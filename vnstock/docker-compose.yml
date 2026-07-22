@@ -34,7 +34,6 @@ services:
       PYTHONUNBUFFERED: "1"
       FIINQUANT_USERNAME: ${FIINQUANT_USERNAME:-}
       FIINQUANT_PASSWORD: ${FIINQUANT_PASSWORD:-}
-      VNSTOCK_FIINQUANTX_LICENSED: ${VNSTOCK_FIINQUANTX_LICENSED:-false}
     restart: unless-stopped
     healthcheck:
       test:

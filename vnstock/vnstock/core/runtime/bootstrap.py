@@ -30,8 +30,8 @@ def default_plugin_registry() -> PluginRegistry:
     - **FMARKET** — FMarket fund platform (fund data only)
     - **MSN** — MSN Money market data (experimental)
     - **FMP** — Financial Modeling Prep API (requires FMP_API_KEY)
-    - **FIINQUANTX** — licensed FiinQuantX SDK (explicit-source only; requires
-      SDK, credentials and acknowledgement)
+    - **FIINQUANTX** — FiinQuantX SDK (explicit-source only; requires
+      an exact supported SDK and credentials)
 
     Returns:
         A new :class:`PluginRegistry` with all eight providers registered.

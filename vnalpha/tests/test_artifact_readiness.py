@@ -226,7 +226,6 @@ def test_artifact_readiness_contract(tmp_path: Path, monkeypatch) -> None:
     with WarehouseWriteCoordinator(path=blocked_path).transaction() as connection:
         connection.execute("INSERT INTO symbol_master (symbol) VALUES ('VNM')")
         _seed(connection, table="canonical_ohlcv", symbol="VNM", end_date="2024-09-30")
-    monkeypatch.delenv("VNALPHA_FIINQUANTX_PERSISTENCE_APPROVED", raising=False)
     resolver = SourcePolicyResolver(configured_sources={"index.ohlcv": "fiinquantx"})
     ranking = ArtifactReadinessService(blocked_path, source_policy=resolver).inspect(
         _request(ReadinessCapability.CANDIDATE_RANKING)

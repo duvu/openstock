@@ -39,7 +39,7 @@ Current priority and delivery order are maintained in [the root roadmap](../ROAD
 | Provider hardening | Capability contracts, schema drift, comparison, health, routing diagnostics, fixtures and opt-in live tests |
 | Trading execution | Permanently out of scope |
 
-The current FiinQuantX slice is deliberately limited. Commercial approval, complete entitlement/quota/session behavior, company reference and later flow/fundamental contracts remain open work under issues #105/#106. See [`docs/providers/FIINQUANTX.md`](docs/providers/FIINQUANTX.md).
+The current FiinQuantX slice is deliberately limited. Complete entitlement/quota/session behavior, company reference and later flow/fundamental contracts remain open work under issues #105/#106. See [`docs/providers/FIINQUANTX.md`](docs/providers/FIINQUANTX.md).
 
 ## Architecture
 
@@ -106,7 +106,7 @@ profile = reference.company.info(symbol="FPT")
 balance_sheet = fundamental.equity.balance_sheet(symbol="TCB", period="year")
 ```
 
-For the licensed FiinQuantX experimental path, use only documented canonical endpoints and explicit `source="FIINQUANTX"` after completing local SDK, credential and license configuration. Explicit selection returns a typed failure rather than silently falling back.
+For the FiinQuantX experimental path, use only documented canonical endpoints and explicit `source="FIINQUANTX"` after configuring the local SDK and credentials. Explicit selection returns a typed failure rather than silently falling back.
 
 ## Data quality
 
