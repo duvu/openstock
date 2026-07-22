@@ -5,6 +5,10 @@ from vnalpha.maintenance.daily import (
     MaintenanceRunStatus,
     MaintenanceStageStatus,
 )
+from vnalpha.maintenance.finalization import (
+    MaintenanceFinalizationResult,
+    maybe_submit_session_finalization,
+)
 from vnalpha.maintenance.ledger import (
     get_failed_maintenance_stages,
     get_latest_maintenance_run,
@@ -34,4 +38,6 @@ __all__ = [
     "MaintenanceProducerRequest",
     "MaintenanceProducerResult",
     "MaintenanceRunState",
+    "MaintenanceFinalizationResult",
+    "maybe_submit_session_finalization",
 ]

@@ -64,9 +64,9 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 
 ## 8. Session finalization — #337
 
-- [ ] 8.1 Add idempotent `maybe_submit_session_finalization()` trigger.
-- [ ] 8.2 Guard against unmapped or active expected jobs.
-- [ ] 8.3 Add the finalization handler and state transitions.
+- [x] 8.1 Add idempotent `maybe_submit_session_finalization()` trigger. Evidence: `vnalpha/tests/test_maintenance_producer.py::test_maintenance_producer_freezes_goals_and_resumes_idempotently` submits one finalization goal after acquisition completion and joins it on repeat.
+- [x] 8.2 Guard against unmapped or active expected jobs. Evidence: the same contract returns `ACQUIRING` without submission before acquisition jobs are terminal.
+- [ ] 8.3 Add the finalization handler and state transitions. The trigger's `FINALIZATION_QUEUED` transition is implemented; worker stage execution remains downstream work.
 - [ ] 8.4 Build features and score/watchlist once for the frozen eligible universe.
 - [ ] 8.5 Build context, mature outcomes and project approved memory in order.
 - [ ] 8.6 Persist truthful `SUCCESS|PARTIAL|FAILED` evidence and prove retry/idempotency.

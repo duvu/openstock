@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from vnalpha.maintenance.finalization import maybe_submit_session_finalization
 from vnalpha.maintenance.producer import (
     MaintenanceProducer,
     MaintenanceProducerRequest,
     MaintenanceRunState,
 )
+from vnalpha.provisioning_queue import ProvisioningQueue
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
@@ -55,3 +57,28 @@ def test_maintenance_producer_freezes_goals_and_resumes_idempotently(
     assert resumed.submitted_count == 0
     assert resumed.joined_count == 0
     assert resumed.mapped_count == 3
+
+    blocked = maybe_submit_session_finalization(
+        first.maintenance_run_id,
+        warehouse_path=warehouse_path,
+        queue_path=queue_path,
+    )
+    assert blocked.state == "ACQUIRING"
+    queue = ProvisioningQueue(queue_path)
+    while (job := queue.claim("test-worker")) is not None:
+        queue.complete(job.job_id, "test-worker", "done")
+    finalized = maybe_submit_session_finalization(
+        first.maintenance_run_id,
+        warehouse_path=warehouse_path,
+        queue_path=queue_path,
+    )
+    duplicate = maybe_submit_session_finalization(
+        first.maintenance_run_id,
+        warehouse_path=warehouse_path,
+        queue_path=queue_path,
+    )
+    assert finalized.state == "FINALIZATION_QUEUED"
+    assert finalized.submitted
+    assert finalized.job_id is not None
+    assert duplicate.joined
+    assert duplicate.job_id == finalized.job_id
