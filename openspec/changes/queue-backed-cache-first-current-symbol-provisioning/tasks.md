@@ -55,12 +55,12 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 
 ## 7. Maintenance producer — #326
 
-- [ ] 7.1 Add maintenance states, frozen universe/session/source-policy fields and expected goal identities.
-- [ ] 7.2 Add idempotent `maintenance_run_job` mapping.
-- [ ] 7.3 Implement phased resume across DuckDB ledger and SQLite queue updates.
-- [ ] 7.4 Enqueue VNINDEX as dataset-range work and equities as `PRICE_ANALYSIS` goals.
-- [ ] 7.5 Ensure acquisition does not build batch features, scores or watchlists.
-- [ ] 7.6 Return enqueue/detach evidence, never final daily success.
+- [x] 7.1 Add maintenance states, frozen universe/session/source-policy fields and expected goal identities. Evidence: `MaintenanceProducer` persists the frozen snapshot ID, hash, symbols, calendar and expected goal payloads before submission.
+- [x] 7.2 Add idempotent `maintenance_run_job` mapping. Evidence: `maintenance_run_job` uses `(maintenance_run_id, goal_identity)` as its primary key and maps queue IDs only when absent.
+- [x] 7.3 Implement phased resume across DuckDB ledger and SQLite queue updates. Evidence: producer submission and mapping are separate phases; resuming an existing run reuses mappings and queue identity without duplicate jobs.
+- [x] 7.4 Enqueue VNINDEX as dataset-range work and equities as `PRICE_ANALYSIS` goals. Evidence: `test_maintenance_producer_freezes_goals_and_resumes_idempotently` verifies one benchmark plus one price-only goal per frozen symbol.
+- [x] 7.5 Ensure acquisition does not build batch features, scores or watchlists. Evidence: maintenance equity goals request only `ReadinessCapability.PRICE_ANALYSIS`; finalization remains a separate downstream goal.
+- [x] 7.6 Return enqueue/detach evidence, never final daily success. Evidence: `MaintenanceProducerResult` reports run state, expected/submitted/joined/mapped counts and job IDs while producer state stops at `ACQUIRING`.
 
 ## 8. Session finalization — #337
 

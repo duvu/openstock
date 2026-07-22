@@ -9,12 +9,16 @@ from typing import Optional
 import duckdb
 
 from vnalpha.core.logging import get_logger
+from vnalpha.observability.domain import log_migration_start, log_migration_success
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
 from vnalpha.warehouse.corporate_action_schema import ALL_DDL_CORPORATE_ACTIONS
 from vnalpha.warehouse.disclosure_schema import ALL_DDL_DISCLOSURES
 from vnalpha.warehouse.fundamentals_schema import ALL_DDL_FUNDAMENTALS
 from vnalpha.warehouse.ingestion_migrations import migrate_ingestion_run_outcome_columns
-from vnalpha.warehouse.maintenance_ledger_schema import ALL_DDL_MAINTENANCE_LEDGER
+from vnalpha.warehouse.maintenance_ledger_schema import (
+    ALL_DDL_MAINTENANCE_LEDGER,
+    DDL_MAINTENANCE_RUN_QUEUE_COLUMNS,
+)
 from vnalpha.warehouse.ranking_evaluation_schema import ALL_DDL_RANKING_EVALUATION
 from vnalpha.warehouse.ranking_policy_decision_schema import (
     ALL_DDL_RANKING_POLICY_DECISION,
@@ -37,6 +41,7 @@ from vnalpha.warehouse.schema import (
 )
 from vnalpha.warehouse.symbol_memory_schema import ALL_DDL_SYMBOL_MEMORY
 from vnalpha.warehouse.valuation_schema import ALL_DDL_VALUATION
+from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
 logger = get_logger("warehouse.migrations")
 
@@ -55,8 +60,6 @@ def run_migrations(
         emit_observability: Emit migration logs and audit events when true.
     """
     if conn is None:
-        from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
-
         with WarehouseWriteCoordinator(path=path).transaction() as write_connection:
             run_migrations(
                 conn=write_connection,
@@ -67,8 +70,6 @@ def run_migrations(
     if emit_observability:
         logger.info("Running warehouse migrations...")
         try:
-            from vnalpha.observability.domain import log_migration_start
-
             log_migration_start("warehouse")
         except Exception:  # noqa: BLE001
             pass
@@ -137,8 +138,6 @@ def run_migrations(
     if emit_observability:
         logger.info("Warehouse migrations complete.")
         try:
-            from vnalpha.observability.domain import log_migration_success
-
             log_migration_success("warehouse")
         except Exception:  # noqa: BLE001
             pass
@@ -149,6 +148,8 @@ def _migrate_maintenance_run_columns(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         "ALTER TABLE maintenance_run ADD COLUMN IF NOT EXISTS source_policy JSON"
     )
+    for ddl in DDL_MAINTENANCE_RUN_QUEUE_COLUMNS:
+        conn.execute(ddl)
 
 
 def _migrate_tool_trace_parent_columns(conn: duckdb.DuckDBPyConnection) -> None:
