@@ -386,16 +386,6 @@ class ManagedAssistantExecution(
             "ASSISTANT_PERSISTENCE_FAILED", "execute_prepared", status="FAILED"
         )
 
-
-def _lifecycle_diagnostic(exc: AssistantLifecycleError) -> dict[str, str]:
-    return AssistantDegradation(
-        exc.stage,
-        exc.category,
-        correlation_id=exc.correlation_id,
-        trace_id=exc.trace_id,
-        model_route=exc.model_route,
-    ).to_dict()
-
     def _finish_execution_failure(
         self, prepared: PreparedAssistantTurn, exc: Exception
     ) -> None:
@@ -411,3 +401,13 @@ def _lifecycle_diagnostic(exc: AssistantLifecycleError) -> dict[str, str]:
     def cancel_prepared(self, prepared: PreparedAssistantTurn) -> None:
         with self._coordinator.transaction() as connection:
             self._connected_engine(connection).cancel_prepared(prepared)
+
+
+def _lifecycle_diagnostic(exc: AssistantLifecycleError) -> dict[str, str]:
+    return AssistantDegradation(
+        exc.stage,
+        exc.category,
+        correlation_id=exc.correlation_id,
+        trace_id=exc.trace_id,
+        model_route=exc.model_route,
+    ).to_dict()
