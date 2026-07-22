@@ -606,6 +606,8 @@ class ChatController:
             self._present_actionable_tool_failure(exc)
         except (AssistantInputValidationError, PlanValidationError) as exc:
             self._present_validation_failure(exc)
+        except AssistantLifecycleError as exc:
+            self._present_lifecycle_failure(exc)
         except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
