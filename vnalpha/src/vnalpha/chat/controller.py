@@ -7,9 +7,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator, Literal
 
+from vnalpha.assistant.degraded_answer import lifecycle_warning
 from vnalpha.assistant.errors import (
     ActionableToolExecutionError,
     AssistantInputValidationError,
+    AssistantLifecycleError,
     PlanValidationError,
 )
 from vnalpha.assistant.tool_policy import is_approval_required_plan, is_safe_plan
@@ -473,6 +475,17 @@ class ChatController:
             return self._present_actionable_tool_failure(exc)
         except (AssistantInputValidationError, PlanValidationError) as exc:
             return self._present_validation_failure(exc)
+        except AssistantLifecycleError as exc:
+            error_text = lifecycle_warning(
+                exc.stage,
+                exc.category,
+                exc.correlation_id,
+                trace_id=exc.trace_id,
+                model_route=exc.model_route,
+            )
+            self._on_message("red", error_text)
+            self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
+            return error_text
         except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."

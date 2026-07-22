@@ -202,6 +202,7 @@ class TestAnswerSynthesizer:
         assert untrusted_fallback is not None
         assert "ghp_" not in untrusted_fallback.risks_caveats
         assert "ghp_" not in untrusted_fallback.research_metadata["degradation"]
+        assert "ghp_" not in untrusted_fallback.research_metadata["fallback_reason"]
 
         assert (
             build_deterministic_tool_answer(
@@ -231,6 +232,16 @@ class TestAnswerSynthesizer:
             build_deterministic_tool_answer(
                 plan,
                 {"unrelated": {"summary": "available"}},
+                AssistantDegradation(
+                    AssistantFailureStage.SYNTHESIS_CALL, "GATEWAY_FAILURE"
+                ),
+            )
+            is None
+        )
+        assert (
+            build_deterministic_tool_answer(
+                plan,
+                {"step_1": None},
                 AssistantDegradation(
                     AssistantFailureStage.SYNTHESIS_CALL, "GATEWAY_FAILURE"
                 ),

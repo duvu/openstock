@@ -73,18 +73,48 @@ class ManagedAssistantExecution(
                 prepared,
                 on_trace_event=on_trace_event,
             )
-        with self._coordinator.transaction() as connection:
-            trace_ids = tuple(
-                create_tool_trace(
-                    connection,
-                    session_id=None,
-                    assistant_session_id=prepared.assistant_session_id,
-                    trace_parent_type="assistant",
-                    tool_name=step.tool_name,
-                    input_data=step.arguments,
+        try:
+            with self._coordinator.transaction() as connection:
+                trace_ids = tuple(
+                    create_tool_trace(
+                        connection,
+                        session_id=None,
+                        assistant_session_id=prepared.assistant_session_id,
+                        trace_parent_type="assistant",
+                        tool_name=step.tool_name,
+                        input_data=step.arguments,
+                    )
+                    for step in prepared.plan.steps
                 )
-                for step in prepared.plan.steps
-            )
+        except Exception as exc:
+            try:
+                with self._coordinator.transaction() as connection:
+                    finish_prepared_turn(
+                        connection, prepared.prepared_turn_id, status="FAILED"
+                    )
+            except Exception:
+                self._record_persistence_failure()
+            try:
+                with self._coordinator.transaction() as connection:
+                    finish_assistant_session(
+                        connection,
+                        prepared.assistant_session_id,
+                        status="FAILED",
+                        intent=prepared.intent_result.intent,
+                        plan=prepared.plan.to_dict(),
+                        error={
+                            "error_type": type(exc).__name__,
+                            "message": sanitize_error_summary(exc),
+                        },
+                    )
+            except Exception:
+                self._record_persistence_failure()
+            raise AssistantLifecycleError(
+                stage=AssistantFailureStage.AUDIT_PERSIST,
+                category="TOOL_TRACE_CREATE_FAILURE",
+                correlation_id=get_correlation_id(),
+                model_route=self._engine._llm_model(),
+            ) from exc
         try:
             tool_outputs = self._execute_managed_tools(
                 prepared, trace_ids, on_trace_event=on_trace_event

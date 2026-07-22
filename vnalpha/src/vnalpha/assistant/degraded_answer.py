@@ -47,6 +47,7 @@ _PUBLIC_CATEGORIES: Final = frozenset(
         "SESSION_CREATE_FAILURE",
         "STRUCTURED_OUTPUT_INVALID",
         "TOOL_EXECUTION_FAILURE",
+        "TOOL_TRACE_CREATE_FAILURE",
     }
 )
 
@@ -104,7 +105,11 @@ def build_deterministic_tool_answer(
     if (
         not tool_outputs
         or not _is_read_only_plan(plan)
-        or any(step.step_id not in tool_outputs for step in plan.steps)
+        or any(
+            not isinstance(tool_outputs.get(step.step_id), dict)
+            or not tool_outputs[step.step_id]
+            for step in plan.steps
+        )
     ):
         return None
     summaries, warnings, source_refs = _tool_result_details(plan, tool_outputs)
@@ -140,7 +145,7 @@ def build_deterministic_tool_answer(
         research_metadata={
             **answer.research_metadata,
             "synthesis_status": "FALLBACK_SUCCESS",
-            "fallback_reason": degradation.category,
+            "fallback_reason": degradation.to_dict()["category"],
             "llm_used": False,
             "degradation": degradation.to_dict(),
         },
@@ -252,6 +257,7 @@ def _is_read_only_plan(plan: AssistantPlan) -> bool:
     return (
         bool(plan.steps)
         and not plan.is_refusal()
+        and plan.intent != "unsupported_or_unsafe"
         and all(
             (permission := TOOL_PERMISSIONS.get(step.tool_name)) is not None
             and permission.value.startswith("READ_")

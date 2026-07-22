@@ -104,4 +104,4 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
         config = getattr(self._llm, "config", None)
         if not getattr(config, "store_raw", False):
             return {}
-        return {"raw_responses": raw_responses}
+        return {"response_evidence": raw_responses}

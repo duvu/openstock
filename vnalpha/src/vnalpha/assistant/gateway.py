@@ -424,9 +424,9 @@ class LLMGatewayClient:
                 if self._config.store_raw:
                     self._last_raw_responses.append(
                         {
-                            "model_id": decision.model_id,
+                            "route_profile": decision.profile.value,
                             "status_code": response.status_code,
-                            "body": response.text,
+                            "response_chars": len(response.text),
                         }
                     )
                 response.raise_for_status()

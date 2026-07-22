@@ -182,23 +182,35 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
             )
             return turn
         except RefusalError as exc:
-            finish_assistant_session(
-                self._conn,
-                session_id,
-                status="REFUSED",
-                refusal_reason=str(exc),
-            )
+            try:
+                finish_assistant_session(
+                    self._conn,
+                    session_id,
+                    status="REFUSED",
+                    refusal_reason=str(exc),
+                )
+            except Exception:
+                _log_assistant_lifecycle(
+                    "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="REFUSED"
+                )
             return _refusal_result(exc)
         except AssistantInputValidationError as exc:
-            finish_assistant_session(
-                self._conn,
-                session_id,
-                status="VALIDATION_ERROR",
-                error={
-                    "error_type": type(exc).__name__,
-                    "message": sanitize_error_summary(exc),
-                },
-            )
+            try:
+                finish_assistant_session(
+                    self._conn,
+                    session_id,
+                    status="VALIDATION_ERROR",
+                    error={
+                        "error_type": type(exc).__name__,
+                        "message": sanitize_error_summary(exc),
+                    },
+                )
+            except Exception:
+                _log_assistant_lifecycle(
+                    "ASSISTANT_PERSISTENCE_FAILED",
+                    "prepare",
+                    status="VALIDATION_ERROR",
+                )
             raise
         except AssistantError as exc:
             try:

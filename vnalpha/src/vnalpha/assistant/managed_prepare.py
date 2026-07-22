@@ -180,12 +180,17 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                 )
             return turn
         except RefusalError as exc:
-            with self._coordinator.transaction() as connection:
-                finish_assistant_session(
-                    connection,
-                    session_id,
-                    status="REFUSED",
-                    refusal_reason=str(exc),
+            try:
+                with self._coordinator.transaction() as connection:
+                    finish_assistant_session(
+                        connection,
+                        session_id,
+                        status="REFUSED",
+                        refusal_reason=str(exc),
+                    )
+            except Exception:
+                _log_assistant_lifecycle(
+                    "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="REFUSED"
                 )
             return _refusal_result(exc)
         except AssistantInputValidationError as exc:
