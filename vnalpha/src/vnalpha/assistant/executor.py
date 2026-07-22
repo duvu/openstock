@@ -28,7 +28,6 @@ from vnalpha.data_availability import ensure_symbol_analysis_ready
 from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
 from vnalpha.data_availability.deep_readiness_models import ContextRequirement
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
-from vnalpha.provisioning_queue import DEFAULT_QUEUE_PATH
 from vnalpha.tools.errors import ActionableToolError, ToolError
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import TOOL_PERMISSIONS, build_local_tool_registry
@@ -240,7 +239,7 @@ class AssistantExecutor:
                 step.tool_name == _PROVISION_TOOL for step in plan.steps
             )
         results: dict[str, Any] = {}
-        for step in plan.steps:
+        for step_index, step in enumerate(plan.steps):
             assert_safe_tool(step.tool_name)
             _ensure_data_for_step(
                 self._conn,
@@ -252,6 +251,11 @@ class AssistantExecutor:
             )
             if step.tool_name == _PROVISION_TOOL:
                 _assert_provisioning_ready(step, results[step.step_id])
+                _apply_provisioned_date(
+                    plan.steps[step_index + 1 :],
+                    step,
+                    results[step.step_id],
+                )
         return results
 
     def _execute_step(
@@ -278,3 +282,26 @@ class AssistantExecutor:
             raise ToolExecutionError(str(exc)) from exc
         except Exception as exc:
             raise ToolExecutionError(str(exc)) from exc
+
+
+def _apply_provisioned_date(
+    downstream_steps: list[ToolPlanStep],
+    provisioning_step: ToolPlanStep,
+    provisioning_result: Any,
+) -> None:
+    data = (
+        provisioning_result.get("data")
+        if isinstance(provisioning_result, dict)
+        else None
+    )
+    resolved_date = data.get("resolved_date") if isinstance(data, dict) else None
+    symbol = provisioning_step.arguments.get("symbol")
+    if not isinstance(resolved_date, str) or not isinstance(symbol, str):
+        return
+    for step in downstream_steps:
+        if step.tool_name not in _ANALYSIS_TOOLS:
+            continue
+        if step.arguments.get("symbol") != symbol:
+            continue
+        if step.arguments.get("date") in (None, "today"):
+            step.arguments["date"] = resolved_date

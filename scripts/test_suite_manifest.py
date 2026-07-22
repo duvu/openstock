@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import ast
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Final
+
+import tomllib
 
 ALLOWED_DOMAINS: Final = frozenset({"application", "data", "research"})
 
@@ -69,14 +70,15 @@ def _test_path(node: str) -> str:
 def _defined_tests(tests_root: Path) -> set[tuple[str, ...]]:
     definitions: set[tuple[str, ...]] = set()
     for source_path in tests_root.rglob("*.py"):
+        test_path = source_path.relative_to(tests_root.parent).as_posix()
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
         for child in tree.body:
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if child.name.startswith("test_"):
-                    definitions.add((child.name,))
+                    definitions.add((test_path, child.name))
             if isinstance(child, ast.ClassDef) and child.name.startswith("Test"):
                 definitions.update(
-                    (child.name, method.name)
+                    (test_path, child.name, method.name)
                     for method in child.body
                     if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))
                     and method.name.startswith("test_")
@@ -147,7 +149,7 @@ def validate_manifest(
         if contract.test in tests:
             errors.append(f"pytest node is duplicated: {contract.test!r}")
         tests.add(contract.test)
-        expected_definitions.add(tuple(contract.test.split("::")[1:]))
+        expected_definitions.add(tuple(contract.test.split("::")))
         try:
             test_path = _test_path(contract.test)
         except ManifestError as exc:

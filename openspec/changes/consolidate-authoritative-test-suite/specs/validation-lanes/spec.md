@@ -1,27 +1,32 @@
 ## ADDED Requirements
 
-### Requirement: Validation SHALL use bounded, domain and release lanes
-The repository SHALL provide an unconditional consistency/spec lane, the
-60-second one-contract development loop, affected-domain authoritative lanes,
-and full/package acceptance owned by final-candidate, release or explicitly
-routed packaging work.
+### Requirement: Local validation SHALL use bounded, domain and final lanes
+The repository SHALL provide a 60-second one-contract development loop, local
+affected-domain authoritative runners, and one complete final-candidate runner.
+Package acceptance is manual and selected only when package, installation,
+dependency-layout, service-unit or release inputs change.
 
-#### Scenario: A normal application pull request is evaluated
+#### Scenario: A normal source change is evaluated locally
 
-- **WHEN** routing identifies an ordinary `vnalpha/src/**` change
-- **THEN** consistency and the compact affected-domain lane run
-- **AND** Debian acceptance is deliberately skipped.
+- **WHEN** a developer changes one `vnalpha` contract
+- **THEN** the owning 60-second test runs during the edit loop
+- **AND** its affected local domain runs before the final candidate.
 
-#### Scenario: A release is evaluated
+#### Scenario: Documentation-only work is evaluated
 
-- **WHEN** the release validation path runs
-- **THEN** the complete authoritative inventory and package/operational
-  acceptance execute in addition to consistency.
+- **WHEN** only documentation or OpenSpec artifacts change
+- **THEN** no runtime suite is required during the edit loop.
+
+#### Scenario: Package inputs change
+
+- **WHEN** package, installation, dependency-layout, service-unit or release
+  inputs change
+- **THEN** the relevant manual package acceptance is selected.
 
 ### Requirement: Aggregate execution SHALL collect each authoritative node once
-An aggregate lane SHALL resolve the authoritative inventory to one stable
-pytest invocation. Obsolete R0, R4 and Phase wrappers SHALL be removed rather
-than run before or after the aggregate.
+An aggregate local lane SHALL resolve the authoritative inventory to one stable
+pytest invocation. Obsolete R0, R4 and Phase wrappers SHALL not run before or
+after that aggregate.
 
 #### Scenario: Full aggregate validation is planned
 
@@ -32,42 +37,14 @@ than run before or after the aggregate.
 #### Scenario: A duplicate node enters the inventory
 
 - **WHEN** the runner resolves an inventory with a repeated node
-- **THEN** repository consistency fails before pytest executes.
+- **THEN** manifest validation fails before pytest executes.
 
-### Requirement: Required merge conclusions SHALL fail closed
-The always-evaluated Required merge gate SHALL accept only `success` or a
-deliberate `skipped` conclusion for each fixed dependency. Failure,
-cancellation, timeout, action-required, neutral, startup failure, unknown or
-missing conclusions SHALL fail the gate.
+### Requirement: CI routing SHALL remain out of scope
+Issue #348 SHALL NOT add, require or use GitHub Actions jobs, path-aware
+routing, required gates or hosted workflow evidence. It MAY remove the
+#348-owned routing artifacts solely to restore the pre-#349 generic workflow.
 
-#### Scenario: Docs-only runtime jobs are deliberately skipped
+#### Scenario: The active change is completed
 
-- **WHEN** consistency succeeds and runtime/package jobs conclude `skipped`
-  by routing policy
-- **THEN** the Required merge gate succeeds.
-
-#### Scenario: A required job is cancelled
-
-- **WHEN** any dependency concludes `cancelled`
-- **THEN** the Required merge gate fails.
-
-### Requirement: Routing SHALL classify changed paths fail-closed
-Routing SHALL classify normalized repository-relative paths as
-`docs_openspec_only`, `vnalpha`, `vnstock`, `packaging`,
-`shared_contract` or `test_or_workflow_infrastructure`. Unknown paths
-shall fail rather than receive a docs-only disposition. Ordinary
-`vnalpha/src/**` changes SHALL select compact domains and SHALL NOT select
-Debian acceptance.
-
-#### Scenario: Documentation-only work changes
-
-- **WHEN** all changed paths are documentation or OpenSpec artifacts
-- **THEN** routing selects consistency/spec and deliberately skips runtime
-  lanes.
-
-#### Scenario: Package inputs change
-
-- **WHEN** packaging, installer, dependency-layout, service-unit or release
-  inputs change
-- **THEN** routing selects package acceptance in addition to applicable
-  consistency and full validation.
+- **WHEN** final local evidence is recorded
+- **THEN** no hosted CI result is a prerequisite for completion.

@@ -1,92 +1,66 @@
 ## Context
 
-vnalpha collected 3,296 tests across 276 files at the recorded baseline.
-That collection contains issue-number, R0/R4/Phase, adapter and schema
-duplication that makes ordinary development slow without increasing confidence.
-Issue #348 requires 180–220 authoritative public/risk contracts, with a hard
-cap of 250. The normal local loop is one owning contract and must finish or
-time out within 60 seconds.
-
-The repository already provides root Make targets, GitHub Actions, package
-acceptance scripts and scripts/check-repo-consistency.py. This change makes
-those existing seams consume one bounded inventory; it does not change product
-behavior or the read-only research boundary.
+Issue #348 consolidates the legacy `vnalpha` collection into a bounded local
+contract suite. The live issue explicitly supersedes the earlier CI-routing
+proposal: no work in this change depends on GitHub Actions or hosted evidence.
 
 ## Decisions
 
-### 1. One TOML inventory owns every retained vnalpha contract
+### 1. One source-aware TOML inventory owns retained `vnalpha` contracts
 
-vnalpha/tests/suites/authoritative.toml contains one [[contract]] table for
-each retained exact pytest node. It records a stable identifier and one of
-application, data or research. The current inventory has 213 entries.
+`vnalpha/tests/suites/authoritative.toml` records a stable identifier, domain
+and exact pytest node for each retained contract. The validator derives test
+definitions as `(relative source path, class, method)` tuples, so a matching
+name in another file cannot satisfy an inventory entry. It rejects malformed
+TOML, invalid paths, duplicate identifiers or nodes, unsupported domains,
+missing definitions, unclassified definitions and counts outside 180–220.
 
-The parser rejects malformed TOML, non-normalized nodes, missing files,
-duplicate identifiers, duplicate nodes, unsupported domains and a count outside
-180–220 or above the hard cap of 250. Exact node collection remains pytest's
-responsibility; an invalid node makes the selected pytest command fail.
+### 2. Local commands select one owner, a domain, or a final candidate
 
-### 2. One small runner resolves all or selected domains
+`make test-loop TEST=<node>` is the normal 60-second edit-test loop.
+`make test-vnalpha-{data,research,application}` resolves one local domain; it
+uses `uv run --extra dev` so the declared pytest dependency is installed.
+`make test-vnalpha` is reserved for a frozen final candidate and invokes the
+complete manifest once.
 
-scripts/run-test-suite.py validates the inventory, prints a plan for review,
-or invokes pytest once with the selected exact nodes. make test-vnalpha is
-reserved for final candidates and release validation. The three domain targets
-use --domain data, --domain research or --domain application.
+### 3. The contract budget is maintained by merge or replacement
 
-make test-loop TEST=<nodeid> remains independent of the inventory runner and
-is the sole edit-test command. It fails fast after 60 seconds. It must not
-expand into aggregate, packaging, evaluation, R0 or R4 work.
+Every discovered `test_*` definition is either the exact owner in the manifest
+or is merged/deleted before validation can pass. Equivalent scenarios share a
+single public-boundary test. Distinct financial, point-in-time, transaction,
+recovery, migration, package and fail-closed risks retain a dedicated owner.
 
-### 3. Tests and checks receive an explicit disposition
+### 4. CI routing is not part of this change
 
-The collection inventory records KEEP for each manifest node. All other
-collected nodes receive DELETE, MERGE or REPLACE evidence before they are
-removed. Issue-number, R0/R4/Phase and file-glob wrapper names are not durable
-contract identities. A retained legacy risk node is moved or renamed only after
-its specific public/risk contract is preserved.
+The prior #348 path classifier and conditional workflow jobs are removed. This
+one-time rollback restores the pre-#349 generic jobs and gate exactly; it does
+not add or modify their policy. Local evidence is sufficient for this
+development-only issue.
 
-The obsolete broad suite manifest, its runner tests and its duplicate
-repository-check tests are deleted. The real consistency command is the
-authoritative checker; it runs unconditionally in CI.
+### 5. Package acceptance remains manual and input-scoped
 
-### 4. CI routes domains without a smoke duplicate
+Packaging/install, dependency-layout, service-unit and release work may use
+their manual acceptance commands when those inputs change. Source, test or
+OpenSpec work does not select packaging validation under #348.
 
-scripts/classify-test-impact.py is the policy source for normalized changed
-paths. Docs/OpenSpec-only work selects only consistency. Ordinary vnalpha
-source work selects compact vnalpha domains. Changes to tests, fixtures,
-manifests, routing, Make or workflow files select the complete authoritative
-inventory because they can change validation semantics.
+### 6. Migrated DuckDB setup is isolated and lifecycle coverage stays direct
 
-The workflow has no separate smoke lane, so a PR never runs a second R0/R4
-subset around the same contracts. The Required job accepts only success or
-GitHub's deliberate skipped conclusion.
-
-### 5. Debian acceptance stays package-owned
-
-The Debian workflow triggers for packaging, Make, dependency-layout and its own
-workflow configuration. It does not trigger merely because vnalpha/src/**
-changes. Build/install/upgrade checks remain release and package-input gates.
-
-### 6. Migrated DuckDB fixture reuse remains isolated
-
-The existing session fixture creates a migrated template once, and compatible
-tests receive a copied warehouse file. Fresh migration, idempotency, upgrade,
-rollback, crash, reopen, locking and multiprocessing contracts retain dedicated
-inputs. A mutation-isolation contract proves copies do not share state.
+Compatible tests copy a migrated template into their own temporary warehouse.
+Fresh migration, idempotency, upgrade, rollback, crash, reopen, locking and
+multiprocessing contracts keep dedicated inputs.
 
 ## Risks and mitigations
 
-- Removing a unique financial or security boundary is prevented by recording a
-  retained contract node before deletion.
-- An omitted or stale inventory node is prevented by the consistency checker
-  and the selected pytest command.
-- Incorrect path routing fails closed for unknown and infrastructure paths.
-- Package validation remains available for release/package inputs without
-  charging ordinary source changes its cost.
+- A stale or misplaced node fails source-aware manifest validation before
+  pytest runs.
+- A test-count increase must be offset by a merge or be rejected at the
+  220-contract target boundary.
+- The developer environment cannot silently omit pytest because local aggregate
+  targets declare the `dev` extra.
+- No CI routing or hosted-result claim can accidentally become closure evidence.
 
 ## Validation and closure
 
-The final candidate must strictly validate this OpenSpec, run the bounded owner
-test and compact affected-domain lane locally, and record the complete
-authoritative suite and any routed package validation honestly. GitHub Actions
-must pass on the exact pushed commit before #348 is closed and the change is
-archived.
+On one frozen local SHA: strictly validate the active OpenSpec, run the bounded
+owner test(s) affected by the change, run relevant local domains, then run the
+complete authoritative suite once. Record commands and results honestly.

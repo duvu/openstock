@@ -89,16 +89,16 @@ test-loop: ## Run one owning contract test with a hard 60-second limit: TEST=pat
 	@timeout 60s sh -c 'cd "$(PROJECT)" && pytest -q --maxfail=1 "$(TEST)"'
 
 test-vnalpha: ## Run the canonical complete vnalpha suite; final-candidate/release use only
-	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py; else python ../scripts/run-test-suite.py; fi
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run --extra dev python ../scripts/run-test-suite.py; else python ../scripts/run-test-suite.py; fi
 
 test-vnalpha-data: ## Run canonical vnalpha data coverage
-	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --domain data; else python ../scripts/run-test-suite.py --domain data; fi
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run --extra dev python ../scripts/run-test-suite.py --domain data; else python ../scripts/run-test-suite.py --domain data; fi
 
 test-vnalpha-research: ## Run canonical vnalpha research coverage
-	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --domain research; else python ../scripts/run-test-suite.py --domain research; fi
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run --extra dev python ../scripts/run-test-suite.py --domain research; else python ../scripts/run-test-suite.py --domain research; fi
 
 test-vnalpha-application: ## Run canonical vnalpha application coverage
-	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run python ../scripts/run-test-suite.py --domain application; else python ../scripts/run-test-suite.py --domain application; fi
+	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run --extra dev python ../scripts/run-test-suite.py --domain application; else python ../scripts/run-test-suite.py --domain application; fi
 
 verify-r2-ci: ## Run static R2 deployment verification
 	packaging/tests/test_daily_pipeline_units.sh

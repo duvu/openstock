@@ -185,8 +185,13 @@ test = "tests/test_benchmark_relative_strength.py::test_vn30_reference_is_not_wr
 
 [[contract]]
 id = "canonical-quarantine-test-invalid-close-is-quarantined-before-canonical-promotion"
-domain = "application"
+domain = "data"
 test = "tests/test_canonical_quarantine.py::test_invalid_close_is_quarantined_before_canonical_promotion"
+
+[[contract]]
+id = "canonical-quarantine-test-bounded-canonical-promotion-leaves-outside-dates-unchanged"
+domain = "data"
+test = "tests/test_canonical_quarantine.py::test_bounded_canonical_promotion_leaves_outside_dates_unchanged"
 
 [[contract]]
 id = "chat-context-testchatcontextdefaults-test-all-optional-fields-are-none-or-empty"
@@ -359,9 +364,14 @@ domain = "application"
 test = "tests/test_dates.py::TestResolveDateToday::test_none_returns_today"
 
 [[contract]]
-id = "deep-analysis-readiness-test-readiness-reports-cache-hit-for-every-required-core-artifact"
+id = "deep-analysis-readiness-test-readiness-reports-actionable-core-status"
 domain = "data"
-test = "tests/test_deep_analysis_readiness.py::test_readiness_reports_cache_hit_for_every_required_core_artifact"
+test = "tests/test_deep_analysis_readiness.py::test_readiness_reports_actionable_core_status"
+
+[[contract]]
+id = "deep-analysis-readiness-test-live-deep-analysis-plan-reuses-fresh-evidence"
+domain = "application"
+test = "tests/test_deep_analysis_readiness.py::test_live_deep_analysis_plan_reuses_fresh_evidence"
 
 [[contract]]
 id = "deploy-testdeployevents-test-verify-started-event-written"
@@ -471,7 +481,27 @@ test = "tests/test_input_history.py::TestPush::test_push_stores_text"
 [[contract]]
 id = "intent-and-planner-testdeterministicprecheck-test-deterministic-precheck-buy-refused"
 domain = "application"
-test = "tests/test_intent_and_planner.py::TestDeterministicPrecheck::test_deterministic_precheck_buy_refused"
+test = "tests/_intent_and_planner_cases.py::TestDeterministicPrecheck::test_deterministic_precheck_buy_refused"
+
+[[contract]]
+id = "current-symbol-research-application-test-ready-current-symbol-reuses-persisted-evidence-without-a-queue-job"
+domain = "application"
+test = "tests/test_current_symbol_research_application.py::test_ready_current_symbol_reuses_persisted_evidence_without_a_queue_job"
+
+[[contract]]
+id = "current-symbol-research-application-test-missing-current-symbol-work-joins-one-escalated-queue-job"
+domain = "application"
+test = "tests/test_current_symbol_research_application.py::test_missing_current_symbol_work_joins_one_escalated_queue_job"
+
+[[contract]]
+id = "data-only-symbol-test-raw-ready-canonical-stale-promotes-only-the-missing-tail"
+domain = "data"
+test = "tests/test_data_only_symbol.py::test_raw_ready_canonical_stale_promotes_only_the_missing_tail"
+
+[[contract]]
+id = "data-only-symbol-test-stale-raw-evidence-syncs-only-the-missing-session-tail"
+domain = "data"
+test = "tests/test_data_only_symbol.py::test_stale_raw_evidence_syncs_only_the_missing_session_tail"
 
 [[contract]]
 id = "llm-capability-fallback-test-route-decision-carries-configured-capabilities"
@@ -604,6 +634,11 @@ domain = "application"
 test = "tests/test_p0_operations_truthfulness.py::test_daily_cli_persists_noop_invocation"
 
 [[contract]]
+id = "p0-operations-truthfulness-test-cli-records-effective-runtime-identity-in-metadata-mode"
+domain = "application"
+test = "tests/test_p0_operations_truthfulness.py::test_cli_records_effective_runtime_identity_in_metadata_mode"
+
+[[contract]]
 id = "persistence-testsaveandgetcandidatescore-test-save-then-get-returns-record"
 domain = "application"
 test = "tests/test_persistence.py::TestSaveAndGetCandidateScore::test_save_then_get_returns_record"
@@ -639,9 +674,9 @@ domain = "data"
 test = "tests/test_research_answer_audit_completion.py::test_migrations_create_research_answer_audit_table"
 
 [[contract]]
-id = "research-automation-migrations-test-run-migrations-adds-lifecycle-state-to-legacy-research-artifact"
+id = "research-automation-migrations-test-run-migrations-upgrades-legacy-research-and-outcome-tables"
 domain = "data"
-test = "tests/test_research_automation_migrations.py::test_run_migrations_adds_lifecycle_state_to_legacy_research_artifact"
+test = "tests/test_research_automation_migrations.py::test_run_migrations_upgrades_legacy_research_and_outcome_tables"
 
 [[contract]]
 id = "research-context-commands-test-market-regime-reads-latest-and-exact-persisted-context"
@@ -834,11 +869,6 @@ domain = "application"
 test = "tests/test_trace_timeline.py::test_running_content"
 
 [[contract]]
-id = "tui-test-app-can-be-created"
-domain = "application"
-test = "tests/test_tui.py::test_app_can_be_created"
-
-[[contract]]
 id = "tui-clipboard-missing-target-visible-and-non-mutating"
 domain = "application"
 test = "tests/test_tui_clipboard.py::test_copy_missing_target_is_visible_and_non_mutating"
@@ -869,11 +899,6 @@ domain = "application"
 test = "tests/test_tui_operational_router.py::test_unsupported_operational_command_records_redacted_failure"
 
 [[contract]]
-id = "tui-pilot-test-app-mounts"
-domain = "application"
-test = "tests/test_tui_pilot.py::test_app_mounts"
-
-[[contract]]
 id = "tui-responsive-layout-test-height-policy-has-compact-medium-and-full-suggestion-limits"
 domain = "application"
 test = "tests/test_tui_responsive_layout.py::test_height_policy_has_compact_medium_and_full_suggestion_limits"
@@ -902,11 +927,6 @@ test = "tests/test_tui_todo_panel.py::test_workspace_todo_source_maps_workspace_
 id = "tui-todo-refresh-add-updates-workspace-without-side-panel"
 domain = "application"
 test = "tests/test_tui_todo_refresh.py::test_todo_add_updates_workspace_without_side_panel"
-
-[[contract]]
-id = "tui-workspace-test-9-1-app-mounts"
-domain = "application"
-test = "tests/test_tui_workspace.py::test_9_1_app_mounts"
 
 [[contract]]
 id = "tui-workspace-context-lifecycle-test-tui-startup-displays-active-workspace-and-resume-summary"

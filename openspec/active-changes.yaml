@@ -58,10 +58,12 @@ changes:
       checked 180–220 authoritative contract inventory (hard cap 250), with
       duplicate execution, test and checker removal plus isolated DuckDB reuse.
     evidence: >-
-      Issue #348 owns the normative policy, spec-first gate, phased execution
-      plan and before/after acceptance evidence. Initial routing, aggregate
-      de-duplication and fixture work are implemented; inventory consolidation
-      and final evidence remain incomplete.
+      GitHub issue 348 owns the local normative policy, spec-first gate, phased
+      execution plan and before/after acceptance evidence. The source-aware
+      inventory is at the 220-contract target with local aggregate
+      de-duplication and isolated fixture work; final local validation and
+      independent review remain incomplete. CI routing and hosted evidence are
+      explicitly out of scope.
 
   validate-daily-equity-ranking:
     status: partial

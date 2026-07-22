@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import importlib.metadata
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-_RELEASE_PATH = Path("/opt/vnalpha/RELEASE")
+_SYSTEM_RELEASE_PATH = Path("/opt/vnalpha/RELEASE")
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,10 +25,11 @@ class SoftwareIdentity:
         return ";".join(parts)
 
 
-def resolve_software_identity(release_path: Path = _RELEASE_PATH) -> SoftwareIdentity:
+def resolve_software_identity(release_path: Path | None = None) -> SoftwareIdentity:
+    resolved_release_path = release_path or _default_release_path()
     values: dict[str, str] = {}
     try:
-        for line in release_path.read_text(encoding="utf-8").splitlines():
+        for line in resolved_release_path.read_text(encoding="utf-8").splitlines():
             key, sep, value = line.partition("=")
             if sep and key.strip() and value.strip():
                 values[key.strip().lower()] = value.strip()
@@ -48,6 +51,16 @@ def resolve_software_identity(release_path: Path = _RELEASE_PATH) -> SoftwareIde
         source_commit=source_commit,
         tree_state=values.get("tree_state"),
     )
+
+
+def _default_release_path() -> Path:
+    configured_path = os.getenv("OPENSTOCK_RELEASE_FILE")
+    if configured_path:
+        return Path(configured_path)
+    runtime_release_path = Path(sys.prefix).resolve().parent / "RELEASE"
+    if runtime_release_path.is_file():
+        return runtime_release_path
+    return _SYSTEM_RELEASE_PATH
 
 
 __all__ = ["SoftwareIdentity", "resolve_software_identity"]

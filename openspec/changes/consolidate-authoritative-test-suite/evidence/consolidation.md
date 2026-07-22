@@ -22,3 +22,33 @@ exact duplicate test functions. The scan is not
 used to classify financial, migration, package, recovery or security cases as
 deletable; those boundaries remain retained unless a contract-level replacement
 is separately demonstrated.
+
+## Current-main reconciliation
+
+The source-aware validator found five unrecorded #370 contract nodes and one
+moved intent node. The intent entry was retargeted without adding coverage.
+The five #370 nodes are distinct public or risk contracts and remain separate:
+bounded canonical promotion, ready-evidence reuse, queue joining/escalation,
+canonical-tail promotion and raw-evidence-tail sync.
+To preserve the budget without weakening those contracts, three duplicate
+Textual app-mount smoke tests were removed; the retained workspace-context
+startup contract mounts the same application path and verifies the stronger
+workspace lifecycle result.
+
+The resulting source-aware inventory is 220 nodes with no unclassified test
+definitions.
+
+## Frozen local candidate
+
+The executable candidate `71ce2f3097d73af8955b6c84bf8de58cbd28f3b7` was
+validated locally on 2026-07-22. Strict OpenSpec validation and repository
+consistency passed. The affected data and application lanes passed, as did the
+bounded TODO-persistence and plan-preview owners. The complete
+`make test-vnalpha` aggregate selected all 220 nodes and completed in 57.1
+seconds without pytest failures or a generated `vnalpha/MagicMock` artifact.
+
+The two formerly mock-derived warehouse paths are now concrete test-owned
+connections: a migrated temporary warehouse for the Textual TODO contract and
+an in-memory DuckDB connection for the plan-preview contract. The retained
+workspace-context startup contract continues to own the duplicate Textual
+mount behavior removed above.
