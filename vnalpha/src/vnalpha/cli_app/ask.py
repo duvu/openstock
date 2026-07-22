@@ -3,10 +3,30 @@ from __future__ import annotations
 from typing import Optional
 
 import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
+from vnalpha.assistant.app import AssistantApp
+from vnalpha.assistant.degraded_answer import (
+    degradation_warning,
+    lifecycle_warning,
+)
+from vnalpha.assistant.errors import (
+    AssistantError,
+    AssistantInputValidationError,
+    AssistantLifecycleError,
+    LLMConfigError,
+)
+from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
+from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
+from vnalpha.assistant.planner import PlanBuilder
 from vnalpha.core.dates import resolve_date
 from vnalpha.core.logging import set_correlation_id
+from vnalpha.core.text_safety import sanitize_error_summary, sanitize_text
 from vnalpha.observability.commands import command_lifecycle
+from vnalpha.observability.errors import capture_exception
+from vnalpha.warehouse.connection import get_connection
 
 
 def register(app: typer.Typer) -> None:
@@ -36,22 +56,6 @@ def register(app: typer.Typer) -> None:
         """
         set_correlation_id()
         with command_lifecycle("ask"):
-            from rich.console import Console
-            from rich.panel import Panel
-            from rich.text import Text
-
-            from vnalpha.assistant.app import AssistantApp
-            from vnalpha.assistant.errors import (
-                AssistantError,
-                AssistantInputValidationError,
-                LLMConfigError,
-            )
-            from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
-            from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
-            from vnalpha.core.text_safety import sanitize_error_summary, sanitize_text
-            from vnalpha.observability.errors import capture_exception
-            from vnalpha.warehouse.connection import get_connection
-
             console = Console()
             error_console = Console(stderr=True)
 
@@ -78,7 +82,8 @@ def register(app: typer.Typer) -> None:
                 capture_exception(exc)
                 error_console.print(
                     Text(
-                        "Assistant request failed. Check logs and retry.",
+                        "Assistant request could not be started. "
+                        "Check workspace access and retry.",
                         style="red",
                     )
                 )
@@ -114,11 +119,26 @@ def register(app: typer.Typer) -> None:
                     Text(f"Assistant error: {public_error}", style="red")
                 )
                 raise typer.Exit(code=1) from exc
+            except AssistantLifecycleError as exc:
+                error_console.print(
+                    Text(
+                        lifecycle_warning(
+                            exc.stage,
+                            exc.category,
+                            exc.correlation_id,
+                            trace_id=exc.trace_id,
+                            model_route=exc.model_route,
+                        ),
+                        style="red",
+                    )
+                )
+                raise typer.Exit(code=1) from exc
             except AssistantError as exc:
                 capture_exception(exc)
                 error_console.print(
                     Text(
-                        "Assistant request failed. Check logs and retry.",
+                        "Assistant request did not produce a usable answer. "
+                        "Check logs and retry.",
                         style="red",
                     )
                 )
@@ -127,15 +147,14 @@ def register(app: typer.Typer) -> None:
                 capture_exception(exc)
                 error_console.print(
                     Text(
-                        "Assistant request failed. Check logs and retry.",
+                        "Assistant request did not produce a usable answer. "
+                        "Check logs and retry.",
                         style="red",
                     )
                 )
                 raise typer.Exit(code=1) from exc
 
             if show_plan or no_execute:
-                from vnalpha.assistant.planner import PlanBuilder
-
                 pb = PlanBuilder()
                 console.print(
                     Panel(
@@ -167,6 +186,10 @@ def register(app: typer.Typer) -> None:
             if result.risks_caveats:
                 answer_text.append("Risks/caveats: ", style="dim yellow")
                 answer_text.append(sanitize_text(result.risks_caveats) + "\n")
+            warning = degradation_warning(result)
+            if warning is not None:
+                answer_text.append("Warning: ", style="bold yellow")
+                answer_text.append(sanitize_text(warning) + "\n", style="yellow")
             if result.missing_data:
                 answer_text.append("\nMissing data:\n", style="dim red")
                 for item in result.missing_data:

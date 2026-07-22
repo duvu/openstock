@@ -27,7 +27,12 @@ def _success(url: str, content: str) -> httpx.Response:
         request=httpx.Request("POST", url),
         json={
             "choices": [{"message": {"content": content}, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            "usage": {
+                "prompt_tokens": 1,
+                "completion_tokens": 1,
+                "provider_debug": "private provider payload",
+                "model_id": "private-model-id",
+            },
         },
     )
 
@@ -60,3 +65,11 @@ def test_gateway_sends_strict_json_schema(monkeypatch) -> None:
     assert response_format["json_schema"]["schema"] == INTENT_CLASSIFICATION_SCHEMA
     assert usage["structured_output_mode"] == "json_schema"
     assert usage["structured_output_downgraded"] is False
+    assert usage["route_profile"] in {
+        "small",
+        "default",
+        "reasoning",
+        "long_context",
+    }
+    assert "provider_debug" not in usage
+    assert "model_id" not in usage

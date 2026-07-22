@@ -11,6 +11,21 @@ policy:
 
 changes:
 
+  assistant-deterministic-fallback-observability:
+    status: partial
+    github_issues: [384, 385]
+    roadmap_state: scheduled
+    summary: >-
+      Preserve successful read-only assistant tool output through bounded
+      deterministic fallback answers and actionable degradation diagnostics.
+    evidence: >-
+      The focused owning contract covers gateway, parse, context-policy,
+      groundedness, fallback-validation, synthesis-trace, audit, projection and
+      session-finalization failures, including planner to market.get_regime.
+      Validation is recorded at implementation SHA
+      02f57a0af1c7749063b28a8543476a5402735f47; final PR and lifecycle-gate
+      evidence remain pending under issue 388.
+
   fiinquantx-full-data-expansion:
     status: partial
     github_issues: [356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367]

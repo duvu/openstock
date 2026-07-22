@@ -7,7 +7,7 @@ correlated to the failed lifecycle stage.
 
 ## What Changes
 
-- Make a deterministic rendering of successful read-only tool outputs the minimum
+- Make deterministic rendering of successful read-only tool outputs the minimum
   deliverable before optional LLM synthesis.
 - Return a valid deterministic answer with a bounded warning when synthesis,
   answer validation, audit persistence, knowledge projection, or session
@@ -22,7 +22,7 @@ correlated to the failed lifecycle stage.
 ### New Capabilities
 
 - `assistant-failure-observability`: expose stable, sanitized downstream failure
-  diagnostics and correlation evidence consistently through CLI and TUI.
+  diagnostics through CLI and TUI.
 
 ### Modified Capabilities
 
@@ -37,5 +37,3 @@ correlated to the failed lifecycle stage.
   trace lifecycle persistence, and shared CLI/TUI answer presentation.
 - Does not add network access, arbitrary tool execution, broker behavior, trading
   actions, or raw exception exposure.
-- Existing successful answers remain compatible; degraded answers gain additive
-  metadata and a bounded visible warning.

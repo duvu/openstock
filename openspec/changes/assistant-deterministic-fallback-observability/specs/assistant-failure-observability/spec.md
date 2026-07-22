@@ -1,12 +1,8 @@
 ## ADDED Requirements
 
-### Requirement: Assistant shall expose bounded downstream failure diagnostics
+### Requirement: Assistant SHALL expose bounded downstream failure diagnostics
 
-When a request reaches a downstream assistant lifecycle failure, the CLI and
-TUI SHALL expose the same sanitized diagnostic fields: a finite failed stage,
-stable error category, correlation ID, runtime build SHA, model route when one
-was selected, and trace ID when one exists. They SHALL NOT expose credentials,
-raw provider payloads, prompts, or unrestricted exception text.
+When a request reaches a downstream assistant lifecycle failure, CLI and TUI SHALL expose the same sanitized diagnostic fields: a finite stage selected from `CLASSIFY`, `PLAN`, `TOOL_EXECUTION`, `SYNTHESIS_CALL`, `SYNTHESIS_PARSE`, `ANSWER_VALIDATION`, `AUDIT_PERSIST`, `KNOWLEDGE_PROJECTION`, and `SESSION_FINALIZE`; a stable category; correlation ID; runtime build SHA; model route when selected; and trace ID when it exists. They SHALL NOT expose credentials, raw provider payloads, prompts, or raw exception text.
 
 #### Scenario: Synthesis gateway fails
 - **GIVEN** a safe read-only plan completed deterministic tools

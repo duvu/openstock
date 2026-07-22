@@ -19,6 +19,7 @@ class AssistantSessionStatus(str, Enum):
     RUNNING = "RUNNING"
     PREPARED = "PREPARED"
     SUCCESS = "SUCCESS"
+    DEGRADED_SUCCESS = "DEGRADED_SUCCESS"
     REFUSED = "REFUSED"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     FAILED = "FAILED"
@@ -108,18 +109,13 @@ class AssistantRequest:
     routing_session_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        context = (
-            dataclasses.asdict(self.chat_context)
-            if self.chat_context is not None
-            else None
-        )
         return {
-            "current_user_prompt": self.current_user_prompt,
-            "workspace_context": self.workspace_context,
-            "chat_context": context,
+            "current_user_prompt": None,
+            "workspace_context": None,
+            "chat_context": None,
             "date": self.date,
             "date_is_implicit": self.date_is_implicit,
-            "routing_session_id": self.routing_session_id,
+            "routing_session_id": None,
         }
 
 

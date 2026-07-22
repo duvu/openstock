@@ -150,13 +150,6 @@ def _extract_json_from_text(text: str) -> str | None:
     return None
 
 
-def _preview(text: str, max_chars: int = 240) -> str:
-    normalized = text.strip().replace("\n", "\\n")
-    if len(normalized) <= max_chars:
-        return normalized
-    return f"{normalized[:max_chars]}…"
-
-
 def parse_json_response(response_text: str, *, context: str) -> dict:
     clean = strip_markdown_fence(response_text)
     parse_attempts: list[str] = [response_text]
@@ -182,9 +175,7 @@ def parse_json_response(response_text: str, *, context: str) -> dict:
         break
 
     if data is None:
-        raise IntentClassificationError(
-            f"Invalid JSON from {context}: {_preview(response_text)}"
-        ) from last_exc
+        raise IntentClassificationError(f"Invalid JSON from {context}") from last_exc
 
     return data
 
@@ -197,16 +188,11 @@ def parse_synthesis_response(response_text: str) -> AssistantAnswer:
     try:
         data = parse_json_response(response_text, context="synthesizer")
     except IntentClassificationError as exc:
-        raise InvalidSynthesisResponseError(
-            f"Invalid JSON from synthesizer: {_preview(response_text)}"
-        ) from exc
+        raise InvalidSynthesisResponseError("Invalid JSON from synthesizer") from exc
 
     source_refs = data.get("grounded_source_refs", [])
     if not isinstance(source_refs, list):
         source_refs = []
-    metadata = data.get("research_metadata", {})
-    if not isinstance(metadata, dict):
-        metadata = {}
     claim_source_refs: dict[str, list[str]] = {}
     raw_claim_source_refs = data.get("claim_source_refs", {})
     if isinstance(raw_claim_source_refs, dict):
@@ -227,11 +213,9 @@ def parse_synthesis_response(response_text: str) -> AssistantAnswer:
         risks_caveats=str(data.get("risks_caveats", "")),
         tool_trace_summary=str(data.get("tool_trace_summary", "")),
         missing_data=[str(item) for item in missing_data],
-        raw_tool_outputs=data.get("raw_tool_outputs", {})
-        if isinstance(data.get("raw_tool_outputs", {}), dict)
-        else {},
+        raw_tool_outputs={},
         grounded_source_refs=[str(item) for item in source_refs],
-        research_metadata=metadata,
+        research_metadata={},
         claim_source_refs=claim_source_refs,
     )
 

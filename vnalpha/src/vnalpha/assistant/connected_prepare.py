@@ -8,6 +8,10 @@ from uuid import uuid4
 import duckdb
 
 from vnalpha.assistant.connected_context import ConnectedAssistantContext
+from vnalpha.assistant.degraded_answer import (
+    AssistantDegradation,
+    AssistantFailureStage,
+)
 from vnalpha.assistant.effective_date import (
     normalize_date_candidate,
     resolve_effective_target_date,
@@ -16,6 +20,7 @@ from vnalpha.assistant.effective_date import (
 from vnalpha.assistant.errors import (
     AssistantError,
     AssistantInputValidationError,
+    AssistantLifecycleError,
     RefusalError,
 )
 from vnalpha.assistant.models import (
@@ -34,6 +39,10 @@ from vnalpha.assistant.runtime_helpers import (
 )
 from vnalpha.assistant.tool_policy import is_approval_required_plan
 from vnalpha.core.text_safety import sanitize_error_summary
+from vnalpha.observability.context import get_correlation_id
+from vnalpha.sandbox.execution_service import SandboxExecutionService
+from vnalpha.symbol_memory.repository import SymbolMemoryRepository
+from vnalpha.symbol_memory.retrieval import SymbolMemoryRetrievalService
 from vnalpha.warehouse.assistant_repo import (
     create_assistant_session,
     create_llm_trace,
@@ -53,12 +62,20 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
 
         prompt = request.current_user_prompt
         persistence = _prompt_projection(request)
-        session_id = create_assistant_session(
-            self._conn,
-            surface=self._surface,
-            user_prompt=persistence.prompt_summary,
-            prompt=persistence,
-        )
+        try:
+            session_id = create_assistant_session(
+                self._conn,
+                surface=self._surface,
+                user_prompt=persistence.prompt_summary,
+                prompt=persistence,
+            )
+        except Exception as exc:
+            raise AssistantLifecycleError(
+                stage=AssistantFailureStage.AUDIT_PERSIST,
+                category="SESSION_CREATE_FAILURE",
+                correlation_id=get_correlation_id(),
+                model_route=self._llm_model(),
+            ) from exc
         _log_assistant_lifecycle("ASSISTANT_PREPARED", "prepare", status="RUNNING")
         try:
             request = replace(request, date=normalize_date_candidate(request.date))
@@ -76,6 +93,32 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                     prompt,
                     session_id=request.routing_session_id or session_id,
                 )
+            except Exception as exc:
+                try:
+                    finish_llm_trace(
+                        self._conn,
+                        classify_trace_id,
+                        status="FAILED",
+                        error={
+                            "message": sanitize_error_summary(exc),
+                            **self._raw_response_summary(
+                                self._classifier.last_raw_responses
+                            ),
+                        },
+                        model=self._llm_model(),
+                    )
+                except Exception:
+                    _log_assistant_lifecycle(
+                        "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="FAILED"
+                    )
+                raise AssistantLifecycleError(
+                    stage=AssistantFailureStage.CLASSIFY,
+                    category="CLASSIFICATION_FAILURE",
+                    correlation_id=get_correlation_id(),
+                    trace_id=classify_trace_id,
+                    model_route=self._llm_model(),
+                ) from exc
+            try:
                 finish_llm_trace(
                     self._conn,
                     classify_trace_id,
@@ -87,20 +130,16 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                         ),
                     },
                     usage=self._classifier.last_usage,
+                    model=self._llm_model(),
                 )
-            except Exception as exc:  # noqa: BROAD_EXCEPT_OK
-                finish_llm_trace(
-                    self._conn,
-                    classify_trace_id,
-                    status="FAILED",
-                    error={
-                        "message": sanitize_error_summary(exc),
-                        **self._raw_response_summary(
-                            self._classifier.last_raw_responses
-                        ),
-                    },
-                )
-                raise
+            except Exception as exc:
+                raise AssistantLifecycleError(
+                    stage=AssistantFailureStage.AUDIT_PERSIST,
+                    category="CLASSIFY_TRACE_PERSIST_FAILURE",
+                    correlation_id=get_correlation_id(),
+                    trace_id=classify_trace_id,
+                    model_route=self._llm_model(),
+                ) from exc
             raw_classified_date = intent_result.entities.get("date")
             classified_date = (
                 raw_classified_date if isinstance(raw_classified_date, str) else None
@@ -114,11 +153,17 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
             intent_result.entities["date"] = effective_date
             request = replace(request, date=effective_date)
             check_intent_policy(intent_result)
-            plan = self._planner.build(intent_result)
+            try:
+                plan = self._planner.build(intent_result)
+            except Exception as exc:
+                raise AssistantLifecycleError(
+                    stage=AssistantFailureStage.PLAN,
+                    category="PLAN_BUILD_FAILURE",
+                    correlation_id=get_correlation_id(),
+                    model_route=self._llm_model(),
+                ) from exc
             request = self._with_symbol_memory_context(request, intent_result.entities)
             if is_approval_required_plan(plan):
-                from vnalpha.sandbox.execution_service import SandboxExecutionService
-
                 plan = SandboxExecutionService(
                     self._conn,
                     surface=self._surface,
@@ -142,35 +187,78 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
             )
             return turn
         except RefusalError as exc:
-            finish_assistant_session(
-                self._conn,
-                session_id,
-                status="REFUSED",
-                refusal_reason=str(exc),
-            )
+            try:
+                finish_assistant_session(
+                    self._conn,
+                    session_id,
+                    status="REFUSED",
+                    refusal_reason=str(exc),
+                )
+            except Exception:
+                _log_assistant_lifecycle(
+                    "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="REFUSED"
+                )
             return _refusal_result(exc)
         except AssistantInputValidationError as exc:
-            finish_assistant_session(
-                self._conn,
-                session_id,
-                status="VALIDATION_ERROR",
-                error={
-                    "error_type": type(exc).__name__,
-                    "message": sanitize_error_summary(exc),
-                },
-            )
+            try:
+                finish_assistant_session(
+                    self._conn,
+                    session_id,
+                    status="VALIDATION_ERROR",
+                    error={
+                        "error_type": type(exc).__name__,
+                        "message": sanitize_error_summary(exc),
+                    },
+                )
+            except Exception:
+                _log_assistant_lifecycle(
+                    "ASSISTANT_PERSISTENCE_FAILED",
+                    "prepare",
+                    status="VALIDATION_ERROR",
+                )
             raise
         except AssistantError as exc:
-            finish_assistant_session(
-                self._conn,
-                session_id,
-                status="FAILED",
-                error={
-                    "error_type": type(exc).__name__,
-                    "message": sanitize_error_summary(exc),
-                },
-            )
+            try:
+                finish_assistant_session(
+                    self._conn,
+                    session_id,
+                    status="FAILED",
+                    error={
+                        "error_type": type(exc).__name__,
+                        "message": sanitize_error_summary(exc),
+                        **(
+                            {"lifecycle": _lifecycle_diagnostic(exc)}
+                            if isinstance(exc, AssistantLifecycleError)
+                            else {}
+                        ),
+                    },
+                )
+            except Exception:
+                _log_assistant_lifecycle(
+                    "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="FAILED"
+                )
             raise
+        except Exception as exc:
+            try:
+                finish_assistant_session(
+                    self._conn,
+                    session_id,
+                    status="FAILED",
+                    error={
+                        "error_type": type(exc).__name__,
+                        "message": sanitize_error_summary(exc),
+                    },
+                )
+            except Exception:
+                _log_assistant_lifecycle(
+                    "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="FAILED"
+                )
+            raise AssistantLifecycleError(
+                stage=AssistantFailureStage.AUDIT_PERSIST,
+                category="PREPARE_PERSIST_FAILURE",
+                correlation_id=get_correlation_id(),
+                model_route=self._llm_model(),
+            ) from exc
 
     def _with_symbol_memory_context(
         self, request: AssistantRequest, entities: dict[str, Any]
@@ -187,9 +275,6 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
             return request
         as_of_date = _request_as_of_date(request.date)
         try:
-            from vnalpha.symbol_memory.repository import SymbolMemoryRepository
-            from vnalpha.symbol_memory.retrieval import SymbolMemoryRetrievalService
-
             retrieval = SymbolMemoryRetrievalService(SymbolMemoryRepository(self._conn))
             rendered = tuple(
                 retrieval.render_context(
@@ -206,3 +291,13 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
             value for value in (request.workspace_context, memory_context) if value
         )
         return replace(request, workspace_context=workspace_context)
+
+
+def _lifecycle_diagnostic(exc: AssistantLifecycleError) -> dict[str, str]:
+    return AssistantDegradation(
+        exc.stage,
+        exc.category,
+        correlation_id=exc.correlation_id,
+        trace_id=exc.trace_id,
+        model_route=exc.model_route,
+    ).to_dict()
