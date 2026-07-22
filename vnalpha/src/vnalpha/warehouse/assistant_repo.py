@@ -183,8 +183,8 @@ def finish_llm_trace(
             finished_at = ?,
             status = ?,
             model = COALESCE(?, model),
-            output_summary_json = ?,
-            usage_json = ?,
+            output_summary_json = COALESCE(?, output_summary_json),
+            usage_json = COALESCE(?, usage_json),
             error_json = ?
         WHERE llm_trace_id = ?
         """,

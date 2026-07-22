@@ -395,7 +395,7 @@ class TestAnswerSynthesizer:
                                 ],
                             }
                         ),
-                        {},
+                        {"total_tokens": 7},
                     )
                 return (
                     '{"intent":"review_market_regime","confidence":0.9,"entities":{}}',
@@ -410,6 +410,14 @@ class TestAnswerSynthesizer:
         audit_result, _ = audit_app.ask("thi truong hom nay", date="2026-07-01")
         assert isinstance(audit_result, AssistantAnswer)
         assert audit_result.research_metadata["degradation"]["stage"] == "AUDIT_PERSIST"
+        audit_trace_id = audit_result.research_metadata["degradation"]["trace_id"]
+        audit_trace = conn.execute(
+            "SELECT output_summary_json, usage_json FROM llm_trace WHERE llm_trace_id = ?",
+            [audit_trace_id],
+        ).fetchone()
+        assert audit_trace is not None
+        assert json.loads(audit_trace[0])["summary_length"] > 0
+        assert json.loads(audit_trace[1])["total_tokens"] == 7
 
         projection_app = AssistantApp(conn, llm_client=ValidSynthesisGateway())
         monkeypatch.setattr(
@@ -539,6 +547,33 @@ class TestAnswerSynthesizer:
         assert conn.execute(
             "SELECT status FROM assistant_session ORDER BY started_at DESC LIMIT 1"
         ).fetchone() == ("FAILED",)
+
+        raw_model_payload = "NONJSON-MODEL-PAYLOAD-DO-NOT-PERSIST-4f31f"
+
+        class InvalidJsonClassificationGateway:
+            last_raw_responses: tuple[dict, ...] = ()
+
+            def chat(self, *_args, **_kwargs):
+                return raw_model_payload, {"total_tokens": 1}
+
+        with pytest.raises(AssistantLifecycleError) as lifecycle_error:
+            AssistantApp(conn, llm_client=InvalidJsonClassificationGateway()).ask(
+                "thi truong hom nay"
+            )
+        assert lifecycle_error.value.trace_id is not None
+        trace_error = conn.execute(
+            "SELECT error_json FROM llm_trace WHERE llm_trace_id = ?",
+            [lifecycle_error.value.trace_id],
+        ).fetchone()
+        assert trace_error is not None
+        assert raw_model_payload not in trace_error[0]
+        session_error = conn.execute(
+            "SELECT error_json FROM assistant_session WHERE assistant_session_id = ("
+            "SELECT assistant_session_id FROM llm_trace WHERE llm_trace_id = ?)",
+            [lifecycle_error.value.trace_id],
+        ).fetchone()
+        assert session_error is not None
+        assert raw_model_payload not in session_error[0]
 
         with monkeypatch.context() as trace_patch:
             trace_patch.setattr(

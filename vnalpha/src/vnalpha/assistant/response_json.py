@@ -150,13 +150,6 @@ def _extract_json_from_text(text: str) -> str | None:
     return None
 
 
-def _preview(text: str, max_chars: int = 240) -> str:
-    normalized = text.strip().replace("\n", "\\n")
-    if len(normalized) <= max_chars:
-        return normalized
-    return f"{normalized[:max_chars]}…"
-
-
 def parse_json_response(response_text: str, *, context: str) -> dict:
     clean = strip_markdown_fence(response_text)
     parse_attempts: list[str] = [response_text]
@@ -182,9 +175,7 @@ def parse_json_response(response_text: str, *, context: str) -> dict:
         break
 
     if data is None:
-        raise IntentClassificationError(
-            f"Invalid JSON from {context}: {_preview(response_text)}"
-        ) from last_exc
+        raise IntentClassificationError(f"Invalid JSON from {context}") from last_exc
 
     return data
 
@@ -197,9 +188,7 @@ def parse_synthesis_response(response_text: str) -> AssistantAnswer:
     try:
         data = parse_json_response(response_text, context="synthesizer")
     except IntentClassificationError as exc:
-        raise InvalidSynthesisResponseError(
-            f"Invalid JSON from synthesizer: {_preview(response_text)}"
-        ) from exc
+        raise InvalidSynthesisResponseError("Invalid JSON from synthesizer") from exc
 
     source_refs = data.get("grounded_source_refs", [])
     if not isinstance(source_refs, list):
