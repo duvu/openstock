@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
-
 import duckdb
 
 from vnalpha.core.dates import resolve_date
 from vnalpha.data_availability.checks import compute_lookback_start
 from vnalpha.data_availability.policy import DEFAULT_POLICY
-from vnalpha.data_provisioning.ensure_current_symbol import (
+from vnalpha.data_provisioning.current_symbol_models import (
     CurrentSymbolReadyResult,
     ProvisioningAction,
     ProvisioningOutcome,
 )
+from vnalpha.data_provisioning.current_symbol_tail import canonical_lineage, tail_start
 from vnalpha.data_provisioning.service import (
     DataProvisioningRequest,
     DataProvisioningResult,
@@ -19,7 +18,6 @@ from vnalpha.data_provisioning.service import (
     ProvisioningStatus,
 )
 from vnalpha.ingestion.build_canonical import build_canonical_ohlcv
-from vnalpha.ingestion.trading_calendar import SessionRange, VietnamSessionCalendar
 
 
 def provision_data_only_symbol(
@@ -33,12 +31,16 @@ def provision_data_only_symbol(
     resolved_date = resolve_date(requested_date)
     lookback_start = compute_lookback_start(resolved_date, DEFAULT_POLICY.lookback_days)
     service = DataProvisioningService(conn)
-    raw_tail_start = _tail_start(
-        conn, "market_ohlcv_raw", symbol, resolved_date, lookback_start
-    )
-    canonical_tail_start = _tail_start(
-        conn, "canonical_ohlcv", symbol, resolved_date, lookback_start
-    )
+    if refresh:
+        raw_tail_start = resolved_date
+        canonical_tail_start = resolved_date
+    else:
+        raw_tail_start = tail_start(
+            conn, "market_ohlcv_raw", symbol, resolved_date, lookback_start
+        )
+        canonical_tail_start = tail_start(
+            conn, "canonical_ohlcv", symbol, resolved_date, lookback_start
+        )
     actions: list[ProvisioningAction] = []
     warnings: list[str] = []
     if raw_tail_start is not None:
@@ -55,7 +57,20 @@ def provision_data_only_symbol(
                 source=DEFAULT_POLICY.source,
             )
         )
-        actions.append(ProvisioningAction("sync_ohlcv", download.status.value))
+        actions.append(
+            ProvisioningAction(
+                "sync_ohlcv",
+                download.status.value,
+                dataset="equity.ohlcv",
+                symbol=symbol,
+                start_date=raw_tail_start,
+                end_date=resolved_date,
+                source=download.source,
+                ingestion_run_id=download.lineage.get("ingestion_run_id"),
+                failure_category=download.terminal_reason,
+                root_cause=download.error,
+            )
+        )
         warnings.extend(download.warnings)
         if download.status is not ProvisioningStatus.SUCCESS:
             return _failed_result(
@@ -91,7 +106,16 @@ def provision_data_only_symbol(
             end=resolved_date,
         )
     except (duckdb.Error, ValueError) as error:
-        actions.append(ProvisioningAction("build_canonical", "FAILED"))
+        actions.append(
+            ProvisioningAction(
+                "build_canonical",
+                "FAILED",
+                dataset="equity.ohlcv",
+                symbol=symbol,
+                start_date=canonical_tail_start,
+                end_date=resolved_date,
+            )
+        )
         return CurrentSymbolReadyResult(
             symbol=symbol,
             outcome=ProvisioningOutcome.FAILED,
@@ -105,8 +129,23 @@ def provision_data_only_symbol(
             errors=(str(error),),
             remediation=(),
         )
-    actions.append(ProvisioningAction("build_canonical", "SUCCESS"))
+    provider, ingestion_run_id = canonical_lineage(
+        conn, symbol, canonical_tail_start, resolved_date
+    )
     if canonical["upserted"] <= 0:
+        actions.append(
+            ProvisioningAction(
+                "build_canonical",
+                "FAILED",
+                dataset="equity.ohlcv",
+                symbol=symbol,
+                failure_category="CANONICAL_ROWS_MISSING",
+                start_date=canonical_tail_start,
+                end_date=resolved_date,
+                source=provider,
+                ingestion_run_id=ingestion_run_id,
+            )
+        )
         return CurrentSymbolReadyResult(
             symbol=symbol,
             outcome=ProvisioningOutcome.FAILED,
@@ -120,6 +159,18 @@ def provision_data_only_symbol(
             errors=("Canonical OHLCV build did not produce persisted rows.",),
             remediation=(),
         )
+    actions.append(
+        ProvisioningAction(
+            "build_canonical",
+            "SUCCESS",
+            dataset="equity.ohlcv",
+            symbol=symbol,
+            start_date=canonical_tail_start,
+            end_date=resolved_date,
+            source=provider,
+            ingestion_run_id=ingestion_run_id,
+        )
+    )
 
     return CurrentSymbolReadyResult(
         symbol=symbol,
@@ -136,31 +187,6 @@ def provision_data_only_symbol(
         errors=(),
         remediation=(),
     )
-
-
-def _tail_start(
-    conn: duckdb.DuckDBPyConnection,
-    table: str,
-    symbol: str,
-    resolved_date: str,
-    initial_start: str,
-) -> str | None:
-    latest = conn.execute(
-        f"SELECT MAX(CAST(time AS DATE))::VARCHAR FROM {table} "
-        "WHERE symbol = ? AND interval = '1D'",
-        [symbol],
-    ).fetchone()
-    if latest is None or latest[0] is None:
-        return initial_start
-    if str(latest[0]) >= resolved_date:
-        return None
-    next_sessions = VietnamSessionCalendar().sessions(
-        SessionRange(
-            start=date.fromisoformat(str(latest[0])) + timedelta(days=1),
-            end=date.fromisoformat(resolved_date),
-        )
-    )
-    return next_sessions[0].isoformat() if next_sessions else None
 
 
 def _failed_result(

@@ -33,9 +33,11 @@ class CurrentSymbolResearchResult:
     status: CurrentSymbolResearchStatus
     requested_capability: ReadinessCapability
     effective_capability: ReadinessCapability | None
+    requested_date: str | None
     effective_date: str
     job_id: ProvisioningJobId | None
     provisioning: CurrentSymbolProvisioningState
+    reused_fresh_data: bool
     correlation_id: str
     readiness: ArtifactReadinessReport
 
@@ -50,8 +52,10 @@ def build_result(
     match status:
         case CurrentSymbolResearchStatus.READY:
             capability = readiness.requested_capability
+            reused_fresh_data = job_id is None
         case CurrentSymbolResearchStatus.DEGRADED:
             capability = readiness.effective_capability
+            reused_fresh_data = job_id is None
         case (
             CurrentSymbolResearchStatus.ACCEPTED
             | CurrentSymbolResearchStatus.PENDING
@@ -59,15 +63,18 @@ def build_result(
             | CurrentSymbolResearchStatus.FAILED
         ):
             capability = None
+            reused_fresh_data = False
         case unreachable:
             assert_never(unreachable)
     return CurrentSymbolResearchResult(
         status=status,
         requested_capability=readiness.requested_capability,
         effective_capability=capability,
+        requested_date=readiness.requested_date,
         effective_date=readiness.effective_date,
         job_id=job_id,
         provisioning=provisioning_state(status, job_id),
+        reused_fresh_data=reused_fresh_data,
         correlation_id=correlation_id,
         readiness=readiness,
     )

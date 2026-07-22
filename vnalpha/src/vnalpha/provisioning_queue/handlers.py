@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol, assert_never
@@ -7,8 +8,8 @@ from typing import Protocol, assert_never
 import duckdb
 
 from vnalpha.data_availability.artifact_readiness_models import ReadinessCapability
+from vnalpha.data_provisioning.current_symbol_models import CurrentSymbolReadyResult
 from vnalpha.data_provisioning.ensure_current_symbol import (
-    CurrentSymbolReadyResult,
     ensure_current_symbol_ready,
 )
 from vnalpha.provisioning_queue.models import (
@@ -40,9 +41,7 @@ class ProvisioningStage:
     requires_warehouse_write: bool
     action: Callable[[duckdb.DuckDBPyConnection | None], HandlerResult]
 
-    def execute(
-        self, connection: duckdb.DuckDBPyConnection | None
-    ) -> HandlerResult:
+    def execute(self, connection: duckdb.DuckDBPyConnection | None) -> HandlerResult:
         return self.action(connection)
 
 
@@ -93,11 +92,10 @@ class CurrentSymbolHandlerConfigurationError(Exception):
 def _result_from_current_symbol(
     goal: EnsureCurrentSymbolGoal, result: CurrentSymbolReadyResult
 ) -> HandlerResult:
-    evidence = f"{result.outcome.value} {goal.symbol} {result.resolved_date}"
+    evidence = json.dumps(result.to_trace_dict(), separators=(",", ":"), sort_keys=True)
     if result.is_ready:
         return HandlerResult(succeeded=True, detail=evidence)
-    detail = "; ".join(result.errors) or evidence
-    return HandlerResult(succeeded=False, detail=detail)
+    return HandlerResult(succeeded=False, detail=evidence)
 
 
 def _admit_current_symbol(goal: EnsureCurrentSymbolGoal) -> HandlerResult:

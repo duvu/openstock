@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import signal
 from pathlib import Path
 from threading import Event, Thread
@@ -16,6 +17,11 @@ from tests.provisioning_queue_worker_support import (
     current_goal,
     range_goal,
     stage,
+)
+from vnalpha.data_provisioning.ensure_current_symbol import (
+    CurrentSymbolReadyResult,
+    ProvisioningAction,
+    ProvisioningOutcome,
 )
 from vnalpha.provisioning_queue import (
     GoalEnrichment,
@@ -35,6 +41,7 @@ def assert_stage_control_boundaries(
 ) -> None:
     _assert_unsupported_handlers_fail_without_warehouse(tmp_path)
     _assert_enrichment_stops_before_provider(tmp_path, monkeypatch)
+    _assert_current_symbol_result_retains_tail_evidence(tmp_path, monkeypatch)
     _assert_cancellation_stops_before_next_stage(tmp_path)
     _assert_terminalization_cancellation_races(tmp_path)
     _assert_timing_configuration_is_bounded(tmp_path)
@@ -86,6 +93,53 @@ def _assert_enrichment_stops_before_provider(
         "UNSUPPORTED_ENRICHMENT_REQUEST; BLOCKED: current-symbol-provision"
     )
     assert queue.get(submitted.job_id).status is ProvisioningJobStatus.FAILED
+
+
+def _assert_current_symbol_result_retains_tail_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    queue = ProvisioningQueue(tmp_path / "tail-evidence.sqlite3")
+    queue.initialize()
+    submitted = queue.submit_or_join(current_goal("FPT"), priority=1).job
+    ready_result = CurrentSymbolReadyResult(
+        symbol="FPT",
+        outcome=ProvisioningOutcome.READY,
+        correlation_id="tail-correlation",
+        requested_date="2026-01-07",
+        resolved_date="2026-01-07",
+        actions=(
+            ProvisioningAction(
+                action="sync_ohlcv",
+                status="SUCCESS",
+                dataset="equity.ohlcv",
+                symbol="FPT",
+                start_date="2026-01-06",
+                end_date="2026-01-07",
+                source="fixture",
+                ingestion_run_id="fixture-run",
+            ),
+        ),
+        reused_fresh_data=False,
+        refreshed=False,
+        warnings=(),
+        errors=(),
+    )
+    monkeypatch.setattr(
+        handlers_module,
+        "ensure_current_symbol_ready",
+        lambda *_args, **_kwargs: ready_result,
+    )
+    completed = ProvisioningWorker(
+        queue,
+        worker_id="tail-evidence",
+        warehouse_path=tmp_path / "tail-evidence.duckdb",
+        handlers=(CurrentSymbolGoalHandler(),),
+    ).process_one()
+    assert completed is not None
+    assert completed.status is ProvisioningJobStatus.SUCCEEDED
+    assert completed.result is not None
+    assert json.loads(completed.result) == ready_result.to_trace_dict()
+    assert queue.get(submitted.job_id).result == completed.result
 
 
 def _assert_cancellation_stops_before_next_stage(tmp_path: Path) -> None:
