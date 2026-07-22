@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 from datetime import date
@@ -31,7 +32,7 @@ def _prompt_projection(request: AssistantRequest) -> PromptPersistenceRecord:
         else None
     )
     chat_payload = (
-        json.dumps(request.to_dict()["chat_context"], sort_keys=True)
+        json.dumps(dataclasses.asdict(request.chat_context), sort_keys=True)
         if request.chat_context is not None
         else None
     )

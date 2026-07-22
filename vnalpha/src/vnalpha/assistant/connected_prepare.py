@@ -206,11 +206,6 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                     error={
                         "error_type": type(exc).__name__,
                         "message": sanitize_error_summary(exc),
-                        **(
-                            {"lifecycle": _lifecycle_diagnostic(exc)}
-                            if isinstance(exc, AssistantLifecycleError)
-                            else {}
-                        ),
                     },
                 )
             except Exception:
@@ -229,6 +224,11 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                     error={
                         "error_type": type(exc).__name__,
                         "message": sanitize_error_summary(exc),
+                        **(
+                            {"lifecycle": _lifecycle_diagnostic(exc)}
+                            if isinstance(exc, AssistantLifecycleError)
+                            else {}
+                        ),
                     },
                 )
             except Exception:

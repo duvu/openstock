@@ -203,11 +203,10 @@ def finish_llm_trace(
 def _model_from_usage(usage: dict | None) -> str | None:
     if not isinstance(usage, dict):
         return None
-    route = usage.get("model_route")
-    if not isinstance(route, dict):
-        return None
-    model_id = route.get("model_id")
-    return str(model_id) if model_id else None
+    route_profile = usage.get("route_profile")
+    if route_profile in {"small", "default", "reasoning", "long_context"}:
+        return route_profile
+    return None
 
 
 def persist_prepared_turn(conn, turn: PreparedAssistantTurn) -> None:

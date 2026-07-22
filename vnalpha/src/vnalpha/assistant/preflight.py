@@ -376,8 +376,8 @@ def _default_probe(config, api_key: str) -> GatewayProbe:
             raise LLMGatewayError(
                 "The structured preflight response failed schema verification."
             )
-        route = usage.get("model_route") if isinstance(usage, dict) else None
-        return route if isinstance(route, dict) else None
+        route_profile = usage.get("route_profile") if isinstance(usage, dict) else None
+        return {"profile": route_profile} if isinstance(route_profile, str) else None
 
     return probe
 

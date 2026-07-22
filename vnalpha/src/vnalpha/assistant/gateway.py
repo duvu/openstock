@@ -77,6 +77,14 @@ _SCHEMA_UNSUPPORTED_MARKERS = (
     "structured_output",
     "unsupported schema",
 )
+_USAGE_COUNTERS = frozenset(
+    {
+        "completion_tokens",
+        "prompt_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+    }
+)
 RETRY_AFTER_MAX_SECONDS = 300
 
 
@@ -146,6 +154,19 @@ def _parse_retry_after(raw: str | None) -> int | None:
     if value <= 0:
         return None
     return min(value, RETRY_AFTER_MAX_SECONDS)
+
+
+def _bounded_usage(usage: object) -> dict[str, int]:
+    if not isinstance(usage, dict):
+        return {}
+    return {
+        key: value
+        for key, value in usage.items()
+        if key in _USAGE_COUNTERS
+        and isinstance(value, int)
+        and not isinstance(value, bool)
+        and value >= 0
+    }
 
 
 @dataclass
@@ -355,8 +376,16 @@ class LLMGatewayClient:
                 last_error = exc.error
                 previous = decision
                 continue
-            usage_payload = dict(usage)
-            usage_payload["model_route"] = decision.to_dict()
+            usage_payload = _bounded_usage(usage)
+            structured_mode = usage.get("structured_output_mode")
+            if structured_mode in {"none", "json_object", "json_schema"}:
+                usage_payload["structured_output_mode"] = structured_mode
+            structured_output_downgraded = usage.get("structured_output_downgraded")
+            if isinstance(structured_output_downgraded, bool):
+                usage_payload["structured_output_downgraded"] = (
+                    structured_output_downgraded
+                )
+            usage_payload["route_profile"] = decision.profile.value
             return content, usage_payload
 
         if strict_schema and last_error is not None and not compatible_fallbacks:
@@ -447,8 +476,7 @@ class LLMGatewayClient:
                         "LLM response from model "
                         f"'{decision.model_id}' has empty completion content."
                     )
-                usage = data.get("usage", {})
-                usage_payload = dict(usage) if isinstance(usage, dict) else {}
+                usage_payload = _bounded_usage(data.get("usage"))
                 usage_payload["structured_output_mode"] = structured_mode
                 usage_payload["structured_output_downgraded"] = schema_downgraded
                 latency_ms = (time.monotonic() - started) * 1000

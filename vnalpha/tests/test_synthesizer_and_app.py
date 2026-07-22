@@ -21,12 +21,14 @@ from vnalpha.assistant.gateway import FakeLLMClient
 from vnalpha.assistant.models import (
     AssistantAnswer,
     AssistantPlan,
+    AssistantRequest,
     ToolPlanStep,
 )
 from vnalpha.assistant.response_json import parse_synthesis_response
 from vnalpha.assistant.synthesizer import (
     AnswerSynthesizer,
 )
+from vnalpha.chat.context import ChatContext
 from vnalpha.research_intelligence.models import MarketRegimeSnapshot
 from vnalpha.tui.screens.assistant import render_assistant_answer
 from vnalpha.warehouse.migrations import run_migrations
@@ -483,6 +485,21 @@ class TestAnswerSynthesizer:
         assert "secret" not in unsafe_warning
         assert "trace_id=" not in unsafe_warning
         assert "model_route=" not in unsafe_warning
+
+        request_with_raw_context = AssistantRequest(
+            current_user_prompt="safe prompt",
+            workspace_context="private workspace payload",
+            routing_session_id="private routing session",
+            chat_context=ChatContext(
+                last_plan="private plan payload",
+                last_tool_outputs_summary="private tool output payload",
+            ),
+        )
+        persisted_request = request_with_raw_context.to_dict()
+        assert persisted_request["current_user_prompt"] is None
+        assert persisted_request["workspace_context"] is None
+        assert persisted_request["chat_context"] is None
+        assert persisted_request["routing_session_id"] is None
 
         with monkeypatch.context() as finalization_patch:
             finalization_patch.setattr(
