@@ -364,6 +364,11 @@ domain = "data"
 test = "tests/test_deep_analysis_readiness.py::test_readiness_reports_actionable_core_status"
 
 [[contract]]
+id = "deep-analysis-readiness-test-live-deep-analysis-plan-reuses-fresh-evidence"
+domain = "application"
+test = "tests/test_deep_analysis_readiness.py::test_live_deep_analysis_plan_reuses_fresh_evidence"
+
+[[contract]]
 id = "deploy-testdeployevents-test-verify-started-event-written"
 domain = "application"
 test = "tests/test_deploy.py::TestDeployEvents::test_verify_started_event_written"

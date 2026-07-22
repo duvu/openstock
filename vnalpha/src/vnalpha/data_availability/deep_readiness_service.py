@@ -54,6 +54,12 @@ class DeepAnalysisReadinessService:
                 message="Deep-analysis date could not be resolved.",
                 exception_type=type(exc).__name__,
             )
+        resolved_date = _resolve_available_session_date(
+            request.conn,
+            normalized_symbol,
+            request.requested_date,
+            resolved_date,
+        )
 
         audit_started(
             symbol=normalized_symbol,
@@ -236,6 +242,44 @@ def _first_actionable_failure(result: EnsureDataResult) -> str | None:
                 f"(dataset={dataset}, symbol={symbol}, category={category}): {cause}"
             )
     return None
+
+
+def _resolve_available_session_date(
+    conn: duckdb.DuckDBPyConnection,
+    symbol: str,
+    requested_date: str | None,
+    resolved_date: str,
+) -> str:
+    if requested_date is not None and requested_date.strip().lower() != "today":
+        return resolved_date
+    row = conn.execute(
+        """
+        SELECT cs.date::VARCHAR
+        FROM candidate_score cs
+        WHERE cs.symbol = ?
+          AND cs.date <= ?
+          AND EXISTS (
+              SELECT 1 FROM feature_snapshot fs
+              WHERE fs.symbol = cs.symbol AND fs.date = cs.date
+          )
+          AND (
+              SELECT COUNT(*) FROM canonical_ohlcv price
+              WHERE price.symbol = cs.symbol
+                AND price.interval = '1D'
+                AND CAST(price.time AS DATE) BETWEEN cs.date - INTERVAL 420 DAY AND cs.date
+          ) >= 120
+          AND (
+              SELECT COUNT(*) FROM canonical_ohlcv benchmark
+              WHERE benchmark.symbol = 'VNINDEX'
+                AND benchmark.interval = '1D'
+                AND CAST(benchmark.time AS DATE) BETWEEN cs.date - INTERVAL 420 DAY AND cs.date
+          ) >= 120
+        ORDER BY cs.date DESC
+        LIMIT 1
+        """,
+        [symbol, resolved_date],
+    ).fetchone()
+    return str(row[0]) if row is not None and row[0] is not None else resolved_date
 
 
 def _undetailed_provisioning_failure(

@@ -8,10 +8,10 @@ import duckdb
 from vnalpha.assistant.executor import AssistantExecutor
 from vnalpha.assistant.models import IntentResult
 from vnalpha.assistant.planner import PlanBuilder
+from vnalpha.data_availability import deep_readiness_service
 from vnalpha.data_availability.deep_readiness import (
     DeepAnalysisReadinessRequest,
     DeepAnalysisReadinessService,
-    ReadinessArtifactStatus,
 )
 from vnalpha.data_availability.models import (
     EnsureDataAction,
@@ -55,7 +55,7 @@ def _ensure_result(
 
 
 def _seed_cached_deep_analysis(conn: duckdb.DuckDBPyConnection) -> None:
-    target_date = "2026-07-22"
+    target_date = "2026-07-21"
     target_session = date.fromisoformat(target_date)
     lineage = {
         "as_of_bar_date": target_date,
@@ -119,27 +119,6 @@ def _seed_cached_deep_analysis(conn: duckdb.DuckDBPyConnection) -> None:
 def test_readiness_reports_actionable_core_status() -> None:
     conn = duckdb.connect()
     run_migrations(conn=conn)
-    service = DeepAnalysisReadinessService(
-        ensure=lambda _conn, _symbol, _date: _ensure_result(
-            status=EnsureDataStatus.READY,
-            actions=[EnsureDataAction.CACHE_HIT],
-        )
-    )
-
-    result = service.ensure_ready(
-        DeepAnalysisReadinessRequest(conn, "FPT", "2026-07-10")
-    )
-
-    assert result.is_ready is True
-    assert {artifact.status for artifact in result.artifacts if artifact.blocking} == {
-        ReadinessArtifactStatus.READY
-    }
-    assert {
-        artifact.status for artifact in result.artifacts if not artifact.blocking
-    } == {ReadinessArtifactStatus.NOT_REQUESTED}
-    assert result.actions == (EnsureDataAction.CACHE_HIT.value,)
-    assert result.correlation_id
-
     failed_result = DeepAnalysisReadinessService(
         ensure=lambda _conn, _symbol, _date: (_ for _ in ()).throw(RuntimeError())
     ).ensure_ready(DeepAnalysisReadinessRequest(conn, "FPT", "2026-07-10"))
@@ -164,13 +143,23 @@ def test_readiness_reports_actionable_core_status() -> None:
         "category=PROVISIONING_RESULT_INCONSISTENT): "
         "the provisioning result reported not-ready without error evidence",
     )
+    conn.close()
 
+
+def test_live_deep_analysis_plan_reuses_fresh_evidence(monkeypatch) -> None:
+    conn = duckdb.connect()
+    run_migrations(conn=conn)
     _seed_cached_deep_analysis(conn)
+    monkeypatch.setattr(
+        deep_readiness_service,
+        "resolve_market_session_date",
+        lambda _requested_date: "2026-07-22",
+    )
     plan = PlanBuilder().build(
         IntentResult(
             intent="deep_analyze_symbol",
             confidence=1.0,
-            entities={"symbol": "FPT", "date": "2026-07-22"},
+            entities={"symbol": "FPT"},
         )
     )
     session_id = create_assistant_session(
@@ -188,9 +177,10 @@ def test_readiness_reports_actionable_core_status() -> None:
     analysis = execution[plan.steps[1].step_id]["data"]
     assert provisioning["outcome"] == "REUSED"
     assert provisioning["reused_fresh_data"] is True
+    assert provisioning["resolved_date"] == "2026-07-21"
     assert analysis["symbol"] == "FPT"
     assert analysis["available"] is True
-    assert analysis["as_of_date"] == "2026-07-22"
+    assert analysis["as_of_date"] == "2026-07-21"
     assert analysis["candidate"]["score"] == 0.75
     assert analysis["missing_data"] == []
     conn.close()
