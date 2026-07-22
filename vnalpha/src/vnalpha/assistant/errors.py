@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from vnalpha.assistant.degraded_answer import AssistantFailureStage
 from vnalpha.tools.errors import PublicToolFailure
 
 
@@ -27,14 +28,18 @@ class AssistantLifecycleError(AssistantError):
     def __init__(
         self,
         *,
-        stage: str,
+        stage: AssistantFailureStage,
         category: str,
         correlation_id: str | None = None,
+        trace_id: str | None = None,
+        model_route: str | None = None,
     ) -> None:
         self.stage = stage
         self.category = category
         self.correlation_id = correlation_id
-        super().__init__(f"Assistant lifecycle failed at {stage}: {category}")
+        self.trace_id = trace_id
+        self.model_route = model_route
+        super().__init__(f"Assistant lifecycle failed at {stage.value}: {category}")
 
 
 class PreparedPlanHashMismatchError(AssistantInputValidationError, ValueError):

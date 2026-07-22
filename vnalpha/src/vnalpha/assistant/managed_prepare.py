@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from vnalpha.assistant.degraded_answer import AssistantFailureStage
 from vnalpha.assistant.effective_date import (
     normalize_date_candidate,
     resolve_effective_target_date,
@@ -89,9 +90,11 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                         },
                     )
                 raise AssistantLifecycleError(
-                    stage="CLASSIFY",
+                    stage=AssistantFailureStage.CLASSIFY,
                     category="CLASSIFICATION_FAILURE",
                     correlation_id=get_correlation_id(),
+                    trace_id=classify_trace_id,
+                    model_route=self._engine._llm_model(),
                 ) from exc
             with self._coordinator.transaction() as connection:
                 finish_llm_trace(
@@ -123,9 +126,10 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                 plan = self._engine._planner.build(intent_result)
             except Exception as exc:
                 raise AssistantLifecycleError(
-                    stage="PLAN",
+                    stage=AssistantFailureStage.PLAN,
                     category="PLAN_BUILD_FAILURE",
                     correlation_id=get_correlation_id(),
+                    model_route=self._engine._llm_model(),
                 ) from exc
             request = self._with_symbol_memory_context(request, intent_result.entities)
             if is_approval_required_plan(plan):

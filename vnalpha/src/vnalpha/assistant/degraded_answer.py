@@ -12,6 +12,7 @@ from vnalpha.assistant.research_templates import (
     build_deterministic_research_answer,
     is_research_intent,
 )
+from vnalpha.core.text_safety import sanitize_text
 from vnalpha.maintenance.software_identity import resolve_software_identity
 from vnalpha.observability.context import get_correlation_id
 from vnalpha.tools.setup import TOOL_PERMISSIONS
@@ -133,14 +134,23 @@ def degradation_warning(answer: AssistantAnswer) -> str | None:
     return diagnostic_warning(diagnostic)
 
 
-def lifecycle_warning(stage: str, category: str, correlation_id: str | None) -> str:
+def lifecycle_warning(
+    stage: AssistantFailureStage,
+    category: str,
+    correlation_id: str | None,
+    *,
+    trace_id: str | None = None,
+    model_route: str | None = None,
+) -> str:
     return (
         diagnostic_warning(
             {
                 "warning": "Assistant request did not produce a usable answer.",
-                "stage": stage,
+                "stage": stage.value,
                 "category": category,
                 "correlation_id": correlation_id or get_correlation_id(),
+                "trace_id": trace_id or "",
+                "model_route": model_route or "",
                 "build_sha": _runtime_build_sha() or "unavailable",
             }
         )
@@ -161,8 +171,8 @@ def diagnostic_warning(diagnostic: dict[str, Any]) -> str | None:
     for key in ("correlation_id", "trace_id", "model_route", "build_sha"):
         value = diagnostic.get(key)
         if isinstance(value, str) and value:
-            suffix += f" {key}={value}"
-    return warning + suffix
+            suffix += f" {key}={sanitize_text(value)}"
+    return sanitize_text(warning) + suffix
 
 
 def _is_read_only_plan(plan: AssistantPlan) -> bool:
@@ -222,11 +232,11 @@ def _data_summary(plan: AssistantPlan, tool_outputs: dict[str, Any]) -> str:
 def _runtime_build_sha() -> str | None:
     configured = environ.get("VNALPHA_BUILD_SHA") or environ.get("GITHUB_SHA")
     if configured:
-        return configured
+        return sanitize_text(configured)
     try:
         source_commit = resolve_software_identity().source_commit
         if source_commit:
-            return source_commit
+            return sanitize_text(source_commit)
         return (
             check_output(
                 ["git", "-C", str(Path(__file__).parents[4]), "rev-parse", "HEAD"],

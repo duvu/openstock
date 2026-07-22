@@ -9,7 +9,11 @@ import duckdb
 import pytest
 
 from vnalpha.assistant.connection_runtime import AssistantApp
-from vnalpha.assistant.degraded_answer import degradation_warning, lifecycle_warning
+from vnalpha.assistant.degraded_answer import (
+    AssistantFailureStage,
+    degradation_warning,
+    lifecycle_warning,
+)
 from vnalpha.assistant.errors import SynthesisError
 from vnalpha.assistant.gateway import FakeLLMClient
 from vnalpha.assistant.models import (
@@ -367,10 +371,33 @@ class TestAnswerSynthesizer:
             "SYNTHESIS_TRACE_CREATE_FAILURE"
         )
 
-        lifecycle = lifecycle_warning("CLASSIFY", "CLASSIFICATION_FAILURE", "corr-1")
+        monkeypatch.setenv("VNALPHA_BUILD_SHA", "api_key=build-secret")
+        lifecycle = lifecycle_warning(
+            AssistantFailureStage.CLASSIFY,
+            "CLASSIFICATION_FAILURE",
+            "corr-1",
+        )
         assert "stage=CLASSIFY" in lifecycle
         assert "category=CLASSIFICATION_FAILURE" in lifecycle
         assert "correlation_id=corr-1" in lifecycle
+        assert "build-secret" not in lifecycle
+
+        with monkeypatch.context() as finalization_patch:
+            finalization_patch.setattr(
+                "vnalpha.assistant.connected_execute.finish_prepared_turn",
+                trace_failure,
+            )
+            prepared_turn_failure_result, _ = AssistantApp(
+                conn, llm_client=ValidSynthesisGateway()
+            ).ask("thi truong hom nay", date="2026-07-01")
+        assert isinstance(prepared_turn_failure_result, AssistantAnswer)
+        assert (
+            prepared_turn_failure_result.research_metadata["degradation"]["stage"]
+            == "SESSION_FINALIZE"
+        )
+        assert conn.execute(
+            "SELECT status FROM assistant_session ORDER BY started_at DESC LIMIT 1"
+        ).fetchone() == ("DEGRADED_SUCCESS",)
 
         def session_failure(*_args, **_kwargs):
             raise RuntimeError("session unavailable")

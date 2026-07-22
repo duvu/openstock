@@ -8,7 +8,11 @@ from rich.panel import Panel
 from rich.text import Text
 
 from vnalpha.assistant.app import AssistantApp
-from vnalpha.assistant.degraded_answer import degradation_warning, lifecycle_warning
+from vnalpha.assistant.degraded_answer import (
+    AssistantFailureStage,
+    degradation_warning,
+    lifecycle_warning,
+)
 from vnalpha.assistant.errors import (
     AssistantError,
     AssistantInputValidationError,
@@ -80,7 +84,7 @@ def register(app: typer.Typer) -> None:
                 error_console.print(
                     Text(
                         lifecycle_warning(
-                            "REQUEST_RESOLUTION", "CONNECTION_FAILURE", None
+                            AssistantFailureStage.CLASSIFY, "CONNECTION_FAILURE", None
                         ),
                         style="red",
                     )
@@ -120,7 +124,13 @@ def register(app: typer.Typer) -> None:
             except AssistantLifecycleError as exc:
                 error_console.print(
                     Text(
-                        lifecycle_warning(exc.stage, exc.category, exc.correlation_id),
+                        lifecycle_warning(
+                            exc.stage,
+                            exc.category,
+                            exc.correlation_id,
+                            trace_id=exc.trace_id,
+                            model_route=exc.model_route,
+                        ),
                         style="red",
                     )
                 )
@@ -129,7 +139,11 @@ def register(app: typer.Typer) -> None:
                 capture_exception(exc)
                 error_console.print(
                     Text(
-                        lifecycle_warning("REQUEST_FAILED", "ASSISTANT_FAILURE", None),
+                        lifecycle_warning(
+                            AssistantFailureStage.ANSWER_VALIDATION,
+                            "ASSISTANT_FAILURE",
+                            None,
+                        ),
                         style="red",
                     )
                 )
@@ -138,7 +152,11 @@ def register(app: typer.Typer) -> None:
                 capture_exception(exc)
                 error_console.print(
                     Text(
-                        lifecycle_warning("REQUEST_FAILED", "UNEXPECTED_FAILURE", None),
+                        lifecycle_warning(
+                            AssistantFailureStage.ANSWER_VALIDATION,
+                            "UNEXPECTED_FAILURE",
+                            None,
+                        ),
                         style="red",
                     )
                 )
