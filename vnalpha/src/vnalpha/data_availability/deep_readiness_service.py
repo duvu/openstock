@@ -262,8 +262,9 @@ def _resolve_available_session_date(
     minimum_date = (
         date.fromisoformat(resolved_date) - timedelta(days=max_session_age_days)
     ).isoformat()
-    row = conn.execute(
-        """
+    try:
+        row = conn.execute(
+            """
         SELECT cs.date::VARCHAR
         FROM candidate_score cs
         WHERE cs.symbol = ?
@@ -288,8 +289,10 @@ def _resolve_available_session_date(
         ORDER BY cs.date DESC
         LIMIT 1
         """,
-        [symbol, resolved_date, minimum_date],
-    ).fetchone()
+            [symbol, resolved_date, minimum_date],
+        ).fetchone()
+    except duckdb.CatalogException:
+        return resolved_date
     return str(row[0]) if row is not None and row[0] is not None else resolved_date
 
 
