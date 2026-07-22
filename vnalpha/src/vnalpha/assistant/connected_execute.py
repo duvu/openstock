@@ -289,6 +289,18 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                         ),
                     )
                     session_status = "DEGRADED_SUCCESS"
+        diagnostic = answer.research_metadata.get("degradation")
+        if synthesis_trace_id is not None and isinstance(diagnostic, dict):
+            try:
+                finish_llm_trace(
+                    self._conn,
+                    synthesis_trace_id,
+                    status=session_status,
+                    error=diagnostic,
+                    model=self._llm_model(),
+                )
+            except Exception:
+                self._record_persistence_failure()
         try:
             finish_prepared_turn(
                 self._conn, prepared.prepared_turn_id, status="EXECUTED"

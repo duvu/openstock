@@ -319,6 +319,19 @@ class ManagedAssistantExecution(
                         ),
                     )
                     session_status = "DEGRADED_SUCCESS"
+        diagnostic = answer.research_metadata.get("degradation")
+        if synthesis_trace_id is not None and isinstance(diagnostic, dict):
+            try:
+                with self._coordinator.transaction() as connection:
+                    finish_llm_trace(
+                        connection,
+                        synthesis_trace_id,
+                        status=session_status,
+                        error=diagnostic,
+                        model=self._engine._llm_model(),
+                    )
+            except Exception:
+                self._record_persistence_failure()
         try:
             with self._coordinator.transaction() as connection:
                 finish_prepared_turn(
