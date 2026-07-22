@@ -104,4 +104,20 @@ class ConnectedAssistantPersistence(ConnectedAssistantContext):
         config = getattr(self._llm, "config", None)
         if not getattr(config, "store_raw", False):
             return {}
-        return {"response_evidence": raw_responses}
+        evidence: list[dict[str, Any]] = []
+        for response in raw_responses:
+            if not isinstance(response, dict):
+                continue
+            item: dict[str, Any] = {}
+            route_profile = response.get("route_profile")
+            try:
+                item["route_profile"] = ModelProfile.parse(route_profile).value
+            except ValueError:
+                pass
+            for key in ("status_code", "response_chars"):
+                value = response.get(key)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    item[key] = value
+            if item:
+                evidence.append(item)
+        return {"response_evidence": evidence} if evidence else {}

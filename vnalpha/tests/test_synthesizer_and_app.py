@@ -23,6 +23,7 @@ from vnalpha.assistant.models import (
     AssistantPlan,
     ToolPlanStep,
 )
+from vnalpha.assistant.response_json import parse_synthesis_response
 from vnalpha.assistant.synthesizer import (
     AnswerSynthesizer,
 )
@@ -203,6 +204,12 @@ class TestAnswerSynthesizer:
         assert "ghp_" not in untrusted_fallback.risks_caveats
         assert "ghp_" not in untrusted_fallback.research_metadata["degradation"]
         assert "ghp_" not in untrusted_fallback.research_metadata["fallback_reason"]
+        assert (
+            parse_synthesis_response(
+                json.dumps({"research_metadata": {"warning": "ghp_secret"}})
+            ).research_metadata
+            == {}
+        )
 
         assert (
             build_deterministic_tool_answer(

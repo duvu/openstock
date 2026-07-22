@@ -204,9 +204,6 @@ def parse_synthesis_response(response_text: str) -> AssistantAnswer:
     source_refs = data.get("grounded_source_refs", [])
     if not isinstance(source_refs, list):
         source_refs = []
-    metadata = data.get("research_metadata", {})
-    if not isinstance(metadata, dict):
-        metadata = {}
     claim_source_refs: dict[str, list[str]] = {}
     raw_claim_source_refs = data.get("claim_source_refs", {})
     if isinstance(raw_claim_source_refs, dict):
@@ -231,7 +228,7 @@ def parse_synthesis_response(response_text: str) -> AssistantAnswer:
         if isinstance(data.get("raw_tool_outputs", {}), dict)
         else {},
         grounded_source_refs=[str(item) for item in source_refs],
-        research_metadata=metadata,
+        research_metadata={},
         claim_source_refs=claim_source_refs,
     )
 

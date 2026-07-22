@@ -476,16 +476,7 @@ class ChatController:
         except (AssistantInputValidationError, PlanValidationError) as exc:
             return self._present_validation_failure(exc)
         except AssistantLifecycleError as exc:
-            error_text = lifecycle_warning(
-                exc.stage,
-                exc.category,
-                exc.correlation_id,
-                trace_id=exc.trace_id,
-                model_route=exc.model_route,
-            )
-            self._on_message("red", error_text)
-            self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
-            return error_text
+            return self._present_lifecycle_failure(exc)
         except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
@@ -541,6 +532,8 @@ class ChatController:
                 self._present_actionable_tool_failure(exc)
             except (AssistantInputValidationError, PlanValidationError) as exc:
                 self._present_validation_failure(exc)
+            except AssistantLifecycleError as exc:
+                self._present_lifecycle_failure(exc)
             except Exception as exc:
                 error_text = format_runtime_error(
                     "Assistant request failed. Check logs and retry."
@@ -1007,6 +1000,8 @@ class ChatController:
             return self._present_actionable_tool_failure(exc)
         except (AssistantInputValidationError, PlanValidationError) as exc:
             return self._present_validation_failure(exc)
+        except AssistantLifecycleError as exc:
+            return self._present_lifecycle_failure(exc)
         except Exception as exc:
             error_text = format_runtime_error(
                 "Assistant request failed. Check logs and retry."
@@ -1040,6 +1035,18 @@ class ChatController:
         )
         self._on_message("yellow", error_text)
         self._persist_error_message(error_text, ChatErrorKind.VALIDATION)
+        return error_text
+
+    def _present_lifecycle_failure(self, exc: AssistantLifecycleError) -> str:
+        error_text = lifecycle_warning(
+            exc.stage,
+            exc.category,
+            exc.correlation_id,
+            trace_id=exc.trace_id,
+            model_route=exc.model_route,
+        )
+        self._on_message("red", error_text)
+        self._persist_error_message(error_text, ChatErrorKind.RUNTIME)
         return error_text
 
     def _render_prepared_answer(self, answer) -> None:
