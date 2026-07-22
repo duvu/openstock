@@ -9,9 +9,7 @@ from typer.testing import CliRunner
 
 from vnalpha.cli_app import common as cli_common
 from vnalpha.cli_app import maintain as maintain_cli
-from vnalpha.core.config import AppConfig, VnstockServiceConfig, WarehouseConfig
-from vnalpha.data_provisioning.source_policy import SourcePolicyResolver
-from vnalpha.maintenance import runtime_identity
+from vnalpha.core.config import reset_config
 from vnalpha.maintenance.models import (
     DailyMaintenanceResult,
     MaintenanceRunStatus,
@@ -28,29 +26,29 @@ from vnalpha.observability.context import reset_run_context
 
 def test_daily_cli_persists_noop_invocation(tmp_path, monkeypatch) -> None:
     warehouse = tmp_path / "warehouse.duckdb"
-
-    def _connection(*, ephemeral: bool):
-        return duckdb.connect(":memory:" if ephemeral else str(warehouse))
-
-    monkeypatch.setattr(maintain_cli, "_maintenance_connection", _connection)
+    monkeypatch.setenv("VNALPHA_WAREHOUSE_PATH", str(warehouse))
+    reset_config()
     monkeypatch.setattr(
         maintain_cli,
         "resolve_software_identity",
         lambda: SoftwareIdentity("1.2.3", "a" * 40, "clean"),
     )
 
-    result = CliRunner().invoke(
-        maintain_cli.app,
-        ["daily", "--date", "2026-07-19", "--json"],
-    )
-    assert result.exit_code == 0, result.output
+    try:
+        result = CliRunner().invoke(
+            maintain_cli.app,
+            ["daily", "--date", "2026-07-19", "--json"],
+        )
+        assert result.exit_code == 0, result.output
 
-    conn = duckdb.connect(str(warehouse))
-    row = conn.execute(
-        "SELECT status, package_version, source_commit, tree_state FROM maintenance_run"
-    ).fetchone()
-    conn.close()
-    assert row == ("NOOP", "1.2.3", "a" * 40, "clean")
+        conn = duckdb.connect(str(warehouse))
+        row = conn.execute(
+            "SELECT status, package_version, source_commit, tree_state FROM maintenance_run"
+        ).fetchone()
+        conn.close()
+        assert row == ("NOOP", "1.2.3", "a" * 40, "clean")
+    finally:
+        reset_config()
 
 
 def test_cli_records_effective_runtime_identity_in_metadata_mode(

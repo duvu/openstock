@@ -1,26 +1,24 @@
 # Authoritative inventory disposition
 
-Baseline collection recorded for issue #348: 3,296 pytest nodes across 276
-vnalpha test files. The final authoritative inventory contains 211 exact nodes,
-all collected from the reduced tree.
+The pre-consolidation baseline was 3,303 collected pytest nodes across 275
+`vnalpha` test files. The current local manifest contains 220 exact source
+nodes: 118 application, 78 data and 24 research. `run-test-suite.py --plan`
+emits 220 unique nodes.
 
 | Disposition | Scope | Evidence |
 | --- | --- | --- |
-| KEEP | Every node in `vnalpha/tests/suites/authoritative.toml` | One public or distinct approved risk contract per exact node; the manifest and collection both contain 211 nodes. |
-| DELETE | Every baseline pytest node absent from the authoritative inventory | 3,085 duplicate, issue-number, R0/R4/Phase, adapter, schema, literal or implementation-detail cases were removed. |
-| MERGE | Broad glob manifest, old runner self-tests and duplicate repository-check tests | Replaced by one small parser/checker invoked through repository consistency. |
-| REPLACE | Old file-level suite/aggregate/smoke wrappers | Replaced by domain selection over exact inventory nodes. |
+| KEEP | Every node in `vnalpha/tests/suites/authoritative.toml` | One public or distinct approved risk contract per exact source node. |
+| MERGE | Three duplicate Textual app-mount smoke tests | One workspace-context startup owner mounts the same public application path. |
+| REPLACE | Broad file-glob suite and aggregate wrappers | Local domain selection resolves exact manifest nodes. |
+| DELETE | Legacy duplicate, issue-labelled, literal and implementation-detail test nodes absent from the source-aware inventory | The validator rejects any remaining unclassified `test_*` definition. |
 
-The 67 baseline files without a retained node were deleted. In files with a
-retained node, AST-guided pruning removed every other collected `test_*`
-definition while preserving non-test fixtures and helpers. A static inventory
-check rejects a new unclassified test definition before CI selects pytest.
+The validator uses the test file path as part of each definition identity. A
+matching function or method name in another test file cannot satisfy a manifest
+entry. This caught a moved intent test and five unrecorded current-main nodes
+before a domain lane could execute.
 
-Legacy R0/R4/Phase tests retained only where their contract remains distinct:
-
-- point-in-time benchmark date and minimal migration;
-- invalid CLI universe;
-- complete session lifecycle, trace persistence, per-session clear isolation,
-  credential-safe persistence, unsafe-tool refusal and no local panel dispatch;
-- pipeline candidate production, audit reference integrity, cache eligibility,
-  process lock exclusion and grounded source rejection.
+Distinct retained legacy risks include point-in-time benchmark dates and
+minimal migration; current-session lifecycle, trace persistence, credential
+redaction and unsafe-tool refusal; pipeline candidate production, audit
+reference integrity, cache eligibility, process lock exclusion and grounded
+source rejection.

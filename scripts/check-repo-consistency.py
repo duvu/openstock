@@ -216,26 +216,14 @@ def _check_ci_gate_contract(errors: list[str]) -> None:
                 f"{workflow_path}: missing required merge-gate contract {required!r}"
             )
     for result_name in (
-        "IMPACT_RESULT",
         "CONSISTENCY_RESULT",
         "VNALPHA_RESULT",
-        "VNALPHA_DOMAINS_RESULT",
         "VNSTOCK_RESULT",
     ):
-        required = f'case "${result_name}" in success|skipped) ;; *) exit 1 ;; esac'
+        required = f'test "${result_name}" = success'
         if required not in workflow:
             errors.append(
-                f"{workflow_path}: required gate must fail {result_name} unless success or skipped"
-            )
-    for routing_contract in (
-        "name: Change impact routing",
-        "python scripts/classify-test-impact.py --github-output",
-        "needs.impact.outputs.full == 'true'",
-        "contains(fromJSON(needs.impact.outputs.domains), 'vnalpha-application')",
-    ):
-        if routing_contract not in workflow:
-            errors.append(
-                f"{workflow_path}: missing fail-closed impact classifier contract {routing_contract!r}"
+                f"{workflow_path}: required gate must require {result_name} success"
             )
 
     doc_path = "vnalpha/docs/branch-protection.md"
