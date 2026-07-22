@@ -604,6 +604,11 @@ domain = "application"
 test = "tests/test_p0_operations_truthfulness.py::test_daily_cli_persists_noop_invocation"
 
 [[contract]]
+id = "p0-operations-truthfulness-test-runtime-identity-records-effective-runtime-configuration"
+domain = "application"
+test = "tests/test_p0_operations_truthfulness.py::test_runtime_identity_records_effective_runtime_configuration"
+
+[[contract]]
 id = "persistence-testsaveandgetcandidatescore-test-save-then-get-returns-record"
 domain = "application"
 test = "tests/test_persistence.py::TestSaveAndGetCandidateScore::test_save_then_get_returns_record"

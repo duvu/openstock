@@ -27,7 +27,11 @@ from vnalpha.data_availability.deep_readiness_models import (
     ReadinessResult,
 )
 from vnalpha.data_availability.ensure import ensure_symbol_analysis_ready
-from vnalpha.data_availability.models import EnsureDataResult, EnsureDataStatus
+from vnalpha.data_availability.models import (
+    EnsureDataActionStatus,
+    EnsureDataResult,
+    EnsureDataStatus,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,7 +120,7 @@ class DeepAnalysisReadinessService:
             errors = (
                 (root_cause,)
                 if root_cause is not None
-                else ("Required deep-analysis data could not be made ready.",)
+                else (_undetailed_provisioning_failure(result, resolved_date),)
             )
         readiness = ReadinessResult(
             symbol=result.symbol,
@@ -229,8 +233,6 @@ def _first_actionable_failure(result: EnsureDataResult) -> str | None:
     affected dataset/symbol and sanitized root cause, so the message is
     actionable rather than a static full-pipeline wrapper (issue #305).
     """
-    from vnalpha.data_availability.models import EnsureDataActionStatus
-
     for outcome in result.action_outcomes:
         if outcome.status is EnsureDataActionStatus.FAILED:
             dataset = outcome.dataset or "unknown"
@@ -242,6 +244,18 @@ def _first_actionable_failure(result: EnsureDataResult) -> str | None:
                 f"(dataset={dataset}, symbol={symbol}, category={category}): {cause}"
             )
     return None
+
+
+def _undetailed_provisioning_failure(
+    result: EnsureDataResult, resolved_date: str
+) -> str:
+    category = result.failure_code or "PROVISIONING_RESULT_INCONSISTENT"
+    return (
+        "Deep-analysis preparation failed without a stage diagnostic "
+        f"(symbol={result.symbol}, effective_date={resolved_date}, "
+        f"status={result.status.value}, category={category}): "
+        "the provisioning result reported not-ready without error evidence"
+    )
 
 
 def _first_blocking_artifact(artifacts: tuple) -> str | None:
