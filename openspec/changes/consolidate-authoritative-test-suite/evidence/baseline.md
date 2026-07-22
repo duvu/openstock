@@ -111,19 +111,16 @@ ownership decision.
 | `test_r4_permissions.py`, `test_r4_session.py`, `test_r4_trace.py`, `test_r4_clear.py`, `test_r4_persistence.py`, `test_r4_controller_persistence.py` | complete `test-vnalpha` | `verify-r4` | 2 each |
 | `packaging/scripts/openstock-verify --ci` | `verify-r2-ci` | direct final command | 2 |
 
-The current `vnalpha` GitHub Actions job also runs the five R0 files through
-`make verify-r0` before the full suite, so that job duplicates those files.
-The fourteen targeted repository-regression node IDs are likewise collected by
-the later full suite. No current workflow can deliberately skip the `vnalpha`
-or `vnstock` jobs for a documentation/OpenSpec-only pull request: all three
-jobs (`consistency`, `vnalpha`, `vnstock`) are unconditional.
+At the recorded baseline, the `vnalpha` GitHub Actions job also ran the five R0
+files through `make verify-r0` before the full suite, and fourteen targeted
+repository-regression node IDs were likewise collected by the later full suite.
+This is historical context only: issue #348 no longer changes, requires or
+uses hosted CI evidence.
 
 ## Migration and docs-lane baseline limits
 
 There is no existing full-migration invocation counter or fixture timing hook,
 so its baseline value is **not yet measurable**. Task 1.6 remains open until
 the fixture work adds an explicit counter and records before/after values.
-Likewise, no docs/OpenSpec-only pull request run on this commit exists from
-which to report a truthful job wall time; the static workflow inspection above
-records the pre-change behavior only. These unknowns are intentionally not
-presented as passing measurements.
+The static workflow inspection above records pre-change behavior only; no
+hosted workflow measurement is required or presented as #348 evidence.

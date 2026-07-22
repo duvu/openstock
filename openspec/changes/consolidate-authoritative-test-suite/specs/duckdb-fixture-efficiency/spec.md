@@ -41,13 +41,10 @@ Transaction rollback reuse SHALL be limited to tests that do not verify commit, 
 - **WHEN** its contract depends on process and file-lock behavior
 - **THEN** it uses a dedicated file-backed database and is never converted to shared transaction reuse.
 
-### Requirement: Parallel execution SHALL be evidence gated and reversible
-Parallel pytest SHALL be enabled only after repeated sequential and `-n auto --dist loadfile` runs on the same commit have identical collection and outcomes without contamination or flake. A simple sequential command SHALL remain available, and nightly SHALL retain a sequential full lane during observation.
+### Requirement: Sequential local execution SHALL remain authoritative
+The change SHALL retain a simple sequential local command. Parallel and hosted
+execution policy is outside issue #348.
 
-#### Scenario: Parallel equivalence is proven
-- **WHEN** repeated parallel runs match the sequential collection and outcomes
-- **THEN** pull-request lanes may enable the controlled parallel command.
-
-#### Scenario: Parallel execution reveals contamination
-- **WHEN** outcomes differ, a flake appears or mutable state crosses tests
-- **THEN** parallelization is rolled back while the sequential lane remains authoritative.
+#### Scenario: A final local candidate is evaluated
+- **WHEN** a developer runs the complete authoritative suite
+- **THEN** the sequential manifest runner is available as the authoritative command.
