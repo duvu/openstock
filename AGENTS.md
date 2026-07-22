@@ -1,6 +1,6 @@
 # Agent notes for the OpenStock repository
 
-OpenStock contains `vnalpha`, `vnstock`, OpenSpec, packaging and CI assets.
+OpenStock contains `vnalpha`, `vnstock`, OpenSpec, packaging and local development assets.
 
 ## Repository structure
 
@@ -10,8 +10,8 @@ OpenStock contains `vnalpha`, `vnstock`, OpenSpec, packaging and CI assets.
 | `vnstock/` | Provider-independent market-data library/service. |
 | `openspec/` | Active changes, archive and accepted specifications. |
 | `packaging/` | Package and deployment assets. |
-| `.github/` | CI and release workflows. |
 | `Makefile` | Repository commands. |
+| `CODING.md` | Normative coding conventions. |
 | `TESTING.md` | Normative testing policy. |
 
 ## Product boundary
@@ -27,14 +27,39 @@ understand/specify the public contract
 → implement the smallest complete change
 → inspect or smoke-check
 → add/update the authoritative contract test
-→ run it once
+→ run focused coding and test checks once
 ```
 
 Do not write failing tests as process ceremony or design production code around test-only seams.
 
+## Coding rules for agents
+
+[`CODING.md`](CODING.md) is the single normative coding source. Read it when adding, changing or reviewing Python code. Do not duplicate the full policy in issues or implementation notes.
+
+Mandatory summary:
+
+- all imports are module-level and placed at the top of the file;
+- never add imports inside functions, methods, classes, conditions or after executable code;
+- order imports as standard library, third-party, then project-local;
+- no wildcard or unused imports;
+- fix circular dependencies architecturally; never hide them with a local import;
+- use Ruff formatting, Python naming conventions and typed public boundaries;
+- prefer typed models/enums over free-form dictionaries and magic strings;
+- keep functions focused and dependency direction one-way;
+- catch specific exceptions and use logging instead of `print()`;
+- avoid mutable global runtime state and generic `utils`/`helpers` modules.
+
+For every touched Python file, run:
+
+```bash
+make lint-files PROJECT=vnalpha FILES="src/path/file.py tests/path/test_file.py"
+```
+
+Use `PROJECT=vnstock` for vnstock files. An agent MUST NOT complete work while a touched file contains a local/mid-file import or fails the focused coding check.
+
 ## Testing rules for agents
 
-[`TESTING.md`](TESTING.md) is the single normative source. Read it when adding, changing, deleting or reviewing tests; do not duplicate its full content in issues or implementation notes.
+[`TESTING.md`](TESTING.md) is the single normative testing source. Read it when adding, changing, deleting or reviewing tests.
 
 Mandatory summary:
 
@@ -54,7 +79,7 @@ Use:
 make test-loop TEST=tests/path/to/test_file.py::test_contract
 ```
 
-Do not run full suites, R0/R4, `verify-hardening`, packaging, research evals, repository-wide checks or GitHub Actions after each patch. Full/package gates run only once at the correct lifecycle stage.
+Do not run full suites, R0/R4, `verify-hardening`, packaging, research evals, repository-wide checks or GitHub Actions after each patch. Broader local validation runs once only when a frozen candidate and material risk justify it.
 
 Before completing a behavior-changing PR, report:
 
@@ -64,7 +89,8 @@ authoritative_test:
 tests_removed_or_merged:
 net_test_count_change:
 net_test_LOC_change:
-validation_command:
+local_validation_command:
+local_validation_result:
 ```
 
 ## Implementation guidance
