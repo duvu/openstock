@@ -258,6 +258,7 @@ def _resolve_available_session_date(
         FROM candidate_score cs
         WHERE cs.symbol = ?
           AND cs.date <= ?
+          AND cs.date >= ?::DATE - INTERVAL 7 DAY
           AND EXISTS (
               SELECT 1 FROM feature_snapshot fs
               WHERE fs.symbol = cs.symbol AND fs.date = cs.date
@@ -277,7 +278,7 @@ def _resolve_available_session_date(
         ORDER BY cs.date DESC
         LIMIT 1
         """,
-        [symbol, resolved_date],
+        [symbol, resolved_date, resolved_date],
     ).fetchone()
     return str(row[0]) if row is not None and row[0] is not None else resolved_date
 
