@@ -5,7 +5,10 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from vnalpha.assistant.degraded_answer import AssistantFailureStage
+from vnalpha.assistant.degraded_answer import (
+    AssistantDegradation,
+    AssistantFailureStage,
+)
 from vnalpha.assistant.effective_date import (
     normalize_date_candidate,
     resolve_effective_target_date,
@@ -228,9 +231,24 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                     error={
                         "error_type": type(exc).__name__,
                         "message": sanitize_error_summary(exc),
+                        **(
+                            {"lifecycle": _lifecycle_diagnostic(exc)}
+                            if isinstance(exc, AssistantLifecycleError)
+                            else {}
+                        ),
                     },
                 )
         except Exception:
             _log_assistant_lifecycle(
                 "ASSISTANT_PERSISTENCE_FAILED", "prepare", status=status
             )
+
+
+def _lifecycle_diagnostic(exc: AssistantLifecycleError) -> dict[str, str]:
+    return AssistantDegradation(
+        exc.stage,
+        exc.category,
+        correlation_id=exc.correlation_id,
+        trace_id=exc.trace_id,
+        model_route=exc.model_route,
+    ).to_dict()

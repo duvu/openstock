@@ -8,7 +8,10 @@ from uuid import uuid4
 import duckdb
 
 from vnalpha.assistant.connected_context import ConnectedAssistantContext
-from vnalpha.assistant.degraded_answer import AssistantFailureStage
+from vnalpha.assistant.degraded_answer import (
+    AssistantDegradation,
+    AssistantFailureStage,
+)
 from vnalpha.assistant.effective_date import (
     normalize_date_candidate,
     resolve_effective_target_date,
@@ -203,6 +206,11 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                     error={
                         "error_type": type(exc).__name__,
                         "message": sanitize_error_summary(exc),
+                        **(
+                            {"lifecycle": _lifecycle_diagnostic(exc)}
+                            if isinstance(exc, AssistantLifecycleError)
+                            else {}
+                        ),
                     },
                 )
             except Exception:
@@ -281,3 +289,13 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
             value for value in (request.workspace_context, memory_context) if value
         )
         return replace(request, workspace_context=workspace_context)
+
+
+def _lifecycle_diagnostic(exc: AssistantLifecycleError) -> dict[str, str]:
+    return AssistantDegradation(
+        exc.stage,
+        exc.category,
+        correlation_id=exc.correlation_id,
+        trace_id=exc.trace_id,
+        model_route=exc.model_route,
+    ).to_dict()
