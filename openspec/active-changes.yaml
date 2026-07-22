@@ -1,5 +1,5 @@
 # Registry for non-archived OpenSpec lifecycle and evidence.
-reviewed_at: 2026-07-19
+reviewed_at: 2026-07-22
 policy:
   active_directory: openspec/changes
   archive_directory: openspec/changes/archive
@@ -22,8 +22,10 @@ changes:
     evidence: >-
       Warehouse ownership (#343), readiness contracts (#320) and typed
       provisioning goals (#338), durable queue repository (#323) and sequential
-      worker core (#324) are implemented; bounded stage interruption and
-      shutdown proof remain incomplete. Commits
+      worker core (#324) are implemented. Commit
+      1b3d36a87769702aed93af10f08e819c9aa28704 adds bounded staged execution,
+      interruption rollback, cancellation between stages and recoverable signal
+      shutdown. Earlier commits
       85caa5da2481822c84cbac45594feb94abad9176 and
       079c32dfa3d59fd9bb345d5b730a0112035c2d45 and
       031aef766584d14493b3835dc65baf69705098e3 and
