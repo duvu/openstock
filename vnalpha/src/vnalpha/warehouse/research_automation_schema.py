@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS research_artifact (
         'created', 'running', 'succeeded',
         'failed', 'rejected', 'validated', 'promoted'
     )),
-    lifecycle_state VARCHAR CHECK (
+    lifecycle_state VARCHAR NOT NULL CHECK (
         lifecycle_state IN (
             'RUN', 'OBSERVE', 'PACKAGE', 'AI_FIX', 'VALIDATE',
             'PROMOTE_READY', 'PROMOTED', 'REJECTED', 'ROLLED_BACK',

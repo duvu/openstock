@@ -45,7 +45,7 @@ class DeepAnalysisReadinessService:
         normalized_symbol = request.symbol.upper().strip()
         try:
             resolved_date = resolve_market_session_date(request.requested_date)
-        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+        except Exception as exc:  # noqa: BLE001
             return self._terminal_failure(
                 symbol=normalized_symbol,
                 requested_date=request.requested_date,
@@ -75,7 +75,7 @@ class DeepAnalysisReadinessService:
                 requested_date=request.requested_date,
                 resolved_date=resolved_date,
             )
-        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+        except Exception as exc:  # noqa: BLE001
             return self._terminal_failure(
                 symbol=normalized_symbol,
                 requested_date=request.requested_date,
@@ -96,7 +96,7 @@ class DeepAnalysisReadinessService:
         )
         try:
             context_artifacts = evaluate_context_readiness(context_input)
-        except Exception:  # noqa: BROAD_EXCEPT_OK
+        except Exception:  # noqa: BLE001
             context_artifacts = unavailable_context_artifacts(
                 context_input, ContextIssue.CONTEXT_BUILD_FAILED
             )
@@ -108,12 +108,6 @@ class DeepAnalysisReadinessService:
             if artifact.error is not None
         )
         if not result.is_ready and not errors:
-            # Preserve the first actionable root cause instead of flattening it
-            # into a generic wrapper (issue #305). Prefer a failed provisioning
-            # stage; otherwise fall back to the first blocking core artifact
-            # whose evidence is not ready (e.g. a stale benchmark that every
-            # action "succeeded" on but that still did not reach the target
-            # session).
             root_cause = _first_actionable_failure(result) or _first_blocking_artifact(
                 core_artifacts
             )
@@ -153,7 +147,7 @@ class DeepAnalysisReadinessService:
     ) -> EnsureDataResult:
         try:
             return self.ensure(request.conn, symbol, resolved_date)
-        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+        except Exception as exc:  # noqa: BLE001
             audit_ensure_exception(
                 symbol=symbol,
                 requested_date=request.requested_date,
@@ -165,7 +159,11 @@ class DeepAnalysisReadinessService:
                 symbol=symbol,
                 target_date=resolved_date,
                 status=EnsureDataStatus.FAILED,
-                errors=["Core data readiness could not be evaluated."],
+                errors=[
+                    "Deep-analysis preparation failed at stage core_provisioning "
+                    f"(dataset=core, symbol={symbol}, effective_date={resolved_date}, "
+                    f"category=ENSURE_EXCEPTION): {type(exc).__name__}"
+                ],
             )
 
     def _terminal_failure(
@@ -227,12 +225,6 @@ def ensure_deep_analysis_ready(
 
 
 def _first_actionable_failure(result: EnsureDataResult) -> str | None:
-    """Summarize the first failed stage, retaining its stage and sanitized cause.
-
-    The top-level error summarizes the failure but keeps the failed stage name,
-    affected dataset/symbol and sanitized root cause, so the message is
-    actionable rather than a static full-pipeline wrapper (issue #305).
-    """
     for outcome in result.action_outcomes:
         if outcome.status is EnsureDataActionStatus.FAILED:
             dataset = outcome.dataset or "unknown"

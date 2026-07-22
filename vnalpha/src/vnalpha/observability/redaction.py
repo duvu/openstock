@@ -43,6 +43,16 @@ _METADATA_SAFE_KEYS: frozenset[str] = frozenset(
         "redaction_status",
         "actor",
         "command",
+        "application_version",
+        "source_commit",
+        "current_source_commit",
+        "build_match_status",
+        "tree_state",
+        "package_installation_path",
+        "warehouse_path",
+        "vnstock_service_url",
+        "provider_source_policy",
+        "process_started_at",
     }
 )
 

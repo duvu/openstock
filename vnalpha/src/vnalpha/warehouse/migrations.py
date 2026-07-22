@@ -394,6 +394,28 @@ def _migrate_research_artifact_columns(conn: duckdb.DuckDBPyConnection) -> None:
             "SET lifecycle_state = 'RUN' "
             "WHERE lifecycle_state IS NULL"
         )
+    if _column_is_nullable(conn, "research_artifact", "lifecycle_state"):
+        for index_name in (
+            "research_artifact_status_idx",
+            "research_artifact_lifecycle_state_idx",
+            "research_artifact_type_idx",
+        ):
+            conn.execute(f"DROP INDEX IF EXISTS {index_name}")
+        conn.execute(
+            "ALTER TABLE research_artifact ALTER COLUMN lifecycle_state SET NOT NULL"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS research_artifact_status_idx "
+            "ON research_artifact (status)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS research_artifact_lifecycle_state_idx "
+            "ON research_artifact (lifecycle_state)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS research_artifact_type_idx "
+            "ON research_artifact (artifact_type)"
+        )
 
 
 def _migrate_research_experiment_columns(conn: duckdb.DuckDBPyConnection) -> None:

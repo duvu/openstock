@@ -117,9 +117,33 @@ def _create_legacy_research_artifact_table_without_lineage_path(
     )
 
 
-def test_run_migrations_adds_lifecycle_state_to_legacy_research_artifact() -> None:
+def _create_legacy_candidate_outcome_table(conn: duckdb.DuckDBPyConnection) -> None:
+    conn.execute(
+        "CREATE TABLE candidate_outcome ("
+        "symbol VARCHAR NOT NULL,"
+        "watchlist_date DATE NOT NULL,"
+        "horizon_sessions INTEGER NOT NULL,"
+        "outcome_status VARCHAR NOT NULL,"
+        "price_basis VARCHAR,"
+        "benchmark_price_basis VARCHAR,"
+        "adjustment_methodology VARCHAR,"
+        "adjustment_version VARCHAR,"
+        "action_overlap_status VARCHAR,"
+        "corporate_action_lineage_json VARCHAR,"
+        "PRIMARY KEY (symbol, watchlist_date, horizon_sessions)"
+        ")"
+    )
+    conn.execute(
+        "INSERT INTO candidate_outcome "
+        "(symbol, watchlist_date, horizon_sessions, outcome_status) "
+        "VALUES ('FPT', '2026-01-02', 5, 'PENDING')"
+    )
+
+
+def test_run_migrations_upgrades_legacy_research_and_outcome_tables() -> None:
     conn = duckdb.connect(":memory:")
     _create_legacy_research_artifact_table(conn)
+    _create_legacy_candidate_outcome_table(conn)
 
     columns = (
         "artifact_id",
@@ -236,8 +260,48 @@ def test_run_migrations_adds_lifecycle_state_to_legacy_research_artifact() -> No
         )
 
     run_migrations(conn=conn)
+    run_migrations(conn=conn)
 
     rows = conn.execute(
         "SELECT artifact_id, status, lifecycle_state FROM research_artifact ORDER BY artifact_id"
     ).fetchall()
     assert rows == [("ra-1", "created", "RUN"), ("ra-2", "failed", "FAILED")]
+    lifecycle_nullable = conn.execute(
+        "SELECT is_nullable FROM information_schema.columns "
+        "WHERE table_name = 'research_artifact' AND column_name = 'lifecycle_state'"
+    ).fetchone()
+    assert lifecycle_nullable == ("NO",)
+    outcome = conn.execute(
+        "SELECT price_basis, benchmark_price_basis, adjustment_methodology, "
+        "adjustment_version, action_overlap_status, corporate_action_lineage_json "
+        "FROM candidate_outcome WHERE symbol = 'FPT'"
+    ).fetchone()
+    assert outcome == (
+        "UNKNOWN",
+        "UNKNOWN",
+        "UNKNOWN",
+        "UNKNOWN",
+        "NOT_EVALUATED",
+        "[]",
+    )
+    contracts = conn.execute(
+        "SELECT column_name, is_nullable FROM information_schema.columns "
+        "WHERE table_name = 'candidate_outcome' "
+        "AND column_name IN ("
+        "'price_basis', 'benchmark_price_basis', 'adjustment_methodology', "
+        "'adjustment_version', 'action_overlap_status', 'corporate_action_lineage_json'"
+        ")"
+    ).fetchall()
+    assert {nullable for _, nullable in contracts} == {"NO"}
+    conn.execute(
+        "INSERT INTO candidate_outcome "
+        "(symbol, watchlist_date, horizon_sessions, outcome_status) "
+        "VALUES ('FPT', '2026-01-03', 5, 'PENDING')"
+    )
+    defaults = conn.execute(
+        "SELECT price_basis, benchmark_price_basis, adjustment_methodology, "
+        "adjustment_version, action_overlap_status, corporate_action_lineage_json "
+        "FROM candidate_outcome WHERE watchlist_date = '2026-01-03'"
+    ).fetchone()
+    assert defaults == outcome
+    conn.close()

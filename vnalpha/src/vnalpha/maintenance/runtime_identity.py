@@ -4,6 +4,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import StrEnum
 from pathlib import Path
 from typing import Mapping
 
@@ -26,10 +27,18 @@ _POLICY_DATASETS = (
 )
 
 
+class RuntimeBuildMatchStatus(StrEnum):
+    MATCH = "MATCH"
+    STALE = "STALE"
+    UNVERIFIABLE = "UNVERIFIABLE"
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeIdentity:
     application_version: str
     source_commit: str | None
+    current_source_commit: str | None
+    build_match_status: RuntimeBuildMatchStatus
     tree_state: str | None
     package_installation_path: str
     warehouse_path: str
@@ -41,6 +50,8 @@ class RuntimeIdentity:
         return {
             "application_version": self.application_version,
             "source_commit": self.source_commit,
+            "current_source_commit": self.current_source_commit,
+            "build_match_status": self.build_match_status.value,
             "tree_state": self.tree_state,
             "package_installation_path": self.package_installation_path,
             "warehouse_path": self.warehouse_path,
@@ -55,6 +66,7 @@ def collect_runtime_identity(
     config: AppConfig | None = None,
     software_identity: SoftwareIdentity | None = None,
     source_policy_resolver: SourcePolicyResolver | None = None,
+    current_checkout_path: Path | None = None,
 ) -> RuntimeIdentity:
     resolved_config = config or get_config()
     resolved_software_identity = software_identity or resolve_software_identity()
@@ -68,12 +80,15 @@ def collect_runtime_identity(
         for dataset in _POLICY_DATASETS
         if (resolved := resolver.resolve(dataset))
     }
+    source_commit = resolved_software_identity.source_commit or _source_checkout_commit(
+        Path(__file__).resolve().parents[1]
+    )
+    current_source_commit = _source_checkout_commit(current_checkout_path or Path.cwd())
     return RuntimeIdentity(
         application_version=resolved_software_identity.package_version,
-        source_commit=(
-            resolved_software_identity.source_commit
-            or _source_checkout_commit(Path(__file__).resolve().parents[1])
-        ),
+        source_commit=source_commit,
+        current_source_commit=current_source_commit,
+        build_match_status=_build_match_status(source_commit, current_source_commit),
         tree_state=resolved_software_identity.tree_state,
         package_installation_path=str(Path(__file__).resolve().parents[1]),
         warehouse_path=str(resolved_config.warehouse.path.expanduser().resolve()),
@@ -121,4 +136,14 @@ def _source_checkout_commit(package_path: Path) -> str | None:
     return commit
 
 
-__all__ = ["RuntimeIdentity", "collect_runtime_identity"]
+def _build_match_status(
+    source_commit: str | None, current_source_commit: str | None
+) -> RuntimeBuildMatchStatus:
+    if source_commit is None or current_source_commit is None:
+        return RuntimeBuildMatchStatus.UNVERIFIABLE
+    if source_commit == current_source_commit:
+        return RuntimeBuildMatchStatus.MATCH
+    return RuntimeBuildMatchStatus.STALE
+
+
+__all__ = ["RuntimeBuildMatchStatus", "RuntimeIdentity", "collect_runtime_identity"]
