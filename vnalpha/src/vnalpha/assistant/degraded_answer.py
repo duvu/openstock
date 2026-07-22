@@ -19,6 +19,7 @@ from vnalpha.tools.setup import TOOL_PERMISSIONS
 
 _PUBLIC_WARNING: Final = "AI synthesis unavailable; showing deterministic result."
 _LIFECYCLE_WARNING: Final = "Assistant request did not produce a usable answer."
+_LIFECYCLE_CAUSE: Final = "LIFECYCLE_FAILURE"
 _PUBLIC_FALLBACK_LIMITATION: Final = (
     "Deterministic fallback is limited to available tool evidence."
 )
@@ -190,6 +191,7 @@ def lifecycle_warning(
         diagnostic_warning(
             {
                 "warning": _LIFECYCLE_WARNING,
+                "cause": _LIFECYCLE_CAUSE,
                 "stage": stage.value,
                 "category": category,
                 "correlation_id": correlation_id or get_correlation_id(),
@@ -217,6 +219,8 @@ def diagnostic_warning(diagnostic: dict[str, Any]) -> str | None:
     except ValueError:
         return None
     suffix = f" stage={public_stage.value} category={category}"
+    if warning == _LIFECYCLE_WARNING and diagnostic.get("cause") == _LIFECYCLE_CAUSE:
+        suffix += f" cause={_LIFECYCLE_CAUSE}"
     for key in ("correlation_id", "trace_id", "model_route", "build_sha"):
         if value := _public_identifier(key, diagnostic.get(key)):
             suffix += f" {key}={value}"

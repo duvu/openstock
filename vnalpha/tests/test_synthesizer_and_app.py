@@ -460,6 +460,7 @@ class TestAnswerSynthesizer:
         )
         assert "stage=CLASSIFY" in lifecycle
         assert "category=CLASSIFICATION_FAILURE" in lifecycle
+        assert "cause=LIFECYCLE_FAILURE" in lifecycle
         assert "correlation_id=0123456789abcdef" in lifecycle
         assert "build-secret" not in lifecycle
 

@@ -105,6 +105,7 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                                 self._classifier.last_raw_responses
                             ),
                         },
+                        model=self._llm_model(),
                     )
                 except Exception:
                     _log_assistant_lifecycle(

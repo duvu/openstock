@@ -100,6 +100,7 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                                     self._engine._classifier.last_raw_responses
                                 ),
                             },
+                            model=self._engine._llm_model(),
                         )
                 except Exception:
                     _log_assistant_lifecycle(

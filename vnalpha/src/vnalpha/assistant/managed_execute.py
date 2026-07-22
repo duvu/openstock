@@ -197,6 +197,7 @@ class ManagedAssistantExecution(
                                     self._engine._synthesizer.last_raw_responses
                                 ),
                             },
+                            model=self._engine._llm_model(),
                         )
                 except Exception:
                     self._record_persistence_failure()
