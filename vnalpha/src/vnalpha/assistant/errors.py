@@ -23,6 +23,20 @@ class AssistantInputValidationError(AssistantError):
     pass
 
 
+class AssistantLifecycleError(AssistantError):
+    def __init__(
+        self,
+        *,
+        stage: str,
+        category: str,
+        correlation_id: str | None = None,
+    ) -> None:
+        self.stage = stage
+        self.category = category
+        self.correlation_id = correlation_id
+        super().__init__(f"Assistant lifecycle failed at {stage}: {category}")
+
+
 class PreparedPlanHashMismatchError(AssistantInputValidationError, ValueError):
     pass
 

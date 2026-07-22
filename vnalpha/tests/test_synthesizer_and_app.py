@@ -9,7 +9,7 @@ import duckdb
 import pytest
 
 from vnalpha.assistant.connection_runtime import AssistantApp
-from vnalpha.assistant.degraded_answer import degradation_warning
+from vnalpha.assistant.degraded_answer import degradation_warning, lifecycle_warning
 from vnalpha.assistant.errors import SynthesisError
 from vnalpha.assistant.gateway import FakeLLMClient
 from vnalpha.assistant.models import (
@@ -21,6 +21,7 @@ from vnalpha.assistant.synthesizer import (
     AnswerSynthesizer,
 )
 from vnalpha.research_intelligence.models import MarketRegimeSnapshot
+from vnalpha.tui.screens.assistant import render_assistant_answer
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.repositories import upsert_market_regime_snapshot
 
@@ -153,8 +154,9 @@ def _market_snapshot(as_of_date: date) -> MarketRegimeSnapshot:
 
 
 class TestAnswerSynthesizer:
-    def test_synthesizer_returns_answer_with_summary(self, conn, monkeypatch):
-        """Synthesizer returns an AssistantAnswer with non-empty summary."""
+    def test_synthesizer_preserves_read_only_results_when_degraded(
+        self, conn, monkeypatch
+    ):
         monkeypatch.setenv("VNALPHA_BUILD_SHA", "test-build-sha")
         client = FakeLLMClient(responses=[(VALID_SYNTHESIS_JSON, {})])
         synth = AnswerSynthesizer(client)
@@ -280,6 +282,12 @@ class TestAnswerSynthesizer:
         assert "stage=SYNTHESIS_CALL" in warning
         assert "category=GATEWAY_FAILURE" in warning
         assert "correlation_id=" in warning
+        assert "trace_id=" in warning
+        assert "model_route=FailingSynthesisGateway" in warning
+        assert "build_sha=test-build-sha" in warning
+        rendered_tui_answer = render_assistant_answer(result).plain
+        assert "Warning: AI synthesis unavailable" in rendered_tui_answer
+        assert "stage=SYNTHESIS_CALL" in rendered_tui_answer
         assert conn.execute(
             "SELECT status FROM assistant_session ORDER BY started_at DESC LIMIT 1"
         ).fetchone() == ("DEGRADED_SUCCESS",)
@@ -343,8 +351,26 @@ class TestAnswerSynthesizer:
             ).ask("thi truong hom nay", date="2026-07-01")
         assert isinstance(trace_result, AssistantAnswer)
         assert trace_result.research_metadata["degradation"]["stage"] == (
-            "SYNTHESIS_PERSIST"
+            "AUDIT_PERSIST"
         )
+
+        with monkeypatch.context() as trace_patch:
+            trace_patch.setattr(
+                "vnalpha.assistant.connected_execute.create_llm_trace",
+                trace_failure,
+            )
+            trace_creation_result, _ = AssistantApp(
+                conn, llm_client=ValidSynthesisGateway()
+            ).ask("thi truong hom nay", date="2026-07-01")
+        assert isinstance(trace_creation_result, AssistantAnswer)
+        assert trace_creation_result.research_metadata["degradation"]["category"] == (
+            "SYNTHESIS_TRACE_CREATE_FAILURE"
+        )
+
+        lifecycle = lifecycle_warning("CLASSIFY", "CLASSIFICATION_FAILURE", "corr-1")
+        assert "stage=CLASSIFY" in lifecycle
+        assert "category=CLASSIFICATION_FAILURE" in lifecycle
+        assert "correlation_id=corr-1" in lifecycle
 
         def session_failure(*_args, **_kwargs):
             raise RuntimeError("session unavailable")

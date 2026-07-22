@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from os import environ
+from pathlib import Path
+from subprocess import DEVNULL, check_output
 from typing import Any, Final
 
 from vnalpha.assistant.models import AssistantAnswer, AssistantPlan
@@ -10,6 +12,7 @@ from vnalpha.assistant.research_templates import (
     build_deterministic_research_answer,
     is_research_intent,
 )
+from vnalpha.maintenance.software_identity import resolve_software_identity
 from vnalpha.observability.context import get_correlation_id
 from vnalpha.tools.setup import TOOL_PERMISSIONS
 
@@ -22,7 +25,6 @@ class AssistantFailureStage(StrEnum):
     TOOL_EXECUTION = "TOOL_EXECUTION"
     SYNTHESIS_CALL = "SYNTHESIS_CALL"
     SYNTHESIS_PARSE = "SYNTHESIS_PARSE"
-    SYNTHESIS_PERSIST = "SYNTHESIS_PERSIST"
     ANSWER_VALIDATION = "ANSWER_VALIDATION"
     AUDIT_PERSIST = "AUDIT_PERSIST"
     KNOWLEDGE_PROJECTION = "KNOWLEDGE_PROJECTION"
@@ -47,10 +49,7 @@ class AssistantDegradation:
             "correlation_id": self.correlation_id or get_correlation_id(),
             "trace_id": self.trace_id or "",
             "model_route": self.model_route or "",
-            "build_sha": self.build_sha
-            or environ.get("VNALPHA_BUILD_SHA")
-            or environ.get("GITHUB_SHA")
-            or "unknown",
+            "build_sha": self.build_sha or _runtime_build_sha() or "unavailable",
         }
         return {key: value for key, value in values.items() if value}
 
@@ -131,6 +130,25 @@ def degradation_warning(answer: AssistantAnswer) -> str | None:
     diagnostic = answer.research_metadata.get("degradation")
     if not isinstance(diagnostic, dict):
         return None
+    return diagnostic_warning(diagnostic)
+
+
+def lifecycle_warning(stage: str, category: str, correlation_id: str | None) -> str:
+    return (
+        diagnostic_warning(
+            {
+                "warning": "Assistant request did not produce a usable answer.",
+                "stage": stage,
+                "category": category,
+                "correlation_id": correlation_id or get_correlation_id(),
+                "build_sha": _runtime_build_sha() or "unavailable",
+            }
+        )
+        or "Assistant request did not produce a usable answer."
+    )
+
+
+def diagnostic_warning(diagnostic: dict[str, Any]) -> str | None:
     warning = diagnostic.get("warning")
     stage = diagnostic.get("stage")
     category = diagnostic.get("category")
@@ -140,8 +158,10 @@ def degradation_warning(answer: AssistantAnswer) -> str | None:
     ):
         return None
     suffix = f" stage={stage} category={category}"
-    if isinstance(correlation_id, str) and correlation_id:
-        suffix += f" correlation_id={correlation_id}"
+    for key in ("correlation_id", "trace_id", "model_route", "build_sha"):
+        value = diagnostic.get(key)
+        if isinstance(value, str) and value:
+            suffix += f" {key}={value}"
     return warning + suffix
 
 
@@ -197,3 +217,24 @@ def _data_summary(plan: AssistantPlan, tool_outputs: dict[str, Any]) -> str:
             if values:
                 return "Deterministic result: " + ", ".join(values[:6]) + "."
     return "Deterministic tool result is available."
+
+
+def _runtime_build_sha() -> str | None:
+    configured = environ.get("VNALPHA_BUILD_SHA") or environ.get("GITHUB_SHA")
+    if configured:
+        return configured
+    try:
+        source_commit = resolve_software_identity().source_commit
+        if source_commit:
+            return source_commit
+        return (
+            check_output(
+                ["git", "-C", str(Path(__file__).parents[4]), "rev-parse", "HEAD"],
+                stderr=DEVNULL,
+                text=True,
+                timeout=1,
+            ).strip()
+            or None
+        )
+    except Exception:
+        return None

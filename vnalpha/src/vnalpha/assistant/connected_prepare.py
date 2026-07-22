@@ -16,6 +16,7 @@ from vnalpha.assistant.effective_date import (
 from vnalpha.assistant.errors import (
     AssistantError,
     AssistantInputValidationError,
+    AssistantLifecycleError,
     RefusalError,
 )
 from vnalpha.assistant.models import (
@@ -34,6 +35,10 @@ from vnalpha.assistant.runtime_helpers import (
 )
 from vnalpha.assistant.tool_policy import is_approval_required_plan
 from vnalpha.core.text_safety import sanitize_error_summary
+from vnalpha.observability.context import get_correlation_id
+from vnalpha.sandbox.execution_service import SandboxExecutionService
+from vnalpha.symbol_memory.repository import SymbolMemoryRepository
+from vnalpha.symbol_memory.retrieval import SymbolMemoryRetrievalService
 from vnalpha.warehouse.assistant_repo import (
     create_assistant_session,
     create_llm_trace,
@@ -88,7 +93,7 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                     },
                     usage=self._classifier.last_usage,
                 )
-            except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+            except Exception as exc:
                 finish_llm_trace(
                     self._conn,
                     classify_trace_id,
@@ -100,7 +105,11 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                         ),
                     },
                 )
-                raise
+                raise AssistantLifecycleError(
+                    stage="CLASSIFY",
+                    category="CLASSIFICATION_FAILURE",
+                    correlation_id=get_correlation_id(),
+                ) from exc
             raw_classified_date = intent_result.entities.get("date")
             classified_date = (
                 raw_classified_date if isinstance(raw_classified_date, str) else None
@@ -114,11 +123,16 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
             intent_result.entities["date"] = effective_date
             request = replace(request, date=effective_date)
             check_intent_policy(intent_result)
-            plan = self._planner.build(intent_result)
+            try:
+                plan = self._planner.build(intent_result)
+            except Exception as exc:
+                raise AssistantLifecycleError(
+                    stage="PLAN",
+                    category="PLAN_BUILD_FAILURE",
+                    correlation_id=get_correlation_id(),
+                ) from exc
             request = self._with_symbol_memory_context(request, intent_result.entities)
             if is_approval_required_plan(plan):
-                from vnalpha.sandbox.execution_service import SandboxExecutionService
-
                 plan = SandboxExecutionService(
                     self._conn,
                     surface=self._surface,
@@ -187,9 +201,6 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
             return request
         as_of_date = _request_as_of_date(request.date)
         try:
-            from vnalpha.symbol_memory.repository import SymbolMemoryRepository
-            from vnalpha.symbol_memory.retrieval import SymbolMemoryRetrievalService
-
             retrieval = SymbolMemoryRetrievalService(SymbolMemoryRepository(self._conn))
             rendered = tuple(
                 retrieval.render_context(

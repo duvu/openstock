@@ -10,7 +10,11 @@ from vnalpha.assistant.effective_date import (
     resolve_effective_target_date,
     validate_date_candidate,
 )
-from vnalpha.assistant.errors import AssistantInputValidationError, RefusalError
+from vnalpha.assistant.errors import (
+    AssistantInputValidationError,
+    AssistantLifecycleError,
+    RefusalError,
+)
 from vnalpha.assistant.managed_context import ManagedAssistantContext
 from vnalpha.assistant.models import (
     AssistantPlan,
@@ -27,6 +31,8 @@ from vnalpha.assistant.runtime_helpers import (
 )
 from vnalpha.assistant.tool_policy import is_approval_required_plan
 from vnalpha.core.text_safety import sanitize_error_summary
+from vnalpha.observability.context import get_correlation_id
+from vnalpha.sandbox.execution_service import SandboxExecutionService
 from vnalpha.warehouse.assistant_repo import (
     create_assistant_session,
     create_llm_trace,
@@ -35,6 +41,7 @@ from vnalpha.warehouse.assistant_repo import (
     mark_assistant_session_prepared,
     persist_prepared_turn,
 )
+from vnalpha.warehouse.connection import read_connection
 
 
 class ManagedAssistantPreparation(ManagedAssistantContext):
@@ -68,7 +75,7 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                     prompt,
                     session_id=request.routing_session_id or session_id,
                 )
-            except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+            except Exception as exc:
                 with self._coordinator.transaction() as connection:
                     finish_llm_trace(
                         connection,
@@ -81,7 +88,11 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                             ),
                         },
                     )
-                raise
+                raise AssistantLifecycleError(
+                    stage="CLASSIFY",
+                    category="CLASSIFICATION_FAILURE",
+                    correlation_id=get_correlation_id(),
+                ) from exc
             with self._coordinator.transaction() as connection:
                 finish_llm_trace(
                     connection,
@@ -108,11 +119,16 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
             intent_result.entities["date"] = effective_date
             request = replace(request, date=effective_date)
             check_intent_policy(intent_result)
-            plan = self._engine._planner.build(intent_result)
+            try:
+                plan = self._engine._planner.build(intent_result)
+            except Exception as exc:
+                raise AssistantLifecycleError(
+                    stage="PLAN",
+                    category="PLAN_BUILD_FAILURE",
+                    correlation_id=get_correlation_id(),
+                ) from exc
             request = self._with_symbol_memory_context(request, intent_result.entities)
             if is_approval_required_plan(plan):
-                from vnalpha.sandbox.execution_service import SandboxExecutionService
-
                 with self._coordinator.transaction() as connection:
                     plan = SandboxExecutionService(
                         connection,
@@ -149,15 +165,13 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
         except AssistantInputValidationError as exc:
             self._finish_prepare_failure(session_id, exc, "VALIDATION_ERROR")
             raise
-        except Exception as exc:  # noqa: BROAD_EXCEPT_OK
+        except Exception as exc:
             self._finish_prepare_failure(session_id, exc, "FAILED")
             raise
 
     def _with_symbol_memory_context(
         self, request: AssistantRequest, entities: dict[str, Any]
     ) -> AssistantRequest:
-        from vnalpha.warehouse.connection import read_connection
-
         with read_connection(path=self._warehouse_path) as connection:
             return self._connected_engine(connection)._with_symbol_memory_context(
                 request, entities

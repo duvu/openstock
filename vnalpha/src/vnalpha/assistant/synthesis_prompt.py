@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from vnalpha.assistant.context import build_context_message
 from vnalpha.assistant.groundedness import available_source_refs
 from vnalpha.assistant.models import AssistantPlan, AssistantRequest
 from vnalpha.assistant.policy import TRADING_EXECUTION_PHRASES
@@ -108,8 +109,6 @@ def _build_synthesis_messages(
     }
     messages = [{"role": "system", "content": SYNTHESIZER_SYSTEM_PROMPT}]
     if request is not None:
-        from vnalpha.assistant.context import build_context_message
-
         context_message = build_context_message(request)
         if context_message is not None:
             messages.append(context_message)
