@@ -8,13 +8,20 @@ from typing import Iterator
 import duckdb
 import typer
 
+from vnalpha.data_availability.dataset_readiness import check_dataset_readiness
+from vnalpha.data_provisioning.source_policy import get_default_resolver
 from vnalpha.ingestion.trading_calendar import VietnamSessionCalendar
 from vnalpha.maintenance.daily import (
     DailyMaintenanceRequest,
     DailyMaintenanceService,
     MaintenanceRunStatus,
 )
-from vnalpha.maintenance.ledger import persist_maintenance_run
+from vnalpha.maintenance.ledger import (
+    collect_operational_proof,
+    get_failed_maintenance_stages,
+    get_latest_maintenance_run,
+    persist_maintenance_run,
+)
 from vnalpha.maintenance.software_identity import resolve_software_identity
 from vnalpha.maintenance.source_routing import (
     MaintenanceSourcePolicy,
@@ -24,6 +31,7 @@ from vnalpha.maintenance.source_routing import (
 from vnalpha.observability.context import set_correlation_id
 from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.migrations import run_migrations
+from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
 app = typer.Typer(help="Run deterministic one-shot market maintenance.")
 
@@ -172,9 +180,8 @@ def _maintenance_connection(*, ephemeral: bool) -> Iterator[duckdb.DuckDBPyConne
             run_migrations(conn=connection)
             yield connection
         return
-    from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
-
     with WarehouseWriteCoordinator().transaction() as connection:
+        run_migrations(conn=connection)
         yield connection
 
 
@@ -192,11 +199,6 @@ def status(
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Query the latest maintenance run status and recent failures."""
-    from vnalpha.maintenance.ledger import (
-        get_failed_maintenance_stages,
-        get_latest_maintenance_run,
-    )
-
     conn = get_connection()
     try:
         latest = get_latest_maintenance_run(conn)
@@ -245,9 +247,6 @@ def readiness(
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Report per-dataset readiness and the default resolved source policy."""
-    from vnalpha.data_availability.dataset_readiness import check_dataset_readiness
-    from vnalpha.data_provisioning.source_policy import get_default_resolver
-
     datasets = (
         "reference.symbols",
         "equity.ohlcv",
@@ -308,8 +307,6 @@ def proof(
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Validate persisted ledger evidence for issue #255."""
-    from vnalpha.maintenance.ledger import collect_operational_proof
-
     conn = get_connection()
     try:
         report = collect_operational_proof(
