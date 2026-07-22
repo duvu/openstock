@@ -12,6 +12,7 @@ from vnalpha.assistant.models import (
     AssistantRequest,
     IntentResult,
     PreparedAssistantTurn,
+    ToolPlanStep,
     plan_hash,
 )
 from vnalpha.assistant.planner import PlanBuilder
@@ -67,7 +68,11 @@ def _ensure_result(
 
 
 def _seed_cached_deep_analysis(
-    conn: duckdb.DuckDBPyConnection, target_date: str
+    conn: duckdb.DuckDBPyConnection,
+    target_date: str,
+    *,
+    symbol: str = "FPT",
+    include_benchmark: bool = True,
 ) -> None:
     target_session = date.fromisoformat(target_date)
     lineage = {
@@ -84,8 +89,12 @@ def _seed_cached_deep_analysis(
         "feature_status_contract_version": "feature-data-status-v1",
     }
     conn.executemany(
-        "INSERT INTO symbol_master (symbol, name, is_active) VALUES (?, ?, TRUE)",
-        [("FPT", "FPT"), ("VNINDEX", "VNINDEX")],
+        "INSERT INTO symbol_master (symbol, name, is_active) VALUES (?, ?, TRUE) "
+        "ON CONFLICT DO NOTHING",
+        [
+            (symbol, symbol),
+            *((("VNINDEX", "VNINDEX"),) if include_benchmark else ()),
+        ],
     )
     conn.executemany(
         "INSERT INTO canonical_ohlcv "
@@ -93,8 +102,8 @@ def _seed_cached_deep_analysis(
         "ingestion_run_id, source_service_run_id) "
         "VALUES (?, ?, '1D', 100.0, 'fixture', 'pass', 'fixture-run', 'service-run')",
         [
-            (symbol, (target_session - timedelta(days=offset)).isoformat())
-            for symbol in ("FPT", "VNINDEX")
+            (seed_symbol, (target_session - timedelta(days=offset)).isoformat())
+            for seed_symbol in ((symbol, "VNINDEX") if include_benchmark else (symbol,))
             for offset in range(120)
         ],
     )
@@ -104,28 +113,28 @@ def _seed_cached_deep_analysis(
         "source_row_count, benchmark_row_count, feature_data_status, "
         "feature_build_version, lineage_json, feature_profile, neutral_completeness, "
         "relative_strength_completeness) "
-        "VALUES ('FPT', ?, 100.0, ?, ?, 120, 120, 'EXACT_DATE', 'v1', ?, "
+        "VALUES (?, ?, 100.0, ?, ?, 120, 120, 'EXACT_DATE', 'v1', ?, "
         "'STANDARD_120', 'COMPLETE', 'COMPLETE')",
-        [target_date, target_date, target_date, json.dumps(lineage)],
+        [symbol, target_date, target_date, target_date, json.dumps(lineage)],
     )
     conn.executemany(
         "INSERT INTO relative_strength_snapshot "
         "(symbol, date, benchmark_symbol, horizon_sessions, relative_return, "
         "source_bar_date, benchmark_bar_date, source_row_count, benchmark_row_count, "
         "data_status, methodology_version, lineage_json) "
-        "VALUES ('FPT', ?, 'VNINDEX', ?, 0.1, ?, ?, 1, 1, 'SUCCESS', 'v1', ?) ",
+        "VALUES (?, ?, 'VNINDEX', ?, 0.1, ?, ?, 1, 1, 'SUCCESS', 'v1', ?) ",
         [
-            (target_date, 20, target_date, target_date, json.dumps(lineage)),
-            (target_date, 60, target_date, target_date, json.dumps(lineage)),
+            (symbol, target_date, 20, target_date, target_date, json.dumps(lineage)),
+            (symbol, target_date, 60, target_date, target_date, json.dumps(lineage)),
         ],
     )
     conn.execute(
         "INSERT INTO candidate_score "
         "(symbol, date, score, candidate_class, lineage_json, scoring_policy_id, "
         "scoring_policy_version, scoring_policy_hash, scoring_policy_status) "
-        "VALUES ('FPT', ?, 0.75, 'WATCH_CANDIDATE', ?, 'baseline', 'v1', "
+        "VALUES (?, ?, 0.75, 'WATCH_CANDIDATE', ?, 'baseline', 'v1', "
         "'fixture-hash', 'APPROVED')",
-        [target_date, json.dumps(lineage)],
+        [symbol, target_date, json.dumps(lineage)],
     )
 
 
@@ -173,6 +182,15 @@ def test_live_deep_analysis_plan_reuses_fresh_evidence(tmp_path: Path) -> None:
             entities={"symbol": "FPT", "date": "today"},
         )
     )
+    plan.steps.append(
+        ToolPlanStep(
+            step_id="deep_hpg",
+            tool_name="analysis.deep_symbol",
+            arguments={"symbol": "HPG", "date": "today"},
+            purpose="Analyze HPG using its requested session",
+            required_permission="READ_WAREHOUSE",
+        )
+    )
     request = AssistantRequest(
         current_user_prompt="phan tich co phieu FPT",
         date="today",
@@ -181,6 +199,12 @@ def test_live_deep_analysis_plan_reuses_fresh_evidence(tmp_path: Path) -> None:
     with coordinator.transaction() as conn:
         run_migrations(conn=conn)
         _seed_cached_deep_analysis(conn, latest_validated_date)
+        _seed_cached_deep_analysis(
+            conn,
+            requested_date,
+            symbol="HPG",
+            include_benchmark=False,
+        )
         session_id = create_assistant_session(
             conn,
             surface="test",
@@ -223,16 +247,20 @@ def test_live_deep_analysis_plan_reuses_fresh_evidence(tmp_path: Path) -> None:
     )
     answer, executed_plan = managed_app.execute_prepared(prepared)
     with coordinator.transaction() as conn:
-        deep_trace = conn.execute(
+        deep_traces = conn.execute(
             "SELECT input_json FROM tool_trace "
-            "WHERE assistant_session_id = ? AND tool_name = 'analysis.deep_symbol'",
+            "WHERE assistant_session_id = ? AND tool_name = 'analysis.deep_symbol' "
+            "ORDER BY started_at",
             [session_id],
-        ).fetchone()
+        ).fetchall()
 
     assert [step.tool_name for step in executed_plan.steps] == [
         "data.ensure_current_symbol",
         "analysis.deep_symbol",
+        "analysis.deep_symbol",
     ]
     assert answer.summary
-    assert deep_trace is not None
-    assert json.loads(deep_trace[0])["date"] == latest_validated_date
+    assert [json.loads(trace[0])["date"] for trace in deep_traces] == [
+        latest_validated_date,
+        "today",
+    ]

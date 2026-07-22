@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
@@ -19,6 +19,12 @@ def _is_write_step(step: ToolPlanStep) -> bool:
     return TOOL_PERMISSIONS[step.tool_name].value.startswith("WRITE_")
 
 
+@dataclass(frozen=True, slots=True)
+class _ProvisionedSession:
+    symbol: str
+    resolved_date: str
+
+
 class ManagedAssistantToolExecution(ManagedAssistantContext):
     def _execute_managed_tools(
         self,
@@ -33,11 +39,11 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
             step.tool_name == "data.ensure_current_symbol"
             for step in prepared.plan.steps
         )
-        provisioned_date: str | None = None
+        provisioned_session: _ProvisionedSession | None = None
         for index, (step, trace_id) in enumerate(
             zip(prepared.plan.steps, trace_ids, strict=True)
         ):
-            executable_step = _with_provisioned_date(step, provisioned_date)
+            executable_step = _with_provisioned_date(step, provisioned_session)
             step_plan = replace(prepared.plan, steps=[executable_step])
             executor: AssistantExecutor | None = None
             try:
@@ -86,7 +92,7 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
                     )
                 self._replay_trace_events(events, on_trace_event)
                 raise
-            provisioned_date = _provisioned_date(step, results.get(step.step_id))
+            provisioned_session = _provisioned_session(step, results.get(step.step_id))
         self._replay_trace_events(events, on_trace_event)
         return results
 
@@ -101,20 +107,27 @@ class ManagedAssistantToolExecution(ManagedAssistantContext):
 
 
 def _with_provisioned_date(
-    step: ToolPlanStep, provisioned_date: str | None
+    step: ToolPlanStep, provisioned_session: _ProvisionedSession | None
 ) -> ToolPlanStep:
     if (
-        provisioned_date is None
+        provisioned_session is None
         or step.tool_name != "analysis.deep_symbol"
+        or step.arguments.get("symbol") != provisioned_session.symbol
         or step.arguments.get("date") not in (None, "today")
     ):
         return step
-    return replace(step, arguments={**step.arguments, "date": provisioned_date})
+    return replace(
+        step,
+        arguments={**step.arguments, "date": provisioned_session.resolved_date},
+    )
 
 
-def _provisioned_date(step: ToolPlanStep, result: Any) -> str | None:
+def _provisioned_session(step: ToolPlanStep, result: Any) -> _ProvisionedSession | None:
     if step.tool_name != "data.ensure_current_symbol" or not isinstance(result, dict):
         return None
     data = result.get("data")
     resolved_date = data.get("resolved_date") if isinstance(data, dict) else None
-    return resolved_date if isinstance(resolved_date, str) else None
+    symbol = step.arguments.get("symbol")
+    if not isinstance(symbol, str) or not isinstance(resolved_date, str):
+        return None
+    return _ProvisionedSession(symbol=symbol, resolved_date=resolved_date)
