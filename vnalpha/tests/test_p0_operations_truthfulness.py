@@ -63,7 +63,9 @@ def test_cli_records_effective_runtime_identity_in_metadata_mode(
     )
     identity = collect_runtime_identity(
         config=AppConfig(
-            vnstock=VnstockServiceConfig(base_url="http://vnstock.test:6900"),
+            vnstock=VnstockServiceConfig(
+                base_url="http://svcuser:supersecret@vnstock.test:6900"
+            ),
             warehouse=WarehouseConfig(path=tmp_path / "warehouse.duckdb"),
         ),
         software_identity=SoftwareIdentity("1.2.3", "a" * 40, "clean"),
@@ -101,7 +103,7 @@ def test_cli_records_effective_runtime_identity_in_metadata_mode(
     assert fields["current_source_commit"] == "b" * 40
     assert fields["build_match_status"] == "STALE"
     assert fields["warehouse_path"] == str(tmp_path / "warehouse.duckdb")
-    assert fields["vnstock_service_url"] == "http://vnstock.test:6900"
+    assert "vnstock_service_url" not in fields
     assert fields["provider_source_policy"] == {
         "reference.symbols": {
             "source": None,
@@ -131,6 +133,28 @@ def test_cli_records_effective_runtime_identity_in_metadata_mode(
     }
     assert fields["package_installation_path"].endswith("/vnalpha")
     assert fields["process_started_at"] is not None
+
+    monkeypatch.setenv("VNALPHA_LOG_ROOT", str(tmp_path / "redacted-logs"))
+    monkeypatch.setenv("VNALPHA_LOG_CONTENT_MODE", "redacted")
+    reset_run_context()
+    try:
+        redacted_result = CliRunner().invoke(app, ["status"])
+    finally:
+        reset_run_context()
+
+    assert redacted_result.exit_code == 0, redacted_result.output
+    redacted_log = next((tmp_path / "redacted-logs" / "runs").glob("*/app.jsonl"))
+    redacted_records = [
+        json.loads(line) for line in redacted_log.read_text().splitlines()
+    ]
+    redacted_identity = next(
+        record
+        for record in redacted_records
+        if record["event_type"] == "RUNTIME_IDENTITY"
+    )
+    assert redacted_identity["vnstock_service_url"] == (
+        "http://[REDACTED]@vnstock.test:6900"
+    )
 
 
 def _maintenance_result(

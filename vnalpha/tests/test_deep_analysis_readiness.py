@@ -1,48 +1,29 @@
 from __future__ import annotations
 
+import json
+
 import duckdb
 
-from vnalpha.assistant import executor as assistant_executor
 from vnalpha.assistant.executor import AssistantExecutor
 from vnalpha.assistant.models import IntentResult
 from vnalpha.assistant.planner import PlanBuilder
+from vnalpha.data_availability import ensure as availability_ensure
 from vnalpha.data_availability.deep_readiness import (
     DeepAnalysisReadinessRequest,
     DeepAnalysisReadinessService,
     ReadinessArtifactStatus,
-    ReadinessResult,
 )
 from vnalpha.data_availability.models import (
     EnsureDataAction,
     EnsureDataResult,
     EnsureDataStatus,
 )
-from vnalpha.data_provisioning.ensure_current_symbol import (
-    CurrentSymbolReadyResult,
-    ProvisioningOutcome,
+from vnalpha.data_availability.policy import DataAvailabilityPolicy
+from vnalpha.data_provisioning import (
+    ensure_current_symbol as current_symbol_provisioning,
 )
-from vnalpha.tools.models import ToolOutput, ToolPermission, ToolSpec
-from vnalpha.tools.registry import LocalToolRegistry
 from vnalpha.warehouse.assistant_repo import create_assistant_session
 from vnalpha.warehouse.migrations import run_migrations
-
-
-def _blocked_provisioning(readiness: ReadinessResult) -> CurrentSymbolReadyResult:
-    """Wrap a failed ReadinessResult as a FAILED provisioning result."""
-    return CurrentSymbolReadyResult(
-        symbol=readiness.symbol,
-        outcome=ProvisioningOutcome.FAILED,
-        correlation_id=readiness.correlation_id,
-        requested_date=readiness.requested_date,
-        resolved_date=readiness.resolved_date,
-        actions=(),
-        reused_fresh_data=False,
-        refreshed=False,
-        warnings=readiness.warnings,
-        errors=readiness.errors,
-        remediation=(),
-        readiness=readiness,
-    )
 
 
 def _ensure_result(
@@ -74,6 +55,63 @@ def _ensure_result(
         freshness="cache_hit",
         warnings=warnings or [],
         cache_rejection_reasons=cache_rejection_reasons or [],
+    )
+
+
+def _seed_cached_deep_analysis(conn: duckdb.DuckDBPyConnection) -> None:
+    target_date = "2026-07-10"
+    lineage = {
+        "as_of_bar_date": target_date,
+        "scoring_version": "v1",
+        "scoring_policy_id": "baseline",
+        "scoring_policy_version": "v1",
+        "scoring_policy_hash": "fixture-hash",
+        "scoring_policy_status": "APPROVED",
+        "feature_build_version": "v1",
+        "selected_provider": "fixture",
+        "ingestion_run_id": "fixture-run",
+        "benchmark_symbol": "VNINDEX",
+        "feature_status_contract_version": "feature-data-status-v1",
+    }
+    conn.executemany(
+        "INSERT INTO symbol_master (symbol, name, is_active) VALUES (?, ?, TRUE)",
+        [("FPT", "FPT"), ("VNINDEX", "VNINDEX")],
+    )
+    conn.executemany(
+        "INSERT INTO canonical_ohlcv "
+        "(symbol, time, interval, close, selected_provider, quality_status, "
+        "ingestion_run_id, source_service_run_id) "
+        "VALUES (?, ?, '1D', 100.0, 'fixture', 'pass', 'fixture-run', 'service-run')",
+        [("FPT", target_date), ("VNINDEX", target_date)],
+    )
+    conn.execute(
+        "INSERT INTO feature_snapshot "
+        "(symbol, date, close, as_of_bar_date, benchmark_as_of_bar_date, "
+        "source_row_count, benchmark_row_count, feature_data_status, "
+        "feature_build_version, lineage_json, feature_profile, neutral_completeness, "
+        "relative_strength_completeness) "
+        "VALUES ('FPT', ?, 100.0, ?, ?, 1, 1, 'EXACT_DATE', 'v1', ?, "
+        "'STANDARD_120', 'COMPLETE', 'COMPLETE')",
+        [target_date, target_date, target_date, json.dumps(lineage)],
+    )
+    conn.executemany(
+        "INSERT INTO relative_strength_snapshot "
+        "(symbol, date, benchmark_symbol, horizon_sessions, relative_return, "
+        "source_bar_date, benchmark_bar_date, source_row_count, benchmark_row_count, "
+        "data_status, methodology_version, lineage_json) "
+        "VALUES ('FPT', ?, 'VNINDEX', ?, 0.1, ?, ?, 1, 1, 'SUCCESS', 'v1', ?) ",
+        [
+            (target_date, 20, target_date, target_date, json.dumps(lineage)),
+            (target_date, 60, target_date, target_date, json.dumps(lineage)),
+        ],
+    )
+    conn.execute(
+        "INSERT INTO candidate_score "
+        "(symbol, date, score, candidate_class, lineage_json, scoring_policy_id, "
+        "scoring_policy_version, scoring_policy_hash, scoring_policy_status) "
+        "VALUES ('FPT', ?, 0.75, 'WATCH_CANDIDATE', ?, 'baseline', 'v1', "
+        "'fixture-hash', 'APPROVED')",
+        [target_date, json.dumps(lineage)],
     )
 
 
@@ -112,41 +150,45 @@ def test_readiness_reports_actionable_core_status(monkeypatch) -> None:
         "category=ENSURE_EXCEPTION): RuntimeError",
     )
 
-    calls: list[tuple[str, str]] = []
-    registry = LocalToolRegistry()
-    registry.register(
-        ToolSpec(
-            name="data.ensure_current_symbol",
-            description="Controlled current-symbol provisioning",
-            permission=ToolPermission.WRITE_DATA,
-        ),
-        lambda **kwargs: (
-            calls.append(("data.ensure_current_symbol", kwargs["symbol"]))
-            or ToolOutput(
-                data={
-                    "outcome": "REUSED",
-                    "errors": [],
-                    "remediation": [],
-                    "correlation_id": kwargs["correlation_id"],
-                }
-            )
-        ),
+    unexplained_result = DeepAnalysisReadinessService(
+        ensure=lambda _conn, _symbol, _date: _ensure_result(
+            status=EnsureDataStatus.FAILED,
+            actions=[],
+        )
+    ).ensure_ready(DeepAnalysisReadinessRequest(conn, "FPT", "2026-07-10"))
+
+    assert unexplained_result.errors == (
+        "Deep-analysis preparation failed without a stage diagnostic "
+        "(symbol=FPT, effective_date=2026-07-10, status=FAILED, "
+        "category=PROVISIONING_RESULT_INCONSISTENT): "
+        "the provisioning result reported not-ready without error evidence",
     )
-    registry.register(
-        ToolSpec(
-            name="analysis.deep_symbol",
-            description="Controlled deep analysis",
-            permission=ToolPermission.READ_SCORE,
-        ),
-        lambda **kwargs: (
-            calls.append(("analysis.deep_symbol", kwargs["symbol"]))
-            or ToolOutput(data={"available": True, "symbol": kwargs["symbol"]})
-        ),
+
+    _seed_cached_deep_analysis(conn)
+    cache_policy = DataAvailabilityPolicy(
+        min_required_bars=1,
+        lookback_days=1,
     )
+
+    def _ensure_cached_symbol(
+        ensure_conn: duckdb.DuckDBPyConnection,
+        symbol: str,
+        target_date: str | None,
+        *,
+        force_refresh: bool = False,
+    ):
+        return availability_ensure.ensure_symbol_analysis_ready(
+            ensure_conn,
+            symbol,
+            target_date,
+            policy=cache_policy,
+            force_refresh=force_refresh,
+        )
+
     monkeypatch.setattr(
-        assistant_executor,
-        "_build_tool_registry",
-        lambda _conn: registry,
+        current_symbol_provisioning,
+        "ensure_symbol_analysis_ready",
+        _ensure_cached_symbol,
     )
     plan = PlanBuilder().build(
         IntentResult(
@@ -162,12 +204,17 @@ def test_readiness_reports_actionable_core_status(monkeypatch) -> None:
     )
     execution = AssistantExecutor(conn, assistant_session_id=session_id).execute(plan)
 
-    assert calls == [
-        ("data.ensure_current_symbol", "FPT"),
-        ("analysis.deep_symbol", "FPT"),
+    assert [step.tool_name for step in plan.steps] == [
+        "data.ensure_current_symbol",
+        "analysis.deep_symbol",
     ]
-    assert execution[plan.steps[1].step_id]["data"] == {
-        "available": True,
-        "symbol": "FPT",
-    }
+    provisioning = execution[plan.steps[0].step_id]["data"]
+    analysis = execution[plan.steps[1].step_id]["data"]
+    assert provisioning["outcome"] == "REUSED"
+    assert provisioning["reused_fresh_data"] is True
+    assert analysis["symbol"] == "FPT"
+    assert analysis["available"] is True
+    assert analysis["as_of_date"] == "2026-07-10"
+    assert analysis["candidate"]["score"] == 0.75
+    assert analysis["missing_data"] == []
     conn.close()

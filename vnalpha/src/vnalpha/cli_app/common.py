@@ -22,15 +22,24 @@ def configure_app(app: typer.Typer) -> None:
         configure_logging(surface=LogSurface.CLI)
         try:
             init_run_context(surface="cli", actor="cli")
-            log_app("CLI_STARTED", "vnalpha CLI started", module="vnalpha.cli")
+        except Exception:  # noqa: BLE001
+            return
+        log_app("CLI_STARTED", "vnalpha CLI started", module="vnalpha.cli")
+        try:
             log_app(
                 "RUNTIME_IDENTITY",
                 "vnalpha runtime identity recorded",
                 module="vnalpha.cli",
                 extra=collect_runtime_identity().to_log_fields(),
             )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log_app(
+                "RUNTIME_IDENTITY_UNAVAILABLE",
+                "vnalpha runtime identity could not be recorded",
+                level="WARNING",
+                module="vnalpha.cli",
+                extra={"error_type": type(exc).__name__},
+            )
 
 
 def _load_dotenv() -> None:

@@ -50,7 +50,6 @@ _METADATA_SAFE_KEYS: frozenset[str] = frozenset(
         "tree_state",
         "package_installation_path",
         "warehouse_path",
-        "vnstock_service_url",
         "provider_source_policy",
         "process_started_at",
     }
