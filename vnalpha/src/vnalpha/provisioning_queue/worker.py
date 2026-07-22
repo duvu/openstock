@@ -7,17 +7,20 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event, Lock, current_thread, main_thread
-from time import monotonic
 from types import FrameType
-from typing import Callable, Final, Iterator
+from typing import Callable, Final, Iterator, assert_never
 
+from vnalpha.provisioning_queue._worker_execution import (
+    HandlerCancellationRequested,
+    HandlerCompleted,
+    HandlerStopRequested,
+    execute_handler_stages,
+)
 from vnalpha.provisioning_queue._worker_runtime import (
     ExclusiveProvisioner,
-    LeaseHeartbeat,
 )
 from vnalpha.provisioning_queue.handlers import (
     CurrentSymbolGoalHandler,
-    HandlerResult,
     ProvisioningGoalHandler,
 )
 from vnalpha.provisioning_queue.models import GoalType, goal_type
@@ -32,7 +35,6 @@ from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 MAX_CONCURRENCY: Final = 1
 _CANCELLATION_REASON: Final = "CANCELLED_AT_SAFE_BOUNDARY"
 _UNSUPPORTED_HANDLER: Final = "UNSUPPORTED_GOAL_HANDLER"
-_STAGE_TIMEOUT: Final = "STAGE_TIMEOUT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,47 +132,42 @@ class ProvisioningWorker:
         if self._cancellation_requested(job):
             return self._cancel_at_safe_boundary(job)
         try:
-            result = self._execute_handler(job, handler)
-            if self._cancellation_requested(job):
-                return self._cancel_at_safe_boundary(job)
-            self._queue.heartbeat(job.job_id, self._worker_id)
-            if result.succeeded:
-                return self._queue.complete(job.job_id, self._worker_id, result.detail)
-            return self._queue.fail(job.job_id, self._worker_id, result.detail)
+            outcome = execute_handler_stages(
+                queue=self._queue,
+                job=job,
+                worker_id=self._worker_id,
+                handler=handler,
+                coordinator=self._coordinator,
+                stop_requested=self._stop_requested,
+                stage_timeout_seconds=self._settings.stage_timeout_seconds,
+                lease_interval_seconds=max(
+                    0.25, self._settings.lease_safety_seconds / 2
+                ),
+            )
+            match outcome:
+                case HandlerCancellationRequested():
+                    return self._cancel_at_safe_boundary(job)
+                case HandlerStopRequested():
+                    return None
+                case HandlerCompleted(result=result):
+                    if self._cancellation_requested(job):
+                        return self._cancel_at_safe_boundary(job)
+                    if self._stop_requested.is_set():
+                        return None
+                    self._queue.heartbeat(job.job_id, self._worker_id)
+                    if result.succeeded:
+                        return self._queue.complete(
+                            job.job_id, self._worker_id, result.detail
+                        )
+                    return self._queue.fail(job.job_id, self._worker_id, result.detail)
+                case unreachable:
+                    assert_never(unreachable)
         except ProvisioningJobLeaseError:
             if self._cancellation_requested(job):
                 return self._cancel_at_safe_boundary(job)
             return None
         except WarehouseOpenError as error:
             return self._fail_or_cancel(job, str(error))
-
-    def _execute_handler(
-        self, job: ProvisioningJob, handler: ProvisioningGoalHandler
-    ) -> HandlerResult:
-        if handler.requires_warehouse_write:
-            with self._coordinator.transaction() as connection:
-                with self._lease_heartbeat(job):
-                    if self._cancellation_requested(job):
-                        return HandlerResult(False, _CANCELLATION_REASON)
-                    started_at = monotonic()
-                    result = handler.execute(job.goal, connection)
-        else:
-            with self._lease_heartbeat(job):
-                if self._cancellation_requested(job):
-                    return HandlerResult(False, _CANCELLATION_REASON)
-                started_at = monotonic()
-                result = handler.execute(job.goal, None)
-        if monotonic() - started_at > self._settings.stage_timeout_seconds:
-            return HandlerResult(False, _STAGE_TIMEOUT)
-        return result
-
-    def _lease_heartbeat(self, job: ProvisioningJob) -> LeaseHeartbeat:
-        return LeaseHeartbeat(
-            self._queue,
-            job,
-            self._worker_id,
-            max(0.25, self._settings.lease_safety_seconds / 2),
-        )
 
     def _cancellation_requested(self, job: ProvisioningJob) -> bool:
         current = self._queue.get(job.job_id)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol, assert_never
 
@@ -24,15 +25,33 @@ class HandlerResult:
     detail: str
 
 
+class ProvisioningGoalStage(Protocol):
+    name: str
+    requires_warehouse_write: bool
+
+    def execute(
+        self, connection: duckdb.DuckDBPyConnection | None
+    ) -> HandlerResult: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProvisioningStage:
+    name: str
+    requires_warehouse_write: bool
+    action: Callable[[duckdb.DuckDBPyConnection | None], HandlerResult]
+
+    def execute(
+        self, connection: duckdb.DuckDBPyConnection | None
+    ) -> HandlerResult:
+        return self.action(connection)
+
+
 class ProvisioningGoalHandler(Protocol):
     """A statically registered implementation for one finite goal type."""
 
     goal_type: GoalType
-    requires_warehouse_write: bool
 
-    def execute(
-        self, goal: ProvisioningGoal, connection: duckdb.DuckDBPyConnection | None
-    ) -> HandlerResult: ...
+    def stages(self, goal: ProvisioningGoal) -> tuple[ProvisioningGoalStage, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,29 +59,21 @@ class CurrentSymbolGoalHandler:
     """Run the existing current-symbol application operation after re-planning."""
 
     goal_type: GoalType = GoalType.ENSURE_CURRENT_SYMBOL
-    requires_warehouse_write: bool = True
 
-    def execute(
-        self, goal: ProvisioningGoal, connection: duckdb.DuckDBPyConnection | None
-    ) -> HandlerResult:
+    def stages(self, goal: ProvisioningGoal) -> tuple[ProvisioningGoalStage, ...]:
         match goal:
             case EnsureCurrentSymbolGoal() as current_goal:
-                if current_goal.requested_enrichments:
-                    return HandlerResult(False, "UNSUPPORTED_ENRICHMENT_REQUEST")
-                if connection is None:
-                    raise CurrentSymbolHandlerConfigurationError(
-                        "current-symbol provisioning requires a writable warehouse"
-                    )
-                return _result_from_current_symbol(
-                    current_goal,
-                    ensure_current_symbol_ready(
-                        connection,
-                        current_goal.symbol,
-                        current_goal.effective_date.isoformat(),
-                        refresh=current_goal.refresh_mode is RefreshMode.FORCE_REFRESH,
-                        data_only=(
-                            current_goal.desired_capability
-                            is ReadinessCapability.PRICE_ANALYSIS
+                return (
+                    ProvisioningStage(
+                        name="current-symbol-admission",
+                        requires_warehouse_write=False,
+                        action=lambda _: _admit_current_symbol(current_goal),
+                    ),
+                    ProvisioningStage(
+                        name="current-symbol-provision",
+                        requires_warehouse_write=True,
+                        action=lambda connection: _provision_current_symbol(
+                            current_goal, connection
                         ),
                     ),
                 )
@@ -89,8 +100,35 @@ def _result_from_current_symbol(
     return HandlerResult(succeeded=False, detail=detail)
 
 
+def _admit_current_symbol(goal: EnsureCurrentSymbolGoal) -> HandlerResult:
+    if goal.requested_enrichments:
+        return HandlerResult(False, "UNSUPPORTED_ENRICHMENT_REQUEST")
+    return HandlerResult(True, "CURRENT_SYMBOL_ADMITTED")
+
+
+def _provision_current_symbol(
+    goal: EnsureCurrentSymbolGoal, connection: duckdb.DuckDBPyConnection | None
+) -> HandlerResult:
+    if connection is None:
+        raise CurrentSymbolHandlerConfigurationError(
+            "current-symbol provisioning requires a writable warehouse"
+        )
+    return _result_from_current_symbol(
+        goal,
+        ensure_current_symbol_ready(
+            connection,
+            goal.symbol,
+            goal.effective_date.isoformat(),
+            refresh=goal.refresh_mode is RefreshMode.FORCE_REFRESH,
+            data_only=goal.desired_capability is ReadinessCapability.PRICE_ANALYSIS,
+        ),
+    )
+
+
 __all__ = [
     "CurrentSymbolGoalHandler",
     "HandlerResult",
     "ProvisioningGoalHandler",
+    "ProvisioningGoalStage",
+    "ProvisioningStage",
 ]
