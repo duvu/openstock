@@ -72,7 +72,11 @@ class CurrentSymbolResearchApplication:
                 job_id=None,
                 correlation_id=correlation_id,
             )
-        if readiness.effective_capability is not None and not request.force_refresh:
+        if (
+            readiness.effective_capability is not None
+            and not request.force_refresh
+            and not readiness.should_enqueue
+        ):
             return _result(
                 status=CurrentSymbolResearchStatus.DEGRADED,
                 readiness=readiness,
@@ -108,6 +112,16 @@ class CurrentSymbolResearchApplication:
                 job_id=job.job_id,
                 correlation_id=correlation_id,
                 succeeded=job.status.value == "SUCCEEDED",
+            )
+        if (
+            readiness.effective_capability is not None
+            and request.wait_mode is CurrentSymbolWaitMode.DETACH
+        ):
+            return _result(
+                status=CurrentSymbolResearchStatus.DEGRADED,
+                readiness=readiness,
+                job_id=job.job_id,
+                correlation_id=correlation_id,
             )
         return _result(
             status=(

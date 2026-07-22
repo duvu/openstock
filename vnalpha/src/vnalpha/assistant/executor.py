@@ -22,9 +22,13 @@ from vnalpha.assistant.errors import (
 )
 from vnalpha.assistant.models import AssistantPlan, ToolPlanStep
 from vnalpha.assistant.tool_policy import assert_safe_tool
+from vnalpha.commands.normalizers import normalize_date
 from vnalpha.core.logging import get_logger
+from vnalpha.data_availability import ensure_symbol_analysis_ready
 from vnalpha.data_availability.deep_readiness import ensure_deep_analysis_ready
 from vnalpha.data_availability.deep_readiness_models import ContextRequirement
+from vnalpha.observability.context import get_correlation_id, set_correlation_id
+from vnalpha.provisioning_queue import DEFAULT_QUEUE_PATH
 from vnalpha.tools.errors import ActionableToolError, ToolError
 from vnalpha.tools.executor import TracedLocalToolExecutor
 from vnalpha.tools.setup import TOOL_PERMISSIONS, build_local_tool_registry
@@ -51,8 +55,10 @@ _TOOL_PERMISSIONS = TOOL_PERMISSIONS
 logger = get_logger("assistant.executor")
 
 
-def _build_tool_registry(conn):
-    return build_local_tool_registry(conn)
+def _build_tool_registry(conn, warehouse_path=None, queue_path=DEFAULT_QUEUE_PATH):
+    return build_local_tool_registry(
+        conn, warehouse_path=warehouse_path, queue_path=queue_path
+    )
 
 
 def _ensure_data_for_step(
@@ -71,9 +77,6 @@ def _ensure_data_for_step(
         return
     if explicitly_provisioned:
         return
-    from vnalpha.commands.normalizers import normalize_date
-    from vnalpha.data_availability import ensure_symbol_analysis_ready
-
     args = step.arguments
     symbols: list[str] = []
     if isinstance(args.get("symbol"), str) and args["symbol"].strip():
@@ -194,10 +197,15 @@ class AssistantExecutor:
         on_trace_event: "Callable[[TraceEvent], None] | None" = None,
         deferred_traces: bool = False,
         prestarted_trace_ids: tuple[str, ...] = (),
+        *,
+        warehouse_path=None,
+        queue_path=DEFAULT_QUEUE_PATH,
     ) -> None:
         self._conn = conn
         self._assistant_session_id = assistant_session_id
-        self._registry = _build_tool_registry(conn)
+        self._registry = _build_tool_registry(
+            conn, warehouse_path=warehouse_path, queue_path=queue_path
+        )
         self._tool_executor = TracedLocalToolExecutor(
             conn,
             self._registry,
@@ -223,8 +231,6 @@ class AssistantExecutor:
                 reason=plan.refusal_reason or "Unsupported request",
                 policy_category="UNSUPPORTED",
             )
-        from vnalpha.observability.context import get_correlation_id, set_correlation_id
-
         correlation_id = get_correlation_id()
         if not correlation_id or correlation_id == "unset":
             correlation_id = set_correlation_id()

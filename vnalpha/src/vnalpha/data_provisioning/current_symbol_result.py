@@ -84,6 +84,8 @@ def terminal_result(
         status = CurrentSymbolResearchStatus.READY
     elif succeeded and readiness.effective_capability is not None:
         status = CurrentSymbolResearchStatus.DEGRADED
+    elif succeeded:
+        status = CurrentSymbolResearchStatus.UNAVAILABLE
     else:
         status = CurrentSymbolResearchStatus.FAILED
     return build_result(

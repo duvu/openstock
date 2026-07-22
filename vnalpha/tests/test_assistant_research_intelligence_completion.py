@@ -18,7 +18,9 @@ def _deep_plan():
 
 
 def _analysis_step(plan):
-    return next(step for step in plan.steps if step.tool_name == "analysis.deep_symbol")
+    return next(
+        step for step in plan.steps if step.tool_name == "analysis.current_symbol"
+    )
 
 
 def _deep_payload(plan):
@@ -27,7 +29,7 @@ def _deep_payload(plan):
     return {
         step.step_id: {
             "data": {
-                "tool": "analysis.deep_symbol",
+                "tool": "analysis.current_symbol",
                 "available": True,
                 "symbol": "FPT",
                 "as_of_date": "2026-07-10",
@@ -55,7 +57,7 @@ def _response(**overrides):
         "summary": "FPT has a persisted score of 0.75 for research review.",
         "basis": "Based on the deterministic deep-symbol payload.",
         "risks_caveats": "Research-only context; data freshness remains relevant.",
-        "tool_trace_summary": "analysis.deep_symbol completed.",
+        "tool_trace_summary": "analysis.current_symbol completed.",
         "missing_data": [],
         "grounded_source_refs": [],
         "research_metadata": {},
@@ -66,6 +68,8 @@ def _response(**overrides):
 
 def test_research_prompt_contains_template_and_bounded_source_refs():
     plan = _deep_plan()
+    assert len(plan.steps) == 1
+    assert plan.steps[0].tool_name == "analysis.current_symbol"
     tool_outputs, artifact_ref = _deep_payload(plan)
 
     messages = _build_synthesis_messages("Review FPT", plan, tool_outputs)
@@ -74,6 +78,6 @@ def test_research_prompt_contains_template_and_bounded_source_refs():
     assert "Required payload fields" in context["research_template"]
     assert artifact_ref in context["valid_grounded_source_refs"]
     assert (
-        f"tool:analysis.deep_symbol:{_analysis_step(plan).step_id}"
+        f"tool:analysis.current_symbol:{_analysis_step(plan).step_id}"
         in context["valid_grounded_source_refs"]
     )
