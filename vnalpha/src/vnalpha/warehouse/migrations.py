@@ -458,6 +458,15 @@ def _migrate_research_experiment_columns(conn: duckdb.DuckDBPyConnection) -> Non
         "DEFAULT '{}' "
     )
     conn.execute(
+        "ALTER TABLE research_experiment ALTER COLUMN entitlement_json SET DEFAULT '{}'"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ALTER COLUMN missingness_json SET DEFAULT '{}'"
+    )
+    conn.execute(
+        "ALTER TABLE research_experiment ALTER COLUMN capability_payload SET DEFAULT '{}'"
+    )
+    conn.execute(
         "UPDATE research_experiment "
         "SET capability_payload = '{}' "
         "WHERE capability_payload IS NULL"

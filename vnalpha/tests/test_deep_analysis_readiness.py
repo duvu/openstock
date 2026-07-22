@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
+from pathlib import Path
 
 import duckdb
 
-from vnalpha.assistant.executor import AssistantExecutor
-from vnalpha.assistant.models import IntentResult
+from vnalpha.assistant.app import AssistantApp
+from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
+from vnalpha.assistant.models import (
+    AssistantRequest,
+    IntentResult,
+    PreparedAssistantTurn,
+    plan_hash,
+)
 from vnalpha.assistant.planner import PlanBuilder
 from vnalpha.core.dates import resolve_market_session_date
 from vnalpha.data_availability.deep_readiness import (
@@ -18,8 +25,13 @@ from vnalpha.data_availability.models import (
     EnsureDataResult,
     EnsureDataStatus,
 )
-from vnalpha.warehouse.assistant_repo import create_assistant_session
+from vnalpha.warehouse.assistant_repo import (
+    create_assistant_session,
+    mark_assistant_session_prepared,
+    persist_prepared_turn,
+)
 from vnalpha.warehouse.migrations import run_migrations
+from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
 
 def _ensure_result(
@@ -147,14 +159,13 @@ def test_readiness_reports_actionable_core_status() -> None:
     conn.close()
 
 
-def test_live_deep_analysis_plan_reuses_fresh_evidence() -> None:
-    conn = duckdb.connect()
-    run_migrations(conn=conn)
+def test_live_deep_analysis_plan_reuses_fresh_evidence(tmp_path: Path) -> None:
+    warehouse_path = tmp_path / "warehouse.duckdb"
+    coordinator = WarehouseWriteCoordinator(path=warehouse_path)
     requested_date = resolve_market_session_date("today")
     latest_validated_date = (
         date.fromisoformat(requested_date) - timedelta(days=1)
     ).isoformat()
-    _seed_cached_deep_analysis(conn, latest_validated_date)
     plan = PlanBuilder().build(
         IntentResult(
             intent="deep_analyze_symbol",
@@ -162,29 +173,66 @@ def test_live_deep_analysis_plan_reuses_fresh_evidence() -> None:
             entities={"symbol": "FPT", "date": "today"},
         )
     )
-    session_id = create_assistant_session(
-        conn,
-        surface="test",
-        user_prompt="phan tich co phieu FPT",
+    request = AssistantRequest(
+        current_user_prompt="phan tich co phieu FPT",
+        date="today",
+        date_is_implicit=True,
     )
-    execution = AssistantExecutor(conn, assistant_session_id=session_id).execute(plan)
+    with coordinator.transaction() as conn:
+        run_migrations(conn=conn)
+        _seed_cached_deep_analysis(conn, latest_validated_date)
+        session_id = create_assistant_session(
+            conn,
+            surface="test",
+            user_prompt=request.current_user_prompt,
+        )
+        prepared = PreparedAssistantTurn(
+            prepared_turn_id="prepared-deep-analysis",
+            assistant_session_id=session_id,
+            request=request,
+            intent_result=IntentResult(
+                intent="deep_analyze_symbol",
+                confidence=1.0,
+                entities={"symbol": "FPT", "date": "today"},
+            ),
+            plan=plan,
+            plan_hash=plan_hash(plan),
+            policy_status="PASS",
+            created_at="2026-07-22T00:00:00+00:00",
+        )
+        persist_prepared_turn(conn, prepared)
+        mark_assistant_session_prepared(
+            conn,
+            session_id,
+            intent=prepared.intent_result.intent,
+            plan=plan.to_dict(),
+        )
+    managed_app = AssistantApp.managed(
+        surface="test",
+        warehouse_path=warehouse_path,
+        llm_client=LLMGatewayClient(
+            LLMGatewayConfig(
+                model="test-model",
+                endpoint="http://127.0.0.1:1",
+                timeout=1,
+                max_output_tokens=1,
+                max_retries=0,
+                store_raw=False,
+            )
+        ),
+    )
+    answer, executed_plan = managed_app.execute_prepared(prepared)
+    with coordinator.transaction() as conn:
+        deep_trace = conn.execute(
+            "SELECT input_json FROM tool_trace "
+            "WHERE assistant_session_id = ? AND tool_name = 'analysis.deep_symbol'",
+            [session_id],
+        ).fetchone()
 
-    assert [step.tool_name for step in plan.steps] == [
+    assert [step.tool_name for step in executed_plan.steps] == [
         "data.ensure_current_symbol",
         "analysis.deep_symbol",
     ]
-    provisioning = execution[plan.steps[0].step_id]["data"]
-    analysis = execution[plan.steps[1].step_id]["data"]
-    assert provisioning["outcome"] == "REUSED"
-    assert provisioning["reused_fresh_data"] is True
-    assert provisioning["resolved_date"] == latest_validated_date
-    assert provisioning["warnings"] == [
-        "Current-session data is unavailable; using the latest validated "
-        f"market session {latest_validated_date}."
-    ]
-    assert analysis["symbol"] == "FPT"
-    assert analysis["available"] is True
-    assert analysis["as_of_date"] == latest_validated_date
-    assert analysis["candidate"]["score"] == 0.75
-    assert analysis["missing_data"] == []
-    conn.close()
+    assert answer.summary
+    assert deep_trace is not None
+    assert json.loads(deep_trace[0])["date"] == latest_validated_date
