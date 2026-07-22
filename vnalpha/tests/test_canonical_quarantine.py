@@ -85,3 +85,22 @@ def test_invalid_close_is_quarantined_before_canonical_promotion(
     assert rejection_count == (1,)
     assert result["upserted"] == 0
     assert result["rejected"] == 1
+
+
+def test_bounded_canonical_promotion_leaves_outside_dates_unchanged(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    _insert_raw_bar(conn, symbol="FPT", close=10.0, timestamp="2026-01-05")
+    _insert_raw_bar(conn, symbol="FPT", close=11.0, timestamp="2026-01-06")
+    build_canonical_ohlcv(conn, symbol="FPT", start="2026-01-05", end="2026-01-05")
+
+    result = build_canonical_ohlcv(
+        conn, symbol="FPT", start="2026-01-06", end="2026-01-06"
+    )
+
+    rows = conn.execute(
+        "SELECT CAST(time AS DATE)::VARCHAR, close FROM canonical_ohlcv "
+        "WHERE symbol = 'FPT' ORDER BY time"
+    ).fetchall()
+    assert rows == [("2026-01-05", 10.0), ("2026-01-06", 11.0)]
+    assert result == {"upserted": 1, "rejected": 0}

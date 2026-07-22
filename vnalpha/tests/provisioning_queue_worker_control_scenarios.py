@@ -82,7 +82,9 @@ def _assert_enrichment_stops_before_provider(
         handlers=(CurrentSymbolGoalHandler(),),
     ).process_one()
     assert result is not None
-    assert result.error == "UNSUPPORTED_ENRICHMENT_REQUEST"
+    assert result.error == (
+        "UNSUPPORTED_ENRICHMENT_REQUEST; BLOCKED: current-symbol-provision"
+    )
     assert queue.get(submitted.job_id).status is ProvisioningJobStatus.FAILED
 
 

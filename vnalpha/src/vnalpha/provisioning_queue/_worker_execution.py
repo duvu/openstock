@@ -53,7 +53,7 @@ def execute_handler_stages(
     if not stages:
         return HandlerCompleted(HandlerResult(False, _NO_HANDLER_STAGES))
     result = HandlerResult(False, _NO_HANDLER_STAGES)
-    for stage in stages:
+    for index, stage in enumerate(stages):
         boundary = _safe_boundary(queue, job, stop_requested)
         if boundary is not None:
             return boundary
@@ -67,10 +67,23 @@ def execute_handler_stages(
             lease_interval_seconds=lease_interval_seconds,
         )
         if monotonic() - started_at > stage_timeout_seconds:
-            return HandlerCompleted(HandlerResult(False, _STAGE_TIMEOUT))
+            return HandlerCompleted(
+                _failed_with_blocked(_STAGE_TIMEOUT, stages[index + 1 :])
+            )
         if not result.succeeded:
-            return HandlerCompleted(result)
+            return HandlerCompleted(
+                _failed_with_blocked(result.detail, stages[index + 1 :])
+            )
     return HandlerCompleted(result)
+
+
+def _failed_with_blocked(
+    detail: str, dependent_stages: tuple[ProvisioningGoalStage, ...]
+) -> HandlerResult:
+    if not dependent_stages:
+        return HandlerResult(False, detail)
+    blocked = ", ".join(stage.name for stage in dependent_stages)
+    return HandlerResult(False, f"{detail}; BLOCKED: {blocked}")
 
 
 def _safe_boundary(

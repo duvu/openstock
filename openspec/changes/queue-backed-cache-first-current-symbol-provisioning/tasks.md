@@ -36,17 +36,17 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 
 ## 5. Provisioning behavior — #318, #319, #321
 
-- [ ] 5.1 Ready same-date requests return without a queue job or write work.
-- [ ] 5.2 Compute exact missing OHLCV tails and bounded repair ranges.
-- [ ] 5.3 Avoid provider calls when raw evidence is ready and canonical evidence is stale.
-- [ ] 5.4 Add date-bounded canonical promotion.
-- [ ] 5.5 Stop dependent actions after the first failed prerequisite and record `BLOCKED`.
-- [ ] 5.6 Add row-count, function-call and same-date idempotency tests.
+- [x] 5.1 Ready same-date requests return without a queue job or write work. Evidence: `vnalpha/tests/test_current_symbol_research_application.py::test_ready_current_symbol_reuses_persisted_evidence_without_a_queue_job`; `make test-loop TEST=tests/test_current_symbol_research_application.py::test_ready_current_symbol_reuses_persisted_evidence_without_a_queue_job` passed.
+- [x] 5.2 Compute exact missing OHLCV tails and bounded repair ranges. Evidence: `vnalpha/tests/test_data_only_symbol.py::test_stale_raw_evidence_syncs_only_the_missing_session_tail`; `make test-loop TEST=tests/test_data_only_symbol.py::test_stale_raw_evidence_syncs_only_the_missing_session_tail` passed.
+- [x] 5.3 Avoid provider calls when raw evidence is ready and canonical evidence is stale. Evidence: `vnalpha/tests/test_data_only_symbol.py::test_raw_ready_canonical_stale_promotes_only_the_missing_tail`; `make test-loop TEST=tests/test_data_only_symbol.py::test_raw_ready_canonical_stale_promotes_only_the_missing_tail` passed.
+- [x] 5.4 Add date-bounded canonical promotion. Evidence: `vnalpha/tests/test_canonical_quarantine.py::test_bounded_canonical_promotion_leaves_outside_dates_unchanged`; `make test-loop TEST=tests/test_canonical_quarantine.py::test_bounded_canonical_promotion_leaves_outside_dates_unchanged` passed.
+- [x] 5.5 Stop dependent actions after the first failed prerequisite and record `BLOCKED`. Evidence: `vnalpha/tests/test_provisioning_queue_worker.py::test_sequential_provisioning_worker_contract`; `make test-loop TEST=tests/test_provisioning_queue_worker.py::test_sequential_provisioning_worker_contract` passed.
+- [x] 5.6 Add row-count, function-call and same-date idempotency tests. Evidence: `vnalpha/tests/test_current_symbol_research_application.py::test_ready_current_symbol_reuses_persisted_evidence_without_a_queue_job` verifies unchanged canonical row count and no queue creation for same-date ready evidence; `make test-loop TEST=tests/test_current_symbol_research_application.py::test_ready_current_symbol_reuses_persisted_evidence_without_a_queue_job` passed.
 
 ## 6. Interactive application — #325, #322
 
-- [ ] 6.1 Add queue client operations without holding DuckDB while waiting.
-- [ ] 6.2 Implement shared `WAIT_UNTIL_TERMINAL`, `WAIT_UP_TO` and `DETACH` defaults.
+- [x] 6.1 Add queue client operations without holding DuckDB while waiting. Evidence: `CurrentSymbolResearchApplication` closes its readiness inspection before queue initialization/submission; `vnalpha/tests/test_current_symbol_research_application.py::test_missing_current_symbol_work_joins_one_escalated_queue_job` passed.
+- [x] 6.2 Implement shared `WAIT_UNTIL_TERMINAL`, `WAIT_UP_TO` and `DETACH` defaults. Evidence: `CurrentSymbolWaitMode` owns the three modes; the application contract covers default detach and zero-duration bounded wait with `make test-loop TEST=tests/test_current_symbol_research_application.py::test_missing_current_symbol_work_joins_one_escalated_queue_job` passing.
 - [ ] 6.3 Add priority escalation and explicit shared-job cancellation warnings.
 - [ ] 6.4 Add `CurrentSymbolResearchApplication` as the single CLI/TUI/chat boundary.
 - [ ] 6.5 Replace the assistant's unconditional provision-then-analyze plan with one application operation.
