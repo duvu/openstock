@@ -36,6 +36,12 @@ def resolve_effective_target_date(
     selected = classified if classified is not None else requested
     validate_date_candidate(selected)
     try:
+        if (
+            intent in _CURRENT_SYMBOL_SESSION_INTENTS
+            and request_date_is_implicit
+            and (classified is None or classified.casefold() == "today")
+        ):
+            return "today"
         if intent in _CURRENT_SYMBOL_SESSION_INTENTS:
             current_symbol_date = (
                 None if classified is None and request_date_is_implicit else selected

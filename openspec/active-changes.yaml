@@ -11,6 +11,20 @@ policy:
 
 changes:
 
+  implicit-current-symbol-available-session:
+    status: partial
+    github_issues: [389]
+    roadmap_state: scheduled
+    summary: >-
+      Resolve implicit current-symbol research to the latest aligned canonical
+      target and benchmark session before provisioning, while retaining strict
+      explicit-date behavior.
+    evidence: >-
+      The focused readiness contract proves that an implicit request with
+      aligned canonical evidence but no score provisions the prior usable
+      session rather than a data-less current session. Final candidate and
+      GitHub closure evidence are pending.
+
   assistant-deterministic-fallback-observability:
     status: partial
     github_issues: [384, 385]

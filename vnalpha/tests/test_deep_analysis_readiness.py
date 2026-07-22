@@ -7,6 +7,7 @@ from pathlib import Path
 import duckdb
 
 from vnalpha.assistant.app import AssistantApp
+from vnalpha.assistant.effective_date import resolve_effective_target_date
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.models import (
     AssistantRequest,
@@ -182,6 +183,48 @@ def test_readiness_reports_actionable_core_status() -> None:
         "(symbol=FPT, effective_date=2026-07-10, status=FAILED, "
         "category=PROVISIONING_RESULT_INCONSISTENT): "
         "the provisioning result reported not-ready without error evidence",
+    )
+    conn.close()
+
+
+def test_implicit_readiness_uses_aligned_canonical_session() -> None:
+    conn = duckdb.connect()
+    run_migrations(conn=conn)
+    requested_date = resolve_market_session_date("today")
+    latest_available_date = (
+        date.fromisoformat(requested_date) - timedelta(days=1)
+    ).isoformat()
+    assert (
+        resolve_effective_target_date(
+            classified_date="today",
+            request_date=requested_date,
+            intent="deep_analyze_symbol",
+            request_date_is_implicit=True,
+        )
+        == "today"
+    )
+    _seed_cached_deep_analysis(conn, latest_available_date)
+    conn.execute("DELETE FROM candidate_score WHERE symbol = 'FPT'")
+    ensured_dates: list[str | None] = []
+
+    def ensure_latest_available_date(
+        _conn: duckdb.DuckDBPyConnection, _symbol: str, target_date: str | None
+    ) -> EnsureDataResult:
+        ensured_dates.append(target_date)
+        return _ensure_result(
+            status=EnsureDataStatus.READY,
+            actions=[EnsureDataAction.CACHE_HIT],
+        )
+
+    readiness = DeepAnalysisReadinessService(
+        ensure=ensure_latest_available_date
+    ).ensure_ready(DeepAnalysisReadinessRequest(conn, "FPT", None))
+
+    assert readiness.resolved_date == latest_available_date
+    assert ensured_dates == [latest_available_date]
+    assert readiness.warnings == (
+        "Current-session data is unavailable; using the latest validated "
+        f"market session {latest_available_date}.",
     )
     conn.close()
 
