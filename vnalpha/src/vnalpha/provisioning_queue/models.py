@@ -26,6 +26,12 @@ class GoalType(StrEnum):
     FINALIZE_MARKET_SESSION = "FINALIZE_MARKET_SESSION"
 
 
+SUPPORTED_SOURCE_POLICY_VERSION: Final = "policy-v1"
+_SUPPORTED_CONTRACT_VERSIONS: Final = {
+    GoalType.ENSURE_CURRENT_SYMBOL: "current-symbol-v1",
+    GoalType.SYNC_DATASET_RANGE: "dataset-range-v1",
+    GoalType.FINALIZE_MARKET_SESSION: "finalization-v1",
+}
 class GoalEnrichment(StrEnum):
     COMPANY_CONTEXT = "COMPANY_CONTEXT"
     SESSION_CONTEXT = "SESSION_CONTEXT"
@@ -63,7 +69,10 @@ class _GoalModel(BaseModel):
     @field_validator("source_policy_version")
     @classmethod
     def _normalize_source_policy_version(cls, value: str) -> str:
-        return _normalize_version(value, field_name="source_policy_version")
+        normalized = _normalize_version(value, field_name="source_policy_version")
+        if normalized != SUPPORTED_SOURCE_POLICY_VERSION:
+            raise ValueError("source_policy_version is unsupported")
+        return normalized
 
     def payload_json(self) -> str:
         return dumps(
@@ -100,7 +109,9 @@ class EnsureCurrentSymbolGoal(_GoalModel):
     @field_validator("contract_version")
     @classmethod
     def _normalize_contract_version(cls, value: str) -> str:
-        return _normalize_version(value, field_name="contract_version")
+        return _supported_contract_version(
+            value, GoalType.ENSURE_CURRENT_SYMBOL, field_name="contract_version"
+        )
 
     @model_validator(mode="after")
     def _validate_fallback(self) -> EnsureCurrentSymbolGoal:
@@ -134,7 +145,9 @@ class SyncDatasetRangeGoal(_GoalModel):
     @field_validator("contract_version")
     @classmethod
     def _normalize_contract_version(cls, value: str) -> str:
-        return _normalize_version(value, field_name="contract_version")
+        return _supported_contract_version(
+            value, GoalType.SYNC_DATASET_RANGE, field_name="contract_version"
+        )
 
     @model_validator(mode="after")
     def _validate_date_range(self) -> SyncDatasetRangeGoal:
@@ -155,13 +168,19 @@ class FinalizeMarketSessionGoal(_GoalModel):
     frozen_universe_hash: str
     finalization_contract_version: str
 
-    @field_validator(
-        "maintenance_run_id", "frozen_universe_hash", "finalization_contract_version"
-    )
+    @field_validator("maintenance_run_id", "frozen_universe_hash")
     @classmethod
     def _normalize_required_text(cls, value: str) -> str:
         return _normalize_version(value, field_name="goal identity field")
 
+    @field_validator("finalization_contract_version")
+    @classmethod
+    def _normalize_finalization_contract_version(cls, value: str) -> str:
+        return _supported_contract_version(
+            value,
+            GoalType.FINALIZE_MARKET_SESSION,
+            field_name="finalization_contract_version",
+        )
 
 ProvisioningGoal: TypeAlias = (
     EnsureCurrentSymbolGoal | SyncDatasetRangeGoal | FinalizeMarketSessionGoal
@@ -223,6 +242,7 @@ __all__ = [
     "QueueDataset",
     "QueueEntityType",
     "RefreshMode",
+    "SUPPORTED_SOURCE_POLICY_VERSION",
     "SyncDatasetRangeGoal",
     "goal_identity",
     "goal_type",
@@ -237,6 +257,13 @@ def _normalize_version(value: str, *, field_name: str) -> str:
     return normalized
 
 
+def _supported_contract_version(
+    value: str, goal_type: GoalType, *, field_name: str
+) -> str:
+    normalized = _normalize_version(value, field_name=field_name)
+    if normalized != _SUPPORTED_CONTRACT_VERSIONS[goal_type]:
+        raise ValueError(f"{field_name} is unsupported")
+    return normalized
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
