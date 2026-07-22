@@ -12,7 +12,7 @@ policy:
 changes:
 
   implicit-current-symbol-available-session:
-    status: partial
+    status: ready
     github_issues: [389]
     roadmap_state: scheduled
     summary: >-
@@ -22,8 +22,9 @@ changes:
     evidence: >-
       The focused readiness contract proves that an implicit request with
       aligned canonical evidence but no score provisions the prior usable
-      session rather than a data-less current session. Final candidate and
-      GitHub closure evidence are pending.
+      session rather than a data-less current session. Commit
+      0701eba22dfbc2f059da8ce164afe701c6b8437c is published on main and
+      GitHub issue 389 is closed with the recorded validation evidence.
 
   assistant-deterministic-fallback-observability:
     status: partial

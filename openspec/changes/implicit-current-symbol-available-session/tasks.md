@@ -11,4 +11,4 @@
 ## 3. Contract evidence
 
 - [x] 3.1 Add one owning contract for an unscored but aligned prior session.
-- [ ] 3.2 Record final candidate and issue-closure evidence.
+- [x] 3.2 Record final candidate and issue-closure evidence in `validation.md`.
