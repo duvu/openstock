@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import json
+from datetime import date
+
 import typer
 
+from vnalpha.assistant.preflight import run_llm_preflight
 from vnalpha.core.logging import set_correlation_id
+from vnalpha.ingestion.trading_calendar import VietnamSessionCalendar
 from vnalpha.observability.commands import command_lifecycle
 
 
@@ -21,21 +26,15 @@ def register(app: typer.Typer) -> None:
         """
         set_correlation_id()
         with command_lifecycle("preflight"):
-            import json as _json
-            from datetime import date as _date
-
-            from vnalpha.assistant.preflight import run_llm_preflight
-            from vnalpha.ingestion.trading_calendar import VietnamSessionCalendar
-
             result = run_llm_preflight()
             status = result.to_status_dict()
 
             calendar = VietnamSessionCalendar()
-            calendar_status = calendar.get_coverage_status(_date.today())
+            calendar_status = calendar.get_coverage_status(date.today())
 
             if as_json:
                 typer.echo(
-                    _json.dumps(
+                    json.dumps(
                         {
                             "assistant_llm_route": status,
                             "trading_calendar": calendar_status,
@@ -67,8 +66,10 @@ def register(app: typer.Typer) -> None:
                     typer.echo(f"  model:    {result.model}")
                 if result.endpoint:
                     typer.echo(f"  endpoint: {result.endpoint}")
-                if result.route and result.route.get("model_id"):
-                    typer.echo(f"  route:    {result.route.get('model_id')}")
+                if result.route:
+                    route = result.route.get("profile") or result.route.get("model_id")
+                    if route:
+                        typer.echo(f"  route:    {route}")
                 if not result.ready:
                     typer.echo(
                         "  note:     Natural-language chat is unavailable; "
