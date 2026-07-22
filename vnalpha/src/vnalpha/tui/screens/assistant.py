@@ -13,6 +13,7 @@ from vnalpha.assistant.errors import (
 from vnalpha.assistant.gateway import LLMGatewayClient, LLMGatewayConfig
 from vnalpha.assistant.models import AssistantAnswer, RefusalMessage
 from vnalpha.assistant.planner import PlanBuilder
+from vnalpha.core.logging import set_correlation_id
 from vnalpha.core.text_safety import sanitize_error_summary, sanitize_text
 from vnalpha.observability.errors import capture_exception
 
@@ -83,6 +84,7 @@ if _TEXTUAL_AVAILABLE:
             self._process_question(question)
 
         def _process_question(self, question: str) -> None:
+            set_correlation_id()
             answer_panel = self.query_one("#assistant-answer", Static)
             plan_panel = self.query_one("#assistant-plan", Static)
             answer_panel.update(Text("Processing...", style="dim"))

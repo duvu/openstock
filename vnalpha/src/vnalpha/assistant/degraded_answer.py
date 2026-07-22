@@ -19,6 +19,10 @@ from vnalpha.tools.setup import TOOL_PERMISSIONS
 
 _PUBLIC_WARNING: Final = "AI synthesis unavailable; showing deterministic result."
 _LIFECYCLE_WARNING: Final = "Assistant request did not produce a usable answer."
+_PUBLIC_FALLBACK_LIMITATION: Final = (
+    "Deterministic fallback is limited to available tool evidence."
+)
+_PUBLIC_TOOL_WARNING: Final = "Tool output reported a caveat."
 _PUBLIC_WARNINGS: Final = frozenset({_PUBLIC_WARNING, _LIFECYCLE_WARNING})
 _PUBLIC_MODEL_ROUTES: Final = frozenset(
     {"small", "default", "reasoning", "long_context", "client"}
@@ -27,6 +31,7 @@ _PUBLIC_CATEGORIES: Final = frozenset(
     {
         "AUDIT_PERSIST_FAILURE",
         "CLASSIFICATION_FAILURE",
+        "CLASSIFY_TRACE_PERSIST_FAILURE",
         "CONTEXT_POLICY_REJECTED",
         "GATEWAY_FAILURE",
         "GROUNDEDNESS_OR_POLICY_REJECTED",
@@ -93,14 +98,12 @@ def build_deterministic_tool_answer(
     if not tool_outputs or not _is_read_only_plan(plan):
         return None
     summaries, warnings, source_refs = _tool_result_details(plan, tool_outputs)
-    fallback_reasons = [degradation.warning, *(reasons or []), *warnings]
+    fallback_reasons = [_public_fallback_reasons(degradation, reasons, warnings)]
     if is_research_intent(plan.intent):
         answer = build_deterministic_research_answer(
             plan,
             tool_outputs,
-            reasons=list(
-                dict.fromkeys(reason for reason in fallback_reasons if reason)
-            ),
+            reasons=list(fallback_reasons),
         )
         if summaries:
             answer = replace(
@@ -115,9 +118,7 @@ def build_deterministic_tool_answer(
             summary=summaries[0] if summaries else _data_summary(plan, tool_outputs),
             basis="Deterministic tools: "
             + ", ".join(step.tool_name for step in plan.steps),
-            risks_caveats=" ".join(
-                dict.fromkeys(reason for reason in fallback_reasons if reason)
-            ),
+            risks_caveats=" ".join(fallback_reasons),
             tool_trace_summary=(
                 f"Executed {len(plan.steps)} deterministic tool(s): "
                 + ", ".join(step.tool_name for step in plan.steps)
@@ -218,6 +219,23 @@ def _public_identifier(key: str, value: object) -> str:
     if key == "model_route":
         return value if value in _PUBLIC_MODEL_ROUTES else ""
     return value if fullmatch(patterns[key], value) else ""
+
+
+def _public_fallback_reasons(
+    degradation: AssistantDegradation,
+    reasons: list[str] | None,
+    warnings: list[str],
+) -> str:
+    values = [
+        degradation.warning
+        if degradation.warning in _PUBLIC_WARNINGS
+        else _PUBLIC_WARNING
+    ]
+    if reasons:
+        values.append(_PUBLIC_FALLBACK_LIMITATION)
+    if warnings:
+        values.append(_PUBLIC_TOOL_WARNING)
+    return " ".join(dict.fromkeys(values))
 
 
 def _is_read_only_plan(plan: AssistantPlan) -> bool:

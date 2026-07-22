@@ -91,7 +91,9 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                             },
                         )
                 except Exception:
-                    pass
+                    _log_assistant_lifecycle(
+                        "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="FAILED"
+                    )
                 raise AssistantLifecycleError(
                     stage=AssistantFailureStage.CLASSIFY,
                     category="CLASSIFICATION_FAILURE",
@@ -99,19 +101,28 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                     trace_id=classify_trace_id,
                     model_route=self._engine._llm_model(),
                 ) from exc
-            with self._coordinator.transaction() as connection:
-                finish_llm_trace(
-                    connection,
-                    classify_trace_id,
-                    status="SUCCESS",
-                    output_summary={
-                        "intent": intent_result.intent,
-                        **self._engine._raw_response_summary(
-                            self._engine._classifier.last_raw_responses
-                        ),
-                    },
-                    usage=self._engine._classifier.last_usage,
-                )
+            try:
+                with self._coordinator.transaction() as connection:
+                    finish_llm_trace(
+                        connection,
+                        classify_trace_id,
+                        status="SUCCESS",
+                        output_summary={
+                            "intent": intent_result.intent,
+                            **self._engine._raw_response_summary(
+                                self._engine._classifier.last_raw_responses
+                            ),
+                        },
+                        usage=self._engine._classifier.last_usage,
+                    )
+            except Exception as exc:
+                raise AssistantLifecycleError(
+                    stage=AssistantFailureStage.AUDIT_PERSIST,
+                    category="CLASSIFY_TRACE_PERSIST_FAILURE",
+                    correlation_id=get_correlation_id(),
+                    trace_id=classify_trace_id,
+                    model_route=self._engine._llm_model(),
+                ) from exc
             raw_classified_date = intent_result.entities.get("date")
             classified_date = (
                 raw_classified_date if isinstance(raw_classified_date, str) else None
@@ -199,4 +210,6 @@ class ManagedAssistantPreparation(ManagedAssistantContext):
                     },
                 )
         except Exception:
-            pass
+            _log_assistant_lifecycle(
+                "ASSISTANT_PERSISTENCE_FAILED", "prepare", status=status
+            )

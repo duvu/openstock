@@ -82,18 +82,6 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                     prompt,
                     session_id=request.routing_session_id or session_id,
                 )
-                finish_llm_trace(
-                    self._conn,
-                    classify_trace_id,
-                    status="SUCCESS",
-                    output_summary={
-                        "intent": intent_result.intent,
-                        **self._raw_response_summary(
-                            self._classifier.last_raw_responses
-                        ),
-                    },
-                    usage=self._classifier.last_usage,
-                )
             except Exception as exc:
                 try:
                     finish_llm_trace(
@@ -108,10 +96,33 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                         },
                     )
                 except Exception:
-                    pass
+                    _log_assistant_lifecycle(
+                        "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="FAILED"
+                    )
                 raise AssistantLifecycleError(
                     stage=AssistantFailureStage.CLASSIFY,
                     category="CLASSIFICATION_FAILURE",
+                    correlation_id=get_correlation_id(),
+                    trace_id=classify_trace_id,
+                    model_route=self._llm_model(),
+                ) from exc
+            try:
+                finish_llm_trace(
+                    self._conn,
+                    classify_trace_id,
+                    status="SUCCESS",
+                    output_summary={
+                        "intent": intent_result.intent,
+                        **self._raw_response_summary(
+                            self._classifier.last_raw_responses
+                        ),
+                    },
+                    usage=self._classifier.last_usage,
+                )
+            except Exception as exc:
+                raise AssistantLifecycleError(
+                    stage=AssistantFailureStage.AUDIT_PERSIST,
+                    category="CLASSIFY_TRACE_PERSIST_FAILURE",
                     correlation_id=get_correlation_id(),
                     trace_id=classify_trace_id,
                     model_route=self._llm_model(),
@@ -193,7 +204,9 @@ class ConnectedAssistantPreparation(ConnectedAssistantContext):
                     },
                 )
             except Exception:
-                pass
+                _log_assistant_lifecycle(
+                    "ASSISTANT_PERSISTENCE_FAILED", "prepare", status="FAILED"
+                )
             raise
 
     def _with_symbol_memory_context(

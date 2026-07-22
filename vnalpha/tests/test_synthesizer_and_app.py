@@ -10,7 +10,9 @@ import pytest
 
 from vnalpha.assistant.connection_runtime import AssistantApp
 from vnalpha.assistant.degraded_answer import (
+    AssistantDegradation,
     AssistantFailureStage,
+    build_deterministic_tool_answer,
     degradation_warning,
     lifecycle_warning,
 )
@@ -187,6 +189,18 @@ class TestAnswerSynthesizer:
         assert fallback.research_metadata["synthesis_status"] == "FALLBACK_SUCCESS"
         assert fallback.research_metadata["degradation"]["stage"] == "SYNTHESIS_CALL"
         assert "AI synthesis unavailable" in fallback.risks_caveats
+
+        untrusted_fallback = build_deterministic_tool_answer(
+            plan,
+            tool_outputs,
+            AssistantDegradation(
+                AssistantFailureStage.SYNTHESIS_CALL,
+                "GATEWAY_FAILURE",
+                warning="ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd",
+            ),
+        )
+        assert untrusted_fallback is not None
+        assert "ghp_" not in untrusted_fallback.risks_caveats
 
         malformed = AnswerSynthesizer(
             FakeLLMClient(responses=[("{not-json", {})])
