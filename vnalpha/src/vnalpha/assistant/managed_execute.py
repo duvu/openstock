@@ -120,6 +120,13 @@ class ManagedAssistantExecution(
                 prepared, trace_ids, on_trace_event=on_trace_event
             )
         except Exception as exc:
+            lifecycle_error = AssistantLifecycleError(
+                stage=AssistantFailureStage.TOOL_EXECUTION,
+                category="TOOL_EXECUTION_FAILURE",
+                correlation_id=get_correlation_id(),
+                trace_id=trace_ids[0] if trace_ids else None,
+                model_route=self._engine._llm_model(),
+            )
             try:
                 with self._coordinator.transaction() as connection:
                     finish_prepared_turn(
@@ -138,17 +145,12 @@ class ManagedAssistantExecution(
                         error={
                             "error_type": type(exc).__name__,
                             "message": sanitize_error_summary(exc),
+                            "lifecycle": _lifecycle_diagnostic(lifecycle_error),
                         },
                     )
             except Exception:
                 self._record_persistence_failure()
-            raise AssistantLifecycleError(
-                stage=AssistantFailureStage.TOOL_EXECUTION,
-                category="TOOL_EXECUTION_FAILURE",
-                correlation_id=get_correlation_id(),
-                trace_id=trace_ids[0] if trace_ids else None,
-                model_route=self._engine._llm_model(),
-            ) from exc
+            raise lifecycle_error from exc
         synthesis_trace_id: str | None = None
         trace_creation_failed = False
         try:
@@ -175,6 +177,13 @@ class ManagedAssistantExecution(
                 ),
             )
         except Exception as exc:
+            lifecycle_error = AssistantLifecycleError(
+                stage=AssistantFailureStage.ANSWER_VALIDATION,
+                category="SYNTHESIS_FAIL_CLOSED",
+                correlation_id=get_correlation_id(),
+                trace_id=synthesis_trace_id,
+                model_route=self._engine._llm_model(),
+            )
             if synthesis_trace_id is not None:
                 try:
                     with self._coordinator.transaction() as connection:
@@ -209,17 +218,12 @@ class ManagedAssistantExecution(
                         error={
                             "error_type": type(exc).__name__,
                             "message": sanitize_error_summary(exc),
+                            "lifecycle": _lifecycle_diagnostic(lifecycle_error),
                         },
                     )
             except Exception:
                 self._record_persistence_failure()
-            raise AssistantLifecycleError(
-                stage=AssistantFailureStage.ANSWER_VALIDATION,
-                category="SYNTHESIS_FAIL_CLOSED",
-                correlation_id=get_correlation_id(),
-                trace_id=synthesis_trace_id,
-                model_route=self._engine._llm_model(),
-            ) from exc
+            raise lifecycle_error from exc
         degradation = self._engine._synthesizer.last_degradation
         session_status = "DEGRADED_SUCCESS" if degradation is not None else "SUCCESS"
         if degradation is not None:
@@ -381,6 +385,16 @@ class ManagedAssistantExecution(
         _log_assistant_lifecycle(
             "ASSISTANT_PERSISTENCE_FAILED", "execute_prepared", status="FAILED"
         )
+
+
+def _lifecycle_diagnostic(exc: AssistantLifecycleError) -> dict[str, str]:
+    return AssistantDegradation(
+        exc.stage,
+        exc.category,
+        correlation_id=exc.correlation_id,
+        trace_id=exc.trace_id,
+        model_route=exc.model_route,
+    ).to_dict()
 
     def _finish_execution_failure(
         self, prepared: PreparedAssistantTurn, exc: Exception

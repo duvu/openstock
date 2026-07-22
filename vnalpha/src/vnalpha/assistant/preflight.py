@@ -34,7 +34,13 @@ from vnalpha.assistant.errors import (
     LLMResponseError,
     LLMTimeoutError,
 )
+from vnalpha.assistant.gateway import (
+    _SCHEMA_UNSUPPORTED_MARKERS,
+    LLMGatewayClient,
+    LLMGatewayConfig,
+)
 from vnalpha.core.text_safety import redact_structure, sanitize_text
+from vnalpha.observability.errors import capture_exception
 
 # A minimal structured probe: the smallest strict json_schema request that
 # exercises the required JSON_SCHEMA capability end to end. It carries no user
@@ -159,8 +165,6 @@ GatewayProbe = Callable[[], dict | None]
 
 def _capture_exception_safely(exc: Exception) -> None:
     try:
-        from vnalpha.observability.errors import capture_exception
-
         capture_exception(exc)
     except Exception:  # noqa: BLE001
         pass
@@ -183,8 +187,6 @@ def run_llm_preflight(
         A typed :class:`LLMPreflightResult`. Never raises for an expected
         failure mode — every outcome is a typed code.
     """
-
-    from vnalpha.assistant.gateway import LLMGatewayConfig
 
     try:
         config = LLMGatewayConfig.from_env()
@@ -310,8 +312,6 @@ def _classify_response_error(exc: LLMResponseError, config) -> LLMPreflightResul
 
 def _schema_unsupported(text: str) -> bool:
     """Detect a gateway 400 that rejects structured (json_schema) output."""
-    from vnalpha.assistant.gateway import _SCHEMA_UNSUPPORTED_MARKERS
-
     lowered = text.lower()
     return any(marker in lowered for marker in _SCHEMA_UNSUPPORTED_MARKERS)
 
@@ -350,8 +350,6 @@ def _default_probe(config, api_key: str) -> GatewayProbe:
     """Build the real bounded structured probe from environment configuration."""
 
     def probe() -> dict | None:
-        from vnalpha.assistant.gateway import LLMGatewayClient
-
         client = LLMGatewayClient(config, api_key=api_key)
         content, usage = client.chat(
             _PROBE_MESSAGES,

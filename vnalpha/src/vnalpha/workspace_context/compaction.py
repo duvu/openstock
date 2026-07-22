@@ -157,8 +157,15 @@ def compact_workspace(
                 compact_text, usage = _llm_compact(
                     llm_client, deterministic_summary, state
                 )
-                route = usage.get("model_route") if isinstance(usage, dict) else None
-                model_route = dict(route) if isinstance(route, dict) else None
+                route_profile = (
+                    usage.get("route_profile") if isinstance(usage, dict) else None
+                )
+                model_route = (
+                    {"profile": route_profile}
+                    if route_profile
+                    in {"small", "default", "reasoning", "long_context"}
+                    else None
+                )
             except Exception as exc:
                 warnings.append(
                     f"LLM compaction failed; deterministic summary used instead: {exc}"

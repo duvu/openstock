@@ -98,6 +98,12 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
         try:
             tool_outputs = executor.execute(prepared.plan)
         except Exception as exc:
+            lifecycle_error = AssistantLifecycleError(
+                stage=AssistantFailureStage.TOOL_EXECUTION,
+                category="TOOL_EXECUTION_FAILURE",
+                correlation_id=get_correlation_id(),
+                model_route=self._llm_model(),
+            )
             try:
                 finish_assistant_session(
                     self._conn,
@@ -108,6 +114,7 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                     error={
                         "error_type": type(exc).__name__,
                         "message": sanitize_error_summary(exc),
+                        "lifecycle": _lifecycle_diagnostic(lifecycle_error),
                     },
                 )
             except Exception:
@@ -118,12 +125,7 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                 )
             except Exception:
                 self._record_persistence_failure()
-            raise AssistantLifecycleError(
-                stage=AssistantFailureStage.TOOL_EXECUTION,
-                category="TOOL_EXECUTION_FAILURE",
-                correlation_id=get_correlation_id(),
-                model_route=self._llm_model(),
-            ) from exc
+            raise lifecycle_error from exc
         if on_synthesizing is not None:
             on_synthesizing()
         synthesis_trace_id: str | None = None
@@ -174,6 +176,13 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                 )
                 session_status = "DEGRADED_SUCCESS"
         except Exception as exc:
+            lifecycle_error = AssistantLifecycleError(
+                stage=AssistantFailureStage.ANSWER_VALIDATION,
+                category="SYNTHESIS_FAIL_CLOSED",
+                correlation_id=get_correlation_id(),
+                trace_id=synthesis_trace_id,
+                model_route=self._llm_model(),
+            )
             if synthesis_trace_id is not None:
                 try:
                     finish_llm_trace(
@@ -205,17 +214,12 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
                     error={
                         "error_type": type(exc).__name__,
                         "message": sanitize_error_summary(exc),
+                        "lifecycle": _lifecycle_diagnostic(lifecycle_error),
                     },
                 )
             except Exception:
                 self._record_persistence_failure()
-            raise AssistantLifecycleError(
-                stage=AssistantFailureStage.ANSWER_VALIDATION,
-                category="SYNTHESIS_FAIL_CLOSED",
-                correlation_id=get_correlation_id(),
-                trace_id=synthesis_trace_id,
-                model_route=self._llm_model(),
-            ) from exc
+            raise lifecycle_error from exc
         if synthesis_trace_id is not None:
             try:
                 finish_llm_trace(
@@ -347,3 +351,13 @@ class ConnectedAssistantExecution(ConnectedAssistantContext):
         _log_assistant_lifecycle(
             "ASSISTANT_PERSISTENCE_FAILED", "execute_prepared", status="FAILED"
         )
+
+
+def _lifecycle_diagnostic(exc: AssistantLifecycleError) -> dict[str, str]:
+    return AssistantDegradation(
+        exc.stage,
+        exc.category,
+        correlation_id=exc.correlation_id,
+        trace_id=exc.trace_id,
+        model_route=exc.model_route,
+    ).to_dict()

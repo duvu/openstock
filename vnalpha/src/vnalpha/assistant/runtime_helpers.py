@@ -15,6 +15,7 @@ from vnalpha.assistant.models import (
     text_hash,
 )
 from vnalpha.data_availability.dates import normalize_optional_date
+from vnalpha.observability.trace import log_trace
 from vnalpha.workspace_context.redaction import redact_workspace_text
 
 
@@ -71,6 +72,4 @@ def _request_as_of_date(value: str | None) -> date:
 
 
 def _log_assistant_lifecycle(event_type: str, operation: str, *, status: str) -> None:
-    from vnalpha.observability.trace import log_trace
-
     log_trace(event_type, operation, status=status)
