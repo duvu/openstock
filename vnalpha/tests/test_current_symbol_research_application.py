@@ -227,6 +227,22 @@ def test_missing_current_symbol_work_joins_one_escalated_queue_job(
         ],
     )
     assert cancelled.exit_code == 0
+    repeated_cancel = runner.invoke(
+        cli_app,
+        [
+            "jobs",
+            "cancel",
+            str(job.job_id),
+            "--queue-path",
+            str(queue_path),
+            "--confirm",
+        ],
+    )
+    assert repeated_cancel.exit_code == 1
+    assert (
+        "Jobs command failed: provisioning job is already terminal"
+        in repeated_cancel.output
+    )
     retry = runner.invoke(
         cli_app,
         [

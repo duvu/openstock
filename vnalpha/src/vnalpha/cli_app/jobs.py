@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, assert_never
+from typing import Annotated, NoReturn, assert_never
 
 import typer
 
@@ -31,7 +31,10 @@ def list_jobs(
 ) -> None:
     """List bounded queue state without opening the research warehouse."""
     queue = _queue(queue_path)
-    jobs = queue.list(status=status)
+    try:
+        jobs = queue.list(status=status)
+    except ProvisioningQueueError as error:
+        _queue_error(error)
     if json_output:
         typer.echo(json.dumps([_job_payload(job) for job in jobs], sort_keys=True))
         return
@@ -68,7 +71,10 @@ def wait(
         if timeout_seconds is None
         else CurrentSymbolWaitMode.WAIT_UP_TO
     )
-    completed = wait_for_terminal(queue, job, mode, timeout_seconds or 0)
+    try:
+        completed = wait_for_terminal(queue, job, mode, timeout_seconds or 0)
+    except ProvisioningQueueError as error:
+        _queue_error(error)
     if json_output:
         typer.echo(json.dumps(_job_payload(completed), sort_keys=True))
         return
@@ -92,7 +98,10 @@ def cancel(
             err=True,
         )
         raise typer.Exit(code=2)
-    cancelled = queue.cancel(job.job_id)
+    try:
+        cancelled = queue.cancel(job.job_id)
+    except ProvisioningQueueError as error:
+        _queue_error(error)
     if json_output:
         typer.echo(json.dumps(_job_payload(cancelled), sort_keys=True))
         return
@@ -108,20 +117,23 @@ def retry(
     """Create one bounded retry from a failed or cancelled typed job."""
     queue = _queue(queue_path)
     job = _job(queue, job_id)
-    match job.status:
-        case ProvisioningJobStatus.FAILED | ProvisioningJobStatus.CANCELLED:
-            submission = queue.submit_or_join(
-                job.goal,
-                priority=job.priority,
-                origin=job.origin,
-                correlation_id=job.correlation_id,
-            )
-        case ProvisioningJobStatus.QUEUED | ProvisioningJobStatus.RUNNING:
-            raise typer.BadParameter("Only terminal jobs can be retried.")
-        case ProvisioningJobStatus.SUCCEEDED:
-            raise typer.BadParameter("Successful jobs cannot be retried.")
-        case unreachable:
-            assert_never(unreachable)
+    try:
+        match job.status:
+            case ProvisioningJobStatus.FAILED | ProvisioningJobStatus.CANCELLED:
+                submission = queue.submit_or_join(
+                    job.goal,
+                    priority=job.priority,
+                    origin=job.origin,
+                    correlation_id=job.correlation_id,
+                )
+            case ProvisioningJobStatus.QUEUED | ProvisioningJobStatus.RUNNING:
+                raise typer.BadParameter("Only terminal jobs can be retried.")
+            case ProvisioningJobStatus.SUCCEEDED:
+                raise typer.BadParameter("Successful jobs cannot be retried.")
+            case unreachable:
+                assert_never(unreachable)
+    except ProvisioningQueueError as error:
+        _queue_error(error)
     if json_output:
         typer.echo(json.dumps(_job_payload(submission.job), sort_keys=True))
         return
@@ -133,8 +145,7 @@ def _queue(queue_path: Path) -> ProvisioningQueue:
     try:
         queue.initialize()
     except ProvisioningQueueError as error:
-        typer.echo(f"Jobs command failed: {error}", err=True)
-        raise typer.Exit(code=1) from error
+        _queue_error(error)
     return queue
 
 
@@ -142,11 +153,15 @@ def _job(queue: ProvisioningQueue, value: str) -> ProvisioningJob:
     try:
         job = queue.get(ProvisioningJobId(value))
     except ProvisioningQueueError as error:
-        typer.echo(f"Jobs command failed: {error}", err=True)
-        raise typer.Exit(code=1) from error
+        _queue_error(error)
     if job is None:
         raise typer.BadParameter("Unknown provisioning job.")
     return job
+
+
+def _queue_error(error: ProvisioningQueueError) -> NoReturn:
+    typer.echo(f"Jobs command failed: {error}", err=True)
+    raise typer.Exit(code=1) from error
 
 
 def _job_payload(job: ProvisioningJob) -> dict[str, str | int | bool | None]:
