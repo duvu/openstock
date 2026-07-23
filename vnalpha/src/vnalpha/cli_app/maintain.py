@@ -22,6 +22,11 @@ from vnalpha.maintenance.ledger import (
     get_latest_maintenance_run,
     persist_maintenance_run,
 )
+from vnalpha.maintenance.producer import (
+    MaintenanceProducer,
+    MaintenanceProducerError,
+    MaintenanceProducerRequest,
+)
 from vnalpha.maintenance.software_identity import resolve_software_identity
 from vnalpha.maintenance.source_routing import (
     MaintenanceSourcePolicy,
@@ -33,7 +38,50 @@ from vnalpha.warehouse.connection import get_connection
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
-app = typer.Typer(help="Run deterministic one-shot market maintenance.")
+app = typer.Typer(help="Run deterministic market maintenance operations.")
+
+
+@app.command("enqueue")
+def enqueue(
+    date: str = typer.Option("today", "--date", help="Vietnam market date."),
+    universe: str = typer.Option("VN30", "--universe"),
+    snapshot_id: str | None = typer.Option(None, "--snapshot-id"),
+    priority: int = typer.Option(0, "--priority", min=0, max=1000),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Freeze a maintenance scope and detach its bounded queue acquisition work."""
+    try:
+        result = MaintenanceProducer().produce(
+            MaintenanceProducerRequest(
+                date=date,
+                universe=universe,
+                snapshot_id=snapshot_id,
+                priority=priority,
+            )
+        )
+    except MaintenanceProducerError as error:
+        typer.echo(f"Maintenance enqueue failed: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    payload = {
+        "maintenance_run_id": result.maintenance_run_id,
+        "state": result.state.value,
+        "resolved_session": result.resolved_session,
+        "universe_snapshot_id": result.universe_snapshot_id,
+        "expected_count": result.expected_count,
+        "submitted_count": result.submitted_count,
+        "joined_count": result.joined_count,
+        "mapped_count": result.mapped_count,
+        "correlation_id": result.correlation_id,
+    }
+    if json_output:
+        typer.echo(json.dumps(payload, sort_keys=True))
+    else:
+        typer.echo(
+            f"{result.state.value} run={result.maintenance_run_id} "
+            f"session={result.resolved_session} expected={result.expected_count} "
+            f"submitted={result.submitted_count} joined={result.joined_count} "
+            f"mapped={result.mapped_count} correlation_id={result.correlation_id}"
+        )
 
 
 @app.command("daily")

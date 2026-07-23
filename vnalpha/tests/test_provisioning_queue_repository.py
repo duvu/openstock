@@ -29,7 +29,9 @@ from vnalpha.provisioning_queue import (
 )
 
 
-def test_default_queue_path_honors_runtime_override(monkeypatch, tmp_path) -> None:
+def test_durable_provisioning_queue_contract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
     expected_path = tmp_path / "runtime-queue.sqlite3"
     original_path = _sqlite.DEFAULT_QUEUE_PATH
     try:
@@ -43,8 +45,6 @@ def test_default_queue_path_honors_runtime_override(monkeypatch, tmp_path) -> No
         importlib.reload(repository)
     assert _sqlite.DEFAULT_QUEUE_PATH == original_path
 
-
-def test_durable_provisioning_queue_contract(tmp_path) -> None:
     now = datetime(2030, 7, 21, 9, tzinfo=UTC)
     symbol_goal = EnsureCurrentSymbolGoal(
         symbol="FPT",

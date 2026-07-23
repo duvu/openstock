@@ -12,7 +12,7 @@ Environment=VNALPHA_LOG_ROOT=/var/log/openstock
 # logs and the stable lock inode accessible to approved openstock operators.
 Group=openstock
 UMask=0007
-ExecStart=/usr/bin/flock -n -E 75 /run/openstock-pipeline.lock /usr/bin/vnalpha maintain daily --date today --json
+ExecStart=/usr/bin/flock -n -E 75 /run/openstock-pipeline.lock /usr/bin/vnalpha maintain enqueue --date today --json
 SuccessExitStatus=3
 TimeoutStartSec=4h
 NoNewPrivileges=true

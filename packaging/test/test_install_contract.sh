@@ -182,7 +182,7 @@ if [[ -n "$DEB_FILE" ]]; then
         ok ".deb wheelhouse installs without a package index"
         for command in \
           '--help' \
-          'maintain daily --help' \
+          'maintain enqueue --help' \
           'maintain status --help' \
           'tui --help'
         do

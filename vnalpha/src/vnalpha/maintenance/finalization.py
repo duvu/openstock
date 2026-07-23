@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from json import loads
 from pathlib import Path
 
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
@@ -38,7 +39,7 @@ def maybe_submit_session_finalization(
     queue.initialize()
     with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
         run = connection.execute(
-            "SELECT resolved_date, universe_hash, source_policy_version, status FROM maintenance_run WHERE run_id = ?",
+            "SELECT resolved_date, universe_hash, source_policy_version, status, expected_goals_json FROM maintenance_run WHERE run_id = ?",
             [maintenance_run_id],
         ).fetchone()
         if run is None:
@@ -47,7 +48,8 @@ def maybe_submit_session_finalization(
             "SELECT goal_type, job_id FROM maintenance_run_job WHERE maintenance_run_id = ? AND goal_type <> 'FINALIZE_MARKET_SESSION'",
             [maintenance_run_id],
         ).fetchall()
-        if not rows or any(row[1] is None for row in rows):
+        expected_goals = loads(str(run[4]))
+        if len(rows) != len(expected_goals) or any(row[1] is None for row in rows):
             return MaintenanceFinalizationResult(
                 maintenance_run_id, False, False, None, "ACQUIRING", correlation
             )

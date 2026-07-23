@@ -106,6 +106,28 @@ def get(database: QueueDatabase, job_id: ProvisioningJobId) -> ProvisioningJob |
         ) from error
 
 
+def find_by_identity(
+    database: QueueDatabase,
+    goal_identity: str,
+    *,
+    origin: str,
+    correlation_id: str,
+) -> ProvisioningJob | None:
+    try:
+        with database.connection() as connection:
+            row = connection.execute(
+                SELECT_JOB_SQL
+                + " WHERE goal_identity = ? AND origin = ? AND correlation_id = ? "
+                + "ORDER BY created_at_ms DESC, rowid DESC LIMIT 1",
+                (goal_identity, origin, correlation_id),
+            ).fetchone()
+            return None if row is None else job_from_row(row)
+    except sqlite3.Error as error:
+        raise ProvisioningQueueStorageError(
+            "provisioning queue could not recover a submitted job"
+        ) from error
+
+
 def list_jobs(
     database: QueueDatabase, status: ProvisioningJobStatus | None
 ) -> tuple[ProvisioningJob, ...]:

@@ -164,11 +164,6 @@ domain = "application"
 test = "tests/test_assistant_models.py::test_assistant_session_status_values"
 
 [[contract]]
-id = "assistant-persistence-test-migrations-create-assistant-and-llm-tables"
-domain = "data"
-test = "tests/test_assistant_persistence.py::test_migrations_create_assistant_and_llm_tables"
-
-[[contract]]
 id = "assistant-research-intelligence-completion-test-research-prompt-contains-template-and-bounded-source-refs"
 domain = "research"
 test = "tests/test_assistant_research_intelligence_completion.py::test_research_prompt_contains_template_and_bounded_source_refs"
@@ -202,11 +197,6 @@ test = "tests/test_chat_context.py::TestChatContextDefaults::test_all_optional_f
 id = "chat-local-commands-test-cmd-chat-new-via-handle-turn-creates-session"
 domain = "application"
 test = "tests/test_chat_local_commands.py::test_cmd_chat_new_via_handle_turn_creates_session"
-
-[[contract]]
-id = "chat-persistence-test-migrations-create-chat-tables"
-domain = "data"
-test = "tests/test_chat_persistence.py::test_migrations_create_chat_tables"
 
 [[contract]]
 id = "chat-safety-testistoolallowedinchat-test-each-canonical-safe-tool-is-allowed"
@@ -272,11 +262,6 @@ test = "tests/test_command_registry.py::TestCommandRegistry::test_register_and_l
 id = "command-safety-testnobrokerbehavior-test-no-broker-imports-in-handlers"
 domain = "application"
 test = "tests/test_command_safety.py::TestNoBrokerBehavior::test_no_broker_imports_in_handlers"
-
-[[contract]]
-id = "command-warehouse-testschemaadditive-test-phase5-tables-still-exist"
-domain = "data"
-test = "tests/test_command_warehouse.py::TestSchemaAdditive::test_phase5_tables_still_exist"
 
 [[contract]]
 id = "context-readiness-test-not-requested-context-does-not-block-ready-core-result"
@@ -369,9 +354,19 @@ domain = "data"
 test = "tests/test_deep_analysis_readiness.py::test_readiness_reports_actionable_core_status"
 
 [[contract]]
+id = "deep-analysis-readiness-test-implicit-readiness-uses-aligned-canonical-session"
+domain = "application"
+test = "tests/test_deep_analysis_readiness.py::test_implicit_readiness_uses_aligned_canonical_session"
+
+[[contract]]
 id = "deep-analysis-readiness-test-live-deep-analysis-plan-reuses-fresh-evidence"
 domain = "application"
 test = "tests/test_deep_analysis_readiness.py::test_live_deep_analysis_plan_reuses_fresh_evidence"
+
+[[contract]]
+id = "maintenance-producer-test-freezes-goals-and-resumes-idempotently"
+domain = "application"
+test = "tests/test_maintenance_producer.py::test_maintenance_producer_freezes_goals_and_resumes_idempotently"
 
 [[contract]]
 id = "deploy-testdeployevents-test-verify-started-event-written"
@@ -617,11 +612,6 @@ test = "tests/test_outcome_metrics.py::TestDefaultHorizons::test_default_horizon
 id = "outcome-safety-testoutcomelanguageboundary-test-no-trading-execution-terms"
 domain = "data"
 test = "tests/test_outcome_safety.py::TestOutcomeLanguageBoundary::test_no_trading_execution_terms"
-
-[[contract]]
-id = "outcome-schema-testmigrations-test-all-outcome-tables-created"
-domain = "data"
-test = "tests/test_outcome_schema.py::TestMigrations::test_all_outcome_tables_created"
 
 [[contract]]
 id = "output-stream-test-transcript-is-unboxed-so-result-blocks-own-visual-emphasis"

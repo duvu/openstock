@@ -10,7 +10,7 @@ PRERM="$ROOT/packaging/deb/DEBIAN/prerm"
 POSTRM="$ROOT/packaging/deb/DEBIAN/postrm"
 
 systemd-analyze verify "$SERVICE" "$TIMER"
-grep -Fx 'ExecStart=/usr/bin/flock -n -E 75 /run/openstock-pipeline.lock /usr/bin/vnalpha maintain daily --date today --json' "$SERVICE"
+grep -Fx 'ExecStart=/usr/bin/flock -n -E 75 /run/openstock-pipeline.lock /usr/bin/vnalpha maintain enqueue --date today --json' "$SERVICE"
 grep -Fx 'SuccessExitStatus=3' "$SERVICE"
 grep -Fx 'OnCalendar=Mon..Fri *-*-* 17:30:00 Asia/Ho_Chi_Minh' "$TIMER"
 grep -Fx 'Persistent=true' "$TIMER"

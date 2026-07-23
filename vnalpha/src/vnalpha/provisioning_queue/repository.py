@@ -19,7 +19,12 @@ from vnalpha.provisioning_queue._sqlite import (
     QueueConfiguration,
     QueueDatabase,
 )
-from vnalpha.provisioning_queue._submission import get, list_jobs, submit_or_join
+from vnalpha.provisioning_queue._submission import (
+    find_by_identity,
+    get,
+    list_jobs,
+    submit_or_join,
+)
 from vnalpha.provisioning_queue.models import ProvisioningGoal
 from vnalpha.provisioning_queue.queue_models import (
     ProvisioningJob,
@@ -86,6 +91,20 @@ class ProvisioningQueue:
 
     def get(self, job_id: ProvisioningJobId) -> ProvisioningJob | None:
         return get(self._database, job_id)
+
+    def find_by_identity(
+        self,
+        goal_identity: str,
+        *,
+        origin: str,
+        correlation_id: str,
+    ) -> ProvisioningJob | None:
+        return find_by_identity(
+            self._database,
+            goal_identity,
+            origin=origin,
+            correlation_id=correlation_id,
+        )
 
     def list(
         self, *, status: ProvisioningJobStatus | None = None
