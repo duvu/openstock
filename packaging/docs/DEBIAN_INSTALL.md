@@ -1,6 +1,7 @@
 # Debian package install and upgrade
 
-The `vnalpha` Debian package is a host-native client and daily research worker.
+The `vnalpha` Debian package is a host-native client, durable provisioning
+worker and weekday maintenance producer.
 It does not install Docker Engine, a `vnstock-service` image, credentials or the
 external `/opt/openstock` Compose deployment.
 
@@ -10,7 +11,7 @@ external `/opt/openstock` Compose deployment.
 - an offline Python virtual environment under `/opt/vnalpha/venv`;
 - `openstock-verify`, `openstock-mvp1-start`,
   `openstock-backup-warehouse` and `openstock-restore-warehouse`;
-- disabled-by-default daily maintenance systemd units;
+- disabled-by-default `openstock-provisioner.service` and weekday producer timer;
 - `/etc/vnalpha/vnalpha.env` as a protected conffile;
 - the operator documentation under `/usr/share/doc/vnalpha/`.
 
@@ -28,9 +29,11 @@ vnalpha init
 openstock-verify --mvp1
 ```
 
-The package does not enable the daily timer. Enable it only after verification:
+The package does not enable either service. Enable exactly one provisioner and,
+only after verification, the optional weekday producer timer:
 
 ```bash
+sudo systemctl enable --now openstock-provisioner.service
 sudo systemctl enable --now openstock-daily-pipeline.timer
 ```
 
@@ -51,11 +54,14 @@ back to PyPI and never removes the warehouse, knowledge cards or logs.
 The installer creates and maintains these paths as `root:openstock`:
 
 - `/var/lib/openstock/warehouse` — mode `0770`;
+- `/var/lib/openstock/queue` — mode `0770`;
 - `/var/lib/openstock/knowledge` — mode `0770`;
 - `/var/log/openstock` — mode `0770`.
 
-The daily service runs as root with primary group `openstock` and `UMask=0007`,
-so approved operators and the scheduled writer use the same state contract.
+The provisioner and daily producer run with primary group `openstock` and
+`UMask=0007`, so approved operators and deterministic services share one state
+contract. Backup and restore acquire the provisioner lock, so stop the service
+before restoring a paired warehouse/queue snapshot.
 
 ## External prerequisites
 

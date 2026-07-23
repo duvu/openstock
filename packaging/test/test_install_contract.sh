@@ -68,6 +68,7 @@ require_grep '^Group=openstock$' "$SERVICE" "daily service uses the openstock pr
 require_grep '^UMask=0007$' "$SERVICE" "daily service creates group-readable/writable state"
 require_grep 'flock -n -E 75' "$SERVICE" "daily service preserves the one-writer lock contract"
 require_grep 'openstock-provisioner.service' "$BUILD_SCRIPT" "builder bundles the provisioner service"
+require_grep 'flock -n /run/openstock-provisioner.lock' "$REPO_ROOT/packaging/systemd/openstock-provisioner.service" "provisioner retains the queue recovery lock"
 
 for helper in \
   openstock-verify \

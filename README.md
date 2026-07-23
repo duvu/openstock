@@ -244,7 +244,8 @@ The AI assistant is optional. Deterministic data, build, scoring and research co
 
 ## Container worker workflow
 
-The root Compose file can also run bounded one-shot `vnalpha` jobs:
+The root Compose file can run bounded one-shot `vnalpha` jobs for development
+or recovery:
 
 ```bash
 docker compose --profile job run --rm vnalpha-worker init
@@ -252,7 +253,11 @@ docker compose --profile job run --rm vnalpha-worker sync symbols
 docker compose --profile job run --rm vnalpha-worker build canonical
 ```
 
-The host-installed TUI and container worker must point to the same DuckDB file. Keep `OPENSTOCK_WAREHOUSE_DIR` and `VNALPHA_WAREHOUSE_PATH` aligned.
+The supported single-host deployment instead uses the Debian package's one
+durable provisioner and `/var/lib/openstock/queue/provisioning.sqlite3`; do not
+run this container worker alongside that service. Keep
+`OPENSTOCK_WAREHOUSE_DIR` and `VNALPHA_WAREHOUSE_PATH` aligned for any explicit
+container job.
 
 ## Using `vnstock` as a Python library
 
@@ -286,6 +291,7 @@ Start from [`.env.example`](.env.example). Important groups include:
 | `VNSTOCK_CONFIG_DIR` | Local provider configuration and credential state |
 | `VNSTOCK_SERVICE_URL` | Read-only data-service endpoint used by `vnalpha` |
 | `VNALPHA_WAREHOUSE_PATH` | DuckDB file used by host-side research commands |
+| `VNALPHA_PROVISIONING_QUEUE_PATH` | Durable local SQLite queue used by the one provisioner |
 | `VNALPHA_UNIVERSE` | Default research universe |
 | `VNALPHA_LLM_*` | Optional LLM gateway configuration |
 | `VNALPHA_MODEL_*` | Explicit model profiles, fallbacks and capabilities |

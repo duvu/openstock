@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # openstock-backup-warehouse — create a verified, transaction-safe backup of the
-# DuckDB warehouse.
+# DuckDB warehouse and durable provisioning queue.
 #
 # Usage: openstock-backup-warehouse [--wait SECONDS] [--force] [--help]
 #   --wait SECONDS  Block up to SECONDS waiting for the writer lock (default: 0,
@@ -9,9 +9,9 @@
 #                   the writer lock: a backup is never taken while a writer job
 #                   holds the exclusive pipeline lock.
 #
-# The backup acquires the SAME exclusive flock used by pipeline writers
-# (see openstock-run-pipeline), copies the warehouse while holding the lock,
-# then opens the copy read-only and runs a bounded integrity scan.
+# The backup acquires the exclusive warehouse and provisioning-worker locks,
+# then publishes a paired DuckDB/SQLite snapshot only after both copies pass
+# bounded read-only verification.
 #
 # Install: sudo install -m 0755 packaging/scripts/openstock-backup-warehouse /usr/bin/
 
@@ -19,6 +19,8 @@ set -uo pipefail
 
 LOCK_FILE="${OPENSTOCK_LOCK_FILE:-/run/openstock-pipeline.lock}"
 LOCK_FD=200
+QUEUE_LOCK_FILE="${OPENSTOCK_PROVISIONING_LOCK_FILE:-/run/openstock-provisioner.lock}"
+QUEUE_LOCK_FD=201
 WAIT_SECONDS=0
 FORCE=false
 
@@ -76,17 +78,24 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# Source platform env if available
+# Source platform and application env if available.
 if [ -f /etc/openstock/openstock.env ]; then
   set -a
   # shellcheck source=/dev/null
   . /etc/openstock/openstock.env
   set +a
 fi
+if [ -f /etc/vnalpha/vnalpha.env ]; then
+  set -a
+  # shellcheck source=/dev/null
+  . /etc/vnalpha/vnalpha.env
+  set +a
+fi
 
 WAREHOUSE_PATH="${OPENSTOCK_WAREHOUSE_PATH:-/var/lib/openstock/warehouse/warehouse.duckdb}"
 WAREHOUSE_DIR="${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}"
 BACKUP_DIR="${WAREHOUSE_DIR}/backups"
+QUEUE_PATH="${OPENSTOCK_QUEUE_PATH:-${VNALPHA_PROVISIONING_QUEUE_PATH:-/var/lib/openstock/queue/provisioning.sqlite3}}"
 
 # --- bounded, read-only integrity verification of a DuckDB file ---
 # Opens the file read-only, then full-scans every user table so that
@@ -139,6 +148,53 @@ PY
   return "$rc"
 }
 
+backup_sqlite_file() {
+  local source_path="$1"
+  local destination_path="$2"
+  local python_bin=""
+  if ! python_bin="$(command -v python3 2>/dev/null)" \
+    && ! python_bin="$(command -v python 2>/dev/null)"; then
+    echo "[FAIL] Python is required to snapshot the provisioning queue." >&2
+    return 1
+  fi
+  "$python_bin" - "$source_path" "$destination_path" <<'PY'
+import sqlite3
+import sys
+
+source_path, destination_path = sys.argv[1:]
+source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
+destination = sqlite3.connect(destination_path)
+try:
+    source.backup(destination)
+finally:
+    destination.close()
+    source.close()
+PY
+}
+
+verify_sqlite_file() {
+  local database_path="$1"
+  local python_bin=""
+  if ! python_bin="$(command -v python3 2>/dev/null)" \
+    && ! python_bin="$(command -v python 2>/dev/null)"; then
+    echo "[FAIL] Python is required to verify the provisioning queue." >&2
+    return 1
+  fi
+  "$python_bin" - "$database_path" <<'PY'
+import sqlite3
+import sys
+
+database_path = sys.argv[1]
+connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
+try:
+    result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+    if result != "ok":
+        raise RuntimeError(f"integrity check returned {result!r}")
+finally:
+    connection.close()
+PY
+}
+
 # --- acquire the same exclusive writer lock (never bypassed) ---
 mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
 if ! eval "exec ${LOCK_FD}>\"${LOCK_FILE}\"" 2>/dev/null; then
@@ -166,7 +222,31 @@ if [ "$lock_ok" != "true" ]; then
   exit 1
 fi
 
-# Lock is held for the remainder of the run; released automatically on exit.
+mkdir -p "$(dirname "$QUEUE_LOCK_FILE")" 2>/dev/null || true
+if ! eval "exec ${QUEUE_LOCK_FD}>\"${QUEUE_LOCK_FILE}\"" 2>/dev/null; then
+  echo "[FAIL] Cannot open provisioning lock for writing: $QUEUE_LOCK_FILE" >&2
+  log_jsonl "BACKUP_FAILED" "Cannot open provisioning lock lock_file=${QUEUE_LOCK_FILE}" "FAILED"
+  exit 1
+fi
+if [ "$WAIT_SECONDS" -gt 0 ]; then
+  queue_lock_ok=false
+  if flock -w "$WAIT_SECONDS" "$QUEUE_LOCK_FD"; then
+    queue_lock_ok=true
+  fi
+else
+  queue_lock_ok=false
+  if flock -n "$QUEUE_LOCK_FD"; then
+    queue_lock_ok=true
+  fi
+fi
+if [ "$queue_lock_ok" != "true" ]; then
+  echo "[FAIL] The provisioner holds the queue lock ($QUEUE_LOCK_FILE). Backup aborted." >&2
+  echo "       Stop openstock-provisioner.service, or use --wait SECONDS." >&2
+  log_jsonl "BACKUP_FAILED" "Backup blocked by active provisioner lock_file=${QUEUE_LOCK_FILE}" "FAILED"
+  exit 1
+fi
+
+# Both locks are held for the remainder of the run; released automatically on exit.
 if [ ! -f "$WAREHOUSE_PATH" ]; then
   echo "[FAIL] Warehouse not found at: $WAREHOUSE_PATH" >&2
   log_jsonl "BACKUP_FAILED" "Backup failed warehouse not found path=${WAREHOUSE_PATH}" "FAILED"
@@ -178,6 +258,10 @@ mkdir -p "$BACKUP_DIR"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_PATH="${BACKUP_DIR}/warehouse-${TIMESTAMP}.duckdb"
 TMP_BACKUP_PATH="${BACKUP_PATH}.partial"
+QUEUE_BACKUP_PATH="${BACKUP_PATH%.duckdb}.queue.sqlite3"
+QUEUE_ABSENT_PATH="${BACKUP_PATH%.duckdb}.queue.absent"
+TMP_QUEUE_BACKUP_PATH="${QUEUE_BACKUP_PATH}.partial"
+TMP_QUEUE_ABSENT_PATH="${QUEUE_ABSENT_PATH}.partial"
 
 echo "[INFO] Backing up $WAREHOUSE_PATH -> $BACKUP_PATH"
 log_jsonl "BACKUP_STARTED" "Backup started src=${WAREHOUSE_PATH} dest=${BACKUP_PATH}" "STARTED"
@@ -205,7 +289,50 @@ else
   log_jsonl "BACKUP_VERIFIED" "Backup verified dest=${BACKUP_PATH}" "OK"
 fi
 
-# Atomically publish the verified backup under its final name.
+# Create a matching SQLite snapshot while the provisioner lock is held. A
+# marker records an intentionally absent queue so restore never guesses which
+# durable state belongs with the warehouse backup.
+QUEUE_STATE="absent"
+if [ -e "$QUEUE_PATH" ]; then
+  if [ ! -f "$QUEUE_PATH" ] || [ -L "$QUEUE_PATH" ]; then
+    echo "[FAIL] Provisioning queue is not a regular file: $QUEUE_PATH" >&2
+    log_jsonl "BACKUP_FAILED" "Queue is not a regular file path=${QUEUE_PATH}" "FAILED"
+    exit 1
+  fi
+  echo "[INFO] Backing up provisioning queue: $QUEUE_PATH"
+  if ! backup_sqlite_file "$QUEUE_PATH" "$TMP_QUEUE_BACKUP_PATH"; then
+    rm -f "$TMP_BACKUP_PATH" "$TMP_QUEUE_BACKUP_PATH" 2>/dev/null || true
+    log_jsonl "BACKUP_FAILED" "Queue backup failed src=${QUEUE_PATH}" "FAILED"
+    exit 1
+  fi
+  if [ "$FORCE" != "true" ] && ! verify_sqlite_file "$TMP_QUEUE_BACKUP_PATH"; then
+    rm -f "$TMP_BACKUP_PATH" "$TMP_QUEUE_BACKUP_PATH" 2>/dev/null || true
+    log_jsonl "BACKUP_FAILED" "Queue backup verification failed src=${QUEUE_PATH}" "FAILED"
+    exit 1
+  fi
+  QUEUE_STATE="present"
+else
+  : > "$TMP_QUEUE_ABSENT_PATH"
+fi
+
+# Publish the queue companion before the warehouse. The warehouse file is the
+# discoverable entry point, so a failed companion publish never advertises an
+# incomplete pair to --latest.
+if [ "$QUEUE_STATE" = "present" ]; then
+  if ! mv -f "$TMP_QUEUE_BACKUP_PATH" "$QUEUE_BACKUP_PATH" 2>/dev/null; then
+    rm -f "$TMP_BACKUP_PATH" "$TMP_QUEUE_BACKUP_PATH" 2>/dev/null || true
+    log_jsonl "BACKUP_FAILED" "Queue backup finalize failed dest=${QUEUE_BACKUP_PATH}" "FAILED"
+    exit 1
+  fi
+else
+  if ! mv -f "$TMP_QUEUE_ABSENT_PATH" "$QUEUE_ABSENT_PATH" 2>/dev/null; then
+    rm -f "$TMP_BACKUP_PATH" "$TMP_QUEUE_ABSENT_PATH" 2>/dev/null || true
+    log_jsonl "BACKUP_FAILED" "Queue absence marker finalize failed dest=${QUEUE_ABSENT_PATH}" "FAILED"
+    exit 1
+  fi
+fi
+
+# Atomically publish the verified warehouse under its final name.
 if ! mv -f "$TMP_BACKUP_PATH" "$BACKUP_PATH" 2>/dev/null; then
   echo "[FAIL] Could not finalize backup: $TMP_BACKUP_PATH -> $BACKUP_PATH" >&2
   rm -f "$TMP_BACKUP_PATH" 2>/dev/null || true
@@ -213,5 +340,5 @@ if ! mv -f "$TMP_BACKUP_PATH" "$BACKUP_PATH" 2>/dev/null; then
   exit 1
 fi
 
-echo "[OK] Backup created: $BACKUP_PATH"
-log_jsonl "BACKUP_CREATED" "Backup created dest=${BACKUP_PATH}" "OK"
+echo "[OK] Backup created: $BACKUP_PATH (queue=${QUEUE_STATE})"
+log_jsonl "BACKUP_CREATED" "Backup created dest=${BACKUP_PATH} queue_state=${QUEUE_STATE}" "OK"

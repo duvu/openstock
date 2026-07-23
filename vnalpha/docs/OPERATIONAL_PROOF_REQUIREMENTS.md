@@ -13,8 +13,9 @@ Demonstrate 10 consecutive live daily-maintenance sessions on a supported host.
 
 ### 1. Enable Daily Maintenance Timer
 ```bash
-# Configure systemd timer or cron
-vnalpha maintain daily --date today
+# The supported host has one queue worker and one optional weekday producer.
+sudo systemctl enable --now openstock-provisioner.service
+sudo systemctl enable --now openstock-daily-pipeline.timer
 ```
 
 ### 2. Evidence Collection Per Session
@@ -39,18 +40,18 @@ vnalpha maintain status --json > evidence/run-<date>.json
 ```
 
 ### 4. Manual Rerun Evidence
-For at least 2 sessions, demonstrate same-date rerun:
+For at least 2 sessions, demonstrate same-date enqueue idempotency:
 ```bash
-vnalpha maintain daily --date 2026-07-17  # First run
-vnalpha maintain daily --date 2026-07-17  # Rerun (no duplicates)
+vnalpha maintain enqueue --date 2026-07-17  # First enqueue
+vnalpha maintain enqueue --date 2026-07-17  # Joins the frozen run; no duplicate jobs
 ```
 
 ### 5. Validation Criteria
 - [x] 10 consecutive market sessions with persisted records
 - [ ] Provider/symbol failures produce PARTIAL without losing successful symbols
 - [ ] No flattened/unactionable generic failures
-- [ ] Same-date reruns create separate invocation records
-- [ ] One-writer lock prevents timer/manual overlap
+- [ ] Same-date enqueue joins the frozen run without duplicate jobs
+- [ ] Warehouse and provisioner locks prevent timer/worker overlap during recovery
 - [ ] Incremental acquisition (not full reload every session)
 - [ ] Current symbol analysis uses accumulated evidence
 - [ ] Report separates live vs fixture evidence
@@ -85,4 +86,4 @@ per date with status/symbol counts/source policy, and reports
   operator owns running the timer; `maintain proof` makes assembling the
   evidence turnkey once the sessions exist.
 - Partial failures are acceptable and demonstrate robustness
-- Lock contention should be gracefully handled
+- Lock contention should be gracefully handled; stop the provisioner before a paired backup or restore

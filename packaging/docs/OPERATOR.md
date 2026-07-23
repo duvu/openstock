@@ -431,15 +431,19 @@ file location, and that `vnstock-service` is reachable at the configured URL.
 sudo openstock-backup-warehouse
 ```
 
-Backups land in `/var/lib/openstock/warehouse/backups/` with names like
-`warehouse-20260707-143022.duckdb`.
+Backups land in `/var/lib/openstock/warehouse/backups/` as a pair such as
+`warehouse-20260707-143022.duckdb` and
+`warehouse-20260707-143022.queue.sqlite3`. A queue-absence marker is stored
+instead when no durable queue exists yet.
 
-The script acquires the **same exclusive `flock`** that pipeline writers use
-(on `/run/openstock-pipeline.lock`), so it cannot copy the database while a
-writer job is running. By default it fails immediately if a writer holds the
-lock; pass `--wait SECONDS` to block for up to that many seconds:
+The script acquires both the warehouse writer lock and the provisioner lock
+(`/run/openstock-pipeline.lock` and `/run/openstock-provisioner.lock`), so it
+cannot copy a mismatched database/queue pair. Stop the provisioner before a
+backup or restore. By default the command fails immediately while either lock
+is held; pass `--wait SECONDS` to block for up to that many seconds:
 
 ```bash
+sudo systemctl stop openstock-provisioner.service
 sudo openstock-backup-warehouse --wait 300
 ```
 
@@ -469,13 +473,13 @@ sudo openstock-restore-warehouse --backup \
   /var/lib/openstock/warehouse/backups/warehouse-20260707-143022.duckdb
 ```
 
-`openstock-restore-warehouse` acquires the same writer lock, verifies the chosen
-backup **before** touching the live warehouse, takes a `pre-restore-*.duckdb`
-snapshot of the current warehouse, replaces the warehouse atomically, and
-verifies the result. If the restored warehouse fails verification it is rolled
-back to the pre-restore snapshot, so a failed restore always leaves a usable
-warehouse in place. Pass `--yes` to skip the interactive confirmation and
-`--wait SECONDS` to wait for an active writer lock.
+`openstock-restore-warehouse` requires a paired queue snapshot or absence
+marker, acquires both locks, verifies each source **before** touching live
+state, and takes `pre-restore-*` snapshots of the current warehouse and queue.
+It stages and verifies both restored files; a failure rolls both back to the
+pre-restore state. Pass `--yes` to skip the interactive confirmation and
+`--wait SECONDS` to wait for an active lock. Start the provisioner only after
+`openstock-verify` passes.
 
 ### Rollback procedures
 

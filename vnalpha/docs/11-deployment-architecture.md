@@ -15,12 +15,13 @@ terminal workspace:
 Docker
 ├── vnstock-service       # long-running localhost data service
 ├── vnstock-login         # optional one-shot credential helper
-└── vnalpha-worker        # one-shot pipeline jobs
+└── vnalpha-worker        # explicit development/manual jobs only
 
 Host
 ├── /var/lib/openstock/vnstock-config/
 ├── /var/lib/openstock/warehouse/warehouse.duckdb
-└── vnalpha Debian package → CLI and Textual TUI
+├── /var/lib/openstock/queue/provisioning.sqlite3
+└── vnalpha Debian package → CLI, Textual TUI and one provisioner daemon
 ```
 
 The TUI is launched by the user from a terminal, SSH session or `tmux`; it is not
@@ -34,6 +35,7 @@ Production defaults:
 OPENSTOCK_WAREHOUSE_DIR=/var/lib/openstock/warehouse
 VNSTOCK_CONFIG_DIR=/var/lib/openstock/vnstock-config
 VNALPHA_WAREHOUSE_PATH=/var/lib/openstock/warehouse/warehouse.duckdb
+VNALPHA_PROVISIONING_QUEUE_PATH=/var/lib/openstock/queue/provisioning.sqlite3
 ```
 
 Prepare them before starting Compose:
@@ -93,8 +95,9 @@ docker compose --profile job run --rm vnalpha-worker build features --date today
 docker compose --profile job run --rm vnalpha-worker score --date today
 ```
 
-The worker is not a daemon. A scheduler or systemd timer may invoke these jobs,
-but overlapping writers are prohibited for the DuckDB deployment.
+These are explicit container jobs for development or recovery. The supported
+single-host runtime uses the Debian package's one sequential provisioner daemon
+for queued work; overlapping warehouse writers are prohibited.
 
 ### Host-installed `vnalpha`
 
@@ -105,8 +108,9 @@ vnalpha --help
 vnalpha tui
 ```
 
-The package loads `/etc/vnalpha/vnalpha.env` and reads the shared warehouse.
-Interactive workflows should be read-mostly while a pipeline job is active.
+The package loads `/etc/vnalpha/vnalpha.env`, reads the shared warehouse and
+uses the same local provisioning queue as the daemon. Interactive workflows
+remain read-mostly while a pipeline job is active.
 
 ## Root Compose is canonical
 
@@ -193,8 +197,10 @@ TimeoutStartSec=0
 WantedBy=multi-user.target
 ```
 
-Use separate timer units for daily one-shot worker commands. Do not launch the
-interactive TUI from systemd.
+`openstock-provisioner.service` owns exactly one sequential worker and retains
+the queue lock for its full lifetime. `openstock-daily-pipeline.timer` only
+enqueues weekday maintenance goals; it does not run a competing worker. Do not
+launch the interactive TUI from systemd.
 
 ## Validation
 

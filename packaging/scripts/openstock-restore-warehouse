@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # openstock-restore-warehouse — guarded, verified restore of the DuckDB warehouse
-# from a timestamped backup.
+# and its paired durable provisioning queue from a timestamped backup.
 #
 # Usage:
 #   openstock-restore-warehouse --backup PATH [--wait SECONDS] [--yes] [--help]
@@ -16,10 +16,12 @@
 #   1. Acquires the SAME exclusive flock used by pipeline writers.
 #   2. Verifies the chosen backup (read-only bounded scan) BEFORE touching the
 #      live warehouse.
-#   3. Takes a pre-restore backup of the current warehouse.
-#   4. Replaces the warehouse atomically (copy to temp on the same filesystem,
+#   3. Takes a pre-restore snapshot of the current warehouse and queue.
+#   4. Replaces the warehouse and queue from verified staged copies,
+#      rolling both back if either replacement or verification fails.
+#   5. Replaces the warehouse atomically (copy to temp on the same filesystem,
 #      then mv). A failed restore leaves the original warehouse intact.
-#   5. Verifies the restored warehouse; on failure, rolls back to the
+#   6. Verifies the restored warehouse; on failure, rolls back to the
 #      pre-restore copy.
 #
 # Install: sudo install -m 0755 packaging/scripts/openstock-restore-warehouse /usr/bin/
@@ -28,6 +30,8 @@ set -uo pipefail
 
 LOCK_FILE="${OPENSTOCK_LOCK_FILE:-/run/openstock-pipeline.lock}"
 LOCK_FD=200
+QUEUE_LOCK_FILE="${OPENSTOCK_PROVISIONING_LOCK_FILE:-/run/openstock-provisioner.lock}"
+QUEUE_LOCK_FD=201
 WAIT_SECONDS=0
 ASSUME_YES=false
 BACKUP_PATH=""
@@ -109,10 +113,17 @@ if [ -f /etc/openstock/openstock.env ]; then
   . /etc/openstock/openstock.env
   set +a
 fi
+if [ -f /etc/vnalpha/vnalpha.env ]; then
+  set -a
+  # shellcheck source=/dev/null
+  . /etc/vnalpha/vnalpha.env
+  set +a
+fi
 
 WAREHOUSE_PATH="${OPENSTOCK_WAREHOUSE_PATH:-/var/lib/openstock/warehouse/warehouse.duckdb}"
 WAREHOUSE_DIR="${OPENSTOCK_WAREHOUSE_DIR:-/var/lib/openstock/warehouse}"
 BACKUP_DIR="${WAREHOUSE_DIR}/backups"
+QUEUE_PATH="${OPENSTOCK_QUEUE_PATH:-${VNALPHA_PROVISIONING_QUEUE_PATH:-/var/lib/openstock/queue/provisioning.sqlite3}}"
 
 verify_duckdb_file() {
   local db_path="$1"
@@ -159,6 +170,63 @@ PY
   return "$rc"
 }
 
+backup_sqlite_file() {
+  local source_path="$1"
+  local destination_path="$2"
+  local python_bin=""
+  if ! python_bin="$(command -v python3 2>/dev/null)" \
+    && ! python_bin="$(command -v python 2>/dev/null)"; then
+    echo "[FAIL] Python is required to snapshot the provisioning queue." >&2
+    return 1
+  fi
+  "$python_bin" - "$source_path" "$destination_path" <<'PY'
+import sqlite3
+import sys
+
+source_path, destination_path = sys.argv[1:]
+source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
+destination = sqlite3.connect(destination_path)
+try:
+    source.backup(destination)
+finally:
+    destination.close()
+    source.close()
+PY
+}
+
+verify_sqlite_file() {
+  local database_path="$1"
+  local python_bin=""
+  if ! python_bin="$(command -v python3 2>/dev/null)" \
+    && ! python_bin="$(command -v python 2>/dev/null)"; then
+    echo "[FAIL] Python is required to verify the provisioning queue." >&2
+    return 1
+  fi
+  "$python_bin" - "$database_path" <<'PY'
+import sqlite3
+import sys
+
+database_path = sys.argv[1]
+connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
+try:
+    result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+    if result != "ok":
+        raise RuntimeError(f"integrity check returned {result!r}")
+finally:
+    connection.close()
+PY
+}
+
+restore_live_queue() {
+  local snapshot_path="$1"
+  local state="$2"
+  rm -f "$QUEUE_PATH" "${QUEUE_PATH}-wal" "${QUEUE_PATH}-shm" 2>/dev/null || true
+  if [ "$state" = "present" ]; then
+    mkdir -p "$(dirname "$QUEUE_PATH")"
+    backup_sqlite_file "$snapshot_path" "$QUEUE_PATH"
+  fi
+}
+
 # Resolve --latest
 if [ "$USE_LATEST" = "true" ]; then
   BACKUP_PATH="$(ls -1t "${BACKUP_DIR}"/warehouse-*.duckdb 2>/dev/null | head -1 || true)"
@@ -172,6 +240,18 @@ fi
 if [ ! -f "$BACKUP_PATH" ]; then
   echo "[FAIL] Backup file not found: $BACKUP_PATH" >&2
   log_jsonl "RESTORE_FAILED" "Backup file not found path=${BACKUP_PATH}" "FAILED"
+  exit 1
+fi
+
+QUEUE_BACKUP_PATH="${BACKUP_PATH%.duckdb}.queue.sqlite3"
+QUEUE_ABSENT_PATH="${BACKUP_PATH%.duckdb}.queue.absent"
+if [ -f "$QUEUE_BACKUP_PATH" ]; then
+  BACKUP_QUEUE_STATE="present"
+elif [ -f "$QUEUE_ABSENT_PATH" ]; then
+  BACKUP_QUEUE_STATE="absent"
+else
+  echo "[FAIL] Backup has no paired queue snapshot or absence marker: $BACKUP_PATH" >&2
+  log_jsonl "RESTORE_FAILED" "Queue companion missing backup=${BACKUP_PATH}" "FAILED"
   exit 1
 fi
 
@@ -195,6 +275,24 @@ if [ "$lock_ok" != "true" ]; then
   exit 1
 fi
 
+mkdir -p "$(dirname "$QUEUE_LOCK_FILE")" 2>/dev/null || true
+if ! eval "exec ${QUEUE_LOCK_FD}>\"${QUEUE_LOCK_FILE}\"" 2>/dev/null; then
+  echo "[FAIL] Cannot open provisioning lock for writing: $QUEUE_LOCK_FILE" >&2
+  log_jsonl "RESTORE_FAILED" "Cannot open provisioning lock lock_file=${QUEUE_LOCK_FILE}" "FAILED"
+  exit 1
+fi
+if [ "$WAIT_SECONDS" -gt 0 ]; then
+  queue_lock_ok=false; flock -w "$WAIT_SECONDS" "$QUEUE_LOCK_FD" && queue_lock_ok=true
+else
+  queue_lock_ok=false; flock -n "$QUEUE_LOCK_FD" && queue_lock_ok=true
+fi
+if [ "$queue_lock_ok" != "true" ]; then
+  echo "[FAIL] The provisioner holds the queue lock ($QUEUE_LOCK_FILE). Restore aborted." >&2
+  echo "       Stop openstock-provisioner.service, or retry with --wait SECONDS." >&2
+  log_jsonl "RESTORE_FAILED" "Restore blocked by active provisioner lock_file=${QUEUE_LOCK_FILE}" "FAILED"
+  exit 1
+fi
+
 log_jsonl "RESTORE_STARTED" "Restore started src=${BACKUP_PATH} dest=${WAREHOUSE_PATH}" "STARTED"
 
 # 1. Verify the source backup BEFORE touching the live warehouse.
@@ -202,6 +300,11 @@ echo "[INFO] Verifying source backup: $BACKUP_PATH"
 if ! verify_duckdb_file "$BACKUP_PATH"; then
   echo "[FAIL] Source backup failed verification; nothing changed." >&2
   log_jsonl "RESTORE_FAILED" "Source backup verification failed path=${BACKUP_PATH}" "FAILED"
+  exit 1
+fi
+if [ "$BACKUP_QUEUE_STATE" = "present" ] && ! verify_sqlite_file "$QUEUE_BACKUP_PATH"; then
+  echo "[FAIL] Source queue backup failed verification; nothing changed." >&2
+  log_jsonl "RESTORE_FAILED" "Source queue verification failed path=${QUEUE_BACKUP_PATH}" "FAILED"
   exit 1
 fi
 
@@ -219,57 +322,90 @@ fi
 
 mkdir -p "$WAREHOUSE_DIR" "$BACKUP_DIR"
 
-# 2. Pre-restore backup of the current warehouse (if one exists).
+# 2. Pre-restore snapshots preserve both sides of the durable-state pair.
+PRE_RESTORE_TS="$(date +%Y%m%d-%H%M%S)"
 PRE_RESTORE_PATH=""
+PRE_QUEUE_PATH="${BACKUP_DIR}/pre-restore-${PRE_RESTORE_TS}.queue.sqlite3"
+PRE_QUEUE_STATE="absent"
 if [ -f "$WAREHOUSE_PATH" ]; then
-  PRE_RESTORE_TS="$(date +%Y%m%d-%H%M%S)"
   PRE_RESTORE_PATH="${BACKUP_DIR}/pre-restore-${PRE_RESTORE_TS}.duckdb"
-  echo "[INFO] Saving pre-restore snapshot: $PRE_RESTORE_PATH"
+  echo "[INFO] Saving pre-restore warehouse snapshot: $PRE_RESTORE_PATH"
   if ! cp "$WAREHOUSE_PATH" "$PRE_RESTORE_PATH" 2>/dev/null; then
-    echo "[FAIL] Could not create pre-restore snapshot; aborting." >&2
+    echo "[FAIL] Could not create pre-restore warehouse snapshot; aborting." >&2
     rm -f "$PRE_RESTORE_PATH" 2>/dev/null || true
-    log_jsonl "RESTORE_FAILED" "Pre-restore snapshot failed dest=${PRE_RESTORE_PATH}" "FAILED"
+    log_jsonl "RESTORE_FAILED" "Pre-restore warehouse snapshot failed dest=${PRE_RESTORE_PATH}" "FAILED"
     exit 1
   fi
-  log_jsonl "RESTORE_PRE_BACKUP" "Pre-restore snapshot created dest=${PRE_RESTORE_PATH}" "OK"
 fi
+if [ -e "$QUEUE_PATH" ]; then
+  if [ ! -f "$QUEUE_PATH" ] || [ -L "$QUEUE_PATH" ]; then
+    echo "[FAIL] Live provisioning queue is not a regular file: $QUEUE_PATH" >&2
+    log_jsonl "RESTORE_FAILED" "Live queue is not a regular file path=${QUEUE_PATH}" "FAILED"
+    exit 1
+  fi
+  echo "[INFO] Saving pre-restore provisioning queue snapshot: $PRE_QUEUE_PATH"
+  if ! backup_sqlite_file "$QUEUE_PATH" "$PRE_QUEUE_PATH"; then
+    log_jsonl "RESTORE_FAILED" "Pre-restore queue snapshot failed path=${QUEUE_PATH}" "FAILED"
+    exit 1
+  fi
+  PRE_QUEUE_STATE="present"
+fi
+log_jsonl "RESTORE_PRE_BACKUP" "Pre-restore snapshots created warehouse=${PRE_RESTORE_PATH:-absent} queue=${PRE_QUEUE_STATE}" "OK"
 
-# 3. Atomic replacement: copy the backup to a temp file on the SAME filesystem
-#    (warehouse dir), then mv into place. mv within a filesystem is atomic.
+rollback_live_state() {
+  if [ -n "$PRE_RESTORE_PATH" ] && [ -f "$PRE_RESTORE_PATH" ]; then
+    cp "$PRE_RESTORE_PATH" "${WAREHOUSE_PATH}.rollback.$$" && \
+      mv -f "${WAREHOUSE_PATH}.rollback.$$" "$WAREHOUSE_PATH" || true
+  else
+    rm -f "$WAREHOUSE_PATH" 2>/dev/null || true
+  fi
+  restore_live_queue "$PRE_QUEUE_PATH" "$PRE_QUEUE_STATE" || true
+}
+
+# 3. Stage both sources before replacing either live database.
 TMP_RESTORE_PATH="${WAREHOUSE_PATH}.restore.$$"
+TMP_QUEUE_RESTORE_PATH="${QUEUE_PATH}.restore.$$"
 if ! cp "$BACKUP_PATH" "$TMP_RESTORE_PATH" 2>/dev/null; then
-  echo "[FAIL] Could not stage restore copy; original warehouse unchanged." >&2
-  rm -f "$TMP_RESTORE_PATH" 2>/dev/null || true
-  log_jsonl "RESTORE_FAILED" "Staging copy failed src=${BACKUP_PATH}" "FAILED"
+  echo "[FAIL] Could not stage warehouse restore copy; original state unchanged." >&2
+  log_jsonl "RESTORE_FAILED" "Warehouse staging copy failed src=${BACKUP_PATH}" "FAILED"
+  exit 1
+fi
+if [ "$BACKUP_QUEUE_STATE" = "present" ] && \
+   ! backup_sqlite_file "$QUEUE_BACKUP_PATH" "$TMP_QUEUE_RESTORE_PATH"; then
+  echo "[FAIL] Could not stage queue restore copy; original state unchanged." >&2
+  rm -f "$TMP_RESTORE_PATH" "$TMP_QUEUE_RESTORE_PATH" 2>/dev/null || true
+  log_jsonl "RESTORE_FAILED" "Queue staging copy failed src=${QUEUE_BACKUP_PATH}" "FAILED"
   exit 1
 fi
 
+# 4. Replace and verify the warehouse, then the paired queue. Any failure
+# restores both pre-restore snapshots before returning a non-zero result.
 if ! mv -f "$TMP_RESTORE_PATH" "$WAREHOUSE_PATH" 2>/dev/null; then
-  echo "[FAIL] Atomic replace failed; original warehouse unchanged." >&2
-  rm -f "$TMP_RESTORE_PATH" 2>/dev/null || true
-  log_jsonl "RESTORE_FAILED" "Atomic replace failed dest=${WAREHOUSE_PATH}" "FAILED"
+  echo "[FAIL] Atomic warehouse replacement failed; original state unchanged." >&2
+  rm -f "$TMP_RESTORE_PATH" "$TMP_QUEUE_RESTORE_PATH" 2>/dev/null || true
+  log_jsonl "RESTORE_FAILED" "Warehouse atomic replace failed dest=${WAREHOUSE_PATH}" "FAILED"
   exit 1
 fi
-
-# 4. Verify the restored warehouse; roll back on failure.
-echo "[INFO] Verifying restored warehouse: $WAREHOUSE_PATH"
 if ! verify_duckdb_file "$WAREHOUSE_PATH"; then
   echo "[FAIL] Restored warehouse failed verification; rolling back." >&2
-  if [ -n "$PRE_RESTORE_PATH" ] && [ -f "$PRE_RESTORE_PATH" ]; then
-    if mv -f "$PRE_RESTORE_PATH" "$WAREHOUSE_PATH" 2>/dev/null; then
-      echo "[OK] Rolled back to pre-restore warehouse."
-      log_jsonl "RESTORE_ROLLED_BACK" "Rolled back to pre-restore snapshot dest=${WAREHOUSE_PATH}" "OK"
-    else
-      echo "[FAIL] Rollback failed; pre-restore snapshot remains at $PRE_RESTORE_PATH" >&2
-      log_jsonl "RESTORE_FAILED" "Rollback move failed snapshot=${PRE_RESTORE_PATH}" "FAILED"
-    fi
-  else
-    echo "[WARN] No pre-restore snapshot available to roll back to." >&2
-  fi
+  rollback_live_state
   log_jsonl "RESTORE_FAILED" "Restored warehouse verification failed dest=${WAREHOUSE_PATH}" "FAILED"
   exit 1
 fi
+if ! restore_live_queue "$TMP_QUEUE_RESTORE_PATH" "$BACKUP_QUEUE_STATE"; then
+  echo "[FAIL] Queue replacement failed; rolling back paired state." >&2
+  rollback_live_state
+  log_jsonl "RESTORE_FAILED" "Queue replacement failed dest=${QUEUE_PATH}" "FAILED"
+  exit 1
+fi
+if [ "$BACKUP_QUEUE_STATE" = "present" ] && ! verify_sqlite_file "$QUEUE_PATH"; then
+  echo "[FAIL] Restored queue failed verification; rolling back paired state." >&2
+  rollback_live_state
+  log_jsonl "RESTORE_FAILED" "Restored queue verification failed dest=${QUEUE_PATH}" "FAILED"
+  exit 1
+fi
+rm -f "$TMP_QUEUE_RESTORE_PATH" 2>/dev/null || true
 
-echo "[OK] Restore complete: $WAREHOUSE_PATH (from $BACKUP_PATH)"
-log_jsonl "RESTORE_COMPLETED" "Restore complete src=${BACKUP_PATH} dest=${WAREHOUSE_PATH}" "OK"
+echo "[OK] Restore complete: $WAREHOUSE_PATH (from $BACKUP_PATH, queue=${BACKUP_QUEUE_STATE})"
+log_jsonl "RESTORE_COMPLETED" "Restore complete src=${BACKUP_PATH} dest=${WAREHOUSE_PATH} queue_state=${BACKUP_QUEUE_STATE}" "OK"
 echo "[INFO] Run 'openstock-verify' to confirm platform health before re-enabling the pipeline."

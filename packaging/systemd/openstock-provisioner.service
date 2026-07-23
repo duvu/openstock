@@ -11,7 +11,9 @@ Environment=VNALPHA_LOG_ROOT=/var/log/openstock
 Environment=VNALPHA_PROVISIONING_QUEUE_PATH=/var/lib/openstock/queue/provisioning.sqlite3
 Group=openstock
 UMask=0007
-ExecStart=/usr/bin/vnalpha provision worker --worker-id openstock-provisioner
+# Retain the queue lock for the complete worker lifetime. Backup and restore
+# acquire the same lock before making a paired warehouse/queue snapshot.
+ExecStart=/usr/bin/flock -n /run/openstock-provisioner.lock /usr/bin/vnalpha provision worker --worker-id openstock-provisioner
 Restart=on-failure
 RestartSec=10s
 NoNewPrivileges=true

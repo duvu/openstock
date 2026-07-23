@@ -81,13 +81,13 @@ compose file until a fixed image is available.
 
 ---
 
-## Level 3: Restore the DuckDB warehouse from backup (task 7.7)
+## Level 3: Restore the warehouse and durable queue from backup (task 7.7)
 
 Use this when the warehouse file is corrupted or contains bad data from a
 pipeline run.
 
-**This procedure is destructive.** The current warehouse is replaced by the
-backup. Stop all writers first.
+**This procedure is destructive.** The current warehouse and durable queue are
+replaced by the paired backup. Stop all writers first.
 
 ### Step 1: Stop scheduled jobs
 
@@ -96,6 +96,7 @@ Disable and stop the daily pipeline timer so no job runs during the restore:
 ```bash
 sudo systemctl stop openstock-daily-pipeline.timer
 sudo systemctl stop openstock-daily-pipeline.service
+sudo systemctl stop openstock-provisioner.service
 ```
 
 ### Step 2: Stop the data platform
@@ -113,18 +114,19 @@ process holds the warehouse open.
 ls -lht /var/lib/openstock/warehouse/backups/
 ```
 
-Backups are named `warehouse-YYYYMMDD-HHMMSS.duckdb`. Pick the timestamp
-you want to restore to.
+Backups are paired as `warehouse-YYYYMMDD-HHMMSS.duckdb` and a matching
+`.queue.sqlite3` file (or `.queue.absent` marker). Pick the warehouse file for
+the timestamp you want to restore to; the command rejects an incomplete pair.
 
 ### Step 4: Restore with the guarded restore script
 
 Use `openstock-restore-warehouse` rather than a manual `cp`. It performs the
-full safe sequence under the exclusive writer lock:
+full safe sequence under the exclusive warehouse and provisioner locks:
 
 1. verifies the chosen backup **before** touching the live warehouse;
-2. takes a `pre-restore-*.duckdb` snapshot of the current warehouse;
-3. replaces the warehouse atomically;
-4. verifies the restored warehouse and rolls back to the pre-restore snapshot
+2. takes paired `pre-restore-*` snapshots of the current warehouse and queue;
+3. stages and replaces the warehouse and queue;
+4. verifies both restored files and rolls back both to the pre-restore snapshots
    if verification fails.
 
 ```bash
@@ -151,6 +153,7 @@ Re-enable the timer only after verification passes:
 
 ```bash
 sudo systemctl enable --now openstock-daily-pipeline.timer
+sudo systemctl enable --now openstock-provisioner.service
 ```
 
 ---

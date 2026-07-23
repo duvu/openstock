@@ -85,6 +85,32 @@ PY
   return 0
 }
 
+_make_sqlite_queue() {
+  local database_path="$1"
+  local value="$2"
+  python3 - "$database_path" "$value" <<'PY' 2>/dev/null || return 1
+import sqlite3
+import sys
+
+connection = sqlite3.connect(sys.argv[1])
+connection.execute("CREATE TABLE queue_probe(value TEXT NOT NULL)")
+connection.execute("INSERT INTO queue_probe VALUES (?)", (sys.argv[2],))
+connection.commit()
+connection.close()
+PY
+}
+
+_sqlite_queue_value() {
+  python3 - "$1" <<'PY' 2>/dev/null
+import sqlite3
+import sys
+
+connection = sqlite3.connect(sys.argv[1])
+print(connection.execute("SELECT value FROM queue_probe").fetchone()[0])
+connection.close()
+PY
+}
+
 RESTORE_SCRIPT="${SCRIPT_DIR}/openstock-restore-warehouse"
 
 # --- helper: count event_type in JSONL ---
@@ -283,6 +309,24 @@ test_backup_lock_failure_logs_backup_failed() {
   else
     fail "backup: expected BACKUP_FAILED and no BACKUP_CREATED under held lock, got failed=$failed_count created=$created_count"
   fi
+  local queue_lock_file="${tmpdir}/provisioner.lock"
+  exec 213>"$queue_lock_file"
+  flock -n 213
+  jsonl_file="$(_run_with_logs "$tmpdir" env \
+    OPENSTOCK_LOCK_FILE="${tmpdir}/free-pipeline.lock" \
+    OPENSTOCK_PROVISIONING_LOCK_FILE="$queue_lock_file" \
+    OPENSTOCK_WAREHOUSE_PATH="$fake_warehouse" \
+    OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
+    bash "$BACKUP_SCRIPT")"
+  flock -u 213
+  exec 213>&-
+  failed_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_FAILED")"
+  created_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_CREATED")"
+  if [ "$failed_count" -ge 1 ] && [ "$created_count" -eq 0 ]; then
+    ok "backup: refuses a snapshot while the provisioner holds the queue lock"
+  else
+    fail "backup: expected queue-lock failure, got failed=$failed_count created=$created_count"
+  fi
   rm -rf "$tmpdir"
 }
 
@@ -342,20 +386,28 @@ test_backup_success_logs_backup_created() {
     echo "fake-duckdb-content" > "$fake_warehouse"
     force_flag="--force"
   fi
+  local queue_path="${tmpdir}/provisioning.sqlite3"
+  if ! _make_sqlite_queue "$queue_path" "backup"; then
+    fail "backup: could not create SQLite queue fixture"
+    rm -rf "$tmpdir"; return
+  fi
   local jsonl_file
   jsonl_file="$(_run_with_logs "$tmpdir" env \
     OPENSTOCK_WAREHOUSE_PATH="$fake_warehouse" \
     OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
     OPENSTOCK_LOCK_FILE="${tmpdir}/no.lock" \
+    OPENSTOCK_PROVISIONING_LOCK_FILE="${tmpdir}/provisioner.lock" \
+    OPENSTOCK_QUEUE_PATH="$queue_path" \
     bash "$BACKUP_SCRIPT" $force_flag)"
-  local started_count created_count backup_count
+  local started_count created_count backup_count queue_backup_count
   started_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_STARTED")"
   created_count="$(_count_events "${jsonl_file:-/dev/null}" "BACKUP_CREATED")"
   backup_count="$(find "${tmpdir}/backups" -name 'warehouse-*.duckdb' 2>/dev/null | wc -l)"
-  if [ "$started_count" -ge 1 ] && [ "$created_count" -ge 1 ] && [ "$backup_count" -ge 1 ]; then
-    ok "backup: BACKUP_STARTED+BACKUP_CREATED and a published backup file on success"
+  queue_backup_count="$(find "${tmpdir}/backups" -name 'warehouse-*.queue.sqlite3' 2>/dev/null | wc -l)"
+  if [ "$started_count" -ge 1 ] && [ "$created_count" -ge 1 ] && [ "$backup_count" -ge 1 ] && [ "$queue_backup_count" -eq 1 ]; then
+    ok "backup: publishes one verified warehouse/queue snapshot pair"
   else
-    fail "backup: expected started+created+file, got started=$started_count created=$created_count files=$backup_count"
+    fail "backup: expected started+created+pair, got started=$started_count created=$created_count warehouse=$backup_count queue=$queue_backup_count"
   fi
   # No leftover .partial files.
   local partial_count
@@ -412,25 +464,31 @@ test_restore_success_replaces_and_verifies() {
   local backup_dir="${tmpdir}/backups"
   mkdir -p "$backup_dir"
   local backup="${backup_dir}/warehouse-20240101-000000.duckdb"
+  local backup_queue="${backup%.duckdb}.queue.sqlite3"
+  local queue_path="${tmpdir}/provisioning.sqlite3"
   if ! _make_duckdb "$backup"; then
     ok "restore: success test skipped (no duckdb runtime)"
     rm -rf "$tmpdir"; return
   fi
   _make_duckdb "$warehouse"
+  _make_sqlite_queue "$backup_queue" "backup"
+  _make_sqlite_queue "$queue_path" "live"
   local jsonl_file
   jsonl_file="$(_run_with_logs "$tmpdir" env \
     OPENSTOCK_WAREHOUSE_PATH="$warehouse" \
     OPENSTOCK_WAREHOUSE_DIR="$tmpdir" \
     OPENSTOCK_LOCK_FILE="${tmpdir}/no.lock" \
+    OPENSTOCK_PROVISIONING_LOCK_FILE="${tmpdir}/provisioner.lock" \
+    OPENSTOCK_QUEUE_PATH="$queue_path" \
     bash "$RESTORE_SCRIPT" --backup "$backup" --yes)"
   local started completed pre_backup
   started="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_STARTED")"
   completed="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_COMPLETED")"
   pre_backup="$(_count_events "${jsonl_file:-/dev/null}" "RESTORE_PRE_BACKUP")"
-  if [ "$started" -ge 1 ] && [ "$completed" -ge 1 ] && [ "$pre_backup" -ge 1 ] && [ -f "$warehouse" ]; then
-    ok "restore: pre-backup + atomic replace + verify on success"
+  if [ "$started" -ge 1 ] && [ "$completed" -ge 1 ] && [ "$pre_backup" -ge 1 ] && [ -f "$warehouse" ] && [ "$(_sqlite_queue_value "$queue_path")" = "backup" ]; then
+    ok "restore: restores the verified warehouse/queue pair"
   else
-    fail "restore: expected started+pre_backup+completed, got started=$started pre=$pre_backup completed=$completed"
+    fail "restore: expected paired success, got started=$started pre=$pre_backup completed=$completed"
   fi
   rm -rf "$tmpdir"
 }
@@ -448,6 +506,7 @@ test_restore_corrupt_backup_leaves_warehouse_intact() {
   fi
   # Corrupt backup: restore must reject it BEFORE touching the live warehouse.
   echo "corrupt-backup" > "$backup"
+  : > "${backup%.duckdb}.queue.absent"
   local original_sum
   original_sum="$(md5sum "$warehouse" | awk '{print $1}')"
   local jsonl_file
@@ -478,6 +537,7 @@ test_restore_lock_contention_aborts() {
   local backup="${tmpdir}/backups/warehouse-20240101-000000.duckdb"
   echo "content" > "$warehouse"
   echo "content" > "$backup"
+  : > "${backup%.duckdb}.queue.absent"
   exec 212>"$lock_file"
   flock -n 212
   local jsonl_file
