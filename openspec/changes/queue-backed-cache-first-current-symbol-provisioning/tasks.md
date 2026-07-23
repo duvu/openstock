@@ -69,7 +69,7 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 - [x] 8.3 Add the finalization handler and state transitions. Evidence: the registered `FinalizeMarketSessionGoalHandler` moves the frozen run to `FINALIZING`, persists deterministic finalizer stages, and terminal worker jobs automatically invoke the submit-or-join trigger for mapped maintenance acquisition work.
 - [x] 8.4 Build features and score/watchlist once for the frozen eligible universe. Evidence: `SessionFinalizer` derives the canonical eligible frozen scope, runs one features stage then one score/watchlist stage, and reuses completed stages on retry.
 - [x] 8.5 Build context, mature outcomes and project approved memory in order. Evidence: the handler stage order is context, outcomes, memory after score/watchlist; the maintenance producer contract runs a seeded frozen session through those stages.
-- [ ] 8.6 Persist truthful `SUCCESS|PARTIAL|FAILED` evidence and prove retry/idempotency.
+- [x] 8.6 Persist truthful `SUCCESS|PARTIAL|FAILED` evidence and prove retry/idempotency. Evidence: the maintenance producer contract proves benchmark/coverage failure persists `FAILED`, a complete frozen session persists `SUCCESS`, 80% frozen coverage persists `PARTIAL`, recovery joins the existing finalization job, and replay preserves exactly seven deterministic finalization-stage rows.
 
 ## 9. Queue operations and package — #339, #344, #340
 

@@ -16,6 +16,7 @@ from vnalpha.maintenance.daily import (
     DailyMaintenanceService,
     MaintenanceRunStatus,
 )
+from vnalpha.maintenance.finalization import recover_session_finalization
 from vnalpha.maintenance.ledger import (
     collect_operational_proof,
     get_failed_maintenance_stages,
@@ -39,6 +40,35 @@ from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
 app = typer.Typer(help="Run deterministic market maintenance operations.")
+
+
+@app.command("finalize")
+def finalize(
+    maintenance_run_id: str | None = typer.Option(None, "--run-id"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Recover eligible queued finalization without running it inline."""
+    results = recover_session_finalization(maintenance_run_id=maintenance_run_id)
+    payload = [
+        {
+            "maintenance_run_id": result.maintenance_run_id,
+            "state": result.state,
+            "submitted": result.submitted,
+            "joined": result.joined,
+            "job_id": None if result.job_id is None else str(result.job_id),
+            "correlation_id": result.correlation_id,
+        }
+        for result in results
+    ]
+    if json_output:
+        typer.echo(json.dumps(payload, sort_keys=True))
+        return
+    for result in results:
+        typer.echo(
+            f"{result.state} run={result.maintenance_run_id} "
+            f"submitted={result.submitted} joined={result.joined} "
+            f"job_id={result.job_id or '-'}"
+        )
 
 
 @app.command("enqueue")

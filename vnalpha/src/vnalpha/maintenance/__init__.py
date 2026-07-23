@@ -9,6 +9,7 @@ from vnalpha.maintenance.finalization import (
     MaintenanceFinalizationResult,
     maybe_submit_finalization_for_terminal_job,
     maybe_submit_session_finalization,
+    recover_session_finalization,
 )
 from vnalpha.maintenance.ledger import (
     get_failed_maintenance_stages,
@@ -42,4 +43,5 @@ __all__ = [
     "MaintenanceFinalizationResult",
     "maybe_submit_finalization_for_terminal_job",
     "maybe_submit_session_finalization",
+    "recover_session_finalization",
 ]

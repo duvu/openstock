@@ -126,6 +126,27 @@ def maybe_submit_finalization_for_terminal_job(
     )
 
 
+def recover_session_finalization(
+    *,
+    maintenance_run_id: str | None = None,
+    warehouse_path: Path | str | None = None,
+    queue_path: Path = DEFAULT_QUEUE_PATH,
+) -> tuple[MaintenanceFinalizationResult, ...]:
+    with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
+        rows = connection.execute(
+            "SELECT run_id FROM maintenance_run "
+            "WHERE (? IS NULL AND status = 'ACQUIRING') OR run_id = ? "
+            "ORDER BY run_id",
+            [maintenance_run_id, maintenance_run_id],
+        ).fetchall()
+    return tuple(
+        maybe_submit_session_finalization(
+            str(row[0]), warehouse_path=warehouse_path, queue_path=queue_path
+        )
+        for row in rows
+    )
+
+
 def _correlation_id(requested: str | None) -> str:
     if requested:
         return set_correlation_id(parent=requested)
@@ -136,5 +157,6 @@ def _correlation_id(requested: str | None) -> str:
 __all__ = [
     "MaintenanceFinalizationResult",
     "maybe_submit_finalization_for_terminal_job",
+    "recover_session_finalization",
     "maybe_submit_session_finalization",
 ]

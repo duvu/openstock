@@ -6,7 +6,10 @@ from pathlib import Path
 import duckdb
 
 from vnalpha.ingestion.trading_calendar import SessionRange, VietnamSessionCalendar
-from vnalpha.maintenance.finalization import maybe_submit_session_finalization
+from vnalpha.maintenance.finalization import (
+    maybe_submit_session_finalization,
+    recover_session_finalization,
+)
 from vnalpha.maintenance.producer import (
     MaintenanceProducer,
     MaintenanceProducerRequest,
@@ -134,6 +137,14 @@ def test_maintenance_producer_freezes_goals_and_resumes_idempotently(
     assert finalized.job_id is not None
     assert duplicate.joined
     assert duplicate.job_id == finalized.job_id
+    recovered = recover_session_finalization(
+        maintenance_run_id=first.maintenance_run_id,
+        warehouse_path=warehouse_path,
+        queue_path=queue_path,
+    )
+    assert len(recovered) == 1
+    assert recovered[0].joined
+    assert recovered[0].job_id == finalized.job_id
 
     failed_finalization = ProvisioningWorker(
         queue,
@@ -207,3 +218,75 @@ def test_maintenance_producer_freezes_goals_and_resumes_idempotently(
     ).process_one()
     assert completed_finalization is not None
     assert completed_finalization.status is ProvisioningJobStatus.SUCCEEDED
+    completed_goal = queue.get(ready_finalization.job_id)
+    assert completed_goal is not None
+    replay = queue.submit_or_join(completed_goal.goal, priority=0)
+    assert not replay.joined_existing_job
+    replayed_finalization = ProvisioningWorker(
+        queue,
+        worker_id="test-ready-finalizer-replay",
+        warehouse_path=warehouse_path,
+    ).process_one()
+    assert replayed_finalization is not None
+    assert replayed_finalization.status is ProvisioningJobStatus.SUCCEEDED
+    with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
+        finalization_stage_count = connection.execute(
+            "SELECT COUNT(*) FROM maintenance_finalization_stage WHERE run_id = ?",
+            [ready.maintenance_run_id],
+        ).fetchone()[0]
+    assert finalization_stage_count == 7
+
+    with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
+        connection.execute(
+            "INSERT INTO reference_membership_snapshot "
+            "(snapshot_id, ingestion_run_id, dataset, membership_type, entity_id, "
+            "observed_at, provider, source_query, member_count, status, "
+            "snapshot_semantics, lineage_json, correlation_id) "
+            "VALUES ('snapshot-partial', 'run-partial', 'reference.membership', "
+            "'universe', 'VN30', CURRENT_TIMESTAMP, 'test', 'fixture', 5, "
+            "'SUCCESS', 'frozen', '{}', 'corr-partial')"
+        )
+        connection.executemany(
+            "INSERT INTO reference_membership_member (snapshot_id, member_symbol) "
+            "VALUES ('snapshot-partial', ?)",
+            [("FPT",), ("VCB",), ("HPG",), ("MWG",), ("VNM",)],
+        )
+        connection.executemany(
+            "INSERT INTO symbol_master (symbol) VALUES (?)",
+            [("HPG",), ("MWG",), ("VNM",)],
+        )
+        for symbol in ("HPG", "MWG"):
+            _seed_ready_canonical(
+                connection,
+                symbol=symbol,
+                end_date="2026-07-21",
+            )
+
+    partial = producer.produce(
+        MaintenanceProducerRequest(
+            date="2026-07-21",
+            snapshot_id="snapshot-partial",
+        )
+    )
+    assert partial.expected_count == 1
+    terminal_acquisition = ProvisioningWorker(
+        queue,
+        worker_id="test-partial-acquisition",
+        warehouse_path=warehouse_path,
+        handlers=(),
+    ).process_one()
+    assert terminal_acquisition is not None
+    assert terminal_acquisition.status is ProvisioningJobStatus.FAILED
+    partial_finalization = ProvisioningWorker(
+        queue,
+        worker_id="test-partial-finalizer",
+        warehouse_path=warehouse_path,
+    ).process_one()
+    assert partial_finalization is not None
+    assert partial_finalization.status is ProvisioningJobStatus.SUCCEEDED
+    with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
+        partial_status = connection.execute(
+            "SELECT status FROM maintenance_run WHERE run_id = ?",
+            [partial.maintenance_run_id],
+        ).fetchone()[0]
+    assert partial_status == "PARTIAL"
