@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from os import getenv
 from time import monotonic, sleep
+from typing import Final
 
 from vnalpha.provisioning_queue.queue_models import (
     ProvisioningJob,
@@ -9,11 +11,35 @@ from vnalpha.provisioning_queue.queue_models import (
 )
 from vnalpha.provisioning_queue.repository import ProvisioningQueue
 
+DEFAULT_CURRENT_SYMBOL_WAIT_TIMEOUT_SECONDS: Final = 30.0
+MAX_CURRENT_SYMBOL_WAIT_TIMEOUT_SECONDS: Final = 300.0
+_CURRENT_SYMBOL_WAIT_TIMEOUT_ENV: Final = "VNALPHA_CURRENT_SYMBOL_WAIT_TIMEOUT_SECONDS"
+
 
 class CurrentSymbolWaitMode(StrEnum):
     DETACH = "DETACH"
     WAIT_UP_TO = "WAIT_UP_TO"
     WAIT_UNTIL_TERMINAL = "WAIT_UNTIL_TERMINAL"
+
+
+def default_current_symbol_wait_timeout_seconds() -> float:
+    """Return the bounded interactive wait default from environment configuration."""
+
+    configured = getenv(_CURRENT_SYMBOL_WAIT_TIMEOUT_ENV, "").strip()
+    if not configured:
+        return DEFAULT_CURRENT_SYMBOL_WAIT_TIMEOUT_SECONDS
+    try:
+        timeout_seconds = float(configured)
+    except ValueError as error:
+        raise ValueError(
+            f"{_CURRENT_SYMBOL_WAIT_TIMEOUT_ENV} must be a number"
+        ) from error
+    if not 0 <= timeout_seconds <= MAX_CURRENT_SYMBOL_WAIT_TIMEOUT_SECONDS:
+        raise ValueError(
+            f"{_CURRENT_SYMBOL_WAIT_TIMEOUT_ENV} must be between 0 and "
+            f"{MAX_CURRENT_SYMBOL_WAIT_TIMEOUT_SECONDS:g}"
+        )
+    return timeout_seconds
 
 
 def wait_for_terminal(

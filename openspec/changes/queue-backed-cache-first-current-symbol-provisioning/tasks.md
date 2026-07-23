@@ -51,7 +51,7 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 - [x] 6.4 Add `CurrentSymbolResearchApplication` as the single CLI/TUI/chat boundary. Evidence: `analysis.current_symbol` is registered by `build_local_tool_registry()` and the managed assistant invokes it outside any held warehouse connection.
 - [x] 6.5 Replace the assistant's unconditional provision-then-analyze plan with one application operation. Evidence: `tests/test_assistant_research_intelligence_completion.py::test_research_prompt_contains_template_and_bounded_source_refs` asserts one `analysis.current_symbol` plan step.
 - [x] 6.6 Enforce `READY|DEGRADED|ACCEPTED|PENDING|UNAVAILABLE|FAILED` and claim limitations. Evidence: terminal missing-capability jobs return `UNAVAILABLE`; non-analysis states return no analysis payload; degraded payloads remove ranking/score/benchmark claims.
-- [ ] 6.7 Add cross-surface parity and no-analysis tests for non-analysis states.
+- [x] 6.7 Add cross-surface parity and no-analysis tests for non-analysis states. Evidence: `CurrentSymbolResearchRequest` and `analysis.current_symbol` share the configuration-backed 30-second `WAIT_UP_TO` default; the direct `vnalpha current-symbol` CLI supports `--wait`, `--wait-timeout`, and `--no-wait`; the existing current-symbol contract proves tool and CLI `PENDING` states have `analysis: null` and retain the shared job identity. `make test-loop TEST=tests/test_current_symbol_research_application.py::test_missing_current_symbol_work_joins_one_escalated_queue_job` passed, and the real CLI `--no-wait --json` invocation returned `ACCEPTED`, one queue job, and no analysis payload.
 
 ## 7. Maintenance producer — #326
 

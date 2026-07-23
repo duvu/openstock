@@ -21,6 +21,7 @@ from vnalpha.data_provisioning.current_symbol_application import (
 from vnalpha.features.status import FEATURE_STATUS_CONTRACT_VERSION
 from vnalpha.provisioning_queue import ProvisioningQueue
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
+from vnalpha.tools.current_symbol_research import current_symbol_research
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
@@ -169,7 +170,7 @@ def _seed_ranking_evidence(
 
 
 def test_missing_current_symbol_work_joins_one_escalated_queue_job(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch
 ) -> None:
     missing_warehouse_path = tmp_path / "missing-warehouse.duckdb"
     queue_path = tmp_path / "missing-provisioning.sqlite3"
@@ -183,10 +184,18 @@ def test_missing_current_symbol_work_joins_one_escalated_queue_job(
         queue_path=queue_path,
         policy=DataAvailabilityPolicy(min_required_bars=1),
     )
+    default_request = CurrentSymbolResearchRequest(
+        symbol="FPT",
+        effective_date="2024-09-30",
+        requested_capability=ReadinessCapability.PRICE_ANALYSIS,
+    )
+    assert default_request.wait_mode is CurrentSymbolWaitMode.WAIT_UP_TO
+    assert default_request.wait_timeout_seconds == 30
     request = CurrentSymbolResearchRequest(
         symbol="FPT",
         effective_date="2024-09-30",
         requested_capability=ReadinessCapability.PRICE_ANALYSIS,
+        wait_mode=CurrentSymbolWaitMode.DETACH,
     )
 
     accepted = application.execute(request)
@@ -206,7 +215,58 @@ def test_missing_current_symbol_work_joins_one_escalated_queue_job(
     assert job is not None
     assert job.priority == 3
 
+    monkeypatch.setenv("VNALPHA_CURRENT_SYMBOL_WAIT_TIMEOUT_SECONDS", "0")
+    assistant_output = current_symbol_research(
+        warehouse_path=missing_warehouse_path,
+        queue_path=queue_path,
+        symbol="FPT",
+        date="2024-09-30",
+        requested_capability=ReadinessCapability.PRICE_ANALYSIS,
+    )
+    assistant_payload = assistant_output.data
+    assert assistant_payload["status"] == CurrentSymbolResearchStatus.PENDING.value
+    assert assistant_payload["analysis"] is None
+    assert assistant_payload["wait"] == {
+        "mode": CurrentSymbolWaitMode.WAIT_UP_TO.value,
+        "timeout_seconds": 0,
+    }
+
     runner = CliRunner()
+    cli_current_symbol = runner.invoke(
+        cli_app,
+        [
+            "current-symbol",
+            "FPT",
+            "--date",
+            "2024-09-30",
+            "--capability",
+            "PRICE_ANALYSIS",
+            "--no-wait",
+            "--warehouse-path",
+            str(missing_warehouse_path),
+            "--queue-path",
+            str(queue_path),
+            "--json",
+        ],
+    )
+    assert cli_current_symbol.exit_code == 0
+    cli_payload = json.loads(cli_current_symbol.output)
+    assert cli_payload["status"] == CurrentSymbolResearchStatus.PENDING.value
+    assert cli_payload["analysis"] is None
+    assert cli_payload["wait"] == {
+        "mode": CurrentSymbolWaitMode.DETACH.value,
+        "timeout_seconds": 0,
+    }
+    assert cli_payload["provisioning"]["job_id"] == str(accepted.job_id)
+    conflicting_wait_flags = runner.invoke(
+        cli_app,
+        ["current-symbol", "FPT", "--wait", "--no-wait"],
+    )
+    assert conflicting_wait_flags.exit_code == 2
+    assert "Use only one of --wait, --wait-timeout, or --no-wait." in (
+        conflicting_wait_flags.output
+    )
+
     warning = runner.invoke(
         cli_app,
         ["jobs", "cancel", str(job.job_id), "--queue-path", str(queue_path)],

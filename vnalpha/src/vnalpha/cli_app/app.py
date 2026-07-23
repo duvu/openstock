@@ -3,6 +3,7 @@ import typer
 from vnalpha.cli_app import (
     ask,
     cmd,
+    current_symbol,
     data,
     eval,
     init,
@@ -33,6 +34,7 @@ app.add_typer(build_app, name="build")
 app.add_typer(data.app, name="data")
 app.add_typer(provision.app, name="provision")
 app.add_typer(jobs.app, name="jobs")
+current_symbol.register(app)
 app.add_typer(maintain.app, name="maintain")
 app.add_typer(replay.app, name="replay")
 app.add_typer(warehouse.app, name="warehouse")

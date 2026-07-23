@@ -9,7 +9,10 @@ from vnalpha.data_provisioning.current_symbol_application import (
     CurrentSymbolResearchApplication,
     CurrentSymbolResearchRequest,
 )
-from vnalpha.data_provisioning.current_symbol_queue_wait import CurrentSymbolWaitMode
+from vnalpha.data_provisioning.current_symbol_queue_wait import (
+    CurrentSymbolWaitMode,
+    default_current_symbol_wait_timeout_seconds,
+)
 from vnalpha.data_provisioning.current_symbol_result import (
     CurrentSymbolResearchResult,
     CurrentSymbolResearchStatus,
@@ -30,8 +33,8 @@ def current_symbol_research(
     priority: int = 1,
     force_refresh: bool = False,
     historical: bool = False,
-    wait_mode: CurrentSymbolWaitMode = CurrentSymbolWaitMode.DETACH,
-    wait_timeout_seconds: float = 0,
+    wait_mode: CurrentSymbolWaitMode = CurrentSymbolWaitMode.WAIT_UP_TO,
+    wait_timeout_seconds: float | None = None,
     origin: str | None = None,
     correlation_id: str | None = None,
     queue_path: Path | None = DEFAULT_QUEUE_PATH,
@@ -39,6 +42,12 @@ def current_symbol_research(
     normalized_symbol = symbol.strip().upper()
     if not normalized_symbol:
         raise ToolExecutionError("analysis.current_symbol requires 'symbol'.")
+    resolved_wait_mode = _wait_mode(wait_mode)
+    resolved_timeout_seconds = (
+        default_current_symbol_wait_timeout_seconds()
+        if wait_timeout_seconds is None
+        else wait_timeout_seconds
+    )
     result = CurrentSymbolResearchApplication(
         warehouse_path=warehouse_path,
         queue_path=queue_path,
@@ -50,8 +59,8 @@ def current_symbol_research(
             priority=priority,
             force_refresh=force_refresh,
             historical=historical,
-            wait_mode=_wait_mode(wait_mode),
-            wait_timeout_seconds=wait_timeout_seconds,
+            wait_mode=resolved_wait_mode,
+            wait_timeout_seconds=resolved_timeout_seconds,
             origin=origin,
             correlation_id=correlation_id,
         )
@@ -60,6 +69,10 @@ def current_symbol_research(
         "tool": "analysis.current_symbol",
         "status": result.status.value,
         "provisioning": _result_payload(result),
+        "wait": {
+            "mode": resolved_wait_mode.value,
+            "timeout_seconds": resolved_timeout_seconds,
+        },
         "analysis": None,
     }
     if result.status in {

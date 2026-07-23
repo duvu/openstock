@@ -14,6 +14,7 @@ from vnalpha.data_availability.artifact_readiness_models import (
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
 from vnalpha.data_provisioning.current_symbol_queue_wait import (
     CurrentSymbolWaitMode,
+    default_current_symbol_wait_timeout_seconds,
     wait_for_terminal,
 )
 from vnalpha.data_provisioning.current_symbol_result import (
@@ -46,8 +47,10 @@ class CurrentSymbolResearchRequest:
     priority: int = 1
     force_refresh: bool = False
     historical: bool = False
-    wait_mode: CurrentSymbolWaitMode = CurrentSymbolWaitMode.DETACH
-    wait_timeout_seconds: float = 0
+    wait_mode: CurrentSymbolWaitMode = CurrentSymbolWaitMode.WAIT_UP_TO
+    wait_timeout_seconds: float = field(
+        default_factory=default_current_symbol_wait_timeout_seconds
+    )
     origin: str | None = None
     correlation_id: str | None = None
 
