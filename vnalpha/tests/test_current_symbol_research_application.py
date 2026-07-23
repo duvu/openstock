@@ -6,7 +6,9 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
+from typer.testing import CliRunner
 
+from vnalpha.cli import app as cli_app
 from vnalpha.data_availability.artifact_readiness_models import ReadinessCapability
 from vnalpha.data_availability.policy import DataAvailabilityPolicy
 from vnalpha.data_provisioning.current_symbol_application import (
@@ -203,3 +205,38 @@ def test_missing_current_symbol_work_joins_one_escalated_queue_job(
     assert accepted.job_id == pending.job_id
     assert job is not None
     assert job.priority == 3
+
+    runner = CliRunner()
+    warning = runner.invoke(
+        cli_app,
+        ["jobs", "cancel", str(job.job_id), "--queue-path", str(queue_path)],
+    )
+    assert warning.exit_code == 2
+    assert "can affect every caller sharing this active job" in warning.output
+    assert ProvisioningQueue(queue_path).get(job.job_id).status.value == "QUEUED"
+
+    cancelled = runner.invoke(
+        cli_app,
+        [
+            "jobs",
+            "cancel",
+            str(job.job_id),
+            "--queue-path",
+            str(queue_path),
+            "--confirm",
+        ],
+    )
+    assert cancelled.exit_code == 0
+    retry = runner.invoke(
+        cli_app,
+        [
+            "jobs",
+            "retry",
+            str(job.job_id),
+            "--queue-path",
+            str(queue_path),
+            "--json",
+        ],
+    )
+    assert retry.exit_code == 0
+    assert json.loads(retry.output)["job_id"] != str(job.job_id)
