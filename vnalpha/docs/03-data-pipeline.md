@@ -2,8 +2,8 @@
 
 > **Status:** current implementation contract.
 >
-> Dataset priority and delivery order are maintained in [GitHub issue #238](https://github.com/duvu/openstock/issues/238). This
-> document describes the stable ingestion, validation and lineage boundaries.
+> Dataset priority and delivery order are maintained in [GitHub issue #238](https://github.com/duvu/openstock/issues/238). The
+> current queue-backed provisioning successor is [#317](https://github.com/duvu/openstock/issues/317). This document describes the stable ingestion, validation and lineage boundaries.
 
 ## Core rule
 
@@ -153,8 +153,22 @@ vnalpha score --date today
 vnalpha watchlist --date today
 ```
 
-For scheduled or container execution, use the same commands through the root
-Compose worker:
+These direct commands and the Compose worker are explicit development or
+recovery tools. Normal single-host maintenance first freezes and enqueues a
+session, then lets the one provisioner process it:
+
+```bash
+vnalpha maintain enqueue --date today
+vnalpha jobs health
+```
+
+The weekday producer timer invokes that enqueue operation; it never runs a
+competing one-shot worker. The long-running `openstock-provisioner.service`
+owns `/var/lib/openstock/queue/provisioning.sqlite3` and the queue lock. Do not
+run the Compose worker beside that service.
+
+For explicit recovery only, use the same commands through the root Compose
+worker:
 
 ```bash
 docker compose --profile job run --rm vnalpha-worker sync symbols

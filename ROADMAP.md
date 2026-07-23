@@ -1,6 +1,8 @@
 # OpenStock roadmap
 
 The canonical product roadmap is GitHub issue [#238](https://github.com/duvu/openstock/issues/238).
+Its historical no-queue/one-shot provisioning constraint is superseded by the
+current queue-backed provisioning change [#317](https://github.com/duvu/openstock/issues/317).
 
 GitHub Issues are the only source of truth for:
 

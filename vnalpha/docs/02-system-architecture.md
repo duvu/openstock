@@ -3,8 +3,10 @@
 > **Status:** current architecture.
 >
 > Delivery priority and completion status are owned by the root `ROADMAP.md` and
-> [GitHub issue #238](https://github.com/duvu/openstock/issues/238). This document describes stable component boundaries and the
-> implementation direction; it is not a second roadmap.
+> [GitHub issue #238](https://github.com/duvu/openstock/issues/238). The current
+> queue-backed provisioning successor is [#317](https://github.com/duvu/openstock/issues/317).
+> This document describes stable component boundaries and the implementation
+> direction; it is not a second roadmap.
 
 ## Architecture goal
 
@@ -78,6 +80,33 @@ Owns:
 `vnalpha` must not call provider-specific endpoints or SDKs directly. A missing
 dataset requires a provider-independent contract in `vnstock`, not an adapter in
 the research layer.
+
+## Queue-backed provisioning
+
+The supported single-host write path is deliberately small:
+
+```text
+read warehouse readiness
+→ close the read connection
+→ submit or join one typed SQLite goal
+→ one sequential provisioner claims it
+→ one global DuckDB writer lock protects a bounded stage
+→ terminal job evidence and optional session finalization
+```
+
+The queue is local SQLite at
+`/var/lib/openstock/queue/provisioning.sqlite3`. The provisioner is one
+long-running sequential service, not an interactive TUI process or a pool of
+workers. Current-symbol CLI, TUI and assistant callers use the same
+`WAIT_UP_TO`, `WAIT_UNTIL_TERMINAL` and `DETACH` policy: the default is bounded
+wait, explicit `--wait` waits to a terminal state, and `--no-wait` detaches.
+Maintenance production always detaches and session finalization is a separate
+typed goal.
+
+Historical replay and backtests never auto-enqueue current acquisition work.
+Redis, RabbitMQ, Kafka, multiple workers and a generic DAG are intentionally
+out of scope: one host, one durable local queue and one DuckDB writer provide
+the required operational boundary without a distributed-systems claim.
 
 ## Current application structure
 

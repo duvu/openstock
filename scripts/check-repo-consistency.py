@@ -10,8 +10,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_WAREHOUSE = "/var/lib/openstock/warehouse/warehouse.duckdb"
+CANONICAL_QUEUE = "/var/lib/openstock/queue/provisioning.sqlite3"
 LIVE_ROADMAP_ISSUE_ID = 238
 LIVE_ROADMAP_URL = "https://github.com/duvu/openstock/issues/238"
+QUEUE_ARCHITECTURE_URL = "https://github.com/duvu/openstock/issues/317"
 CURRENT_ROADMAP_DOCS = (
     "README.md",
     "ROADMAP.md",
@@ -190,6 +192,71 @@ def _check_live_roadmap_contract(errors: list[str]) -> None:
             )
 
 
+def _check_queue_architecture_contract(errors: list[str]) -> None:
+    _require(
+        errors,
+        "README.md",
+        CANONICAL_QUEUE,
+        "durable provisioner",
+    )
+    _require(
+        errors,
+        "ROADMAP.md",
+        QUEUE_ARCHITECTURE_URL,
+        "no-queue/one-shot provisioning constraint is superseded",
+    )
+    _require(
+        errors,
+        "vnalpha/docs/02-system-architecture.md",
+        CANONICAL_QUEUE,
+        "WAIT_UP_TO",
+        "WAIT_UNTIL_TERMINAL",
+        "DETACH",
+        "Historical replay and backtests never auto-enqueue",
+    )
+    _require(
+        errors,
+        "vnalpha/docs/03-data-pipeline.md",
+        "vnalpha maintain enqueue --date today",
+        "openstock-provisioner.service",
+        CANONICAL_QUEUE,
+    )
+    _require(
+        errors,
+        "vnalpha/docs/11-deployment-architecture.md",
+        CANONICAL_QUEUE,
+        "one sequential provisioner daemon",
+    )
+    _require(
+        errors,
+        "packaging/docs/OPERATOR.md",
+        "database/queue pair",
+        "openstock-provisioner.service",
+    )
+    _require(
+        errors,
+        "packaging/docs/ROLLBACK.md",
+        "warehouse and durable queue",
+        "openstock-provisioner.service",
+    )
+    _forbid(
+        errors,
+        "vnalpha/docs/02-system-architecture.md",
+        "worker is not a daemon",
+        "No MCP, microservices, queue",
+    )
+    _forbid(
+        errors,
+        "vnalpha/docs/03-data-pipeline.md",
+        "For scheduled or container execution, use the same commands through the root",
+    )
+    _forbid(
+        errors,
+        "vnalpha/docs/OPERATIONAL_PROOF_REQUIREMENTS.md",
+        "vnalpha maintain daily",
+    )
+
+
 def _check_ci_gate_contract(errors: list[str]) -> None:
     workflow_path = ".github/workflows/openstock-ci.yml"
     workflow = _read(workflow_path)
@@ -366,6 +433,7 @@ def check() -> tuple[str, ...]:
     _check_active_changes(errors)
     _check_ci_gate_contract(errors)
     _check_live_roadmap_contract(errors)
+    _check_queue_architecture_contract(errors)
     _check_suite_manifest(errors)
     return tuple(errors)
 
