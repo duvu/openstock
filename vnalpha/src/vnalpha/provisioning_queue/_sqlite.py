@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
+from os import environ
 from pathlib import Path
 from typing import Final, Iterator
 
@@ -11,7 +12,14 @@ from vnalpha.provisioning_queue.queue_models import (
     QueueRuntimeSettings,
 )
 
-DEFAULT_QUEUE_PATH: Final = Path("/var/lib/openstock/queue/provisioning.sqlite3")
+_QUEUE_PATH_ENV_VAR: Final = "VNALPHA_PROVISIONING_QUEUE_PATH"
+_SYSTEM_QUEUE_PATH: Final = Path("/var/lib/openstock/queue/provisioning.sqlite3")
+_configured_queue_path = environ.get(_QUEUE_PATH_ENV_VAR, "").strip()
+DEFAULT_QUEUE_PATH: Final = (
+    Path(_configured_queue_path).expanduser()
+    if _configured_queue_path
+    else _SYSTEM_QUEUE_PATH
+)
 DEFAULT_BUSY_TIMEOUT_MS: Final = 1_000
 DEFAULT_LEASE_SECONDS: Final = 60
 DEFAULT_MAX_ATTEMPTS: Final = 3

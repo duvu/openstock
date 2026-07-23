@@ -251,3 +251,32 @@ def test_artifact_readiness_contract(tmp_path: Path, monkeypatch) -> None:
         policy=DataAvailabilityPolicy(benchmark="VN30"),
     ).inspect(_request(ReadinessCapability.CANDIDATE_RANKING))
     assert _artifact(custom_benchmark, "benchmark_ohlcv").state is ArtifactState.MISSING
+
+    implicit_dir = tmp_path / "implicit"
+    implicit_dir.mkdir()
+    implicit_path = _warehouse(implicit_dir)
+    with WarehouseWriteCoordinator(path=implicit_path).transaction() as connection:
+        connection.execute("INSERT INTO symbol_master (symbol) VALUES ('VNM')")
+        _seed(connection, table="canonical_ohlcv", symbol="VNM", end_date="2024-09-30")
+        _seed(
+            connection,
+            table="canonical_ohlcv",
+            symbol="VNINDEX",
+            end_date="2024-09-30",
+        )
+    monkeypatch.setattr(
+        "vnalpha.data_availability.artifact_readiness.resolve_market_session_date",
+        lambda _: "2024-10-01",
+    )
+    implicit = ArtifactReadinessService(
+        implicit_path,
+        policy=DataAvailabilityPolicy(min_required_bars=5),
+    ).inspect(
+        ArtifactReadinessRequest(
+            symbol="VNM",
+            effective_date="today",
+            capability=ReadinessCapability.CANDIDATE_RANKING,
+        )
+    )
+    assert implicit.effective_date == "2024-09-30"
+    assert implicit.should_enqueue

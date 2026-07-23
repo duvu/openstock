@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
@@ -23,7 +24,24 @@ from vnalpha.provisioning_queue import (
     QueueEntityType,
     RefreshMode,
     SyncDatasetRangeGoal,
+    _sqlite,
+    repository,
 )
+
+
+def test_default_queue_path_honors_runtime_override(monkeypatch, tmp_path) -> None:
+    expected_path = tmp_path / "runtime-queue.sqlite3"
+    original_path = _sqlite.DEFAULT_QUEUE_PATH
+    try:
+        monkeypatch.setenv("VNALPHA_PROVISIONING_QUEUE_PATH", str(expected_path))
+        importlib.reload(_sqlite)
+        reloaded_repository = importlib.reload(repository)
+        assert reloaded_repository.ProvisioningQueue().path == expected_path
+    finally:
+        monkeypatch.delenv("VNALPHA_PROVISIONING_QUEUE_PATH", raising=False)
+        importlib.reload(_sqlite)
+        importlib.reload(repository)
+    assert _sqlite.DEFAULT_QUEUE_PATH == original_path
 
 
 def test_durable_provisioning_queue_contract(tmp_path) -> None:

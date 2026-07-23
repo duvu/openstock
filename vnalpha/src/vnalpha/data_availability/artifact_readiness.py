@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import assert_never
 
@@ -55,8 +55,15 @@ class ArtifactReadinessService:
 
     def inspect(self, request: ArtifactReadinessRequest) -> ArtifactReadinessReport:
         """Return a readiness report using one short-lived read-only connection."""
-        effective_date = resolve_market_session_date(request.effective_date)
+        resolved_date = resolve_market_session_date(request.effective_date)
         with read_connection(self.warehouse_path) as connection:
+            effective_date = _resolve_available_session_date(
+                connection,
+                request.symbol,
+                request.effective_date,
+                resolved_date,
+                self.policy,
+            )
             return _inspect_connection(
                 connection=connection,
                 request=request,
@@ -64,6 +71,73 @@ class ArtifactReadinessService:
                 policy=self.policy,
                 source_policy=self.source_policy,
             )
+
+
+def _resolve_available_session_date(
+    connection: duckdb.DuckDBPyConnection,
+    symbol: str,
+    requested_date: str | None,
+    resolved_date: str,
+    policy: DataAvailabilityPolicy,
+) -> str:
+    if requested_date is not None and requested_date.strip().lower() != "today":
+        return resolved_date
+    minimum_date = (
+        date.fromisoformat(resolved_date)
+        - timedelta(days=policy.stale_after_calendar_days)
+    ).isoformat()
+    quality_placeholders = ", ".join("?" for _ in policy.acceptable_quality_statuses)
+    try:
+        row = connection.execute(
+            f"""
+            SELECT CAST(target.time AS DATE)::VARCHAR
+            FROM canonical_ohlcv target
+            WHERE target.symbol = ?
+              AND target.interval = '1D'
+              AND LOWER(COALESCE(target.quality_status, '')) IN ({quality_placeholders})
+              AND CAST(target.time AS DATE) BETWEEN ? AND ?
+              AND EXISTS (
+                  SELECT 1
+                  FROM canonical_ohlcv benchmark
+                  WHERE benchmark.symbol = ?
+                    AND benchmark.interval = '1D'
+                    AND LOWER(COALESCE(benchmark.quality_status, '')) IN ({quality_placeholders})
+                    AND CAST(benchmark.time AS DATE) = CAST(target.time AS DATE)
+              )
+              AND (
+                  SELECT COUNT(*) FROM canonical_ohlcv price
+                  WHERE price.symbol = target.symbol
+                    AND price.interval = '1D'
+                    AND LOWER(COALESCE(price.quality_status, '')) IN ({quality_placeholders})
+                    AND CAST(price.time AS DATE) BETWEEN CAST(target.time AS DATE) - INTERVAL {policy.lookback_days} DAY AND CAST(target.time AS DATE)
+              ) >= ?
+              AND (
+                  SELECT COUNT(*) FROM canonical_ohlcv benchmark
+                  WHERE benchmark.symbol = ?
+                    AND benchmark.interval = '1D'
+                    AND LOWER(COALESCE(benchmark.quality_status, '')) IN ({quality_placeholders})
+                    AND CAST(benchmark.time AS DATE) BETWEEN CAST(target.time AS DATE) - INTERVAL {policy.lookback_days} DAY AND CAST(target.time AS DATE)
+              ) >= ?
+            ORDER BY CAST(target.time AS DATE) DESC
+            LIMIT 1
+            """,
+            [
+                symbol.strip().upper(),
+                *policy.acceptable_quality_statuses,
+                minimum_date,
+                resolved_date,
+                policy.benchmark,
+                *policy.acceptable_quality_statuses,
+                *policy.acceptable_quality_statuses,
+                policy.min_required_bars,
+                policy.benchmark,
+                *policy.acceptable_quality_statuses,
+                policy.min_required_bars,
+            ],
+        ).fetchone()
+    except duckdb.CatalogException:
+        return resolved_date
+    return str(row[0]) if row is not None and row[0] is not None else resolved_date
 
 
 def _inspect_connection(
