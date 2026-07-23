@@ -15,6 +15,7 @@ VNALPHA_WHEELS=${VNALPHA_ROOT}/wheels
 VNALPHA_RELEASE=${VNALPHA_ROOT}/RELEASE
 OPENSTOCK_STATE_DIR=/var/lib/openstock
 WAREHOUSE_DIR=${OPENSTOCK_STATE_DIR}/warehouse
+QUEUE_DIR=${OPENSTOCK_STATE_DIR}/queue
 KNOWLEDGE_DIR=${OPENSTOCK_STATE_DIR}/knowledge
 LOG_DIR=/var/log/openstock
 CONFIG_DIR=/etc/vnalpha
@@ -136,6 +137,7 @@ case "$1" in
       fail "refusing symlink state directory: ${WAREHOUSE_DIR}"
     fi
     install -d -m 0770 -o root -g openstock "${WAREHOUSE_DIR}"
+    ensure_state_dir "${QUEUE_DIR}" 0770
     ensure_state_dir "${KNOWLEDGE_DIR}" 0770
     ensure_state_dir "${LOG_DIR}" 0770
     ensure_state_dir "${CONFIG_DIR}" 0750
@@ -143,6 +145,7 @@ case "$1" in
     # Preserve all state, but repair group access for existing installations so
     # systemd writers and host CLI/TUI operators use the same DuckDB/knowledge.
     normalize_shared_tree "${WAREHOUSE_DIR}"
+    normalize_shared_tree "${QUEUE_DIR}"
     normalize_shared_tree "${KNOWLEDGE_DIR}"
     normalize_shared_tree "${LOG_DIR}"
 

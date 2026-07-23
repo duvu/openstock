@@ -198,6 +198,7 @@ chmod 0640 "${STAGE_DIR}/etc/vnalpha/vnalpha.env"
 chmod 0644 "${STAGE_DIR}/opt/vnalpha/RELEASE"
 chmod 0644 "${STAGE_DIR}/usr/lib/systemd/system/openstock-daily-pipeline.service"
 chmod 0644 "${STAGE_DIR}/usr/lib/systemd/system/openstock-daily-pipeline.timer"
+chmod 0644 "${STAGE_DIR}/usr/lib/systemd/system/openstock-provisioner.service"
 
 mkdir -p "${OUTPUT_DIR}"
 DEB_FILE="${OUTPUT_DIR}/vnalpha_${VERSION}_amd64.deb"
@@ -219,6 +220,7 @@ for entry in \
   ./usr/bin/openstock-mvp1-start \
   ./usr/bin/openstock-backup-warehouse \
   ./usr/bin/openstock-restore-warehouse \
+  ./usr/lib/systemd/system/openstock-provisioner.service \
   ./usr/share/doc/vnalpha/OPERATOR.md \
   ./opt/vnalpha/RELEASE
 do
@@ -242,3 +244,5 @@ echo "  openstock-verify --mvp1"
 echo ""
 echo "The daily timer is installed but remains disabled until explicitly enabled:"
 echo "  sudo systemctl enable --now openstock-daily-pipeline.timer"
+echo "The provisioner is also installed disabled; enable exactly one worker:"
+echo "  sudo systemctl enable --now openstock-provisioner.service"

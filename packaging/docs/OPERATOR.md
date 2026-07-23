@@ -231,11 +231,29 @@ open it.
 
 ---
 
-## 8.4 Daily pipeline
+## 8.4 Provisioner and daily pipeline
 
-The optional daily pipeline runs the deterministic `vnalpha maintain daily`
-workflow on Vietnam market weekdays at 17:30 Asia/Ho_Chi_Minh. The Debian
-package installs both units but deliberately leaves the timer disabled.
+The supported single-host deployment has exactly one durable provisioning
+worker. It reads `/var/lib/openstock/queue/provisioning.sqlite3` and is separate
+from the weekday producer timer. The Debian package installs both units but
+does not enable either one.
+
+### Enable the one provisioner
+
+```bash
+sudo systemctl enable --now openstock-provisioner.service
+sudo systemctl status openstock-provisioner.service
+sudo journalctl -u openstock-provisioner.service -n 100
+```
+
+Do not start an additional `vnalpha provision worker` process on this host.
+Use `vnalpha jobs health` to inspect the local queue; it is non-destructive.
+
+### Enable the weekday producer
+
+The optional daily producer enqueues the deterministic maintenance goals on
+Vietnam market weekdays at 17:30 Asia/Ho_Chi_Minh. The provisioner processes
+those goals sequentially under the warehouse writer lock.
 
 ### Confirm the packaged units
 

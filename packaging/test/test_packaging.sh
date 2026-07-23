@@ -50,6 +50,7 @@ if run_group files; then
     "${DEB_TREE}/etc/vnalpha/vnalpha.env" \
     "${DEB_TREE}/usr/lib/systemd/system/openstock-daily-pipeline.service" \
     "${DEB_TREE}/usr/lib/systemd/system/openstock-daily-pipeline.timer" \
+    "${DEB_TREE}/usr/lib/systemd/system/openstock-provisioner.service" \
     "${PACKAGING_DIR}/build-deb.sh" \
     "${PACKAGING_DIR}/test/test_install_contract.sh"
   do

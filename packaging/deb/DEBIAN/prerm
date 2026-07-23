@@ -18,6 +18,7 @@ case "$1" in
     if command -v systemctl >/dev/null 2>&1; then
       systemctl stop openstock-daily-pipeline.timer || true
       systemctl stop openstock-daily-pipeline.service || true
+      systemctl stop openstock-provisioner.service || true
     fi
     ;;
 

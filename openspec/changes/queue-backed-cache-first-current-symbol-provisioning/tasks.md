@@ -76,7 +76,7 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 - [x] 9.1 Add queue health, prune and checkpoint commands. Evidence: `vnalpha jobs health`, `jobs checkpoint`, and batch-bounded `jobs prune --older-than DAYS` expose queue state without automatic repair; the durable queue contract and CLI smoke proof passed.
 - [x] 9.2 Gate claims on supported schema and successful integrity checks. Evidence: `ProvisioningQueue.claim` rejects the typed queue health gate when the schema is unsupported or integrity inspection fails; the durable queue contract proves the unsupported-schema case.
 - [x] 9.3 Preserve bounded terminal evidence for retained maintenance runs before pruning. Evidence: pruning writes a typed SQLite tombstone only for unreferenced terminal jobs and retains every `maintenance_run_job` mapping; the durable queue contract proves prunable, retained, and active rows.
-- [ ] 9.4 Package queue paths, permissions, one provisioner daemon and maintenance producer timer.
+- [x] 9.4 Package queue paths, permissions, one provisioner daemon and maintenance producer timer. Evidence: the package creates `/var/lib/openstock/queue` as `root:openstock` mode `0770`; both config trees select the durable queue path; the opt-in `openstock-provisioner.service` starts exactly one sequential worker; and the existing weekday producer remains an opt-in timer. Source/package unit parity, package contracts, `openstock-verify --ci`, and an offline Debian payload build passed.
 - [ ] 9.5 Add queue migration, backup/restore and upgrade/rollback validation.
 - [ ] 9.6 Update architecture, pipeline, deployment and operator documentation.
 - [ ] 9.7 Add consistency checks for obsolete no-queue/one-shot guidance.

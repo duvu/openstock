@@ -60,12 +60,14 @@ require_grep 'OLD_VENV_STAGED=true' "$POSTINST" "postinst records rollback state
 require_grep 'mv.*NEW_VENV.*VNALPHA_VENV' "$POSTINST" "postinst swaps the venv only after validation"
 require_grep 'install.*0770.*WAREHOUSE_DIR|ensure_state_dir.*WAREHOUSE_DIR.*0770' "$POSTINST" "warehouse directory is root:openstock and group-writable"
 require_grep 'ensure_state_dir.*KNOWLEDGE_DIR.*0770' "$POSTINST" "knowledge directory is root:openstock and group-writable"
+require_grep 'ensure_state_dir.*QUEUE_DIR.*0770' "$POSTINST" "queue directory is root:openstock and group-writable"
 require_grep 'ensure_state_dir.*LOG_DIR.*0770' "$POSTINST" "log directory is root:openstock and group-writable"
 reject_grep 'systemctl[[:space:]]+enable|systemctl[[:space:]]+start.*openstock-daily-pipeline' "$POSTINST" "postinst does not enable or start the daily timer"
 
 require_grep '^Group=openstock$' "$SERVICE" "daily service uses the openstock primary group"
 require_grep '^UMask=0007$' "$SERVICE" "daily service creates group-readable/writable state"
 require_grep 'flock -n -E 75' "$SERVICE" "daily service preserves the one-writer lock contract"
+require_grep 'openstock-provisioner.service' "$BUILD_SCRIPT" "builder bundles the provisioner service"
 
 for helper in \
   openstock-verify \
@@ -103,6 +105,7 @@ if [[ -n "$DEB_FILE" ]]; then
       ./etc/vnalpha/vnalpha.env \
       ./usr/lib/systemd/system/openstock-daily-pipeline.service \
       ./usr/lib/systemd/system/openstock-daily-pipeline.timer \
+      ./usr/lib/systemd/system/openstock-provisioner.service \
       ./usr/share/doc/vnalpha/OPERATOR.md \
       ./opt/vnalpha/RELEASE
     do

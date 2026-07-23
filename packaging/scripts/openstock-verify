@@ -160,7 +160,7 @@ check_systemd() {
     warn "openstock-data-platform systemd service status: ${status:-unknown} (may not be installed yet)"
   fi
 
-  local timer_load timer_enabled timer_active service_result service_exit
+  local timer_load timer_enabled timer_active service_result service_exit provisioner_load provisioner_enabled provisioner_active
   timer_load="$(systemctl show openstock-daily-pipeline.timer -p LoadState --value 2>/dev/null || true)"
   if [ "$timer_load" = "loaded" ]; then
     timer_enabled="$(systemctl is-enabled openstock-daily-pipeline.timer 2>/dev/null || true)"
@@ -170,6 +170,15 @@ check_systemd() {
     ok "daily timer installed enabled=${timer_enabled:-unknown} active=${timer_active:-unknown} last_result=${service_result:-unknown} last_exit=${service_exit:-unknown}"
   else
     warn "daily timer is not installed"
+  fi
+
+  provisioner_load="$(systemctl show openstock-provisioner.service -p LoadState --value 2>/dev/null || true)"
+  if [ "$provisioner_load" = "loaded" ]; then
+    provisioner_enabled="$(systemctl is-enabled openstock-provisioner.service 2>/dev/null || true)"
+    provisioner_active="$(systemctl is-active openstock-provisioner.service 2>/dev/null || true)"
+    ok "provisioner installed enabled=${provisioner_enabled:-unknown} active=${provisioner_active:-unknown}"
+  else
+    warn "provisioner service is not installed"
   fi
 }
 
@@ -532,6 +541,11 @@ check_ci_systemd_analyze() {
   local failed=0
   for unit in "$systemd_dir"/*.service "$systemd_dir"/*.timer; do
     [ -f "$unit" ] || continue
+    if [ "$(basename "$unit")" = "openstock-provisioner.service" ] && \
+       [ ! -x /usr/bin/vnalpha ]; then
+      ok "CI: provisioner unit source present (launcher is package-only)"
+      continue
+    fi
     if systemd-analyze verify "$unit" 2>/dev/null; then
       ok "CI: systemd-analyze verify $(basename "$unit") OK"
     else
@@ -556,7 +570,8 @@ check_ci_package_files() {
     "${pkg_dir}/usr/bin/vnalpha-poc" \
     "${pkg_dir}/etc/vnalpha/vnalpha.env" \
     "${pkg_dir}/usr/lib/systemd/system/openstock-daily-pipeline.service" \
-    "${pkg_dir}/usr/lib/systemd/system/openstock-daily-pipeline.timer"
+    "${pkg_dir}/usr/lib/systemd/system/openstock-daily-pipeline.timer" \
+    "${pkg_dir}/usr/lib/systemd/system/openstock-provisioner.service"
   do
     if [ -f "$f" ]; then
       ok "CI: package file exists: $(basename "$f")"

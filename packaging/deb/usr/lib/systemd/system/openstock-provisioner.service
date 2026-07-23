@@ -1,20 +1,19 @@
 [Unit]
-Description=OpenStock daily research-data maintenance
+Description=OpenStock durable provisioning worker
 Wants=network-online.target openstock-data-platform.service
 After=network-online.target openstock-data-platform.service
 
 [Service]
-Type=oneshot
+Type=simple
 WorkingDirectory=/var/lib/openstock
 EnvironmentFile=-/etc/vnalpha/vnalpha.env
 Environment=VNALPHA_LOG_ROOT=/var/log/openstock
-# Keep root ownership for host maintenance while making DuckDB, knowledge,
-# logs and the stable lock inode accessible to approved openstock operators.
+Environment=VNALPHA_PROVISIONING_QUEUE_PATH=/var/lib/openstock/queue/provisioning.sqlite3
 Group=openstock
 UMask=0007
-ExecStart=/usr/bin/flock -n -E 75 /run/openstock-pipeline.lock /usr/bin/vnalpha maintain enqueue --date today --json
-SuccessExitStatus=3
-TimeoutStartSec=4h
+ExecStart=/usr/bin/vnalpha provision worker --worker-id openstock-provisioner
+Restart=on-failure
+RestartSec=10s
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -22,4 +21,7 @@ ProtectHome=true
 ReadWritePaths=/var/lib/openstock /var/log/openstock /run
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=openstock-pipeline
+SyslogIdentifier=openstock-provisioner
+
+[Install]
+WantedBy=multi-user.target
