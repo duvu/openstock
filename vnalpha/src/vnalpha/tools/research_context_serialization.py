@@ -62,6 +62,7 @@ def missing_payload(
         "lineage": {},
         "quality": "INSUFFICIENT_DATA",
         "caveats": [caveat],
+        "missing_data": [caveat],
     }
 
 

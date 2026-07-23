@@ -19,7 +19,10 @@ from vnalpha.assistant.policy import (
     ResearchPolicyResult,
     validate_research_answer_policy,
 )
-from vnalpha.assistant.research_templates import is_research_intent
+from vnalpha.assistant.research_templates import (
+    build_deterministic_research_answer,
+    is_research_intent,
+)
 from vnalpha.assistant.response_parser import parse_synthesis_response
 from vnalpha.assistant.synthesis_prompt import (
     CONTEXT_INTENTS,
@@ -77,6 +80,17 @@ class AnswerSynthesizer:
                         "INPUT_VALIDATION",
                     ),
                 )
+            if _requires_deterministic_missing_answer(plan, tool_outputs):
+                answer = build_deterministic_research_answer(plan, tool_outputs)
+                groundedness = validator.validate(answer, plan, tool_outputs)
+                policy = validate_research_answer_policy(answer, plan.intent)
+                if groundedness.passed and policy.passed:
+                    return self._record_validation(
+                        answer,
+                        groundedness,
+                        policy,
+                        fallback_used=False,
+                    )
 
         messages = _build_synthesis_messages(
             user_prompt, plan, tool_outputs, request=request
@@ -268,5 +282,26 @@ def _requires_caveat_first(tool_outputs: dict[str, Any]) -> bool:
         if "snapshots" in data and not data["snapshots"]:
             return True
         if quality in {"INSUFFICIENT_DATA", "INCOMPLETE", "PARTIAL"}:
+            return True
+    return False
+
+
+def _requires_deterministic_missing_answer(
+    plan: AssistantPlan, tool_outputs: dict[str, Any]
+) -> bool:
+    if plan.intent in CONTEXT_INTENTS:
+        for output in tool_outputs.values():
+            data = output.get("data", output) if isinstance(output, dict) else None
+            if isinstance(data, dict) and data.get("snapshot") is None:
+                return True
+    for step in plan.steps:
+        output = tool_outputs.get(step.step_id)
+        data = output.get("data", output) if isinstance(output, dict) else None
+        if isinstance(data, dict) and data.get("status") in {
+            "ACCEPTED",
+            "PENDING",
+            "UNAVAILABLE",
+            "FAILED",
+        }:
             return True
     return False

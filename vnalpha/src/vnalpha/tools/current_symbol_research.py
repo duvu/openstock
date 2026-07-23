@@ -102,7 +102,12 @@ def current_symbol_research(
             warnings=list(analysis.warnings),
         )
     return ToolOutput(
-        data=payload,
+        data={
+            **payload,
+            "missing_data": [
+                "Current-symbol research is pending deterministic evidence."
+            ],
+        },
         summary=f"Current-symbol research status: {result.status.value}.",
         warnings=[
             f"Deterministic analysis is unavailable while status is {result.status.value}."

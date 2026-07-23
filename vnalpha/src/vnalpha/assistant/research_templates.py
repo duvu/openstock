@@ -244,6 +244,9 @@ def _primary_payload(intent: str, payloads: list[dict[str, Any]]) -> dict[str, A
 def _summary_for_intent(intent: str, payloads: list[dict[str, Any]]) -> str:
     primary = _primary_payload(intent, payloads)
     if intent == "deep_analyze_symbol":
+        status = primary.get("status")
+        if status in {"ACCEPTED", "PENDING", "UNAVAILABLE", "FAILED"}:
+            return f"Current-symbol research status: {status}."
         candidate = primary.get("candidate") or {}
         return (
             f"{primary.get('symbol', 'Symbol')} as of "

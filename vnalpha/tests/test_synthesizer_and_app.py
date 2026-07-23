@@ -325,6 +325,60 @@ class TestAnswerSynthesizer:
         ).synthesize("thi truong hom nay", market_plan, market_output)
         assert execution_disclaimer.research_metadata["fallback_used"] is False
 
+        unavailable_context = AnswerSynthesizer(FakeLLMClient(responses=[])).synthesize(
+            "thi truong hom nay",
+            market_plan,
+            {
+                "step_1": {
+                    "summary": "No persisted market regime research context is available.",
+                    "warnings": ["No persisted market regime snapshot is available."],
+                    "data": {
+                        "snapshot": None,
+                        "freshness": None,
+                        "lineage": {},
+                        "quality": "INSUFFICIENT_DATA",
+                        "caveats": [
+                            "No persisted market regime snapshot is available."
+                        ],
+                        "missing_data": [
+                            "No persisted market regime snapshot is available."
+                        ],
+                    },
+                }
+            },
+        )
+        assert unavailable_context.research_metadata["fallback_used"] is False
+        assert "AI synthesis unavailable" not in unavailable_context.risks_caveats
+
+        pending_symbol = AnswerSynthesizer(FakeLLMClient(responses=[])).synthesize(
+            "phan tich co phieu vhm",
+            AssistantPlan(
+                intent="deep_analyze_symbol",
+                steps=[
+                    ToolPlanStep(
+                        step_id="step_1",
+                        tool_name="analysis.current_symbol",
+                        arguments={"symbol": "VHM"},
+                        purpose="Inspect current symbol research evidence",
+                        required_permission="READ_SCORE",
+                    )
+                ],
+            ),
+            {
+                "step_1": {
+                    "summary": "Current-symbol research status: PENDING.",
+                    "data": {
+                        "status": "PENDING",
+                        "missing_data": [
+                            "Current-symbol research is pending deterministic evidence."
+                        ],
+                    },
+                }
+            },
+        )
+        assert "Current-symbol research status: PENDING." in pending_symbol.summary
+        assert pending_symbol.research_metadata["fallback_used"] is False
+
         groundedness_rejected = AnswerSynthesizer(
             FakeLLMClient(
                 responses=[
