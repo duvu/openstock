@@ -14,6 +14,7 @@ Only official event types already supported by the canonical corporate-action su
 - **AND** does not silently overwrite provider evidence.
 
 ### Requirement: Unsupported or incomplete official events SHALL remain event evidence
+Official events lacking deterministic adjustment terms SHALL remain non-mutating event evidence.
 
 #### Scenario: An official event lacks fields required by the factor method
 - **WHEN** deterministic adjustment terms cannot be established
@@ -21,6 +22,7 @@ Only official event types already supported by the canonical corporate-action su
 - **AND** does not mutate canonical corporate actions or adjustment factors.
 
 ### Requirement: Accepted corporate-action revisions SHALL invalidate only the affected range
+Accepted corporate-action revisions SHALL invalidate and rebuild only their affected range.
 
 #### Scenario: An accepted official revision changes an existing action
 - **WHEN** the revision is persisted
@@ -29,6 +31,7 @@ Only official event types already supported by the canonical corporate-action su
 - **AND** raw canonical OHLCV remains unchanged.
 
 ### Requirement: Downstream adjusted evidence SHALL preserve action lineage
+Rebuilt adjusted evidence SHALL retain the accepted action and factor lineage that produced it.
 
 #### Scenario: Adjusted features or outcomes are rebuilt
 - **WHEN** an accepted action revision changes the factor chain
@@ -44,6 +47,7 @@ Every valuation metric SHALL reference the exact canonical price date and basis,
 - **AND** unavailable metrics are reported explicitly.
 
 ### Requirement: Valuation metrics SHALL fail closed independently
+Each valuation metric SHALL report unavailable when its own inputs are incompatible or absent.
 
 #### Scenario: EPS or equity is missing, zero, negative or incompatible
 - **WHEN** a metric denominator does not satisfy its declared rules
@@ -51,6 +55,7 @@ Every valuation metric SHALL reference the exact canonical price date and basis,
 - **AND** the system does not guess, coerce or silently substitute another value.
 
 ### Requirement: Historical percentile SHALL use comparable persisted snapshots
+Historical percentiles SHALL use only persisted snapshots with compatible point-in-time methodology.
 
 #### Scenario: Historical P/E percentile is calculated
 - **WHEN** prior comparable valuation snapshots exist
@@ -58,6 +63,7 @@ Every valuation metric SHALL reference the exact canonical price date and basis,
 - **AND** excludes future revisions.
 
 ### Requirement: Sector-relative percentile SHALL use point-in-time peers
+Sector-relative percentiles SHALL use only peers supported by point-in-time taxonomy evidence.
 
 #### Scenario: Sector-relative valuation is requested
 - **WHEN** effective-dated membership or taxonomy evidence exists for the as-of date
@@ -65,6 +71,7 @@ Every valuation metric SHALL reference the exact canonical price date and basis,
 - **AND** excludes symbols without comparable metric semantics.
 
 ### Requirement: Valuation context SHALL remain optional and research-only
+Valuation context SHALL remain optional, research-only evidence and SHALL not change ranking policy.
 
 #### Scenario: Valuation evidence is unavailable
 - **WHEN** existing price or ranking analysis is otherwise ready

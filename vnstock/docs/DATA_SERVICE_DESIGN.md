@@ -336,7 +336,6 @@ GET /v1/fundamental/financial-ratio
 
 ```text
 GET /v1/fund/nav
-GET /v1/fund/holdings
 ```
 
 ---

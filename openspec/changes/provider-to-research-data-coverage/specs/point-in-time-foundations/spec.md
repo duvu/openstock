@@ -14,6 +14,7 @@ The four statement datasets SHALL share a common metadata envelope containing fi
 - **AND** the prior revision is linked as superseded rather than overwritten.
 
 ### Requirement: Fundamental normalization SHALL remain bounded
+Fundamental normalization SHALL cover only the approved common fact set.
 
 #### Scenario: A provider returns a broad vendor statement
 - **WHEN** the canonical contract is built
@@ -21,6 +22,7 @@ The four statement datasets SHALL share a common metadata envelope containing fi
 - **AND** unsupported vendor fields are not mirrored into a universal accounting model.
 
 ### Requirement: Historical fundamental snapshots SHALL use observable revisions only
+Historical fundamental snapshots SHALL select only revisions observable at the requested date.
 
 #### Scenario: A report was published after the requested as-of date
 - **WHEN** `fundamental_snapshot(symbol, as_of_date)` is resolved
@@ -32,6 +34,7 @@ The four statement datasets SHALL share a common metadata envelope containing fi
 - **AND** does not mix scopes implicitly.
 
 ### Requirement: Verified publication events MAY establish statement availability
+Verified publication events MAY establish availability only for an exactly matched statement revision, and every established availability SHALL retain that exact linkage.
 
 #### Scenario: An official publication event identifies one statement revision
 - **WHEN** symbol, fiscal period, scope and source/document identity match exactly
@@ -55,6 +58,7 @@ The provider layer SHALL expose canonical disclosure metadata and a small allowl
 - **AND** historical queries observe each revision only after its publication time.
 
 ### Requirement: Disclosure ingestion SHALL NOT require document intelligence
+Disclosure ingestion SHALL not require document intelligence to classify or verify facts.
 
 #### Scenario: A disclosure lacks structured event metadata
 - **WHEN** deterministic allowlisted normalization cannot classify it
@@ -62,6 +66,7 @@ The provider layer SHALL expose canonical disclosure metadata and a small allowl
 - **AND** no PDF/OCR or LLM inference is used to promote it.
 
 ### Requirement: Share counts SHALL be dedicated effective-dated facts
+Share counts SHALL be stored as dedicated facts with explicit effective and availability evidence.
 
 #### Scenario: Current company information includes shares outstanding
 - **WHEN** no verified effective and availability dates exist
@@ -74,6 +79,7 @@ The provider layer SHALL expose canonical disclosure metadata and a small allowl
 - **AND** reports missing or ambiguous evidence explicitly.
 
 ### Requirement: Index membership SHALL use effective-dated revisions
+Historical index membership SHALL be resolved from effective-dated membership revisions.
 
 #### Scenario: VN30 membership changes at a rebalance date
 - **WHEN** membership is queried before and after the effective date
@@ -85,6 +91,7 @@ The provider layer SHALL expose canonical disclosure metadata and a small allowl
 - **THEN** the current snapshot is rejected as historical evidence unless linked to verified effective-dated revisions.
 
 ### Requirement: Point-in-time datasets SHALL remain optional for existing core capabilities
+Missing point-in-time datasets SHALL not alter existing core price or ranking readiness.
 
 #### Scenario: Fundamental, disclosure, share-count or membership evidence is missing
 - **WHEN** price or ranking analysis has its existing required evidence
@@ -92,6 +99,7 @@ The provider layer SHALL expose canonical disclosure metadata and a small allowl
 - **AND** the missing optional context is disclosed.
 
 ### Requirement: Historical workflows SHALL read persisted point-in-time evidence only
+Historical workflows SHALL read persisted point-in-time evidence and SHALL not fetch current provider output.
 
 #### Scenario: A historical consumer encounters a missing point-in-time fact
 - **WHEN** replay or historical research runs

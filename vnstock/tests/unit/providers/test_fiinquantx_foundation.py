@@ -88,7 +88,7 @@ def test_fiinquantx_capability_inventory_owns_documented_and_implemented_states(
         if capability["inventory_state"] == "IMPLEMENTED"
     }
 
-    assert set(capabilities) == documented_datasets
+    assert set(capabilities) == documented_datasets & set(CONTRACT_REGISTRY.names())
     assert capability_implemented_datasets == implemented_datasets
 
 

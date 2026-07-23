@@ -22,6 +22,10 @@ Develop a provider-independent Vietnamese financial data platform that can:
 
 Current priority and delivery order are maintained in [the root roadmap](../ROADMAP.md) and GitHub issue [#238](https://github.com/duvu/openstock/issues/238), not in component planning documents.
 
+The checked-in [dataset capability inventory](docs/dataset-capability-inventory.json)
+is the authoritative status for built-in contracts, routes, providers, quality and
+research consumption.
+
 ## Current scope
 
 | Area | Status |
@@ -32,7 +36,7 @@ Current priority and delivery order are maintained in [the root roadmap](../ROAD
 | Quote and intraday | Public-provider paths where supported; quality and freshness controls apply |
 | Index/ETF/futures/warrant/bond data | Primarily KBS-backed |
 | Global market data | MSN/FMP where available |
-| Fund data | FMARKET NAV and fund data |
+| Fund data | FMARKET NAV only; fund holdings are not a built-in contract or route |
 | FiinQuantX | Experimental, explicit-source-only licensed provider for bounded daily equity/index OHLCV and current index/sector membership snapshots |
 | Cache | Memory/SQLite for permitted data; commercial-provider persistence follows provider-specific license policy |
 | Quality | OHLCV, price-board and intraday validators; reference/fundamental quality contracts remain incomplete |

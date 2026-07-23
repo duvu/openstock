@@ -8,6 +8,7 @@ import pandas as pd
 
 from vnstock.core.auth.spec import AuthSpec
 from vnstock.core.auth.types import AuthType
+from vnstock.core.contracts import CONTRACT_REGISTRY
 from vnstock.providers.fiinquantx.bridge import (
     SUPPORTED_VERSIONS,
     FiinQuantXState,
@@ -92,7 +93,9 @@ class FiinQuantXProviderPlugin:
                 ),
                 "notes": self._capability_note(dataset, sdk.state),
             }
-            for dataset in sorted(DOCUMENTED_DATASETS)
+            for dataset in sorted(
+                set(DOCUMENTED_DATASETS) & set(CONTRACT_REGISTRY.names())
+            )
         }
 
     def validate_params(self, dataset: str, params: dict[str, Any]) -> None:

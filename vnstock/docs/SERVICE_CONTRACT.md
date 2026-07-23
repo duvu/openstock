@@ -34,12 +34,13 @@ Additional available endpoints (not required by current vnalpha consumers):
 | `GET /v1/providers` | — | Registered provider names |
 | `GET /v1/equity/intraday-trades` | `equity.intraday_trades` | |
 | `GET /v1/company/info` | `reference.company_info` | |
+| `GET /v1/reference/index-membership` | `reference.index_membership_snapshot` | Current snapshot only; not historical membership evidence |
+| `GET /v1/reference/sector-membership` | `reference.sector_membership_snapshot` | Current snapshot only; not historical taxonomy evidence |
 | `GET /v1/fundamental/balance-sheet` | `fundamental.balance_sheet` | |
 | `GET /v1/fundamental/income-statement` | `fundamental.income_statement` | |
 | `GET /v1/fundamental/cash-flow` | `fundamental.cash_flow` | |
 | `GET /v1/fundamental/financial-ratio` | `fundamental.financial_ratio` | |
 | `GET /v1/fund/nav` | `fund.nav` | |
-| `GET /v1/fund/holdings` | `fund.holdings` | |
 
 ---
 

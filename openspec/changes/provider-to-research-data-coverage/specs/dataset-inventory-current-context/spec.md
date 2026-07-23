@@ -9,6 +9,7 @@ The repository SHALL maintain one machine-readable inventory that distinguishes 
 - **AND** documentation does not present the dataset as production-available.
 
 ### Requirement: Route, contract and provider declarations SHALL remain consistent
+Canonical routes and provider capability declarations SHALL resolve only to a registered inventory dataset.
 
 #### Scenario: A service route references an unsupported dataset
 - **WHEN** a route has no registered contract or actual provider handler
@@ -20,6 +21,7 @@ The repository SHALL maintain one machine-readable inventory that distinguishes 
 - **AND** no placeholder fund warehouse is created.
 
 ### Requirement: Queue mappings SHALL use finite approved goals
+Dataset queue mappings SHALL name only the approved goal and enrichment vocabulary.
 
 #### Scenario: A dataset declares queued acquisition
 - **WHEN** the inventory contains a queue mapping
@@ -27,6 +29,7 @@ The repository SHALL maintain one machine-readable inventory that distinguishes 
 - **AND** no dataset defines a private job payload.
 
 ### Requirement: Company context SHALL remain current-state evidence
+Company-context observations without verified temporal evidence SHALL be treated as current snapshots.
 
 #### Scenario: Company information is persisted
 - **WHEN** a provider returns canonical company information
@@ -38,6 +41,7 @@ The repository SHALL maintain one machine-readable inventory that distinguishes 
 - **THEN** historical consumers do not treat current shares or industry fields as historical facts.
 
 ### Requirement: Company context SHALL be optional
+Unavailable company context SHALL not alter existing price or ranking readiness.
 
 #### Scenario: Company information is unavailable
 - **WHEN** price or ranking analysis has valid required evidence
@@ -46,6 +50,7 @@ The repository SHALL maintain one machine-readable inventory that distinguishes 
 - **AND** the optional limitation is disclosed.
 
 ### Requirement: Quote and intraday data SHALL produce a bounded session summary
+Current-session observations SHALL be reduced to one bounded, versioned per-symbol summary.
 
 #### Scenario: Quote and trade observations are available
 - **WHEN** current-session data is requested
@@ -53,6 +58,7 @@ The repository SHALL maintain one machine-readable inventory that distinguishes 
 - **AND** persists only a bounded versioned session summary.
 
 ### Requirement: The system SHALL NOT create an unbounded tick warehouse
+Repeated intraday observations SHALL not create an unbounded raw-trade warehouse.
 
 #### Scenario: Repeated intraday observations are ingested
 - **WHEN** provider content changes during a session
@@ -60,12 +66,14 @@ The repository SHALL maintain one machine-readable inventory that distinguishes 
 - **AND** does not persist every trade indefinitely in the research warehouse.
 
 ### Requirement: Current-session outcomes SHALL remain typed
+Valid empty, stale, unsupported and failed current-session observations SHALL remain distinguishable states.
 
 #### Scenario: The market is closed and provider response is valid empty
 - **WHEN** no current trades are expected
 - **THEN** the result is distinct from stale data, unsupported provider and provider failure.
 
 ### Requirement: Foreign-flow support SHALL be end-to-end or explicitly unavailable
+Foreign-flow support SHALL be advertised only after its verified provider, route and consumer chain exists.
 
 #### Scenario: Foreign flow remains contract-only
 - **WHEN** no verified provider, route and consumer have been delivered
@@ -78,6 +86,7 @@ The repository SHALL maintain one machine-readable inventory that distinguishes 
 - **AND** `vnalpha` persists daily rows idempotently with source lineage.
 
 ### Requirement: Foreign-flow context SHALL be bounded and optional
+Foreign-flow context SHALL be bounded and SHALL not block existing core readiness.
 
 #### Scenario: Flow context is requested
 - **WHEN** persisted observations are available

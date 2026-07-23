@@ -37,7 +37,6 @@ ROUTES = {
     "fundamental.cash_flow": "/v1/fundamental/cash-flow",
     "fundamental.financial_ratio": "/v1/fundamental/financial-ratio",
     "fund.nav": "/v1/fund/nav",
-    "fund.holdings": "/v1/fund/holdings",
 }
 DISCOVERY = {
     "health": "/healthz",
@@ -108,9 +107,7 @@ def arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--period", choices=("year", "quarter"), default="year")
     parser.add_argument("--lang", choices=("vi", "en"), default="vi")
     parser.add_argument("--providers", help="Comma-separated provider filter")
-    parser.add_argument(
-        "--datasets", help="Comma-separated canonical dataset filter"
-    )
+    parser.add_argument("--datasets", help="Comma-separated canonical dataset filter")
     parser.add_argument("--include-auto", action="store_true")
     parser.add_argument("--probe-unsupported", action="store_true")
     parser.add_argument("--validate", action="store_true")
@@ -213,11 +210,7 @@ def discover(args: argparse.Namespace) -> dict[str, Any]:
 def capability_matrix(
     discovery: Mapping[str, Any],
 ) -> dict[str, dict[str, dict[str, Any]]]:
-    raw = (
-        discovery.get("capabilities", {})
-        .get("payload", {})
-        .get("capabilities", {})
-    )
+    raw = discovery.get("capabilities", {}).get("payload", {}).get("capabilities", {})
     matrix = {}
     if not isinstance(raw, Mapping):
         return matrix
@@ -227,7 +220,9 @@ def capability_matrix(
         provider_name = str(provider).upper()
         matrix[provider_name] = {}
         for dataset, spec in datasets.items():
-            item = dict(spec) if isinstance(spec, Mapping) else {"supported": bool(spec)}
+            item = (
+                dict(spec) if isinstance(spec, Mapping) else {"supported": bool(spec)}
+            )
             item["supported"] = bool(item.get("supported", False))
             matrix[provider_name][str(dataset).lower()] = safe(item)
     return matrix
@@ -287,7 +282,6 @@ def probe_params(dataset: str, args: argparse.Namespace) -> dict[str, Any]:
             "lang": args.lang,
         },
         "fund.nav": {"symbol": args.fund_symbol},
-        "fund.holdings": {"symbol": args.fund_symbol},
     }[dataset]
 
 
@@ -375,11 +369,7 @@ def classify(
             error_code = "provider_identity_mismatch"
             error_message = f"Returned {actual_provider!r}"
         sample = (
-            tuple(
-                safe(dict(row))
-                for row in rows[:samples]
-                if isinstance(row, Mapping)
-            )
+            tuple(safe(dict(row)) for row in rows[:samples] if isinstance(row, Mapping))
             if samples
             else ()
         )

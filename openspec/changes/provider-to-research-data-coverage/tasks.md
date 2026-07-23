@@ -4,12 +4,12 @@ A task is complete only when the named contract, implementation, focused tests a
 
 ## 1. Capability inventory — #328
 
-- [ ] 1.1 Define the machine-readable inventory schema and finite status vocabulary.
-- [ ] 1.2 Add one row for every built-in contract, route and provider capability.
-- [ ] 1.3 Record quality, `vnalpha` client/persistence/consumer, point-in-time, license and queue mapping separately.
-- [ ] 1.4 Mark `foreign_flow.daily` deferred until #336.
-- [ ] 1.5 Remove unsupported `fund.holdings` route without creating a placeholder fund product.
-- [ ] 1.6 Add repository consistency tests for contract/route/provider/client/queue/document drift.
+- [x] 1.1 Define the machine-readable inventory schema and finite status vocabulary. [evidence: `vnstock/core/capability_inventory.py`, `vnstock/docs/dataset-capability-inventory.json`]
+- [x] 1.2 Add one row for every built-in contract, route and provider capability. [evidence: `vnstock/tests/contracts/test_dataset_capability_inventory.py::test_dataset_capability_inventory_matches_runtime_contracts`]
+- [x] 1.3 Record quality, `vnalpha` client/persistence/consumer, point-in-time, license and queue mapping separately. [evidence: `vnstock/docs/dataset-capability-inventory.json`]
+- [x] 1.4 Mark `foreign_flow.daily` deferred until #336. [evidence: `foreign_flow.daily` inventory row]
+- [x] 1.5 Remove unsupported `fund.holdings` route without creating a placeholder fund product. [evidence: `vnstock/service/dataset_mapper.py`, focused inventory contract test]
+- [x] 1.6 Add repository consistency tests for contract/route/provider/client/queue/document drift. [evidence: `vnstock/tests/contracts/test_dataset_capability_inventory.py::test_dataset_capability_inventory_matches_runtime_contracts`]
 
 ## 2. Optional current context
 

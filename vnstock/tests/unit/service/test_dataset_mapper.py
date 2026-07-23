@@ -31,7 +31,6 @@ class TestPathToDataset:
             ("/v1/fundamental/cash-flow", "fundamental.cash_flow"),
             ("/v1/fundamental/financial-ratio", "fundamental.financial_ratio"),
             ("/v1/fund/nav", "fund.nav"),
-            ("/v1/fund/holdings", "fund.holdings"),
         ],
     )
     def test_canonical_paths(self, path, expected):
@@ -67,7 +66,7 @@ class TestUnknownPaths:
 
     def test_unknown_path_raises(self):
         with pytest.raises(MapperError):
-            path_to_dataset("/v1/unknown/dataset")
+            path_to_dataset("/v1/fund/holdings")
 
     def test_empty_path_raises(self):
         with pytest.raises(MapperError):

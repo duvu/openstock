@@ -17,6 +17,8 @@ Usage::
 from __future__ import annotations
 
 import warnings
+from collections.abc import Mapping
+from types import MappingProxyType
 
 # ---------------------------------------------------------------------------
 # Canonical path → dataset name mapping
@@ -37,7 +39,6 @@ _CANONICAL: dict[str, str] = {
     "/v1/fundamental/cash-flow": "fundamental.cash_flow",
     "/v1/fundamental/financial-ratio": "fundamental.financial_ratio",
     "/v1/fund/nav": "fund.nav",
-    "/v1/fund/holdings": "fund.holdings",
 }
 
 # Deprecated aliases → canonical dataset name
@@ -95,6 +96,10 @@ def path_to_dataset(path: str) -> str:
         )
         return _ALIASES[normalised]
     raise MapperError(path)
+
+
+def canonical_dataset_routes() -> Mapping[str, str]:
+    return MappingProxyType(_CANONICAL)
 
 
 def extract_runtime_params(query: dict[str, list[str]]) -> dict[str, str]:
