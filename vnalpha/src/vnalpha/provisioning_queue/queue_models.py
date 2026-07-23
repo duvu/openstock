@@ -78,6 +78,80 @@ class QueueRuntimeSettings:
 
 
 @final
+@dataclass(frozen=True, slots=True)
+class QueueHealthReport:
+    """Read-only operational state used to decide whether claims are safe."""
+
+    schema_version: int | None
+    supported_schema: bool
+    integrity_check: str
+    integrity_ok: bool
+    journal_mode: str | None
+    synchronous: str | None
+    busy_timeout_ms: int | None
+    file_size_bytes: int
+    wal_size_bytes: int
+    disk_free_bytes: int | None
+    disk_free_threshold_bytes: int
+    disk_free_above_threshold: bool
+    readable: bool
+    writable: bool
+    active_leases: int | None
+    expired_leases: int | None
+    queue_depth: int | None
+    oldest_queued_age_seconds: int | None
+    last_checkpoint_at: datetime | None
+    last_prune_at: datetime | None
+    last_migration_at: datetime | None
+    detail: str | None
+
+    @property
+    def can_claim(self) -> bool:
+        """Return whether the queue has passed its non-destructive claim gate."""
+
+        return (
+            self.supported_schema
+            and self.integrity_ok
+            and self.readable
+            and self.writable
+            and self.disk_free_above_threshold
+        )
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class QueueCheckpointResult:
+    """The bounded result of one passive SQLite WAL checkpoint."""
+
+    busy_readers: int
+    wal_frames: int
+    checkpointed_frames: int
+    completed_at: datetime
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class QueuePruneResult:
+    """Counts from one short, evidence-aware terminal-retention batch."""
+
+    pruned_succeeded: int
+    pruned_failed: int
+    pruned_cancelled: int
+    retained_referenced: int
+    completed_at: datetime
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class PrunedProvisioningJob:
+    """Bounded history retained after terminal job detail is deliberately removed."""
+
+    job_id: ProvisioningJobId
+    final_status: ProvisioningJobStatus
+    pruned_at: datetime
+
+
+@final
 @dataclass
 class ProvisioningQueueError(Exception):
     """Base error for the queue boundary."""
@@ -98,6 +172,14 @@ class ProvisioningQueueValidationError(ProvisioningQueueError):
 @dataclass
 class ProvisioningQueueStorageError(ProvisioningQueueError):
     """SQLite could not safely complete a queue operation."""
+
+
+@final
+@dataclass
+class ProvisioningQueueHealthError(ProvisioningQueueError):
+    """A non-destructive health gate prevented the next queue claim."""
+
+    report: QueueHealthReport
 
 
 @final

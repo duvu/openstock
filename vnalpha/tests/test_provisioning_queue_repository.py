@@ -18,6 +18,7 @@ from vnalpha.provisioning_queue import (
     ProvisioningJobNotFoundError,
     ProvisioningJobStatus,
     ProvisioningQueue,
+    ProvisioningQueueHealthError,
     ProvisioningQueueStorageError,
     ProvisioningQueueValidationError,
     QueueDataset,
@@ -79,6 +80,11 @@ def test_durable_provisioning_queue_contract(
     queue = ProvisioningQueue(tmp_path / "provisioning.sqlite3", max_attempts=2)
 
     settings = queue.initialize()
+    initial_health = queue.health(now=now)
+    assert initial_health.can_claim
+    assert initial_health.schema_version == _sqlite.SCHEMA_VERSION
+    assert initial_health.integrity_ok
+    assert initial_health.queue_depth == 0
     for field, unsupported_version in (
         ("source_policy_version", "policy-v2"),
         ("contract_version", "current-symbol-v2"),
@@ -123,9 +129,14 @@ def test_durable_provisioning_queue_contract(
     migrated_queue.initialize()
     assert not migrated_queue.list()
     with sqlite3.connect(migration_path) as connection:
-        connection.execute("PRAGMA user_version = 2")
+        connection.execute("PRAGMA user_version = 3")
     with pytest.raises(ProvisioningQueueStorageError):
         migrated_queue.initialize()
+    unsupported_health = migrated_queue.health(now=now)
+    assert not unsupported_health.can_claim
+    assert unsupported_health.schema_version == 3
+    with pytest.raises(ProvisioningQueueHealthError):
+        migrated_queue.claim("worker-health", now=now)
     with pytest.raises(ProvisioningJobNotFoundError):
         queue.cancel(ProvisioningJobId("unknown-job"))
     assert [job.goal for job in queue.list()] == [
@@ -136,6 +147,9 @@ def test_durable_provisioning_queue_contract(
     assert joined_symbol.joined_existing_job
     assert joined_symbol.job.job_id == submitted_symbol.job.job_id
     assert joined_symbol.job.priority == 9
+    submitted_health = queue.health(now=now)
+    assert submitted_health.queue_depth == 3
+    assert submitted_health.oldest_queued_age_seconds == 0
     with pytest.raises(ProvisioningQueueValidationError):
         queue.submit_or_join(
             symbol_goal, priority=1, origin="invalid\nmetadata", now=now
@@ -145,6 +159,9 @@ def test_durable_provisioning_queue_contract(
     assert claimed_symbol is not None
     assert claimed_symbol.job_id == submitted_symbol.job.job_id
     assert claimed_symbol.status is ProvisioningJobStatus.RUNNING
+    expired_health = queue.health(now=now + timedelta(seconds=61))
+    assert expired_health.active_leases == 0
+    assert expired_health.expired_leases == 1
     assert (
         queue.heartbeat(
             claimed_symbol.job_id, "worker-symbol", now=now + timedelta(seconds=10)
@@ -175,6 +192,9 @@ def test_durable_provisioning_queue_contract(
         queue.complete(claimed_finalization.job_id, "worker-finalization", "x" * 2_049)
     assert completed.status is ProvisioningJobStatus.SUCCEEDED
     assert completed.result == "persisted evidence is already current"
+    checkpoint = queue.checkpoint(now=now)
+    assert checkpoint.busy_readers == 0
+    assert queue.health(now=now).last_checkpoint_at == now
 
     recovery_now = datetime(2020, 1, 1, tzinfo=UTC)
     recovery_queue = ProvisioningQueue(
@@ -237,3 +257,34 @@ def test_durable_provisioning_queue_contract(
     assert read is not None
     assert sum(job is not None for job in (first_claim, second_claim)) == 1
     assert concurrent_queue.list() == (concurrent_queue.get(concurrent_job.job_id),)
+
+    retention_queue = ProvisioningQueue(tmp_path / "retention.sqlite3")
+    retention_queue.initialize()
+    prunable = retention_queue.submit_or_join(symbol_goal, priority=1, now=now).job
+    retained = retention_queue.submit_or_join(range_goal, priority=1, now=now).job
+    active = retention_queue.submit_or_join(finalization_goal, priority=1, now=now).job
+    retention_queue.cancel(prunable.job_id)
+    retention_queue.cancel(retained.job_id)
+    with sqlite3.connect(retention_queue.path) as connection:
+        connection.execute(
+            "UPDATE provision_job SET updated_at_ms = ? WHERE job_id IN (?, ?)",
+            (
+                int((now - timedelta(days=31)).timestamp() * 1_000),
+                str(prunable.job_id),
+                str(retained.job_id),
+            ),
+        )
+    prune_result = retention_queue.prune(
+        older_than_days=30,
+        retained_job_ids=frozenset({retained.job_id}),
+        now=now,
+    )
+    assert prune_result.pruned_cancelled == 1
+    assert prune_result.retained_referenced == 1
+    assert retention_queue.get(prunable.job_id) is None
+    assert (
+        retention_queue.get_pruned(prunable.job_id).final_status
+        is ProvisioningJobStatus.CANCELLED
+    )
+    assert retention_queue.get(retained.job_id) is not None
+    assert retention_queue.get(active.job_id) is not None

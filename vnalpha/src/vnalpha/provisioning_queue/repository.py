@@ -10,6 +10,7 @@ from vnalpha.provisioning_queue._lifecycle import (
     requeue_expired,
     terminalize,
 )
+from vnalpha.provisioning_queue._operations import get_pruned, prune_terminal
 from vnalpha.provisioning_queue._records import positive
 from vnalpha.provisioning_queue._sqlite import (
     DEFAULT_BUSY_TIMEOUT_MS,
@@ -30,6 +31,11 @@ from vnalpha.provisioning_queue.queue_models import (
     ProvisioningJob,
     ProvisioningJobId,
     ProvisioningJobStatus,
+    ProvisioningQueueHealthError,
+    PrunedProvisioningJob,
+    QueueCheckpointResult,
+    QueueHealthReport,
+    QueuePruneResult,
     QueueRuntimeSettings,
     QueueSubmitResult,
 )
@@ -71,6 +77,30 @@ class ProvisioningQueue:
     def runtime_settings(self) -> QueueRuntimeSettings:
         return self._database.runtime_settings()
 
+    def health(self, *, now: datetime | None = None) -> QueueHealthReport:
+        return self._database.health(now)
+
+    def checkpoint(self, *, now: datetime | None = None) -> QueueCheckpointResult:
+        self.initialize()
+        return self._database.checkpoint(now)
+
+    def prune(
+        self,
+        *,
+        older_than_days: int,
+        retained_job_ids: frozenset[ProvisioningJobId] = frozenset(),
+        now: datetime | None = None,
+    ) -> QueuePruneResult:
+        if not 1 <= older_than_days <= 3_650:
+            raise ValueError("older_than_days must be between 1 and 3650")
+        self.initialize()
+        return prune_terminal(
+            self._database,
+            older_than_days=older_than_days,
+            retained_job_ids=retained_job_ids,
+            now=now,
+        )
+
     def submit_or_join(
         self,
         goal: ProvisioningGoal,
@@ -91,6 +121,9 @@ class ProvisioningQueue:
 
     def get(self, job_id: ProvisioningJobId) -> ProvisioningJob | None:
         return get(self._database, job_id)
+
+    def get_pruned(self, job_id: ProvisioningJobId) -> PrunedProvisioningJob | None:
+        return get_pruned(self._database, job_id)
 
     def find_by_identity(
         self,
@@ -114,6 +147,11 @@ class ProvisioningQueue:
     def claim(
         self, worker_id: str, *, now: datetime | None = None
     ) -> ProvisioningJob | None:
+        report = self.health(now=now)
+        if not report.can_claim:
+            raise ProvisioningQueueHealthError(
+                "provisioning queue health prevents claims", report
+            )
         return claim(self._database, worker_id, now)
 
     def heartbeat(
