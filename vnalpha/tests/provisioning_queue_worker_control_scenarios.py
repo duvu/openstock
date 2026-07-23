@@ -69,6 +69,16 @@ def _assert_unsupported_handlers_fail_without_warehouse(tmp_path: Path) -> None:
 def _assert_enrichment_stops_before_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    company_context_stages = CurrentSymbolGoalHandler().stages(
+        current_goal("FPT").model_copy(
+            update={"requested_enrichments": (GoalEnrichment.COMPANY_CONTEXT,)}
+        )
+    )
+    assert [stage.name for stage in company_context_stages] == [
+        "current-symbol-admission",
+        "current-symbol-provision",
+        "company-context",
+    ]
     queue = ProvisioningQueue(tmp_path / "enrichment.sqlite3")
     queue.initialize()
     submitted = queue.submit_or_join(

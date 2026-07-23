@@ -7,6 +7,7 @@ from typing import Protocol, assert_never
 
 import duckdb
 
+from vnalpha.company_context import refresh_company_context
 from vnalpha.data_availability.artifact_readiness_models import ReadinessCapability
 from vnalpha.data_provisioning.current_symbol_models import CurrentSymbolReadyResult
 from vnalpha.data_provisioning.ensure_current_symbol import (
@@ -16,6 +17,7 @@ from vnalpha.maintenance.session_finalizer import SessionFinalizer
 from vnalpha.provisioning_queue.models import (
     EnsureCurrentSymbolGoal,
     FinalizeMarketSessionGoal,
+    GoalEnrichment,
     GoalType,
     ProvisioningGoal,
     RefreshMode,
@@ -64,7 +66,7 @@ class CurrentSymbolGoalHandler:
     def stages(self, goal: ProvisioningGoal) -> tuple[ProvisioningGoalStage, ...]:
         match goal:
             case EnsureCurrentSymbolGoal() as current_goal:
-                return (
+                stages = (
                     ProvisioningStage(
                         name="current-symbol-admission",
                         requires_warehouse_write=False,
@@ -78,6 +80,17 @@ class CurrentSymbolGoalHandler:
                         ),
                     ),
                 )
+                if GoalEnrichment.COMPANY_CONTEXT in current_goal.requested_enrichments:
+                    return stages + (
+                        ProvisioningStage(
+                            name="company-context",
+                            requires_warehouse_write=True,
+                            action=lambda connection: _refresh_company_context(
+                                current_goal, connection
+                            ),
+                        ),
+                    )
+                return stages
             case unreachable:
                 assert_never(unreachable)
 
@@ -130,7 +143,10 @@ def _result_from_current_symbol(
 
 
 def _admit_current_symbol(goal: EnsureCurrentSymbolGoal) -> HandlerResult:
-    if goal.requested_enrichments:
+    if any(
+        enrichment is not GoalEnrichment.COMPANY_CONTEXT
+        for enrichment in goal.requested_enrichments
+    ):
         return HandlerResult(False, "UNSUPPORTED_ENRICHMENT_REQUEST")
     return HandlerResult(True, "CURRENT_SYMBOL_ADMITTED")
 
@@ -152,6 +168,17 @@ def _provision_current_symbol(
             data_only=goal.desired_capability is ReadinessCapability.PRICE_ANALYSIS,
         ),
     )
+
+
+def _refresh_company_context(
+    goal: EnsureCurrentSymbolGoal, connection: duckdb.DuckDBPyConnection | None
+) -> HandlerResult:
+    if connection is None:
+        raise CurrentSymbolHandlerConfigurationError(
+            "company-context provisioning requires a writable warehouse"
+        )
+    outcome = refresh_company_context(connection, goal.symbol)
+    return HandlerResult(True, json.dumps(outcome.to_dict(), sort_keys=True))
 
 
 def _finalize_stage(

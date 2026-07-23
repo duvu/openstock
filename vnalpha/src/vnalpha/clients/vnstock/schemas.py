@@ -76,6 +76,23 @@ class ProviderCapabilityRecord(BaseModel):
     status: Optional[str] = None
 
 
+class CompanyInfoRecord(BaseModel):
+    symbol: str
+    exchange: str
+    short_name: str | None = None
+    full_name: str | None = None
+    website: str | None = None
+    industry: str | None = None
+    industry_code: str | None = None
+    company_type: str | None = None
+    established_year: int | None = None
+    employees: int | None = None
+    foreign_percent: float | None = None
+    outstanding_share: float | None = None
+    issue_share: float | None = None
+    stock_rating: str | None = None
+
+
 class SymbolsResponse(VnstockResponse):
     pass
 
@@ -100,6 +117,10 @@ class MembershipResponse(VnstockResponse):
             MembershipRecord.model_validate(record).model_dump(mode="json")
             for record in records
         ]
+
+
+class CompanyInfoResponse(VnstockResponse):
+    data: list[CompanyInfoRecord]
 
 
 class ProviderHealthResponse(BaseModel):

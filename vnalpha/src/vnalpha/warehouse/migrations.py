@@ -11,6 +11,7 @@ import duckdb
 from vnalpha.core.logging import get_logger
 from vnalpha.observability.domain import log_migration_start, log_migration_success
 from vnalpha.scoring.policy import BASELINE_SCORING_POLICY
+from vnalpha.warehouse.company_context_schema import ALL_DDL_COMPANY_CONTEXT
 from vnalpha.warehouse.corporate_action_schema import ALL_DDL_CORPORATE_ACTIONS
 from vnalpha.warehouse.disclosure_schema import ALL_DDL_DISCLOSURES
 from vnalpha.warehouse.fundamentals_schema import ALL_DDL_FUNDAMENTALS
@@ -124,6 +125,8 @@ def run_migrations(
         conn.execute(ddl)
     _migrate_maintenance_run_columns(conn)
     for ddl in ALL_DDL_FUNDAMENTALS:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_COMPANY_CONTEXT:
         conn.execute(ddl)
     for ddl in ALL_DDL_VALUATION:
         conn.execute(ddl)

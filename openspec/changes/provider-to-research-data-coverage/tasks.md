@@ -15,10 +15,10 @@ A task is complete only when the named contract, implementation, focused tests a
 
 ### #329 — company profile
 
-- [ ] 2.1 Add typed company-info client and verified provider fixture.
-- [ ] 2.2 Persist idempotent current snapshot revisions with provider, observed time and content hash.
-- [ ] 2.3 Expose one shared company-context result for CLI/TUI/assistant.
-- [ ] 2.4 Prove current share/industry fields do not leak into historical consumers.
+- [x] 2.1 Add typed company-info client and verified provider fixture. [evidence: `vnalpha/clients/vnstock/client.py`, `vnalpha/tests/test_company_context.py::test_company_context_preserves_current_revision_contract`]
+- [x] 2.2 Persist idempotent current snapshot revisions with provider, observed time and content hash. [evidence: `vnalpha/company_context.py`, focused company-context contract test]
+- [x] 2.3 Expose one shared company-context result for CLI/TUI/assistant. [evidence: `CurrentSymbolResearchResult.company_context`, `vnalpha/tools/current_symbol_research.py`, `vnalpha/cli_app/current_symbol.py`]
+- [x] 2.4 Prove current share/industry fields do not leak into historical consumers. [evidence: focused company-context contract test]
 
 ### #330 — quote and intraday summary
 

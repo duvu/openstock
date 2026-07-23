@@ -18,6 +18,7 @@ from vnalpha.data_provisioning.current_symbol_result import (
     CurrentSymbolResearchStatus,
 )
 from vnalpha.provisioning_queue import DEFAULT_QUEUE_PATH
+from vnalpha.provisioning_queue.models import GoalEnrichment
 from vnalpha.tools.errors import ToolExecutionError
 from vnalpha.tools.models import ToolOutput
 from vnalpha.tools.research_intelligence import deep_symbol_analysis
@@ -32,6 +33,7 @@ def current_symbol_research(
     requested_capability: ReadinessCapability = ReadinessCapability.CANDIDATE_RANKING,
     priority: int = 1,
     force_refresh: bool = False,
+    company_context: bool = False,
     historical: bool = False,
     wait_mode: CurrentSymbolWaitMode = CurrentSymbolWaitMode.WAIT_UP_TO,
     wait_timeout_seconds: float | None = None,
@@ -58,6 +60,9 @@ def current_symbol_research(
             requested_capability=_capability(requested_capability),
             priority=priority,
             force_refresh=force_refresh,
+            requested_enrichments=(
+                (GoalEnrichment.COMPANY_CONTEXT,) if company_context else ()
+            ),
             historical=historical,
             wait_mode=resolved_wait_mode,
             wait_timeout_seconds=resolved_timeout_seconds,
@@ -130,6 +135,9 @@ def _result_payload(result: CurrentSymbolResearchResult) -> dict[str, Any]:
     data["requested_capability"] = result.requested_capability.value
     data["effective_capability"] = (
         result.effective_capability.value if result.effective_capability else None
+    )
+    data["company_context"] = (
+        result.company_context.to_dict() if result.company_context is not None else None
     )
     return data
 

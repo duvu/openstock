@@ -36,6 +36,16 @@ Company-context observations without verified temporal evidence SHALL be treated
 - **THEN** `vnalpha` stores provider, observed time and content hash in an idempotent snapshot revision
 - **AND** labels fields without verified effective dates as current-only.
 
+#### Scenario: Current research reuses a persisted company snapshot
+- **WHEN** current-symbol research does not explicitly request `COMPANY_CONTEXT`
+- **THEN** it returns the persisted current snapshot when one is available
+- **AND** does not refresh the provider as an implicit side effect.
+
+#### Scenario: Current research explicitly refreshes company context
+- **WHEN** current-symbol research requests the allowlisted `COMPANY_CONTEXT` enrichment
+- **THEN** the existing typed provisioning goal refreshes and persists the provider outcome
+- **AND** empty, unsupported and provider-failure outcomes remain distinguishable typed results.
+
 #### Scenario: Historical research requests company context
 - **WHEN** only a current company snapshot exists
 - **THEN** historical consumers do not treat current shares or industry fields as historical facts.

@@ -15,6 +15,7 @@ from vnalpha.clients.vnstock.errors import (
     VnstockTimeoutError,
 )
 from vnalpha.clients.vnstock.schemas import (
+    CompanyInfoResponse,
     MembershipResponse,
     OHLCVResponse,
     ProviderHealthResponse,
@@ -141,6 +142,18 @@ class VnstockClient:
             _strict_persistence_params(params),
         )
         return VnstockResponse.model_validate(raw)
+
+    def get_company_info(
+        self,
+        symbol: str,
+        source: Optional[str] = None,
+    ) -> CompanyInfoResponse:
+        source = validate_persistence_source(source)
+        params: dict[str, str] = {"symbol": symbol}
+        if source:
+            params["source"] = source
+        raw = self._get("/v1/company/info", _strict_persistence_params(params))
+        return CompanyInfoResponse.model_validate(raw)
 
     def get_equity_quote(
         self,

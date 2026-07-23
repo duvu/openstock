@@ -27,6 +27,7 @@ def register(app: typer.Typer) -> None:
         ] = ReadinessCapability.CANDIDATE_RANKING,
         priority: Annotated[int, typer.Option("--priority", min=0, max=1000)] = 1,
         force_refresh: Annotated[bool, typer.Option("--force-refresh")] = False,
+        company_context: Annotated[bool, typer.Option("--company-context")] = False,
         historical: Annotated[bool, typer.Option("--historical")] = False,
         wait: Annotated[bool, typer.Option("--wait")] = False,
         wait_timeout: Annotated[
@@ -50,6 +51,7 @@ def register(app: typer.Typer) -> None:
                 requested_capability=capability,
                 priority=priority,
                 force_refresh=force_refresh,
+                company_context=company_context,
                 historical=historical,
                 wait_mode=wait_mode,
                 wait_timeout_seconds=timeout_seconds,
@@ -72,6 +74,16 @@ def register(app: typer.Typer) -> None:
                 f"{status} wait={wait_mode.value} timeout={timeout_seconds:g} "
                 f"job_id={job_id or '-'}"
             )
+            company_context_result = (
+                provisioning.get("company_context")
+                if isinstance(provisioning, dict)
+                else None
+            )
+            if isinstance(company_context_result, dict):
+                typer.echo(
+                    "company_context="
+                    f"{company_context_result.get('status', 'UNAVAILABLE')}"
+                )
             if output.summary:
                 typer.echo(output.summary)
             for warning in output.warnings:

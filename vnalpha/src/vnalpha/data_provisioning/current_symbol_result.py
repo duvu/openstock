@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import assert_never
 
+from vnalpha.company_context import CompanyContextResult
 from vnalpha.data_availability.artifact_readiness_models import (
     ArtifactReadinessReport,
     ReadinessCapability,
@@ -40,6 +41,7 @@ class CurrentSymbolResearchResult:
     reused_fresh_data: bool
     correlation_id: str
     readiness: ArtifactReadinessReport
+    company_context: CompanyContextResult | None = None
 
 
 def build_result(

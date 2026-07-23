@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
+from json import JSONDecodeError, loads
 from pathlib import Path
-from typing import Final
+from typing import Final, Mapping
 
+import duckdb
+
+from vnalpha.company_context import (
+    CompanyContextResult,
+    CompanyContextStatus,
+    get_current_company_context,
+)
 from vnalpha.data_availability.artifact_readiness import ArtifactReadinessService
 from vnalpha.data_availability.artifact_readiness_models import (
     ArtifactReadinessReport,
@@ -31,9 +39,11 @@ from vnalpha.data_provisioning.current_symbol_result import (
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
 from vnalpha.provisioning_queue.models import (
     EnsureCurrentSymbolGoal,
+    GoalEnrichment,
     RefreshMode,
 )
 from vnalpha.provisioning_queue.repository import ProvisioningQueue
+from vnalpha.warehouse.connection import WarehouseOpenError, read_connection
 
 _SOURCE_POLICY_VERSION: Final = "policy-v1"
 _CURRENT_SYMBOL_CONTRACT_VERSION: Final = "current-symbol-v1"
@@ -53,6 +63,7 @@ class CurrentSymbolResearchRequest:
     )
     origin: str | None = None
     correlation_id: str | None = None
+    requested_enrichments: tuple[GoalEnrichment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,32 +79,49 @@ class CurrentSymbolResearchApplication:
     ) -> CurrentSymbolResearchResult:
         correlation_id = _correlation_id(request.correlation_id)
         readiness = self._inspect(request)
-        if readiness.requested_ready and not request.force_refresh:
-            return _result(
-                status=CurrentSymbolResearchStatus.READY,
-                readiness=readiness,
-                job_id=None,
-                correlation_id=correlation_id,
+        refresh_company_context = (
+            GoalEnrichment.COMPANY_CONTEXT in request.requested_enrichments
+        )
+        if (
+            readiness.requested_ready
+            and not request.force_refresh
+            and not refresh_company_context
+        ):
+            return self._with_company_context(
+                _result(
+                    status=CurrentSymbolResearchStatus.READY,
+                    readiness=readiness,
+                    job_id=None,
+                    correlation_id=correlation_id,
+                ),
+                request,
             )
         if (
             readiness.effective_capability is not None
             and not request.force_refresh
             and not readiness.should_enqueue
+            and not refresh_company_context
         ):
-            return _result(
-                status=CurrentSymbolResearchStatus.DEGRADED,
-                readiness=readiness,
-                job_id=None,
-                correlation_id=correlation_id,
+            return self._with_company_context(
+                _result(
+                    status=CurrentSymbolResearchStatus.DEGRADED,
+                    readiness=readiness,
+                    job_id=None,
+                    correlation_id=correlation_id,
+                ),
+                request,
             )
         if request.historical or not (
-            readiness.should_enqueue or request.force_refresh
+            readiness.should_enqueue or request.force_refresh or refresh_company_context
         ):
-            return _result(
-                status=CurrentSymbolResearchStatus.UNAVAILABLE,
-                readiness=readiness,
-                job_id=None,
-                correlation_id=correlation_id,
+            return self._with_company_context(
+                _result(
+                    status=CurrentSymbolResearchStatus.UNAVAILABLE,
+                    readiness=readiness,
+                    job_id=None,
+                    correlation_id=correlation_id,
+                ),
+                request,
             )
         queue = self._queue()
         queue.initialize()
@@ -110,32 +138,42 @@ class CurrentSymbolResearchApplication:
             request.wait_timeout_seconds,
         )
         if job.is_terminal:
-            return _terminal_result(
+            terminal = _terminal_result(
                 readiness=self._inspect(request),
                 job_id=job.job_id,
                 correlation_id=correlation_id,
                 succeeded=job.status.value == "SUCCEEDED",
             )
+            refresh_outcome = _company_context_outcome(job.result)
+            if refresh_company_context and refresh_outcome is not None:
+                return replace(terminal, company_context=refresh_outcome)
+            return self._with_company_context(terminal, request)
         if (
             readiness.effective_capability is not None
             and request.wait_mode is CurrentSymbolWaitMode.DETACH
         ):
-            return _result(
-                status=CurrentSymbolResearchStatus.DEGRADED,
+            return self._with_company_context(
+                _result(
+                    status=CurrentSymbolResearchStatus.DEGRADED,
+                    readiness=readiness,
+                    job_id=job.job_id,
+                    correlation_id=correlation_id,
+                ),
+                request,
+            )
+        return self._with_company_context(
+            _result(
+                status=(
+                    CurrentSymbolResearchStatus.PENDING
+                    if submission.joined_existing_job
+                    or request.wait_mode is not CurrentSymbolWaitMode.DETACH
+                    else CurrentSymbolResearchStatus.ACCEPTED
+                ),
                 readiness=readiness,
                 job_id=job.job_id,
                 correlation_id=correlation_id,
-            )
-        return _result(
-            status=(
-                CurrentSymbolResearchStatus.PENDING
-                if submission.joined_existing_job
-                or request.wait_mode is not CurrentSymbolWaitMode.DETACH
-                else CurrentSymbolResearchStatus.ACCEPTED
             ),
-            readiness=readiness,
-            job_id=job.job_id,
-            correlation_id=correlation_id,
+            request,
         )
 
     def _inspect(
@@ -158,6 +196,28 @@ class CurrentSymbolResearchApplication:
             return ProvisioningQueue()
         return ProvisioningQueue(self.queue_path)
 
+    def _with_company_context(
+        self,
+        result: CurrentSymbolResearchResult,
+        request: CurrentSymbolResearchRequest,
+    ) -> CurrentSymbolResearchResult:
+        if request.historical:
+            context = CompanyContextResult(
+                CompanyContextStatus.HISTORICAL_UNAVAILABLE,
+                None,
+            )
+        else:
+            try:
+                with read_connection(self.warehouse_path) as connection:
+                    context = get_current_company_context(
+                        connection,
+                        result.readiness.symbol,
+                        historical=False,
+                    )
+            except (WarehouseOpenError, duckdb.Error, OSError):
+                context = CompanyContextResult(CompanyContextStatus.UNAVAILABLE, None)
+        return replace(result, company_context=context)
+
 
 def _goal_from(
     request: CurrentSymbolResearchRequest, readiness: ArtifactReadinessReport
@@ -174,6 +234,7 @@ def _goal_from(
         ),
         source_policy_version=_SOURCE_POLICY_VERSION,
         contract_version=_CURRENT_SYMBOL_CONTRACT_VERSION,
+        requested_enrichments=request.requested_enrichments,
     )
 
 
@@ -184,6 +245,18 @@ def _correlation_id(requested: str | None) -> str:
     if current and current != "unset":
         return current
     return set_correlation_id()
+
+
+def _company_context_outcome(result: str | None) -> CompanyContextResult | None:
+    if result is None:
+        return None
+    try:
+        payload = loads(result)
+    except JSONDecodeError:
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    return CompanyContextResult.from_dict(payload)
 
 
 __all__ = [

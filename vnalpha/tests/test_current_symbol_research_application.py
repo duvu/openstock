@@ -87,6 +87,8 @@ def test_ready_current_symbol_reuses_persisted_evidence_without_a_queue_job(
     assert result.reused_fresh_data is True
     assert result.correlation_id
     assert result.readiness.requested_ready
+    assert result.company_context is not None
+    assert result.company_context.status.value == "UNAVAILABLE"
     assert ranking.status is CurrentSymbolResearchStatus.READY
     assert ranking.effective_capability is ReadinessCapability.CANDIDATE_RANKING
     assert ranking.job_id is None
@@ -230,6 +232,9 @@ def test_missing_current_symbol_work_joins_one_escalated_queue_job(
         "mode": CurrentSymbolWaitMode.WAIT_UP_TO.value,
         "timeout_seconds": 0,
     }
+    assert (
+        assistant_payload["provisioning"]["company_context"]["status"] == "UNAVAILABLE"
+    )
 
     runner = CliRunner()
     cli_current_symbol = runner.invoke(
@@ -257,6 +262,7 @@ def test_missing_current_symbol_work_joins_one_escalated_queue_job(
         "mode": CurrentSymbolWaitMode.DETACH.value,
         "timeout_seconds": 0,
     }
+    assert cli_payload["provisioning"]["company_context"]["status"] == "UNAVAILABLE"
     assert cli_payload["provisioning"]["job_id"] == str(accepted.job_id)
     conflicting_wait_flags = runner.invoke(
         cli_app,
