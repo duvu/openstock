@@ -94,6 +94,30 @@ CREATE INDEX IF NOT EXISTS idx_maintenance_run_job_job_id
 ON maintenance_run_job(job_id);
 """
 
+DDL_MAINTENANCE_FINALIZATION_STAGE = """
+CREATE TABLE IF NOT EXISTS maintenance_finalization_stage (
+    stage_run_id VARCHAR PRIMARY KEY,
+    run_id VARCHAR NOT NULL,
+    stage_name VARCHAR NOT NULL,
+    stage_order INTEGER NOT NULL,
+    status VARCHAR NOT NULL,
+    counts JSON,
+    failures JSON,
+    warnings JSON,
+    diagnostics_refs JSON,
+    remediation JSON,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    duration_seconds DOUBLE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+DDL_MAINTENANCE_FINALIZATION_STAGE_IDX_RUN = """
+CREATE INDEX IF NOT EXISTS idx_maintenance_finalization_stage_run
+ON maintenance_finalization_stage(run_id, stage_order);
+"""
+
 DDL_MAINTENANCE_STAGE_RUN_IDX_RUN = """
 CREATE INDEX IF NOT EXISTS idx_maintenance_stage_run_run_id
 ON maintenance_stage_run(run_id, stage_order);
@@ -110,4 +134,6 @@ ALL_DDL_MAINTENANCE_LEDGER = (
     DDL_MAINTENANCE_STAGE_RUN_IDX_RUN,
     DDL_MAINTENANCE_RUN_JOB,
     DDL_MAINTENANCE_RUN_JOB_IDX,
+    DDL_MAINTENANCE_FINALIZATION_STAGE,
+    DDL_MAINTENANCE_FINALIZATION_STAGE_IDX_RUN,
 )

@@ -19,8 +19,12 @@ from vnalpha.provisioning_queue._worker_execution import (
 from vnalpha.provisioning_queue._worker_runtime import (
     ExclusiveProvisioner,
 )
+from vnalpha.provisioning_queue.finalization_trigger import (
+    maybe_submit_finalization_for_terminal_job,
+)
 from vnalpha.provisioning_queue.handlers import (
     CurrentSymbolGoalHandler,
+    FinalizeMarketSessionGoalHandler,
     ProvisioningGoalHandler,
 )
 from vnalpha.provisioning_queue.models import GoalType, goal_type
@@ -46,6 +50,7 @@ class WorkerSettings:
 
 _DEFAULT_HANDLERS: Final[tuple[ProvisioningGoalHandler, ...]] = (
     CurrentSymbolGoalHandler(),
+    FinalizeMarketSessionGoalHandler(),
 )
 _DEFAULT_WORKER_SETTINGS: Final = WorkerSettings()
 
@@ -156,10 +161,15 @@ class ProvisioningWorker:
                         return None
                     self._queue.heartbeat(job.job_id, self._worker_id)
                     if result.succeeded:
-                        return self._queue.complete(
+                        terminal = self._queue.complete(
                             job.job_id, self._worker_id, result.detail
                         )
-                    return self._queue.fail(job.job_id, self._worker_id, result.detail)
+                    else:
+                        terminal = self._queue.fail(
+                            job.job_id, self._worker_id, result.detail
+                        )
+                    self._trigger_finalization(terminal)
+                    return terminal
                 case unreachable:
                     assert_never(unreachable)
         except ProvisioningJobLeaseError:
@@ -175,9 +185,11 @@ class ProvisioningWorker:
 
     def _cancel_at_safe_boundary(self, job: ProvisioningJob) -> ProvisioningJob | None:
         try:
-            return self._queue.acknowledge_cancellation(
+            terminal = self._queue.acknowledge_cancellation(
                 job.job_id, self._worker_id, _CANCELLATION_REASON
             )
+            self._trigger_finalization(terminal)
+            return terminal
         except ProvisioningJobLeaseError:
             return None
 
@@ -185,11 +197,20 @@ class ProvisioningWorker:
         self, job: ProvisioningJob, detail: str
     ) -> ProvisioningJob | None:
         try:
-            return self._queue.fail(job.job_id, self._worker_id, detail)
+            terminal = self._queue.fail(job.job_id, self._worker_id, detail)
+            self._trigger_finalization(terminal)
+            return terminal
         except ProvisioningJobLeaseError:
             if self._cancellation_requested(job):
                 return self._cancel_at_safe_boundary(job)
             return None
+
+    def _trigger_finalization(self, job: ProvisioningJob) -> None:
+        maybe_submit_finalization_for_terminal_job(
+            job.job_id,
+            warehouse_path=self._coordinator.path,
+            queue_path=self._queue.path,
+        )
 
 
 def _handler_registry(

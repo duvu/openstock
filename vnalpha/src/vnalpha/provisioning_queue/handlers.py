@@ -12,8 +12,10 @@ from vnalpha.data_provisioning.current_symbol_models import CurrentSymbolReadyRe
 from vnalpha.data_provisioning.ensure_current_symbol import (
     ensure_current_symbol_ready,
 )
+from vnalpha.maintenance.session_finalizer import SessionFinalizer
 from vnalpha.provisioning_queue.models import (
     EnsureCurrentSymbolGoal,
+    FinalizeMarketSessionGoal,
     GoalType,
     ProvisioningGoal,
     RefreshMode,
@@ -80,6 +82,35 @@ class CurrentSymbolGoalHandler:
                 assert_never(unreachable)
 
 
+@dataclass(frozen=True, slots=True)
+class FinalizeMarketSessionGoalHandler:
+    goal_type: GoalType = GoalType.FINALIZE_MARKET_SESSION
+
+    def stages(self, goal: ProvisioningGoal) -> tuple[ProvisioningGoalStage, ...]:
+        match goal:
+            case FinalizeMarketSessionGoal() as finalization_goal:
+                return tuple(
+                    ProvisioningStage(
+                        name=stage_name,
+                        requires_warehouse_write=True,
+                        action=lambda connection, stage_name=stage_name: (
+                            _finalize_stage(finalization_goal, stage_name, connection)
+                        ),
+                    )
+                    for stage_name in (
+                        "finalization-coverage",
+                        "finalization-features",
+                        "finalization-score-watchlist",
+                        "finalization-context",
+                        "finalization-outcomes",
+                        "finalization-memory",
+                        "finalization-result",
+                    )
+                )
+            case unreachable:
+                assert_never(unreachable)
+
+
 class CurrentSymbolHandlerConfigurationError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
@@ -123,8 +154,22 @@ def _provision_current_symbol(
     )
 
 
+def _finalize_stage(
+    goal: FinalizeMarketSessionGoal,
+    stage_name: str,
+    connection: duckdb.DuckDBPyConnection | None,
+) -> HandlerResult:
+    if connection is None:
+        raise CurrentSymbolHandlerConfigurationError(
+            "session finalization requires a writable warehouse"
+        )
+    outcome = SessionFinalizer(connection).execute(goal, stage_name)
+    return HandlerResult(outcome.succeeded, outcome.detail)
+
+
 __all__ = [
     "CurrentSymbolGoalHandler",
+    "FinalizeMarketSessionGoalHandler",
     "HandlerResult",
     "ProvisioningGoalHandler",
     "ProvisioningGoalStage",

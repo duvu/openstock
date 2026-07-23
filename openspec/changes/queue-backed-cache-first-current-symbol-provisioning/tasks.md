@@ -66,9 +66,9 @@ A task is complete only when its named code, focused tests and exact-SHA evidenc
 
 - [x] 8.1 Add idempotent `maybe_submit_session_finalization()` trigger. Evidence: `vnalpha/tests/test_maintenance_producer.py::test_maintenance_producer_freezes_goals_and_resumes_idempotently` submits one finalization goal after acquisition completion and joins it on repeat.
 - [x] 8.2 Guard against unmapped or active expected jobs. Evidence: the same contract returns `ACQUIRING` without submission before acquisition jobs are terminal.
-- [ ] 8.3 Add the finalization handler and state transitions. The trigger's `FINALIZATION_QUEUED` transition is implemented; worker stage execution remains downstream work.
-- [ ] 8.4 Build features and score/watchlist once for the frozen eligible universe.
-- [ ] 8.5 Build context, mature outcomes and project approved memory in order.
+- [x] 8.3 Add the finalization handler and state transitions. Evidence: the registered `FinalizeMarketSessionGoalHandler` moves the frozen run to `FINALIZING`, persists deterministic finalizer stages, and terminal worker jobs automatically invoke the submit-or-join trigger for mapped maintenance acquisition work.
+- [x] 8.4 Build features and score/watchlist once for the frozen eligible universe. Evidence: `SessionFinalizer` derives the canonical eligible frozen scope, runs one features stage then one score/watchlist stage, and reuses completed stages on retry.
+- [x] 8.5 Build context, mature outcomes and project approved memory in order. Evidence: the handler stage order is context, outcomes, memory after score/watchlist; the maintenance producer contract runs a seeded frozen session through those stages.
 - [ ] 8.6 Persist truthful `SUCCESS|PARTIAL|FAILED` evidence and prove retry/idempotency.
 
 ## 9. Queue operations and package — #339, #344, #340

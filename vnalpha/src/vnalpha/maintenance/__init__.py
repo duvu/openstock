@@ -7,6 +7,7 @@ from vnalpha.maintenance.daily import (
 )
 from vnalpha.maintenance.finalization import (
     MaintenanceFinalizationResult,
+    maybe_submit_finalization_for_terminal_job,
     maybe_submit_session_finalization,
 )
 from vnalpha.maintenance.ledger import (
@@ -39,5 +40,6 @@ __all__ = [
     "MaintenanceProducerResult",
     "MaintenanceRunState",
     "MaintenanceFinalizationResult",
+    "maybe_submit_finalization_for_terminal_job",
     "maybe_submit_session_finalization",
 ]

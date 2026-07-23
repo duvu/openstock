@@ -12,7 +12,8 @@ from vnalpha.maintenance.producer import (
     MaintenanceProducerRequest,
     MaintenanceRunState,
 )
-from vnalpha.provisioning_queue import ProvisioningQueue
+from vnalpha.provisioning_queue import ProvisioningJobStatus, ProvisioningQueue
+from vnalpha.provisioning_queue.worker import ProvisioningWorker
 from vnalpha.warehouse.migrations import run_migrations
 from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
 
@@ -87,8 +88,6 @@ def test_maintenance_producer_freezes_goals_and_resumes_idempotently(
         queue_path=queue_path,
     )
     assert blocked.state == "ACQUIRING"
-    while (job := queue.claim("test-worker")) is not None:
-        queue.complete(job.job_id, "test-worker", "done")
 
     resumed = producer.produce(
         MaintenanceProducerRequest(
@@ -108,7 +107,17 @@ def test_maintenance_producer_freezes_goals_and_resumes_idempotently(
     assert resumed.submitted_count == 0
     assert resumed.joined_count == 0
     assert resumed.mapped_count == 3
-    assert len(queue.list()) == 3
+    unsupported_worker = ProvisioningWorker(
+        queue,
+        worker_id="test-acquisition-terminal",
+        warehouse_path=warehouse_path,
+        handlers=(),
+    )
+    for _ in range(3):
+        terminal = unsupported_worker.process_one()
+        assert terminal is not None
+        assert terminal.status is ProvisioningJobStatus.FAILED
+    assert len(queue.list()) == 4
 
     finalized = maybe_submit_session_finalization(
         first.maintenance_run_id,
@@ -121,10 +130,27 @@ def test_maintenance_producer_freezes_goals_and_resumes_idempotently(
         queue_path=queue_path,
     )
     assert finalized.state == "FINALIZATION_QUEUED"
-    assert finalized.submitted
+    assert finalized.joined
     assert finalized.job_id is not None
     assert duplicate.joined
     assert duplicate.job_id == finalized.job_id
+
+    failed_finalization = ProvisioningWorker(
+        queue,
+        worker_id="test-finalizer",
+        warehouse_path=warehouse_path,
+    ).process_one()
+    assert failed_finalization is not None
+    assert failed_finalization.status is ProvisioningJobStatus.FAILED
+    with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
+        run_status, stage_status = connection.execute(
+            "SELECT r.status, s.status FROM maintenance_run r "
+            "JOIN maintenance_finalization_stage s ON s.run_id = r.run_id "
+            "WHERE r.run_id = ? AND s.stage_name = 'finalization-coverage'",
+            [first.maintenance_run_id],
+        ).fetchone()
+    assert run_status == "FAILED"
+    assert stage_status == "FAILED"
 
     with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
         connection.execute(
@@ -174,3 +200,10 @@ def test_maintenance_producer_freezes_goals_and_resumes_idempotently(
     assert ready_finalization.state == "FINALIZATION_QUEUED"
     assert ready_finalization.submitted
     assert len(queue.list()) == 5
+    completed_finalization = ProvisioningWorker(
+        queue,
+        worker_id="test-ready-finalizer",
+        warehouse_path=warehouse_path,
+    ).process_one()
+    assert completed_finalization is not None
+    assert completed_finalization.status is ProvisioningJobStatus.SUCCEEDED
