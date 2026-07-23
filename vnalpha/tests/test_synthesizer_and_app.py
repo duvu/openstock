@@ -302,6 +302,29 @@ class TestAnswerSynthesizer:
             "CONTEXT_POLICY_REJECTED"
         )
 
+        execution_disclaimer = AnswerSynthesizer(
+            FakeLLMClient(
+                responses=[
+                    (
+                        json.dumps(
+                            {
+                                "summary": "Caveat: this is not a buy or sell signal.",
+                                "basis": "Persisted market context.",
+                                "risks_caveats": "Research only.",
+                                "tool_trace_summary": "market.get_regime completed.",
+                                "missing_data": [],
+                                "grounded_source_refs": [
+                                    "tool:market.get_regime:step_1"
+                                ],
+                            }
+                        ),
+                        {},
+                    )
+                ]
+            )
+        ).synthesize("thi truong hom nay", market_plan, market_output)
+        assert execution_disclaimer.research_metadata["fallback_used"] is False
+
         groundedness_rejected = AnswerSynthesizer(
             FakeLLMClient(
                 responses=[

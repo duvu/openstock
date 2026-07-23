@@ -80,7 +80,7 @@ PREDICTION_CERTAINTY_PHRASES = frozenset(
     }
 )
 
-_OUTPUT_EXECUTION_PHRASES = frozenset(
+OUTPUT_EXECUTION_PHRASES = frozenset(
     {
         "buy" + " now",
         "sell" + " now",
@@ -169,7 +169,7 @@ def validate_research_answer_policy(
 ) -> ResearchPolicyResult:
     """Validate final wording for deep research, shortlist, and scenario outputs."""
     text = " ".join((answer.summary, answer.basis, answer.risks_caveats)).lower()
-    violations = tuple(phrase for phrase in _OUTPUT_EXECUTION_PHRASES if phrase in text)
+    violations = tuple(phrase for phrase in OUTPUT_EXECUTION_PHRASES if phrase in text)
     disclaimer_present = (
         "research-only" in text
         or "research only" in text

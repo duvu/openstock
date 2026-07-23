@@ -6,7 +6,7 @@ from typing import Any
 from vnalpha.assistant.context import build_context_message
 from vnalpha.assistant.groundedness import available_source_refs
 from vnalpha.assistant.models import AssistantPlan, AssistantRequest
-from vnalpha.assistant.policy import TRADING_EXECUTION_PHRASES
+from vnalpha.assistant.policy import OUTPUT_EXECUTION_PHRASES
 from vnalpha.assistant.research_templates import research_prompt_fragment
 from vnalpha.model_routing.models import ModelTaskType
 
@@ -26,7 +26,7 @@ CONTEXT_INTENT_DISCLOSURES = {
 }
 
 CONTEXT_INTENTS = frozenset(CONTEXT_INTENT_DISCLOSURES)
-UNSAFE_CONTEXT_TERMS = TRADING_EXECUTION_PHRASES | frozenset(
+UNSAFE_CONTEXT_TERMS = OUTPUT_EXECUTION_PHRASES | frozenset(
     {
         "rebalance",
         "position",
