@@ -6,11 +6,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 
 SCHEMA_VERSION = 1
 MAX_EVIDENCE_CHARS = 240
@@ -130,10 +131,7 @@ PATTERNS: tuple[PatternRule, ...] = (
     ),
     PatternRule(
         "in_memory_database",
-        re.compile(
-            r"(?:[\"']?:memory:[\"']?|TemporaryDirectory|"
-            r"tmp_path.*(?:duckdb|sqlite))"
-        ),
+        re.compile(r"(?:[\"']?:memory:[\"']?|TemporaryDirectory|tmp_path.*(?:duckdb|sqlite))"),
         "In-memory or temporary file-database test fixture",
     ),
     PatternRule(
@@ -172,9 +170,31 @@ def _should_skip(path: Path, root: Path) -> bool:
     return any(part in SKIP_DIR_NAMES for part in path.relative_to(root).parts)
 
 
-def _iter_text_files(root: Path) -> Iterable[Path]:
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or _should_skip(path, root):
+def _candidate_paths(root: Path) -> tuple[str, tuple[Path, ...]]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            check=False,
+            capture_output=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        result = None
+    if result is not None and result.returncode == 0:
+        tracked = tuple(
+            root / value.decode("utf-8", errors="surrogateescape")
+            for value in result.stdout.split(b"\0")
+            if value
+        )
+        return "git tracked files", tuple(sorted(tracked))
+    return "bounded filesystem fallback", tuple(sorted(root.rglob("*")))
+
+
+def _iter_text_files(root: Path) -> tuple[str, tuple[Path, ...]]:
+    source, candidates = _candidate_paths(root)
+    text_files: list[Path] = []
+    for path in candidates:
+        if path.is_symlink() or not path.is_file() or _should_skip(path, root):
             continue
         try:
             if path.stat().st_size > MAX_TEXT_FILE_BYTES:
@@ -182,18 +202,15 @@ def _iter_text_files(root: Path) -> Iterable[Path]:
             path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        yield path
+        text_files.append(path)
+    return source, tuple(text_files)
 
 
 def _domain_and_owner(path: str, kind: str) -> tuple[str, int]:
     if path.startswith("vnalpha/src/vnalpha/provisioning_queue/"):
         return "queue", 395
     if path.startswith("vnalpha/src/vnalpha/warehouse/"):
-        if (
-            kind in {"schema_ddl", "duckdb_specific_sql"}
-            or "schema" in path
-            or "migration" in path
-        ):
+        if kind in {"schema_ddl", "duckdb_specific_sql"} or "schema" in path or "migration" in path:
             return "schema", 393
         if path.endswith(("connection.py", "transaction.py", "write_coordinator.py")):
             return "runtime", 392
@@ -254,18 +271,30 @@ def _classification(path: str, kind: str, domain: str) -> str:
 def _safe_evidence(line: str) -> str:
     compact = " ".join(line.strip().split())
     compact = re.sub(
-        r"(?i)(postgres(?:ql)?://[^\s:/]+:)[^@\s]+(@)",
+        r"(?i)([a-z][a-z0-9+.-]*://[^\s/:@]+:)[^@\s/]+(@)",
         r"\1[REDACTED]\2",
         compact,
     )
+    compact = re.sub(
+        r"(?i)(authorization\s*[:=]\s*(?:bearer|basic)\s+)[^\s,;]+",
+        r"\1[REDACTED]",
+        compact,
+    )
+    secret_pattern = (
+        r"(?ix)(\b(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|"
+        r"private[_-]?key)\b\s*[:=]\s*)"
+        r"(?:[\"'][^\"']*[\"']|[^\s,;]+)"
+    )
+    compact = re.sub(secret_pattern, r"\1[REDACTED]", compact)
     return compact[:MAX_EVIDENCE_CHARS]
 
 
 def scan_repository(root: Path) -> dict[str, object]:
     root = root.resolve()
     findings: list[InventoryFinding] = []
+    scan_source, text_files = _iter_text_files(root)
     scanned_files = 0
-    for path in _iter_text_files(root):
+    for path in text_files:
         scanned_files += 1
         relative = _relative_path(path, root)
         text = path.read_text(encoding="utf-8")
@@ -295,6 +324,7 @@ def scan_repository(root: Path) -> dict[str, object]:
         "schema_version": SCHEMA_VERSION,
         "root": ".",
         "scan_policy": {
+            "source": scan_source,
             "max_text_file_bytes": MAX_TEXT_FILE_BYTES,
             "skipped_directories": sorted(SKIP_DIR_NAMES),
             "skipped_prefixes": list(SKIP_PREFIXES),
@@ -351,9 +381,7 @@ def validate_report(report: dict[str, object]) -> tuple[str, ...]:
 
     missing_kinds = sorted(REQUIRED_KINDS - found_kinds)
     if missing_kinds:
-        errors.append(
-            "inventory is missing required coupling kinds: " + ", ".join(missing_kinds)
-        )
+        errors.append("inventory is missing required coupling kinds: " + ", ".join(missing_kinds))
     return tuple(errors)
 
 
@@ -367,9 +395,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--json", action="store_true", help="print the full JSON report")
     parser.add_argument("--output", type=Path, help="write the full JSON report")
-    parser.add_argument(
-        "--check", action="store_true", help="fail on an incomplete inventory"
-    )
+    parser.add_argument("--check", action="store_true", help="fail on an incomplete inventory")
     return parser
 
 
