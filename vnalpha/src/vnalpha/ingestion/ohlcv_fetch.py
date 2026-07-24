@@ -186,7 +186,21 @@ def fetch_ohlcv_for_symbol(
                 attempt,
                 diagnostics=diagnostics,
             )
-        actual_source = validate_persistence_source(provider)
+        try:
+            actual_source = validate_persistence_source(provider)
+            price_basis = validated_ohlcv_price_basis(provider, response.diagnostics)
+        except ValueError:
+            return invalid_symbol_result(
+                symbol,
+                start,
+                end,
+                provider,
+                IngestionErrorCategory.PROVIDER_DATA,
+                "Provider response metadata was not valid for persistence.",
+                attempt,
+                diagnostics=diagnostics,
+                diagnostics_ref=response.meta.request_id,
+            )
         requested_source = source.strip().upper() if source else None
         if requested_source is not None and actual_source != requested_source:
             return invalid_symbol_result(
@@ -266,7 +280,7 @@ def fetch_ohlcv_for_symbol(
         return FetchedOHLCV(
             response=response,
             provider=provider,
-            price_basis=validated_ohlcv_price_basis(provider, response.diagnostics),
+            price_basis=price_basis,
             quality_report=quality_report,
             diagnostics=diagnostics,
             attempts=attempt,

@@ -18,8 +18,10 @@ import argparse
 import json
 import os
 import re
+import selectors
 import subprocess
 import sys
+import time
 from dataclasses import asdict, dataclass, replace
 from enum import Enum
 from pathlib import Path
@@ -30,10 +32,12 @@ MAX_DISCOVERED_RUNS = 5
 MAX_EVIDENCE_CHARS = 500
 DESCRIPTION = "Read-only, bounded triage for local OpenStock and failed CI logs."
 SENSITIVE_VALUE = re.compile(
-    r"(?i)\b(authorization|api[_-]?key|token|password|secret|cookie|signature)"
-    r"\s*[:=]\s*([^\s,;&]+)"
+    r"(?i)(?<![A-Za-z0-9_-])"
+    r"((?:[A-Za-z0-9]+[_-])*(?:authorization|api[_-]?key|access[_-]?token|"
+    r"refresh[_-]?token|token|password|secret|private[_-]?key|cookie|signature))"
+    r"(?![A-Za-z0-9_-])\s*[:=]\s*(\"[^\"]*\"|'[^']*'|[^\s,;&]+)"
 )
-BEARER_VALUE = re.compile(r"(?i)\bbearer\s+[^\s,;&]+")
+BEARER_VALUE = re.compile(r"(?i)\b(bearer|basic)\s+[^\s,;&]+")
 URL_CREDENTIALS = re.compile(r"(?i)(https?://)[^/@\s]+@")
 LOG_PREFIX = re.compile(
     r"^(?:\[[^\]]+\]\s*)?(?:\d{4}[-/]\d{2}[-/]\d{2}[ T]"
@@ -90,8 +94,8 @@ def _run_id(value: str) -> int:
 
 
 def sanitize(value: str) -> str:
-    redacted = SENSITIVE_VALUE.sub(r"\1=[REDACTED]", value)
-    redacted = BEARER_VALUE.sub("Bearer [REDACTED]", redacted)
+    redacted = BEARER_VALUE.sub(lambda match: f"{match.group(1)} [REDACTED]", value)
+    redacted = SENSITIVE_VALUE.sub(r"\1=[REDACTED]", redacted)
     redacted = URL_CREDENTIALS.sub(r"\1[REDACTED]@", redacted)
     normalized = " ".join(redacted.split())
     return normalized[:MAX_EVIDENCE_CHARS]
@@ -268,22 +272,68 @@ def _next_step(category: FindingCategory) -> str:
 def github_lines(run_id: int, max_lines: int) -> tuple[tuple[str, ...], Finding | None]:
     source = f"github-actions:{run_id}"
     try:
-        result = subprocess.run(
+        result = _bounded_command(
             ("gh", "run", "view", str(run_id), "--log-failed"),
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
         )
-    except FileNotFoundError:
-        return (), _input_finding(source, "gh executable is unavailable")
-    except subprocess.TimeoutExpired:
+    except OSError as exc:
+        return (), _input_finding(source, f"gh failed-log retrieval unavailable: {exc}")
+    if result.timed_out:
         return (), _input_finding(source, "gh failed-log retrieval timed out")
     if result.returncode:
-        return (), _input_finding(
-            source, result.stderr or "gh failed-log retrieval failed"
-        )
-    return tuple(result.stdout.splitlines()[-max_lines:]), None
+        return (), _input_finding(source, result.output or "gh failed-log retrieval failed")
+    return tuple(result.output.splitlines()[-max_lines:]), None
+
+
+@dataclass(frozen=True, slots=True)
+class _BoundedCommandResult:
+    returncode: int
+    output: str
+    timed_out: bool
+
+
+def _bounded_command(command: tuple[str, ...]) -> _BoundedCommandResult:
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    if process.stdout is None:
+        raise OSError("gh output pipe was not created")
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    output = bytearray()
+    deadline = time.monotonic() + 30
+    timed_out = False
+    try:
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                process.kill()
+                break
+            for key, _ in selector.select(remaining):
+                chunk = os.read(key.fileobj.fileno(), 8192)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    key.fileobj.close()
+                    continue
+                output.extend(chunk)
+                if len(output) > MAX_TAIL_BYTES:
+                    del output[: -MAX_TAIL_BYTES]
+    finally:
+        selector.close()
+    if process.poll() is None:
+        try:
+            process.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            process.kill()
+            process.wait()
+    return _BoundedCommandResult(
+        returncode=process.returncode,
+        output=bytes(output).decode("utf-8", "replace"),
+        timed_out=timed_out,
+    )
 
 
 def _input_finding(source: str, evidence: str) -> Finding:

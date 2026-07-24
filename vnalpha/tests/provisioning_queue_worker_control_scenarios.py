@@ -62,7 +62,7 @@ def _assert_unsupported_handlers_fail_without_warehouse(tmp_path: Path) -> None:
     ).process_one()
     assert result is not None
     assert result.error == "UNSUPPORTED_GOAL_HANDLER"
-    assert queue.get(submitted.job_id).status is ProvisioningJobStatus.QUEUED
+    assert queue.get(submitted.job_id).status is ProvisioningJobStatus.FAILED
     assert not warehouse_path.exists()
 
 
@@ -102,7 +102,7 @@ def _assert_enrichment_stops_before_provider(
     assert result.error == (
         "UNSUPPORTED_ENRICHMENT_REQUEST; BLOCKED: current-symbol-provision"
     )
-    assert queue.get(submitted.job_id).status is ProvisioningJobStatus.QUEUED
+    assert queue.get(submitted.job_id).status is ProvisioningJobStatus.FAILED
 
 
 def _assert_current_symbol_result_retains_tail_evidence(
@@ -251,7 +251,7 @@ def _assert_timeout_finishes_the_safe_boundary(tmp_path: Path) -> None:
     assert not thread.is_alive()
     result = results[0]
     assert result is not None
-    assert result.status is ProvisioningJobStatus.QUEUED
+    assert result.status is ProvisioningJobStatus.FAILED
     assert result.error == "STAGE_TIMEOUT"
 
 

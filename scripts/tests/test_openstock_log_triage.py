@@ -32,7 +32,8 @@ def test_triage_normalizes_redacts_and_deduplicates_log_findings(
         encoding="utf-8",
     )
 
-    exit_code = _module().main(["--path", str(source), "--json", "--fail-on-findings"])
+    module = _module()
+    exit_code = module.main(["--path", str(source), "--json", "--fail-on-findings"])
 
     report = json.loads(capsys.readouterr().out)
     assert exit_code == 1
@@ -59,3 +60,11 @@ def test_triage_normalizes_redacts_and_deduplicates_log_findings(
         if "test is unclassified" in finding["evidence"]
     )
     assert manifest["category"] == "CI_STATIC"
+    sanitized = module.sanitize(
+        "access_token=abc123 client_secret=topsecret "
+        "Authorization: Bearer bearer-secret Authorization: Basic basic-secret"
+    )
+    assert "abc123" not in sanitized
+    assert "topsecret" not in sanitized
+    assert "bearer-secret" not in sanitized
+    assert "basic-secret" not in sanitized

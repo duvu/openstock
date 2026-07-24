@@ -177,6 +177,7 @@ class ProvisioningQueue:
         error: str,
         *,
         now: datetime | None = None,
+        retryable: bool = False,
     ) -> ProvisioningJob:
         return terminalize(
             self._database,
@@ -185,6 +186,7 @@ class ProvisioningQueue:
             ProvisioningJobStatus.FAILED,
             error,
             now=now,
+            retryable=retryable,
         )
 
     def acknowledge_cancellation(

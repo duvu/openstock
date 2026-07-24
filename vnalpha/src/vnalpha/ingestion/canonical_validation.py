@@ -92,7 +92,14 @@ def validate_candidate(
             ):
                 # Candidate is the preferred provider - no consistency error
                 pass
-            elif resolution and candidate.provider in resolution.rejected_providers:
+            elif (
+                resolution
+                and candidate.provider
+                and any(
+                    candidate.provider.strip().lower() == rejected.strip().lower()
+                    for rejected in resolution.rejected_providers
+                )
+            ):
                 # Candidate should be rejected in favor of preferred provider
                 rules.append(CanonicalValidationRule.PROVIDER_CONSISTENCY)
             elif not resolution:

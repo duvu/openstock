@@ -42,6 +42,8 @@ OPERATOR_SCRIPTS=(
   openstock-mvp1-start
   openstock-backup-warehouse
   openstock-restore-warehouse
+  openstock-enable-user-runtime-timer
+  openstock-run-user-runtime-daily
 )
 
 VERSION=""

@@ -57,6 +57,8 @@ while (($#)); do
 done
 
 RUNTIME_USER="${OPENSTOCK_RUNTIME_USER:-beou}"
+[[ "$RUNTIME_USER" != "root" ]] || fail "root is not a supported runtime user"
+[[ "$RUNTIME_USER" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] || fail "unsafe runtime user"
 [[ "$(id -un)" == "$RUNTIME_USER" ]] || \
   fail "run as $RUNTIME_USER without sudo"
 [[ "$DATE_VALUE" == "today" || "$DATE_VALUE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || \
@@ -67,6 +69,13 @@ RUNTIME_USER="${OPENSTOCK_RUNTIME_USER:-beou}"
 RUNTIME_HOME="$(getent passwd "$RUNTIME_USER" | awk -F: '{print $6}')"
 [[ -n "$RUNTIME_HOME" ]] || fail "could not resolve home directory for $RUNTIME_USER"
 RUNTIME_ROOT="${OPENSTOCK_RUNTIME_ROOT:-${RUNTIME_HOME}/.local/share/openstock}"
+RUNTIME_HOME_CANONICAL="$(realpath -m -- "$RUNTIME_HOME")"
+RUNTIME_ROOT_CANONICAL="$(realpath -m -- "$RUNTIME_ROOT")"
+ALLOWED_RUNTIME_ROOT="${RUNTIME_HOME_CANONICAL}/.local/share/openstock"
+case "${RUNTIME_ROOT_CANONICAL}/" in
+  "${ALLOWED_RUNTIME_ROOT}/"*) RUNTIME_ROOT="$RUNTIME_ROOT_CANONICAL" ;;
+  *) fail "runtime root must remain under ${ALLOWED_RUNTIME_ROOT}" ;;
+esac
 VNALPHA_BIN="${OPENSTOCK_VNALPHA_BIN:-${RUNTIME_ROOT}/vnalpha-package/opt/vnalpha/venv/bin/vnalpha}"
 VNSTOCK_SERVICE_URL="${OPENSTOCK_VNSTOCK_SERVICE_URL:-http://127.0.0.1:6900}"
 WAREHOUSE_PATH="${RUNTIME_ROOT}/warehouse/warehouse.duckdb"
@@ -84,19 +93,23 @@ curl --fail --silent --show-error --max-time 10 "${VNSTOCK_SERVICE_URL}/healthz"
 
 load_due_retry() {
   [[ -f "$RETRY_STATE_PATH" ]] || return 1
-  local due_at_epoch retry_attempt retry_symbols
+  local due_at_epoch retry_attempt retry_symbols retry_date
   due_at_epoch="$(awk -F= '$1 == "due_at_epoch" { print $2 }' "$RETRY_STATE_PATH")"
   retry_attempt="$(awk -F= '$1 == "attempt" { print $2 }' "$RETRY_STATE_PATH")"
   retry_symbols="$(awk -F= '$1 == "symbols" { print $2 }' "$RETRY_STATE_PATH")"
+  retry_date="$(awk -F= '$1 == "date" { print $2 }' "$RETRY_STATE_PATH")"
   [[ "$due_at_epoch" =~ ^[0-9]+$ ]] || fail "invalid retry schedule"
   [[ "$retry_attempt" =~ ^[2-9][0-9]*$ ]] || fail "invalid retry attempt"
   [[ "$retry_symbols" =~ ^[A-Z0-9]+(,[A-Z0-9]+)*$ ]] || fail "invalid retry symbols"
+  [[ "$retry_date" =~ ^(today|[0-9]{4}-[0-9]{2}-[0-9]{2})$ ]] || fail "invalid retry date"
   (( retry_attempt <= MAX_TOTAL_ATTEMPTS )) || {
-    rm -f "$RETRY_STATE_PATH"
+    if ! "$DRY_RUN"; then
+      rm -f "$RETRY_STATE_PATH"
+    fi
     return 1
   }
   (( $(date +%s) >= due_at_epoch )) || return 1
-  DATE_VALUE="today"
+  DATE_VALUE="$retry_date"
   SYMBOLS_VALUE="$retry_symbols"
   CURRENT_ATTEMPT="$retry_attempt"
   return 0
@@ -108,18 +121,23 @@ save_retry() {
   local state_tmp
   [[ "$symbols" =~ ^[A-Z0-9]+(,[A-Z0-9]+)*$ ]] || fail "invalid failed symbols"
   if (( next_attempt > MAX_TOTAL_ATTEMPTS )); then
-    rm -f "$RETRY_STATE_PATH"
+    if ! "$DRY_RUN"; then
+      rm -f "$RETRY_STATE_PATH"
+    fi
     return
   fi
+  "$DRY_RUN" && return
   mkdir -p -m 0750 "$RETRY_DIR"
   state_tmp="$(mktemp "${RETRY_DIR}/daily-symbols.XXXXXX")"
-  printf 'due_at_epoch=%s\nattempt=%s\nsymbols=%s\n' \
-    "$(( $(date +%s) + 3600 ))" "$next_attempt" "$symbols" >"$state_tmp"
+  printf 'due_at_epoch=%s\nattempt=%s\ndate=%s\nsymbols=%s\n' \
+    "$(( $(date +%s) + 3600 ))" "$next_attempt" "$DATE_VALUE" "$symbols" >"$state_tmp"
   mv -f "$state_tmp" "$RETRY_STATE_PATH"
 }
 
 clear_retry() {
-  rm -f "$RETRY_STATE_PATH"
+  if ! "$DRY_RUN"; then
+    rm -f "$RETRY_STATE_PATH"
+  fi
 }
 
 failed_symbols_from_output() {
@@ -141,6 +159,9 @@ failed_symbols_from_output() {
 CURRENT_ATTEMPT=1
 if "$RETRY_PENDING"; then
   load_due_retry || exit 0
+fi
+if [[ "$DATE_VALUE" == "today" ]]; then
+  DATE_VALUE="$(TZ=Asia/Ho_Chi_Minh date +%F)"
 fi
 
 COMMAND=(maintain daily --date "$DATE_VALUE" --json)

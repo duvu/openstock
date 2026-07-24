@@ -28,6 +28,7 @@ from vnalpha.provisioning_queue.models import (
 class HandlerResult:
     succeeded: bool
     detail: str
+    retryable: bool = False
 
 
 class ProvisioningGoalStage(Protocol):
@@ -139,7 +140,7 @@ def _result_from_current_symbol(
     evidence = json.dumps(result.to_trace_dict(), separators=(",", ":"), sort_keys=True)
     if result.is_ready:
         return HandlerResult(succeeded=True, detail=evidence)
-    return HandlerResult(succeeded=False, detail=evidence)
+    return HandlerResult(succeeded=False, detail=evidence, retryable=False)
 
 
 def _admit_current_symbol(goal: EnsureCurrentSymbolGoal) -> HandlerResult:

@@ -206,6 +206,7 @@ def test_durable_provisioning_queue_contract(
         "retry-worker",
         "provider unavailable",
         now=now,
+        retryable=True,
     )
     assert scheduled_retry.status is ProvisioningJobStatus.QUEUED
     assert retry_queue.claim("retry-worker", now=now + timedelta(minutes=59)) is None
@@ -217,6 +218,7 @@ def test_durable_provisioning_queue_contract(
         "retry-worker",
         "provider unavailable",
         now=now + timedelta(hours=1),
+        retryable=True,
     )
     assert exhausted_retry.status is ProvisioningJobStatus.FAILED
 

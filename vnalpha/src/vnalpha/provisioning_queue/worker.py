@@ -166,7 +166,10 @@ class ProvisioningWorker:
                         )
                     else:
                         terminal = self._queue.fail(
-                            job.job_id, self._worker_id, result.detail
+                            job.job_id,
+                            self._worker_id,
+                            result.detail,
+                            retryable=result.retryable,
                         )
                     self._trigger_finalization(terminal)
                     return terminal
@@ -206,7 +209,7 @@ class ProvisioningWorker:
             return None
 
     def _trigger_finalization(self, job: ProvisioningJob) -> None:
-        if not job.is_terminal:
+        if not job.is_terminal or job.origin != "maintenance":
             return
         maybe_submit_finalization_for_terminal_job(
             job.job_id,

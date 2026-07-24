@@ -317,12 +317,8 @@ def test_live_deep_analysis_plan_reuses_fresh_evidence(tmp_path: Path) -> None:
         ).fetchall()
 
     assert [step.tool_name for step in executed_plan.steps] == [
-        "data.ensure_current_symbol",
-        "analysis.deep_symbol",
+        "analysis.current_symbol",
         "analysis.deep_symbol",
     ]
     assert answer.summary
-    assert [json.loads(trace[0])["date"] for trace in deep_traces] == [
-        "today",
-        latest_validated_date,
-    ]
+    assert [json.loads(trace[0])["date"] for trace in deep_traces] == ["today"]

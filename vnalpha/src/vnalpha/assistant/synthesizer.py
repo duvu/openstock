@@ -9,7 +9,7 @@ from vnalpha.assistant.degraded_answer import (
     AssistantFailureStage,
     build_deterministic_tool_answer,
 )
-from vnalpha.assistant.errors import SynthesisError
+from vnalpha.assistant.errors import LLMGatewayError, SynthesisError
 from vnalpha.assistant.groundedness import (
     GroundednessResult,
     GroundednessValidator,
@@ -134,7 +134,7 @@ class AnswerSynthesizer:
             )
             self._capture_gateway_raw_responses()
             self.last_usage = usage
-        except Exception as exc:
+        except (LLMGatewayError, RuntimeError) as exc:
             if not self.last_raw_responses:
                 self._capture_gateway_raw_responses()
             return self._deterministic_fallback(
@@ -204,7 +204,7 @@ class AnswerSynthesizer:
             self.last_usage = repaired_usage
             repaired_answer = parse_synthesis_response(repaired_response_text)
             _validate_context_answer(plan, tool_outputs, repaired_answer)
-        except Exception:
+        except (LLMGatewayError, RuntimeError, SynthesisError):
             self._capture_gateway_raw_responses()
             return self._deterministic_fallback(
                 plan,

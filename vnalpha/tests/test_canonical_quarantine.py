@@ -105,10 +105,6 @@ def test_bounded_canonical_promotion_leaves_outside_dates_unchanged(
     assert rows == [("2026-01-05", 10.0), ("2026-01-06", 11.0)]
     assert result == {"upserted": 1, "rejected": 0}
 
-
-def test_conflicting_vnindex_bars_select_the_policy_preferred_provider(
-    conn: duckdb.DuckDBPyConnection,
-) -> None:
     _insert_raw_bar(
         conn,
         symbol="VNINDEX",
@@ -126,7 +122,7 @@ def test_conflicting_vnindex_bars_select_the_policy_preferred_provider(
         open=1_185.0,
         high=1_191.0,
         low=1_180.0,
-        provider="KBS",
+        provider="kbs",
         fetched_at="2026-01-06 01:00:00",
     )
 

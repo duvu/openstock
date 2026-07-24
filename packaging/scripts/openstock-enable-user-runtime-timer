@@ -4,10 +4,10 @@ umask 027
 
 readonly UNIT_DIR="/etc/systemd/system"
 readonly ENV_DIR="/etc/openstock"
-readonly TIMER_UNIT="openstock-daily-pipeline.timer"
-readonly SERVICE_UNIT="openstock-daily-pipeline.service"
-readonly RETRY_TIMER_UNIT="openstock-daily-retry.timer"
-readonly RETRY_SERVICE_UNIT="openstock-daily-retry.service"
+readonly TIMER_UNIT="openstock-user-daily-pipeline.timer"
+readonly SERVICE_UNIT="openstock-user-daily-pipeline.service"
+readonly RETRY_TIMER_UNIT="openstock-user-daily-retry.timer"
+readonly RETRY_SERVICE_UNIT="openstock-user-daily-retry.service"
 readonly ENV_FILE="${ENV_DIR}/user-runtime.env"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
@@ -129,7 +129,7 @@ StandardError=journal
 SyslogIdentifier=openstock-retry
 EOF
 
-  cat >"$timer_path" <<'EOF'
+  cat >"$timer_path" <<EOF
 [Unit]
 Description=OpenStock weekday daily maintenance timer for the user-local runtime
 
@@ -138,7 +138,7 @@ OnCalendar=Mon..Fri *-*-* 17:30:00 Asia/Ho_Chi_Minh
 Persistent=true
 RandomizedDelaySec=5min
 AccuracySec=1min
-Unit=openstock-daily-pipeline.service
+Unit=${SERVICE_UNIT}
 
 [Install]
 WantedBy=timers.target
@@ -178,11 +178,20 @@ if ! "$DRY_RUN" && [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 RUNTIME_USER="${OPENSTOCK_RUNTIME_USER:-${SUDO_USER:-beou}}"
+[[ "$RUNTIME_USER" != "root" ]] || fail "root is not a supported runtime user"
+[[ "$RUNTIME_USER" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] || fail "unsafe runtime user"
 id "$RUNTIME_USER" >/dev/null 2>&1 || fail "runtime user does not exist: $RUNTIME_USER"
 RUNTIME_HOME="$(getent passwd "$RUNTIME_USER" | awk -F: '{print $6}')"
 [[ -n "$RUNTIME_HOME" ]] || fail "could not resolve home directory for $RUNTIME_USER"
 RUNTIME_GROUP="$(id -gn "$RUNTIME_USER")"
 RUNTIME_ROOT="${OPENSTOCK_RUNTIME_ROOT:-${RUNTIME_HOME}/.local/share/openstock}"
+RUNTIME_HOME_CANONICAL="$(realpath -m -- "$RUNTIME_HOME")"
+RUNTIME_ROOT_CANONICAL="$(realpath -m -- "$RUNTIME_ROOT")"
+ALLOWED_RUNTIME_ROOT="${RUNTIME_HOME_CANONICAL}/.local/share/openstock"
+case "${RUNTIME_ROOT_CANONICAL}/" in
+  "${ALLOWED_RUNTIME_ROOT}/"*) RUNTIME_ROOT="$RUNTIME_ROOT_CANONICAL" ;;
+  *) fail "runtime root must remain under ${ALLOWED_RUNTIME_ROOT}" ;;
+esac
 VNALPHA_BIN="${OPENSTOCK_VNALPHA_BIN:-${RUNTIME_ROOT}/vnalpha-package/opt/vnalpha/venv/bin/vnalpha}"
 VNSTOCK_SERVICE_URL="${OPENSTOCK_VNSTOCK_SERVICE_URL:-http://127.0.0.1:6900}"
 WAREHOUSE_PATH="${RUNTIME_ROOT}/warehouse/warehouse.duckdb"
@@ -206,9 +215,13 @@ run_as_runtime_user "$VNALPHA_BIN" maintain daily --help | grep -Fq -- '--dry-ru
   fail "installed CLI does not provide maintain daily --dry-run"
 curl --fail --silent --show-error --max-time 10 "${VNSTOCK_SERVICE_URL}/healthz" >/dev/null
 
-if [[ -e "/usr/lib/systemd/system/${SERVICE_UNIT}" || -e "/usr/lib/systemd/system/${TIMER_UNIT}" ]]; then
-  fail "a package-managed OpenStock daily unit already exists; use the package deployment path"
-fi
+for package_unit in \
+  openstock-daily-pipeline.service openstock-daily-pipeline.timer \
+  openstock-daily-retry.service openstock-daily-retry.timer; do
+  if [[ -e "/usr/lib/systemd/system/${package_unit}" ]]; then
+    fail "a package-managed OpenStock daily unit already exists; use the package deployment path"
+  fi
+done
 for unit in "$SERVICE_UNIT" "$TIMER_UNIT" "$RETRY_SERVICE_UNIT" "$RETRY_TIMER_UNIT"; do
   unit_path="${UNIT_DIR}/${unit}"
   if [[ -e "$unit_path" ]] && ! grep -Fq 'user-local runtime' "$unit_path"; then

@@ -153,6 +153,7 @@ def terminalize(
     status: ProvisioningJobStatus,
     value: str,
     now: datetime | None = None,
+    retryable: bool = False,
 ) -> ProvisioningJob:
     worker = required_metadata(worker_id, field_name="worker_id")
     timestamp = timestamp_ms(now)
@@ -181,6 +182,7 @@ def terminalize(
             job = job_from_row(active)
             if (
                 status is ProvisioningJobStatus.FAILED
+                and retryable
                 and job.attempts < database.configuration.max_attempts
             ):
                 updated = connection.execute(
