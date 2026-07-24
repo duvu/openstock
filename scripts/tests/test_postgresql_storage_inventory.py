@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -40,6 +41,13 @@ def test_storage_inventory_classifies_current_database_coupling(tmp_path: Path) 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    (tmp_path / ".env").write_text(
+        "VNALPHA_WAREHOUSE_PATH=warehouse.duckdb password=must-not-read\n",
+        encoding="utf-8",
+    )
+
     module = _module()
     report = module.scan_repository(tmp_path)
 
@@ -62,3 +70,5 @@ def test_storage_inventory_classifies_current_database_coupling(tmp_path: Path) 
         for finding in findings
     )
     assert report["summary"]["files_with_findings"] == 4
+    assert report["scan_policy"]["source"] == "git tracked files"
+    assert "must-not-read" not in str(report)
