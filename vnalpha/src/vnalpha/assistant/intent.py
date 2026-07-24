@@ -71,6 +71,93 @@ _WATCHLIST_DEEP_KEYWORD_PATTERNS = (
     "tổng hợp watchlist",
 )
 
+_ANALYZE_KEYWORD_PATTERNS = (
+    "phan tich",
+    "phân tích",
+    "analyze",
+    "analysis",
+    "deep analyze",
+    "deep analysis",
+)
+_ANALYZE_SYMBOL_CUES = (
+    "co phieu",
+    "cổ phiếu",
+    "stock",
+    "symbol",
+    "ticker",
+)
+_ANALYZE_SYMBOL_STOPWORDS = frozenset(
+    {
+        "BUY",
+        "SELL",
+        "THE",
+        "FOR",
+        "CAN",
+        "TO",
+        "ANALYZE",
+    }
+)
+
+
+def _looks_like_symbol(candidate: str) -> bool:
+    normalized = candidate.upper()
+    return (
+        2 <= len(normalized) <= 8
+        and normalized.isalpha()
+        and normalized not in _ANALYZE_SYMBOL_STOPWORDS
+    )
+
+
+def _extract_symbol_from_prompt(prompt: str) -> str | None:
+    lower_prompt = prompt.lower()
+    for cue in _ANALYZE_SYMBOL_CUES:
+        match = re.search(
+            rf"\b{re.escape(cue)}\s+([A-Za-z]{{2,8}})\b",
+            lower_prompt,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            candidate = match.group(1).upper()
+            if _looks_like_symbol(candidate):
+                return candidate
+
+    for token in re.findall(r"\b([A-Za-z]{2,8})\b", prompt):
+        if _looks_like_symbol(token):
+            return token.upper()
+    return None
+
+
+def _analysis_intent_fallback(prompt: str) -> tuple[str, dict[str, Any]] | None:
+    lower = prompt.lower()
+    if not any(pattern in lower for pattern in _ANALYZE_KEYWORD_PATTERNS):
+        return None
+
+    symbol = _extract_symbol_from_prompt(prompt)
+    if not symbol:
+        return None
+
+    return "deep_analyze_symbol", {"symbol": symbol}
+
+
+def _intent_classification_fallback(prompt: str) -> tuple[str, dict[str, Any]] | None:
+    analysis = _analysis_intent_fallback(prompt)
+    if analysis is not None:
+        return analysis
+
+    watchlist_intent = _watchlist_intent_fallback(prompt)
+    if watchlist_intent is not None:
+        return watchlist_intent, {}
+    return None
+
+
+def _build_fallback_result(prompt: str) -> IntentResult:
+    fallback = _intent_classification_fallback(prompt)
+    if fallback is None:
+        raise RuntimeError("No fallback intent available")
+
+    intent, entities = fallback
+    return IntentResult(intent=intent, confidence=0.95, entities=entities)
+
 
 def _watchlist_intent_fallback(prompt: str) -> str | None:
     lower = prompt.lower()
@@ -79,14 +166,6 @@ def _watchlist_intent_fallback(prompt: str) -> str | None:
     if any(pattern in lower for pattern in _WATCHLIST_DEEP_KEYWORD_PATTERNS):
         return "summarize_watchlist_deep"
     return "scan_candidates"
-
-
-def _build_watchlist_fallback_result(prompt: str) -> IntentResult:
-    return IntentResult(
-        intent=_watchlist_intent_fallback(prompt),
-        confidence=0.95,
-        entities={},
-    )
 
 
 def _deterministic_precheck(prompt: str) -> str | None:
@@ -266,22 +345,23 @@ class IntentClassifier:
             )
         except Exception as exc:
             self._capture_gateway_raw_responses()
-            fallback_intent = _watchlist_intent_fallback(user_prompt)
-            if fallback_intent is not None:
+            fallback = _intent_classification_fallback(user_prompt)
+            if fallback is not None:
+                fallback_intent, _ = fallback
                 _log.warning(
                     "intent_classify_fallback",
                     stage="chat_failed",
                     intent=fallback_intent,
                     error_type=type(exc).__name__,
                 )
-                return _build_watchlist_fallback_result(user_prompt)
+                return _build_fallback_result(user_prompt)
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
         self._capture_gateway_raw_responses()
 
         try:
             result = parse_classifier_response(response_text, user_prompt)
         except IntentClassificationError:
-            fallback_intent = _watchlist_intent_fallback(user_prompt)
+            fallback = _intent_classification_fallback(user_prompt)
             retry_metadata = {**route_metadata, "schema_repair_retry": True}
             try:
                 response_text, usage = self._client.chat(
@@ -295,27 +375,29 @@ class IntentClassifier:
                 self._capture_gateway_raw_responses()
                 result = parse_classifier_response(response_text, user_prompt)
             except IntentClassificationError as retry_exc:
-                if fallback_intent is not None:
+                if fallback is not None:
+                    fallback_intent, _ = fallback
                     _log.warning(
                         "intent_classify_fallback",
                         stage="schema_repair_failed",
                         intent=fallback_intent,
                         error_type=type(retry_exc).__name__,
                     )
-                    return _build_watchlist_fallback_result(user_prompt)
+                    return _build_fallback_result(user_prompt)
                 raise IntentClassificationError(
                     f"Invalid JSON from classifier after schema-repair retry: {retry_exc}"
                 ) from retry_exc
             except Exception as exc:
                 self._capture_gateway_raw_responses()
-                if fallback_intent is not None:
+                if fallback is not None:
+                    fallback_intent, _ = fallback
                     _log.warning(
                         "intent_classify_fallback",
                         stage="schema_repair_exception",
                         intent=fallback_intent,
                         error_type=type(exc).__name__,
                     )
-                    return _build_watchlist_fallback_result(user_prompt)
+                    return _build_fallback_result(user_prompt)
                 raise IntentClassificationError(
                     f"LLM classifier schema-repair retry failed: {exc}"
                 ) from exc

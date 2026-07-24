@@ -78,15 +78,28 @@ class TestIntentClassifierWatchlistFallback:
         for prompt, expected_intent in {
             "watchlist": "scan_candidates",
             "watchlist summary": "summarize_watchlist_deep",
+            "phan tich co phieu FPT": "deep_analyze_symbol",
+            "Phan tich co phieu fpt": "deep_analyze_symbol",
         }.items():
             result = fallback_classifier.classify(prompt)
             assert result.intent == expected_intent
             assert result.confidence == pytest.approx(0.95)
+            if expected_intent == "deep_analyze_symbol":
+                assert result.entities == {"symbol": "FPT"}
+            else:
+                assert result.entities == {}
 
         parse_failure_classifier = IntentClassifier(FailingParseGateway())
         result = parse_failure_classifier.classify("Summarize watchlist in depth")
         assert result.intent == "summarize_watchlist_deep"
         assert result.confidence == pytest.approx(0.95)
+
+        parse_failure_analyze = parse_failure_classifier.classify(
+            "phan tich co phieu FPT"
+        )
+        assert parse_failure_analyze.intent == "deep_analyze_symbol"
+        assert parse_failure_analyze.entities == {"symbol": "FPT"}
+        assert parse_failure_analyze.confidence == pytest.approx(0.95)
 
         strict_classifier = IntentClassifier(FailingGateway())
         with pytest.raises(IntentClassificationError):
