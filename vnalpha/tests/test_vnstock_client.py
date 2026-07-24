@@ -1,9 +1,10 @@
 """Tests for the vnstock-service client using respx mock."""
 
 import httpx
-import respx
+import pytest
 
 from vnalpha.clients.vnstock.client import VnstockClient
+from vnalpha.clients.vnstock.errors import VnstockConnectionError, VnstockTimeoutError
 from vnalpha.clients.vnstock.schemas import (
     SymbolsResponse,
 )
@@ -46,16 +47,33 @@ OHLCV_RESPONSE = {
 }
 
 
-@respx.mock(base_url=MOCK_BASE)
-def test_get_symbols(respx_mock):
-    respx_mock.get("/v1/reference/symbols").mock(
-        return_value=httpx.Response(200, json=SYMBOLS_RESPONSE)
-    )
+@pytest.mark.parametrize(
+    ("transport_error", "expected_error"),
+    (
+        (None, None),
+        (httpx.RemoteProtocolError("Server disconnected"), VnstockConnectionError),
+        (httpx.ReadTimeout("Request timed out"), VnstockTimeoutError),
+    ),
+)
+def test_get_symbols_handles_response_and_transport_outcomes(
+    respx_mock, transport_error, expected_error
+):
+    route = respx_mock.get("/v1/reference/symbols")
+    if transport_error is None:
+        route.mock(return_value=httpx.Response(200, json=SYMBOLS_RESPONSE))
+    else:
+        route.mock(side_effect=transport_error)
+
     client = VnstockClient(base_url=MOCK_BASE)
-    result = client.get_symbols()
-    assert isinstance(result, SymbolsResponse)
-    assert len(result.data) == 2
-    assert result.meta.provider == "kbs"
+    if expected_error is not None:
+        with pytest.raises(expected_error):
+            client.get_symbols()
+    else:
+        result = client.get_symbols()
+        assert isinstance(result, SymbolsResponse)
+        assert len(result.data) == 2
+        assert result.meta.provider == "kbs"
+
     request = respx_mock.calls.last.request
     assert request.url.params["validate"] == "true"
     assert request.url.params["quality_mode"] == "strict"

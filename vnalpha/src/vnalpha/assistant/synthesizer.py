@@ -38,6 +38,15 @@ if TYPE_CHECKING:
     from vnalpha.assistant.gateway import LLMGatewayClient
 
 
+_VALIDATION_REPAIR_PROMPT = (
+    "The previous research answer did not pass evidence or research-language "
+    "validation. Correct it using only the supplied tool outputs. Every source "
+    "reference and numeric claim must be directly supported. Do not give trading "
+    "instructions. Return exactly one JSON object matching the supplied response "
+    "schema."
+)
+
+
 class AnswerSynthesizer:
     def __init__(self, llm_client: LLMGatewayClient):
         self._client = llm_client
@@ -103,6 +112,7 @@ class AnswerSynthesizer:
             "symbol_count": symbol_count,
             "artifact_count": len(tool_outputs),
             "context_bytes": context_bytes,
+            "validation_repair_retry": False,
             "requires_deep_reasoning": task_type
             in {
                 ModelTaskType.MULTI_SYMBOL_COMPARISON.value,
@@ -178,16 +188,50 @@ class AnswerSynthesizer:
                 fallback_used=False,
             )
 
-        reasons = list(groundedness.messages)
-        if policy.violations:
-            reasons.append(
-                "The model answer failed research-language policy validation."
+        try:
+            repaired_response_text, repaired_usage = self._client.chat(
+                [
+                    *messages,
+                    {"role": "assistant", "content": response_text},
+                    {"role": "system", "content": _VALIDATION_REPAIR_PROMPT},
+                ],
+                response_schema=SYNTHESIS_RESPONSE_SCHEMA,
+                stage="synthesize",
+                task_type=task_type,
+                route_metadata={**route_metadata, "validation_repair_retry": True},
             )
+            self._capture_gateway_raw_responses()
+            self.last_usage = repaired_usage
+            repaired_answer = parse_synthesis_response(repaired_response_text)
+            _validate_context_answer(plan, tool_outputs, repaired_answer)
+        except Exception:
+            self._capture_gateway_raw_responses()
+            return self._deterministic_fallback(
+                plan,
+                tool_outputs,
+                validator,
+                reasons=_validation_reasons(groundedness, policy),
+                degradation=AssistantDegradation(
+                    AssistantFailureStage.ANSWER_VALIDATION,
+                    "GROUNDEDNESS_OR_POLICY_REJECTED",
+                ),
+            )
+
+        groundedness = validator.validate(repaired_answer, plan, tool_outputs)
+        policy = validate_research_answer_policy(repaired_answer, plan.intent)
+        if groundedness.passed and policy.passed:
+            return self._record_validation(
+                repaired_answer,
+                groundedness,
+                policy,
+                fallback_used=False,
+            )
+
         return self._deterministic_fallback(
             plan,
             tool_outputs,
             validator,
-            reasons=reasons,
+            reasons=_validation_reasons(groundedness, policy),
             degradation=AssistantDegradation(
                 AssistantFailureStage.ANSWER_VALIDATION,
                 "GROUNDEDNESS_OR_POLICY_REJECTED",
@@ -250,7 +294,16 @@ class AnswerSynthesizer:
 
     def _capture_gateway_raw_responses(self) -> None:
         raw_responses = getattr(self._client, "last_raw_responses", ())
-        self.last_raw_responses = [dict(response) for response in raw_responses]
+        self.last_raw_responses.extend(dict(response) for response in raw_responses)
+
+
+def _validation_reasons(
+    groundedness: GroundednessResult, policy: ResearchPolicyResult
+) -> list[str]:
+    reasons = list(groundedness.messages)
+    if policy.violations:
+        reasons.append("The model answer failed research-language policy validation.")
+    return reasons
 
 
 def _validate_context_answer(

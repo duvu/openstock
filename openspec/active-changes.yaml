@@ -11,6 +11,24 @@ policy:
 
 changes:
 
+  local-log-triage:
+    status: partial
+    github_issues: []
+    roadmap_state: proposed_untracked
+    summary: >-
+      Add a read-only, bounded, redaction-safe script that normalizes local
+      OpenStock and explicitly selected failed GitHub Actions logs into
+      actionable diagnostic findings.
+    evidence: >-
+      `make lint-files PROJECT=vnalpha FILES="../scripts/openstock-log-triage.py
+      ../scripts/tests/test_openstock_log_triage.py"` and
+      `python -m pytest -q scripts/tests/test_openstock_log_triage.py` passed.
+      Manual CLI use against `ya-router/logs/ya-router.log` and failed Actions
+      run 30020720368 produced bounded authentication and CI-static findings.
+      `AGENTS.md` requires that evidence before source-level Codex debugging.
+      This change remains unscheduled until a maintainer associates it with a
+      GitHub roadmap issue.
+
   implicit-current-symbol-available-session:
     status: ready
     github_issues: [389]

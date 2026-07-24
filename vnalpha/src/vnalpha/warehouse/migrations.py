@@ -40,6 +40,7 @@ from vnalpha.warehouse.schema import (
     ALL_DDL_PHASE510,
     ALL_DDL_RESEARCH_AUTOMATION,
 )
+from vnalpha.warehouse.session_context_schema import ALL_DDL_SESSION_CONTEXT
 from vnalpha.warehouse.symbol_memory_schema import ALL_DDL_SYMBOL_MEMORY
 from vnalpha.warehouse.valuation_schema import ALL_DDL_VALUATION
 from vnalpha.warehouse.write_coordinator import WarehouseWriteCoordinator
@@ -127,6 +128,8 @@ def run_migrations(
     for ddl in ALL_DDL_FUNDAMENTALS:
         conn.execute(ddl)
     for ddl in ALL_DDL_COMPANY_CONTEXT:
+        conn.execute(ddl)
+    for ddl in ALL_DDL_SESSION_CONTEXT:
         conn.execute(ddl)
     for ddl in ALL_DDL_VALUATION:
         conn.execute(ddl)

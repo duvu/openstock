@@ -95,5 +95,5 @@ def _assert_cli_worker_claims_one_job(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0
     assert "processed=1" in result.output
-    assert queue.get(first.job_id).status is ProvisioningJobStatus.FAILED
+    assert queue.get(first.job_id).status is ProvisioningJobStatus.QUEUED
     assert queue.get(second.job_id).status is ProvisioningJobStatus.QUEUED

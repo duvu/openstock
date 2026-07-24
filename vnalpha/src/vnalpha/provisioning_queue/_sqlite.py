@@ -28,7 +28,7 @@ DEFAULT_BUSY_TIMEOUT_MS: Final = 1_000
 DEFAULT_LEASE_SECONDS: Final = 60
 DEFAULT_MAX_ATTEMPTS: Final = 3
 MIN_FREE_DISK_BYTES: Final = 100 * 1024 * 1024
-SCHEMA_VERSION: Final = 2
+SCHEMA_VERSION: Final = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +54,9 @@ class QueueDatabase:
                     self._record_migration(connection)
                 elif version == 1:
                     self._migrate_v1_to_v2(connection)
+                    self._migrate_v2_to_v3(connection)
+                elif version == 2:
+                    self._migrate_v2_to_v3(connection)
                 elif version != SCHEMA_VERSION:
                     raise ProvisioningQueueStorageError(
                         "unsupported provisioning queue schema version"
@@ -267,6 +270,28 @@ class QueueDatabase:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(CREATE_QUEUE_METADATA_SQL)
             connection.execute(CREATE_PRUNED_PROVISION_JOB_SQL)
+            connection.execute("PRAGMA user_version = 2")
+            self._record_migration(connection)
+            connection.commit()
+        except sqlite3.Error:
+            connection.rollback()
+            raise
+
+    def _migrate_v2_to_v3(self, connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "ALTER TABLE provision_job ADD COLUMN available_at_ms INTEGER"
+            )
+            connection.execute(
+                "UPDATE provision_job SET available_at_ms = created_at_ms "
+                "WHERE available_at_ms IS NULL"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS queued_provision_job_available_order "
+                "ON provision_job(available_at_ms, priority DESC, created_at_ms ASC, job_id ASC) "
+                "WHERE status = 'QUEUED'"
+            )
             connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             self._record_migration(connection)
             connection.commit()
@@ -350,12 +375,16 @@ CREATE TABLE IF NOT EXISTS provision_job (
     attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0), lease_owner TEXT,
     lease_expires_at_ms INTEGER, lease_heartbeat_at_ms INTEGER, origin TEXT, correlation_id TEXT,
     cancellation_requested INTEGER NOT NULL DEFAULT 0 CHECK (cancellation_requested IN (0, 1)),
-    result TEXT, error TEXT, created_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
+    result TEXT, error TEXT, available_at_ms INTEGER NOT NULL,
+    created_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS active_provision_job_identity
 ON provision_job(goal_identity) WHERE status IN ('QUEUED', 'RUNNING');
 CREATE INDEX IF NOT EXISTS queued_provision_job_order
 ON provision_job(priority DESC, created_at_ms ASC, job_id ASC) WHERE status = 'QUEUED';
+CREATE INDEX IF NOT EXISTS queued_provision_job_available_order
+ON provision_job(available_at_ms, priority DESC, created_at_ms ASC, job_id ASC)
+WHERE status = 'QUEUED';
 CREATE TABLE IF NOT EXISTS provisioning_queue_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 027
+
+usage() {
+  cat <<'EOF'
+Usage: packaging/scripts/openstock-run-user-runtime-daily [OPTIONS]
+
+Run the user-local OpenStock daily maintenance pipeline against the same
+warehouse used by the TUI. Run this as the runtime user, not with sudo.
+
+Options:
+  --date DATE         Vietnam market date; defaults to today.
+  --symbols SYMBOLS   Comma-separated bounded symbols; defaults to all symbols.
+  --dry-run           Resolve and report the planned maintenance run only.
+  --retry-pending     Run a persisted failed-symbol retry when it is due.
+  --help              Show this help.
+EOF
+}
+
+fail() {
+  printf 'openstock-run-user-runtime-daily: %s\n' "$*" >&2
+  exit 1
+}
+
+DATE_VALUE="today"
+SYMBOLS_VALUE=""
+DRY_RUN=false
+RETRY_PENDING=false
+
+while (($#)); do
+  case "$1" in
+    --date)
+      (($# >= 2)) || fail "--date requires a value"
+      DATE_VALUE="$2"
+      shift 2
+      ;;
+    --symbols)
+      (($# >= 2)) || fail "--symbols requires a value"
+      SYMBOLS_VALUE="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --retry-pending)
+      RETRY_PENDING=true
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *) fail "unknown option: $1" ;;
+  esac
+done
+
+RUNTIME_USER="${OPENSTOCK_RUNTIME_USER:-beou}"
+[[ "$(id -un)" == "$RUNTIME_USER" ]] || \
+  fail "run as $RUNTIME_USER without sudo"
+[[ "$DATE_VALUE" == "today" || "$DATE_VALUE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || \
+  fail "--date must be today or YYYY-MM-DD"
+[[ -z "$SYMBOLS_VALUE" || "$SYMBOLS_VALUE" =~ ^[A-Za-z0-9._,-]+$ ]] || \
+  fail "--symbols must be a comma-separated symbol list"
+
+RUNTIME_HOME="$(getent passwd "$RUNTIME_USER" | awk -F: '{print $6}')"
+[[ -n "$RUNTIME_HOME" ]] || fail "could not resolve home directory for $RUNTIME_USER"
+RUNTIME_ROOT="${OPENSTOCK_RUNTIME_ROOT:-${RUNTIME_HOME}/.local/share/openstock}"
+VNALPHA_BIN="${OPENSTOCK_VNALPHA_BIN:-${RUNTIME_ROOT}/vnalpha-package/opt/vnalpha/venv/bin/vnalpha}"
+VNSTOCK_SERVICE_URL="${OPENSTOCK_VNSTOCK_SERVICE_URL:-http://127.0.0.1:6900}"
+WAREHOUSE_PATH="${RUNTIME_ROOT}/warehouse/warehouse.duckdb"
+QUEUE_PATH="${RUNTIME_ROOT}/queue/provisioning.sqlite3"
+KNOWLEDGE_ROOT="${RUNTIME_ROOT}/knowledge"
+LOG_ROOT="${RUNTIME_ROOT}/logs"
+LOCK_PATH="${RUNTIME_ROOT}/locks/daily-pipeline.lock"
+RETRY_DIR="${RUNTIME_ROOT}/retries"
+RETRY_STATE_PATH="${RETRY_DIR}/daily-symbols.env"
+MAX_TOTAL_ATTEMPTS=3
+
+[[ -x "$VNALPHA_BIN" ]] || fail "vnalpha CLI is not executable: $VNALPHA_BIN"
+[[ -f "$WAREHOUSE_PATH" ]] || fail "live warehouse is missing: $WAREHOUSE_PATH"
+curl --fail --silent --show-error --max-time 10 "${VNSTOCK_SERVICE_URL}/healthz" >/dev/null
+
+load_due_retry() {
+  [[ -f "$RETRY_STATE_PATH" ]] || return 1
+  local due_at_epoch retry_attempt retry_symbols
+  due_at_epoch="$(awk -F= '$1 == "due_at_epoch" { print $2 }' "$RETRY_STATE_PATH")"
+  retry_attempt="$(awk -F= '$1 == "attempt" { print $2 }' "$RETRY_STATE_PATH")"
+  retry_symbols="$(awk -F= '$1 == "symbols" { print $2 }' "$RETRY_STATE_PATH")"
+  [[ "$due_at_epoch" =~ ^[0-9]+$ ]] || fail "invalid retry schedule"
+  [[ "$retry_attempt" =~ ^[2-9][0-9]*$ ]] || fail "invalid retry attempt"
+  [[ "$retry_symbols" =~ ^[A-Z0-9]+(,[A-Z0-9]+)*$ ]] || fail "invalid retry symbols"
+  (( retry_attempt <= MAX_TOTAL_ATTEMPTS )) || {
+    rm -f "$RETRY_STATE_PATH"
+    return 1
+  }
+  (( $(date +%s) >= due_at_epoch )) || return 1
+  DATE_VALUE="today"
+  SYMBOLS_VALUE="$retry_symbols"
+  CURRENT_ATTEMPT="$retry_attempt"
+  return 0
+}
+
+save_retry() {
+  local symbols="$1"
+  local next_attempt="$2"
+  local state_tmp
+  [[ "$symbols" =~ ^[A-Z0-9]+(,[A-Z0-9]+)*$ ]] || fail "invalid failed symbols"
+  if (( next_attempt > MAX_TOTAL_ATTEMPTS )); then
+    rm -f "$RETRY_STATE_PATH"
+    return
+  fi
+  mkdir -p -m 0750 "$RETRY_DIR"
+  state_tmp="$(mktemp "${RETRY_DIR}/daily-symbols.XXXXXX")"
+  printf 'due_at_epoch=%s\nattempt=%s\nsymbols=%s\n' \
+    "$(( $(date +%s) + 3600 ))" "$next_attempt" "$symbols" >"$state_tmp"
+  mv -f "$state_tmp" "$RETRY_STATE_PATH"
+}
+
+clear_retry() {
+  rm -f "$RETRY_STATE_PATH"
+}
+
+failed_symbols_from_output() {
+  local output_path="$1"
+  local payload raw_symbols failed_pattern
+  payload="$(grep -E '^\{.*"failed_symbols"[[:space:]]*:' "$output_path" | tail -n 1 || true)"
+  [[ -n "$payload" ]] || return 1
+  failed_pattern='"failed_symbols"[[:space:]]*:[[:space:]]*\[([^]]*)\]'
+  if [[ "$payload" =~ $failed_pattern ]]; then
+    raw_symbols="${BASH_REMATCH[1]//\"/}"
+    raw_symbols="${raw_symbols//[[:space:]]/}"
+    [[ "$raw_symbols" =~ ^[A-Z0-9]+(,[A-Z0-9]+)*$ ]] || return 1
+    printf '%s\n' "$raw_symbols"
+    return 0
+  fi
+  return 1
+}
+
+CURRENT_ATTEMPT=1
+if "$RETRY_PENDING"; then
+  load_due_retry || exit 0
+fi
+
+COMMAND=(maintain daily --date "$DATE_VALUE" --json)
+if [[ -n "$SYMBOLS_VALUE" ]]; then
+  COMMAND+=(--symbols "$SYMBOLS_VALUE")
+fi
+if "$DRY_RUN"; then
+  COMMAND+=(--dry-run)
+fi
+
+printf 'runtime_user=%s\n' "$RUNTIME_USER"
+printf 'warehouse=%s\n' "$WAREHOUSE_PATH"
+printf 'date=%s\n' "$DATE_VALUE"
+printf 'symbols=%s\n' "${SYMBOLS_VALUE:-all}"
+printf 'dry_run=%s\n' "$DRY_RUN"
+printf 'retry_attempt=%s\n' "$CURRENT_ATTEMPT"
+
+OUTPUT_PATH="$(mktemp)"
+trap 'rm -f "$OUTPUT_PATH"' EXIT
+set +e
+/usr/bin/env -u PYTHONHOME -u PYTHONNOUSERSITE \
+  "HOME=$RUNTIME_HOME" \
+  "VNALPHA_WAREHOUSE_PATH=$WAREHOUSE_PATH" \
+  "VNALPHA_PROVISIONING_QUEUE_PATH=$QUEUE_PATH" \
+  "VNALPHA_KNOWLEDGE_ROOT=$KNOWLEDGE_ROOT" \
+  "VNALPHA_LOG_ROOT=$LOG_ROOT" \
+  "VNSTOCK_SERVICE_URL=$VNSTOCK_SERVICE_URL" \
+  /usr/bin/flock -n -E 75 "$LOCK_PATH" "$VNALPHA_BIN" "${COMMAND[@]}" \
+  | tee "$OUTPUT_PATH"
+PIPELINE_STATUS=${PIPESTATUS[0]}
+set -e
+
+if (( PIPELINE_STATUS == 0 )); then
+  clear_retry
+elif (( PIPELINE_STATUS == 3 )); then
+  if FAILED_SYMBOLS="$(failed_symbols_from_output "$OUTPUT_PATH")"; then
+    save_retry "$FAILED_SYMBOLS" "$(( CURRENT_ATTEMPT + 1 ))"
+    printf 'retry_symbols=%s retry_after_seconds=3600\n' "$FAILED_SYMBOLS"
+  fi
+fi
+
+exit "$PIPELINE_STATUS"

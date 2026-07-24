@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 027
+
+readonly UNIT_DIR="/etc/systemd/system"
+readonly ENV_DIR="/etc/openstock"
+readonly TIMER_UNIT="openstock-daily-pipeline.timer"
+readonly SERVICE_UNIT="openstock-daily-pipeline.service"
+readonly RETRY_TIMER_UNIT="openstock-daily-retry.timer"
+readonly RETRY_SERVICE_UNIT="openstock-daily-retry.service"
+readonly ENV_FILE="${ENV_DIR}/user-runtime.env"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+usage() {
+  cat <<'EOF'
+Usage: sudo packaging/scripts/openstock-enable-user-runtime-timer [--dry-run]
+
+Installs and enables the weekday OpenStock daily-maintenance timer for the
+user-local TUI runtime. The timer runs at 17:30 Asia/Ho_Chi_Minh, with up to a
+five-minute randomized delay, and catches up after a missed scheduled run.
+
+Environment overrides:
+  OPENSTOCK_RUNTIME_USER       Runtime owner (default: sudo caller, then beou)
+  OPENSTOCK_RUNTIME_ROOT       Runtime root (default: <home>/.local/share/openstock)
+  OPENSTOCK_VNALPHA_BIN        CLI path (default: <runtime>/vnalpha-package/.../vnalpha)
+  OPENSTOCK_VNSTOCK_SERVICE_URL Service URL (default: http://127.0.0.1:6900)
+EOF
+}
+
+fail() {
+  printf 'openstock-enable-user-runtime-timer: %s\n' "$*" >&2
+  exit 1
+}
+
+require_safe_path() {
+  local value="$1"
+  [[ "$value" =~ ^/[A-Za-z0-9._/@:+-]+$ ]] || fail "unsafe absolute path: $value"
+}
+
+require_safe_value() {
+  local value="$1"
+  [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || fail "unsafe value"
+}
+
+run_as_runtime_user() {
+  if [[ "$(id -un)" == "$RUNTIME_USER" ]]; then
+    /usr/bin/env -u PYTHONHOME -u PYTHONNOUSERSITE "HOME=$RUNTIME_HOME" "$@"
+    return
+  fi
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u "$RUNTIME_USER" -- /usr/bin/env -u PYTHONHOME -u PYTHONNOUSERSITE \
+      "HOME=$RUNTIME_HOME" "$@"
+    return
+  fi
+  su -s /bin/sh "$RUNTIME_USER" -c \
+    "exec env -u PYTHONHOME -u PYTHONNOUSERSITE HOME=$(printf '%q' "$RUNTIME_HOME") $(printf '%q ' "$@")"
+}
+
+render_files() {
+  local destination="$1"
+  local service_path="${destination}/${SERVICE_UNIT}"
+  local timer_path="${destination}/${TIMER_UNIT}"
+  local retry_service_path="${destination}/${RETRY_SERVICE_UNIT}"
+  local retry_timer_path="${destination}/${RETRY_TIMER_UNIT}"
+  local env_path="${destination}/user-runtime.env"
+
+  cat >"$env_path" <<EOF
+HOME=${RUNTIME_HOME}
+OPENSTOCK_RUNTIME_USER=${RUNTIME_USER}
+OPENSTOCK_RUNTIME_ROOT=${RUNTIME_ROOT}
+VNALPHA_WAREHOUSE_PATH=${WAREHOUSE_PATH}
+VNALPHA_PROVISIONING_QUEUE_PATH=${QUEUE_PATH}
+VNALPHA_KNOWLEDGE_ROOT=${KNOWLEDGE_ROOT}
+VNALPHA_LOG_ROOT=${LOG_ROOT}
+VNSTOCK_SERVICE_URL=${VNSTOCK_SERVICE_URL}
+EOF
+
+  cat >"$service_path" <<EOF
+[Unit]
+Description=OpenStock daily maintenance for the user-local runtime
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=${RUNTIME_USER}
+Group=${RUNTIME_GROUP}
+WorkingDirectory=${RUNTIME_ROOT}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONNOUSERSITE=
+ExecStartPre=/usr/bin/test -x ${VNALPHA_BIN}
+ExecStartPre=/usr/bin/curl --fail --silent --show-error --max-time 10 ${VNSTOCK_SERVICE_URL}/healthz
+ExecStart=/usr/bin/env ${RUNNER_PATH} --date today
+SuccessExitStatus=3 75
+TimeoutStartSec=4h
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=${RUNTIME_ROOT}
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openstock-pipeline
+EOF
+
+  cat >"$retry_service_path" <<EOF
+[Unit]
+Description=OpenStock failed-symbol retry for the user-local runtime
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=${RUNTIME_USER}
+Group=${RUNTIME_GROUP}
+WorkingDirectory=${RUNTIME_ROOT}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONNOUSERSITE=
+ExecStart=/usr/bin/env ${RUNNER_PATH} --retry-pending
+SuccessExitStatus=3 75
+TimeoutStartSec=4h
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=${RUNTIME_ROOT}
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openstock-retry
+EOF
+
+  cat >"$timer_path" <<'EOF'
+[Unit]
+Description=OpenStock weekday daily maintenance timer for the user-local runtime
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 17:30:00 Asia/Ho_Chi_Minh
+Persistent=true
+RandomizedDelaySec=5min
+AccuracySec=1min
+Unit=openstock-daily-pipeline.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+  cat >"$retry_timer_path" <<EOF
+[Unit]
+Description=OpenStock failed-symbol retry timer for the user-local runtime
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+Persistent=true
+AccuracySec=1min
+Unit=${RETRY_SERVICE_UNIT}
+
+[Install]
+WantedBy=timers.target
+EOF
+}
+
+DRY_RUN=false
+while (($#)); do
+  case "$1" in
+    --dry-run) DRY_RUN=true ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *) fail "unknown option: $1" ;;
+  esac
+  shift
+done
+
+if ! "$DRY_RUN" && [[ "$(id -u)" -ne 0 ]]; then
+  fail "run with sudo, or use --dry-run for preflight only"
+fi
+
+RUNTIME_USER="${OPENSTOCK_RUNTIME_USER:-${SUDO_USER:-beou}}"
+id "$RUNTIME_USER" >/dev/null 2>&1 || fail "runtime user does not exist: $RUNTIME_USER"
+RUNTIME_HOME="$(getent passwd "$RUNTIME_USER" | awk -F: '{print $6}')"
+[[ -n "$RUNTIME_HOME" ]] || fail "could not resolve home directory for $RUNTIME_USER"
+RUNTIME_GROUP="$(id -gn "$RUNTIME_USER")"
+RUNTIME_ROOT="${OPENSTOCK_RUNTIME_ROOT:-${RUNTIME_HOME}/.local/share/openstock}"
+VNALPHA_BIN="${OPENSTOCK_VNALPHA_BIN:-${RUNTIME_ROOT}/vnalpha-package/opt/vnalpha/venv/bin/vnalpha}"
+VNSTOCK_SERVICE_URL="${OPENSTOCK_VNSTOCK_SERVICE_URL:-http://127.0.0.1:6900}"
+WAREHOUSE_PATH="${RUNTIME_ROOT}/warehouse/warehouse.duckdb"
+QUEUE_PATH="${RUNTIME_ROOT}/queue/provisioning.sqlite3"
+KNOWLEDGE_ROOT="${RUNTIME_ROOT}/knowledge"
+LOG_ROOT="${RUNTIME_ROOT}/logs"
+LOCK_PATH="${RUNTIME_ROOT}/locks/daily-pipeline.lock"
+RUNNER_PATH="${RUNTIME_ROOT}/bin/openstock-run-user-runtime-daily"
+
+for path in "$RUNTIME_HOME" "$RUNTIME_ROOT" "$VNALPHA_BIN" "$WAREHOUSE_PATH" \
+  "$QUEUE_PATH" "$KNOWLEDGE_ROOT" "$LOG_ROOT" "$LOCK_PATH" "$RUNNER_PATH"; do
+  require_safe_path "$path"
+done
+require_safe_value "$VNSTOCK_SERVICE_URL"
+[[ "$VNSTOCK_SERVICE_URL" =~ ^http://127\.0\.0\.1:[0-9]{1,5}$ ]] || \
+  fail "service URL must be a localhost HTTP URL with an explicit port"
+
+[[ -x "$VNALPHA_BIN" ]] || fail "vnalpha CLI is not executable: $VNALPHA_BIN"
+[[ -f "$WAREHOUSE_PATH" ]] || fail "live warehouse is missing: $WAREHOUSE_PATH"
+run_as_runtime_user "$VNALPHA_BIN" maintain daily --help | grep -Fq -- '--dry-run' || \
+  fail "installed CLI does not provide maintain daily --dry-run"
+curl --fail --silent --show-error --max-time 10 "${VNSTOCK_SERVICE_URL}/healthz" >/dev/null
+
+if [[ -e "/usr/lib/systemd/system/${SERVICE_UNIT}" || -e "/usr/lib/systemd/system/${TIMER_UNIT}" ]]; then
+  fail "a package-managed OpenStock daily unit already exists; use the package deployment path"
+fi
+for unit in "$SERVICE_UNIT" "$TIMER_UNIT" "$RETRY_SERVICE_UNIT" "$RETRY_TIMER_UNIT"; do
+  unit_path="${UNIT_DIR}/${unit}"
+  if [[ -e "$unit_path" ]] && ! grep -Fq 'user-local runtime' "$unit_path"; then
+    fail "refusing to replace non-user-runtime unit: $unit_path"
+  fi
+done
+
+STAGING_DIR="$(mktemp -d)"
+trap 'rm -rf "$STAGING_DIR"' EXIT
+render_files "$STAGING_DIR"
+systemd-analyze verify \
+  "${STAGING_DIR}/${SERVICE_UNIT}" \
+  "${STAGING_DIR}/${TIMER_UNIT}" \
+  "${STAGING_DIR}/${RETRY_SERVICE_UNIT}" \
+  "${STAGING_DIR}/${RETRY_TIMER_UNIT}"
+
+printf 'runtime_user=%s\n' "$RUNTIME_USER"
+printf 'warehouse=%s\n' "$WAREHOUSE_PATH"
+printf 'vnalpha=%s\n' "$VNALPHA_BIN"
+printf 'service_url=%s\n' "$VNSTOCK_SERVICE_URL"
+
+if "$DRY_RUN"; then
+  printf 'preflight=passed; no files or systemd state changed\n'
+  exit 0
+fi
+
+install -d -m 0750 -o "$RUNTIME_USER" -g "$RUNTIME_GROUP" \
+  "${RUNTIME_ROOT}/locks" "${RUNTIME_ROOT}/logs" "${RUNTIME_ROOT}/queue" \
+  "${RUNTIME_ROOT}/knowledge" "${RUNTIME_ROOT}/warehouse" \
+  "${RUNTIME_ROOT}/retries" "${RUNTIME_ROOT}/bin"
+run_as_runtime_user test -w "${RUNTIME_ROOT}/locks"
+run_as_runtime_user test -w "${RUNTIME_ROOT}/logs"
+run_as_runtime_user test -w "${RUNTIME_ROOT}/queue"
+run_as_runtime_user test -w "${RUNTIME_ROOT}/warehouse"
+run_as_runtime_user test -w "${RUNTIME_ROOT}/retries"
+
+install -d -m 0755 "$ENV_DIR"
+install -m 0750 -o "$RUNTIME_USER" -g "$RUNTIME_GROUP" \
+  "${SCRIPT_DIR}/openstock-run-user-runtime-daily" "$RUNNER_PATH"
+install -m 0640 -o root -g root "${STAGING_DIR}/user-runtime.env" "$ENV_FILE"
+install -m 0644 -o root -g root "${STAGING_DIR}/${SERVICE_UNIT}" "${UNIT_DIR}/${SERVICE_UNIT}"
+install -m 0644 -o root -g root "${STAGING_DIR}/${TIMER_UNIT}" "${UNIT_DIR}/${TIMER_UNIT}"
+install -m 0644 -o root -g root "${STAGING_DIR}/${RETRY_SERVICE_UNIT}" "${UNIT_DIR}/${RETRY_SERVICE_UNIT}"
+install -m 0644 -o root -g root "${STAGING_DIR}/${RETRY_TIMER_UNIT}" "${UNIT_DIR}/${RETRY_TIMER_UNIT}"
+
+systemctl daemon-reload
+systemctl enable --now "$TIMER_UNIT" "$RETRY_TIMER_UNIT"
+for timer in "$TIMER_UNIT" "$RETRY_TIMER_UNIT"; do
+  systemctl is-enabled --quiet "$timer"
+  systemctl is-active --quiet "$timer"
+done
+systemctl show "$TIMER_UNIT" -p NextElapseUSecRealtime --value
+systemctl show "$RETRY_TIMER_UNIT" -p NextElapseUSecRealtime --value
+printf 'timers=%s,%s enabled and active\n' "$TIMER_UNIT" "$RETRY_TIMER_UNIT"

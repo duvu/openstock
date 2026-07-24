@@ -4,12 +4,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from vnalpha.commands.models import CommandResult, ResultArtifact
+from vnalpha.tui.app import VnAlphaApp
+from vnalpha.tui.input_router import TuiInputRouter
+from vnalpha.tui.widgets.output_stream import OutputStream
+from vnalpha.tui.widgets.status_bar import StatusBar
 from vnalpha.workspace_context.models import WorkspaceState
 
 
 def _result_with_artifact():
-    from vnalpha.commands.models import CommandResult, ResultArtifact
-
     return CommandResult(
         status="SUCCESS",
         title="/scan",
@@ -21,9 +24,6 @@ def _router(
     workspace: WorkspaceState,
     workspace_changed: MagicMock | None = None,
 ):
-    from vnalpha.tui.input_router import TuiInputRouter
-    from vnalpha.tui.widgets.output_stream import OutputStream
-
     output = MagicMock(spec=OutputStream)
     with patch("vnalpha.tui.input_router.TuiInputRouter._setup_controller"):
         with patch("vnalpha.tui.input_router.TuiInputRouter._setup_executor"):
@@ -43,10 +43,6 @@ async def test_tui_startup_displays_active_workspace_and_resume_summary(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     monkeypatch.setenv("VNALPHA_WORKSPACE_ROOT", str(tmp_path))
-
-    from vnalpha.tui.app import VnAlphaApp
-    from vnalpha.tui.widgets.output_stream import OutputStream
-    from vnalpha.tui.widgets.status_bar import StatusBar
 
     with patch.object(VnAlphaApp, "_setup_router"):
         with patch.object(OutputStream, "show_assistant_message") as show_summary:

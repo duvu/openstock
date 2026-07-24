@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
+from typing import Final
 
 from vnalpha.provisioning_queue._records import (
     detail,
@@ -21,6 +22,8 @@ from vnalpha.provisioning_queue.queue_models import (
     ProvisioningQueueValidationError,
 )
 
+RETRY_DELAY_SECONDS: Final = 60 * 60
+
 
 def claim(
     database: QueueDatabase, worker_id: str, now: datetime | None
@@ -33,7 +36,9 @@ def claim(
             recover_expired(connection, timestamp, database)
             row = connection.execute(
                 SELECT_JOB_SQL
-                + " WHERE status = 'QUEUED' ORDER BY priority DESC, created_at_ms ASC, rowid ASC LIMIT 1"
+                + " WHERE status = 'QUEUED' AND available_at_ms <= ? "
+                + "ORDER BY priority DESC, created_at_ms ASC, rowid ASC LIMIT 1",
+                (timestamp,),
             ).fetchone()
             if row is None:
                 connection.commit()
@@ -147,9 +152,10 @@ def terminalize(
     worker_id: str,
     status: ProvisioningJobStatus,
     value: str,
+    now: datetime | None = None,
 ) -> ProvisioningJob:
     worker = required_metadata(worker_id, field_name="worker_id")
-    timestamp = timestamp_ms(None)
+    timestamp = timestamp_ms(now)
     if status is ProvisioningJobStatus.SUCCEEDED:
         result, error = detail(value, field_name="result"), None
     elif status is ProvisioningJobStatus.FAILED:
@@ -163,20 +169,54 @@ def terminalize(
     try:
         with database.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            updated = connection.execute(
-                "UPDATE provision_job SET status=?, stage=?, result=?, error=?, lease_owner=NULL, lease_expires_at_ms=NULL, lease_heartbeat_at_ms=NULL, updated_at_ms=? WHERE job_id=? AND status='RUNNING' AND lease_owner=? AND lease_expires_at_ms > ? AND cancellation_requested = CASE WHEN ?='CANCELLED' THEN 1 ELSE 0 END RETURNING job_id",
-                (
-                    status.value,
-                    status.value,
-                    result,
-                    error,
-                    timestamp,
-                    job_id,
-                    worker,
-                    timestamp,
-                    status.value,
-                ),
+            active = connection.execute(
+                SELECT_JOB_SQL
+                + " WHERE job_id=? AND status='RUNNING' AND lease_owner=? "
+                + "AND lease_expires_at_ms > ? AND cancellation_requested = "
+                + "CASE WHEN ?='CANCELLED' THEN 1 ELSE 0 END",
+                (job_id, worker, timestamp, status.value),
             ).fetchone()
+            if active is None:
+                raise_lease_error(connection, job_id)
+            job = job_from_row(active)
+            if (
+                status is ProvisioningJobStatus.FAILED
+                and job.attempts < database.configuration.max_attempts
+            ):
+                updated = connection.execute(
+                    "UPDATE provision_job SET status='QUEUED', stage='RETRY_SCHEDULED', "
+                    "result=NULL, error=?, lease_owner=NULL, lease_expires_at_ms=NULL, "
+                    "lease_heartbeat_at_ms=NULL, available_at_ms=?, updated_at_ms=? "
+                    "WHERE job_id=? AND status='RUNNING' AND lease_owner=? "
+                    "AND lease_expires_at_ms > ? RETURNING job_id",
+                    (
+                        error,
+                        timestamp + RETRY_DELAY_SECONDS * 1_000,
+                        timestamp,
+                        job_id,
+                        worker,
+                        timestamp,
+                    ),
+                ).fetchone()
+            else:
+                updated = connection.execute(
+                    "UPDATE provision_job SET status=?, stage=?, result=?, error=?, "
+                    "lease_owner=NULL, lease_expires_at_ms=NULL, lease_heartbeat_at_ms=NULL, "
+                    "updated_at_ms=? WHERE job_id=? AND status='RUNNING' AND lease_owner=? "
+                    "AND lease_expires_at_ms > ? AND cancellation_requested = "
+                    "CASE WHEN ?='CANCELLED' THEN 1 ELSE 0 END RETURNING job_id",
+                    (
+                        status.value,
+                        status.value,
+                        result,
+                        error,
+                        timestamp,
+                        job_id,
+                        worker,
+                        timestamp,
+                        status.value,
+                    ),
+                ).fetchone()
             if updated is None:
                 raise_lease_error(connection, job_id)
             row = connection.execute(

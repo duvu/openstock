@@ -85,7 +85,11 @@ def validate_candidate(
             )
 
             # Only apply consistency rule if candidate is not the selected provider
-            if resolution and candidate.provider == resolution.selected_provider:
+            if (
+                resolution
+                and candidate.provider
+                and candidate.provider.strip().lower() == resolution.selected_provider
+            ):
                 # Candidate is the preferred provider - no consistency error
                 pass
             elif resolution and candidate.provider in resolution.rejected_providers:

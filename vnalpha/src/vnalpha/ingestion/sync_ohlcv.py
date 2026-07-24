@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from typing import Final
 
 import duckdb
 
@@ -14,11 +16,12 @@ from vnalpha.ingestion.models import (
     SymbolIngestionResult,
     aggregate_ohlcv_results,
 )
+from vnalpha.ingestion.ohlcv_fetch import fetch_ohlcv_for_symbol
 from vnalpha.ingestion.persistence import (
     bind_ingestion_run_correlation,
     persist_ohlcv_batch_result,
 )
-from vnalpha.ingestion.symbol_sync import sync_ohlcv_for_symbol
+from vnalpha.ingestion.symbol_sync import persist_fetched_ohlcv_for_symbol
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
 from vnalpha.warehouse.repositories import (
     create_ingestion_run,
@@ -27,6 +30,7 @@ from vnalpha.warehouse.repositories import (
 )
 
 logger = get_logger("ingestion.sync_ohlcv")
+MAX_CONCURRENT_DOWNLOADS: Final = 2
 
 
 def sync_ohlcv(
@@ -70,23 +74,35 @@ def sync_ohlcv(
                 VnstockClient(base_url=base_url) if base_url else VnstockClient()
             )
             owned = True
-        for symbol in universe:
-            result = sync_ohlcv_for_symbol(
-                conn,
-                active_client,
-                run_id,
-                symbol,
-                start=start,
-                end=end,
-                interval=interval,
-                source=source,
-            )
-            if result.diagnostics_ref is None:
-                result = replace(
-                    result,
-                    diagnostics_ref=f"ingestion:{run_id}:{symbol}",
+        with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_DOWNLOADS) as executor:
+            fetched_by_symbol = {
+                symbol: executor.submit(
+                    fetch_ohlcv_for_symbol,
+                    active_client,
+                    symbol,
+                    start=start,
+                    end=end,
+                    interval=interval,
+                    source=source,
                 )
-            results.append(result)
+                for symbol in universe
+            }
+            for symbol in universe:
+                result = persist_fetched_ohlcv_for_symbol(
+                    conn,
+                    run_id,
+                    symbol,
+                    start=start,
+                    end=end,
+                    source=source,
+                    outcome=fetched_by_symbol[symbol].result(),
+                )
+                if result.diagnostics_ref is None:
+                    result = replace(
+                        result,
+                        diagnostics_ref=f"ingestion:{run_id}:{symbol}",
+                    )
+                results.append(result)
 
         batch = aggregate_ohlcv_results(run_id, tuple(results))
         persist_ohlcv_batch_result(conn, batch)

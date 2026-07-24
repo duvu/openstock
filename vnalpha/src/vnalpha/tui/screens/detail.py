@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import date
-from typing import Optional
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -18,6 +16,9 @@ from vnalpha.tui.error_boundary import (
     generic_load_error,
     literal_text,
 )
+from vnalpha.tui.research_date import resolve_tui_research_date
+from vnalpha.warehouse.connection import get_connection
+from vnalpha.warehouse.repositories import get_candidate_score
 
 
 class DetailScreen(Screen):
@@ -32,10 +33,10 @@ class DetailScreen(Screen):
         Binding("escape", "pop_screen", "Back"),
     ]
 
-    def __init__(self, symbol: str, target_date: Optional[str] = None, **kwargs):
+    def __init__(self, symbol: str, target_date: str | None = None, **kwargs):
         super().__init__(**kwargs)
         self._symbol = symbol
-        self._target_date = target_date or str(date.today())
+        self._target_date = resolve_tui_research_date(target_date)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -59,9 +60,6 @@ class DetailScreen(Screen):
 
     def _load_detail(self) -> None:
         try:
-            from vnalpha.warehouse.connection import get_connection
-            from vnalpha.warehouse.repositories import get_candidate_score
-
             conn = get_connection()
             try:
                 # Read the authoritative persisted candidate score record

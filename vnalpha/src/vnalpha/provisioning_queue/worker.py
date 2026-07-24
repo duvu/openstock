@@ -206,6 +206,8 @@ class ProvisioningWorker:
             return None
 
     def _trigger_finalization(self, job: ProvisioningJob) -> None:
+        if not job.is_terminal:
+            return
         maybe_submit_finalization_for_terminal_job(
             job.job_id,
             warehouse_path=self._coordinator.path,

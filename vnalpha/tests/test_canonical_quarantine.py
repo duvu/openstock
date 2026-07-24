@@ -104,3 +104,36 @@ def test_bounded_canonical_promotion_leaves_outside_dates_unchanged(
     ).fetchall()
     assert rows == [("2026-01-05", 10.0), ("2026-01-06", 11.0)]
     assert result == {"upserted": 1, "rejected": 0}
+
+
+def test_conflicting_vnindex_bars_select_the_policy_preferred_provider(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
+    _insert_raw_bar(
+        conn,
+        symbol="VNINDEX",
+        close=1_200.0,
+        open=1_195.0,
+        high=1_201.0,
+        low=1_190.0,
+        provider="VCI",
+        fetched_at="2026-01-06 00:00:00",
+    )
+    _insert_raw_bar(
+        conn,
+        symbol="VNINDEX",
+        close=1_190.0,
+        open=1_185.0,
+        high=1_191.0,
+        low=1_180.0,
+        provider="KBS",
+        fetched_at="2026-01-06 01:00:00",
+    )
+
+    result = build_canonical_ohlcv(conn, symbol="VNINDEX")
+
+    canonical = conn.execute(
+        "SELECT selected_provider, close FROM canonical_ohlcv WHERE symbol = 'VNINDEX'"
+    ).fetchall()
+    assert canonical == [("VCI", 1_200.0)]
+    assert result == {"upserted": 1, "rejected": 0}

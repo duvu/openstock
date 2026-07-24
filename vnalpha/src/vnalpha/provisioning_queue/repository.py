@@ -171,10 +171,20 @@ class ProvisioningQueue:
         )
 
     def fail(
-        self, job_id: ProvisioningJobId, worker_id: str, error: str
+        self,
+        job_id: ProvisioningJobId,
+        worker_id: str,
+        error: str,
+        *,
+        now: datetime | None = None,
     ) -> ProvisioningJob:
         return terminalize(
-            self._database, job_id, worker_id, ProvisioningJobStatus.FAILED, error
+            self._database,
+            job_id,
+            worker_id,
+            ProvisioningJobStatus.FAILED,
+            error,
+            now=now,
         )
 
     def acknowledge_cancellation(
