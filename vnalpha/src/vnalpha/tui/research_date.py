@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from vnalpha.core.dates import resolve_date
-from vnalpha.warehouse.connection import WarehouseOpenError, get_connection
+from vnalpha.warehouse.connection import (
+    WarehouseOpenError,
+    WarehouseOpenFailureKind,
+    get_connection,
+)
 
 
 def resolve_tui_research_date(requested_date: str | None) -> str:
@@ -14,5 +18,7 @@ def resolve_tui_research_date(requested_date: str | None) -> str:
     try:
         with get_connection() as connection:
             return resolve_date(requested_date, conn=connection)
-    except WarehouseOpenError:
+    except WarehouseOpenError as error:
+        if error.kind is not WarehouseOpenFailureKind.UNAVAILABLE:
+            raise
         return resolve_date(requested_date)

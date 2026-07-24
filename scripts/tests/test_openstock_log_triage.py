@@ -68,3 +68,8 @@ def test_triage_normalizes_redacts_and_deduplicates_log_findings(
     assert "topsecret" not in sanitized
     assert "bearer-secret" not in sanitized
     assert "basic-secret" not in sanitized
+    json_sanitized = module.sanitize(
+        '{"access_token":"json-secret","password":"escaped\\"secret"}'
+    )
+    assert "json-secret" not in json_sanitized
+    assert "escaped" not in json_sanitized

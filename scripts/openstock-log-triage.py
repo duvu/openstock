@@ -19,6 +19,7 @@ import json
 import os
 import re
 import selectors
+import signal
 import subprocess
 import sys
 import time
@@ -33,12 +34,15 @@ MAX_EVIDENCE_CHARS = 500
 DESCRIPTION = "Read-only, bounded triage for local OpenStock and failed CI logs."
 SENSITIVE_VALUE = re.compile(
     r"(?i)(?<![A-Za-z0-9_-])"
-    r"((?:[A-Za-z0-9]+[_-])*(?:authorization|api[_-]?key|access[_-]?token|"
-    r"refresh[_-]?token|token|password|secret|private[_-]?key|cookie|signature))"
-    r"(?![A-Za-z0-9_-])\s*[:=]\s*(\"[^\"]*\"|'[^']*'|[^\s,;&]+)"
+    r"(?P<quote>[\"']?)(?P<key>(?:[A-Za-z0-9]+[_-])*(?:authorization|api[_-]?key|apikey|"
+    r"access[_-]?tokens?|accesstokens?|refresh[_-]?tokens?|refreshtokens?|"
+    r"client[_-]?secret|clientsecret|tokens?|passwords?|secrets?|private[_-]?key|"
+    r"privatekey|cookies?|signatures?))"
+    r"(?P=quote)(?![A-Za-z0-9_-])\s*[:=]\s*"
+    r"(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,;&]+)"
 )
 BEARER_VALUE = re.compile(r"(?i)\b(bearer|basic)\s+[^\s,;&]+")
-URL_CREDENTIALS = re.compile(r"(?i)(https?://)[^/@\s]+@")
+URL_CREDENTIALS = re.compile(r"(?i)([A-Za-z][A-Za-z0-9+.-]*://)[^/@\s]+@")
 LOG_PREFIX = re.compile(
     r"^(?:\[[^\]]+\]\s*)?(?:\d{4}[-/]\d{2}[-/]\d{2}[ T]"
     r"\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z)?[:\s]+)?"
@@ -95,7 +99,7 @@ def _run_id(value: str) -> int:
 
 def sanitize(value: str) -> str:
     redacted = BEARER_VALUE.sub(lambda match: f"{match.group(1)} [REDACTED]", value)
-    redacted = SENSITIVE_VALUE.sub(r"\1=[REDACTED]", redacted)
+    redacted = SENSITIVE_VALUE.sub(r"\g<key>=[REDACTED]", redacted)
     redacted = URL_CREDENTIALS.sub(r"\1[REDACTED]@", redacted)
     normalized = " ".join(redacted.split())
     return normalized[:MAX_EVIDENCE_CHARS]
@@ -298,6 +302,7 @@ def _bounded_command(command: tuple[str, ...]) -> _BoundedCommandResult:
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        start_new_session=True,
     )
     if process.stdout is None:
         raise OSError("gh output pipe was not created")
@@ -311,7 +316,7 @@ def _bounded_command(command: tuple[str, ...]) -> _BoundedCommandResult:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 timed_out = True
-                process.kill()
+                _kill_process_group(process)
                 break
             for key, _ in selector.select(remaining):
                 chunk = os.read(key.fileobj.fileno(), 8192)
@@ -329,13 +334,20 @@ def _bounded_command(command: tuple[str, ...]) -> _BoundedCommandResult:
             process.wait(timeout=max(0.0, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
             timed_out = True
-            process.kill()
+            _kill_process_group(process)
             process.wait()
     return _BoundedCommandResult(
         returncode=process.returncode,
         output=bytes(output).decode("utf-8", "replace"),
         timed_out=timed_out,
     )
+
+
+def _kill_process_group(process: subprocess.Popen[bytes]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 def _input_finding(source: str, evidence: str) -> Finding:

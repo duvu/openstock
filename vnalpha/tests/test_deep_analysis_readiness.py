@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
+import pytest
 
 from vnalpha.assistant.app import AssistantApp
 from vnalpha.assistant.effective_date import resolve_effective_target_date
@@ -229,7 +230,10 @@ def test_implicit_readiness_uses_aligned_canonical_session() -> None:
     conn.close()
 
 
-def test_live_deep_analysis_plan_reuses_fresh_evidence(tmp_path: Path) -> None:
+def test_live_deep_analysis_plan_reuses_fresh_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VNALPHA_CURRENT_SYMBOL_WAIT_TIMEOUT_SECONDS", "0")
     warehouse_path = tmp_path / "warehouse.duckdb"
     coordinator = WarehouseWriteCoordinator(path=warehouse_path)
     requested_date = resolve_market_session_date("today")
