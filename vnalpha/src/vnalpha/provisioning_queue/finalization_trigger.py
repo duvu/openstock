@@ -114,6 +114,8 @@ def maybe_submit_finalization_for_terminal_job(
     warehouse_path: Path | str | None = None,
     queue_path: Path = DEFAULT_QUEUE_PATH,
 ) -> tuple[MaintenanceFinalizationResult, ...]:
+    if warehouse_path is not None and not Path(warehouse_path).exists():
+        return ()
     with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
         try:
             rows = connection.execute(

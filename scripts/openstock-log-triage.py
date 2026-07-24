@@ -317,6 +317,8 @@ def _bounded_command(command: tuple[str, ...]) -> _BoundedCommandResult:
             if remaining <= 0:
                 timed_out = True
                 _kill_process_group(process)
+                selector.unregister(process.stdout)
+                process.stdout.close()
                 break
             for key, _ in selector.select(remaining):
                 chunk = os.read(key.fileobj.fileno(), 8192)
