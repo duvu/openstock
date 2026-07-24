@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from vnalpha.assistant.errors import IntentClassificationError
 from vnalpha.assistant.gateway import FakeLLMClient
 from vnalpha.assistant.intent import (
     IntentClassifier,
@@ -51,6 +54,43 @@ class TestDeterministicPrecheck:
     def test_deterministic_precheck_buy_refused(self):
         result = _deterministic_precheck("Buy FPT now")
         assert result == "TRADING_EXECUTION"
+
+
+class TestIntentClassifierWatchlistFallback:
+    def test_watchlist_fallback_for_classifier_failures(self):
+        class FailingGateway:
+            last_raw_responses: tuple[dict, ...] = ()
+
+            def chat(self, *_args, **_kwargs):
+                raise RuntimeError("gateway unavailable")
+
+        class FailingParseGateway:
+            last_raw_responses: tuple[dict, ...] = ()
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def chat(self, *_args, **_kwargs):
+                self.calls += 1
+                return "NO-JSON", {}
+
+        fallback_classifier = IntentClassifier(FailingGateway())
+        for prompt, expected_intent in {
+            "watchlist": "scan_candidates",
+            "watchlist summary": "summarize_watchlist_deep",
+        }.items():
+            result = fallback_classifier.classify(prompt)
+            assert result.intent == expected_intent
+            assert result.confidence == pytest.approx(0.95)
+
+        parse_failure_classifier = IntentClassifier(FailingParseGateway())
+        result = parse_failure_classifier.classify("Summarize watchlist in depth")
+        assert result.intent == "summarize_watchlist_deep"
+        assert result.confidence == pytest.approx(0.95)
+
+        strict_classifier = IntentClassifier(FailingGateway())
+        with pytest.raises(IntentClassificationError):
+            strict_classifier.classify("thi truong hom nay")
 
 
 # ===========================================================================

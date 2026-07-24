@@ -48,6 +48,46 @@ UNSAFE_KEYWORDS: frozenset[str] = frozenset(
     }
 )
 
+_WATCHLIST_KEYWORD_PATTERNS = (
+    "watchlist",
+    "watch list",
+    "watchlist-summary",
+    "watchlist summary",
+)
+_WATCHLIST_DEEP_KEYWORD_PATTERNS = (
+    "watchlist summary",
+    "watchlist-summary",
+    "summarize watchlist",
+    "summarize today's watchlist",
+    "summary of watchlist",
+    "summarize watchlist in depth",
+    "deep watchlist",
+    "watchlist in depth",
+    "cau truc watchlist",
+    "cấu trúc watchlist",
+    "tom tat watchlist",
+    "tóm tắt watchlist",
+    "tong hop watchlist",
+    "tổng hợp watchlist",
+)
+
+
+def _watchlist_intent_fallback(prompt: str) -> str | None:
+    lower = prompt.lower()
+    if not any(pattern in lower for pattern in _WATCHLIST_KEYWORD_PATTERNS):
+        return None
+    if any(pattern in lower for pattern in _WATCHLIST_DEEP_KEYWORD_PATTERNS):
+        return "summarize_watchlist_deep"
+    return "scan_candidates"
+
+
+def _build_watchlist_fallback_result(prompt: str) -> IntentResult:
+    return IntentResult(
+        intent=_watchlist_intent_fallback(prompt),
+        confidence=0.95,
+        entities={},
+    )
+
 
 def _deterministic_precheck(prompt: str) -> str | None:
     lower = prompt.lower()
@@ -226,12 +266,22 @@ class IntentClassifier:
             )
         except Exception as exc:
             self._capture_gateway_raw_responses()
+            fallback_intent = _watchlist_intent_fallback(user_prompt)
+            if fallback_intent is not None:
+                _log.warning(
+                    "intent_classify_fallback",
+                    stage="chat_failed",
+                    intent=fallback_intent,
+                    error_type=type(exc).__name__,
+                )
+                return _build_watchlist_fallback_result(user_prompt)
             raise IntentClassificationError(f"LLM call failed: {exc}") from exc
         self._capture_gateway_raw_responses()
 
         try:
             result = parse_classifier_response(response_text, user_prompt)
         except IntentClassificationError:
+            fallback_intent = _watchlist_intent_fallback(user_prompt)
             retry_metadata = {**route_metadata, "schema_repair_retry": True}
             try:
                 response_text, usage = self._client.chat(
@@ -245,11 +295,27 @@ class IntentClassifier:
                 self._capture_gateway_raw_responses()
                 result = parse_classifier_response(response_text, user_prompt)
             except IntentClassificationError as retry_exc:
+                if fallback_intent is not None:
+                    _log.warning(
+                        "intent_classify_fallback",
+                        stage="schema_repair_failed",
+                        intent=fallback_intent,
+                        error_type=type(retry_exc).__name__,
+                    )
+                    return _build_watchlist_fallback_result(user_prompt)
                 raise IntentClassificationError(
                     f"Invalid JSON from classifier after schema-repair retry: {retry_exc}"
                 ) from retry_exc
             except Exception as exc:
                 self._capture_gateway_raw_responses()
+                if fallback_intent is not None:
+                    _log.warning(
+                        "intent_classify_fallback",
+                        stage="schema_repair_exception",
+                        intent=fallback_intent,
+                        error_type=type(exc).__name__,
+                    )
+                    return _build_watchlist_fallback_result(user_prompt)
                 raise IntentClassificationError(
                     f"LLM classifier schema-repair retry failed: {exc}"
                 ) from exc
