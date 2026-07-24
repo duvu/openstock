@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from itertools import islice
 from types import MappingProxyType
 from typing import Any
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 
+from vnalpha.assistant.presentation_projection import PRESENTATION_SCHEMA_VERSION
 from vnalpha.commands.models import CommandResult, status_color
 from vnalpha.commands.renderers.textual_renderer import result_to_markup
 from vnalpha.core.text_safety import is_sensitive_key, redact_structure, sanitize_text
@@ -52,8 +55,11 @@ def assistant_result_presentation(
     metadata = MappingProxyType(redact_structure(dict(message.research_metadata or {})))
     parts: list[RenderableType] = [
         Text(f"Summary: {_plain(message.summary or message.text)}", style="bold"),
-        Text(f"Risks: {_plain(message.risks_caveats or 'No explicit caveats.')}"),
     ]
+    parts.extend(_assistant_table_renderables(message))
+    parts.append(
+        Text(f"Risks: {_plain(message.risks_caveats or 'No explicit caveats.')}"),
+    )
     source_count, missing_count = message.source_counts()
     parts.append(Text(f"Sources: {source_count}  Missing data: {missing_count}"))
     if message.basis:
@@ -179,12 +185,9 @@ def _assistant_plain_text(message: AssistantAnswerMessage) -> str:
         lines.append(f"Symbol: {_plain(subject)}")
     if as_of_date not in (None, ""):
         lines.append(f"As of: {_plain(as_of_date)}")
-    lines.extend(
-        [
-            f"Summary: {_plain(message.summary or message.text)}",
-            f"Risks: {_plain(message.risks_caveats or 'No explicit caveats.')}",
-        ]
-    )
+    lines.append(f"Summary: {_plain(message.summary or message.text)}")
+    lines.extend(_assistant_table_plain_lines(message))
+    lines.append(f"Risks: {_plain(message.risks_caveats or 'No explicit caveats.')}")
     source_count, missing_count = message.source_counts()
     lines.append(f"Sources: {source_count}  Missing data: {missing_count}")
     if message.basis:
@@ -196,6 +199,136 @@ def _assistant_plain_text(message: AssistantAnswerMessage) -> str:
         lines.append("Grounded source refs:")
         lines.extend(f"  - {_plain(item)}" for item in message.grounded_source_refs)
     return "\n".join(lines)
+
+
+def _assistant_table_renderables(
+    message: AssistantAnswerMessage,
+) -> list[RenderableType]:
+    renderables: list[RenderableType] = []
+    for table_data in _assistant_tables(message):
+        columns = _presentation_columns(table_data)
+        if not columns:
+            continue
+        renderables.append(
+            Text(
+                f"\n{_plain(table_data.get('title') or 'Watchlist')}",
+                style="bold",
+            )
+        )
+        table = Table(
+            box=None,
+            show_header=True,
+            header_style="dim",
+            expand=True,
+            padding=(0, 1),
+        )
+        for column in columns:
+            table.add_column(
+                column["title"],
+                justify=column["align"],
+                no_wrap=column["no_wrap"],
+                overflow="fold",
+            )
+        for row in _presentation_rows(table_data, len(columns)):
+            table.add_row(*row)
+        renderables.append(table)
+    return renderables
+
+
+def _assistant_table_plain_lines(message: AssistantAnswerMessage) -> list[str]:
+    lines: list[str] = []
+    for table_data in _assistant_tables(message):
+        columns = _presentation_columns(table_data)
+        if not columns:
+            continue
+        lines.append(_plain(table_data.get("title") or "Watchlist"))
+        lines.append("\t".join(column["title"] for column in columns))
+        lines.extend(
+            "\t".join(row)
+            for row in _presentation_rows(table_data, len(columns))
+        )
+    return lines
+
+
+def _assistant_tables(
+    message: AssistantAnswerMessage,
+) -> tuple[Mapping[str, object], ...]:
+    metadata = message.research_metadata
+    if not isinstance(metadata, Mapping):
+        return ()
+    presentation = metadata.get("presentation")
+    if not isinstance(presentation, Mapping):
+        return ()
+    if presentation.get("schema_version") != PRESENTATION_SCHEMA_VERSION:
+        return ()
+    raw_tables = presentation.get("tables")
+    if not isinstance(raw_tables, Sequence) or isinstance(
+        raw_tables, (str, bytes, bytearray)
+    ):
+        return ()
+    return tuple(
+        table
+        for table in islice(raw_tables, 8)
+        if isinstance(table, Mapping) and table.get("kind") == "watchlist"
+    )
+
+
+def _presentation_columns(
+    table_data: Mapping[str, object],
+) -> list[dict[str, Any]]:
+    raw_columns = table_data.get("columns")
+    if not isinstance(raw_columns, Sequence) or isinstance(
+        raw_columns, (str, bytes, bytearray)
+    ):
+        return []
+    columns: list[dict[str, Any]] = []
+    for raw_column in islice(raw_columns, 16):
+        if not isinstance(raw_column, Mapping):
+            continue
+        name = _plain(raw_column.get("name") or "")
+        title = _plain(raw_column.get("title") or name)
+        if not name or not title or is_sensitive_key(name) or is_sensitive_key(title):
+            continue
+        raw_align = raw_column.get("align")
+        align = (
+            raw_align
+            if isinstance(raw_align, str)
+            and raw_align in {"left", "center", "right", "decimal"}
+            else "left"
+        )
+        columns.append(
+            {
+                "name": name,
+                "title": title,
+                "align": align,
+                "no_wrap": bool(raw_column.get("no_wrap", False)),
+            }
+        )
+    return columns
+
+
+def _presentation_rows(
+    table_data: Mapping[str, object],
+    width: int,
+) -> tuple[tuple[str, ...], ...]:
+    raw_rows = table_data.get("rows")
+    if not isinstance(raw_rows, Sequence) or isinstance(
+        raw_rows, (str, bytes, bytearray)
+    ):
+        return ()
+    rows: list[tuple[str, ...]] = []
+    for raw_row in raw_rows:
+        if not isinstance(raw_row, Sequence) or isinstance(
+            raw_row, (str, bytes, bytearray)
+        ):
+            continue
+        cells = [
+            "—" if value is None else _plain(value) or "—"
+            for value in islice(raw_row, width)
+        ]
+        cells.extend("—" for _ in range(width - len(cells)))
+        rows.append(tuple(cells))
+    return tuple(rows)
 
 
 def _plain_value(value: object) -> str:
