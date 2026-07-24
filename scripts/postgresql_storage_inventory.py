@@ -131,7 +131,10 @@ PATTERNS: tuple[PatternRule, ...] = (
     ),
     PatternRule(
         "in_memory_database",
-        re.compile(r"(?:[\"']?:memory:[\"']?|TemporaryDirectory|tmp_path.*(?:duckdb|sqlite))"),
+        re.compile(
+            r"(?:[\"']?:memory:[\"']?|TemporaryDirectory|"
+            r"tmp_path.*(?:duckdb|sqlite))"
+        ),
         "In-memory or temporary file-database test fixture",
     ),
     PatternRule(
@@ -210,7 +213,11 @@ def _domain_and_owner(path: str, kind: str) -> tuple[str, int]:
     if path.startswith("vnalpha/src/vnalpha/provisioning_queue/"):
         return "queue", 395
     if path.startswith("vnalpha/src/vnalpha/warehouse/"):
-        if kind in {"schema_ddl", "duckdb_specific_sql"} or "schema" in path or "migration" in path:
+        if (
+            kind in {"schema_ddl", "duckdb_specific_sql"}
+            or "schema" in path
+            or "migration" in path
+        ):
             return "schema", 393
         if path.endswith(("connection.py", "transaction.py", "write_coordinator.py")):
             return "runtime", 392
@@ -368,7 +375,9 @@ def validate_report(report: dict[str, object]) -> tuple[str, ...]:
             found_kinds.add(kind)
         classification = finding.get("classification")
         if classification not in CLASSIFICATIONS:
-            errors.append(f"finding {index} has invalid classification {classification!r}")
+            errors.append(
+                f"finding {index} has invalid classification {classification!r}"
+            )
         owner_issue = finding.get("owner_issue")
         if not isinstance(owner_issue, int) or not 391 <= owner_issue <= 400:
             errors.append(f"finding {index} has invalid owner issue {owner_issue!r}")
@@ -381,7 +390,10 @@ def validate_report(report: dict[str, object]) -> tuple[str, ...]:
 
     missing_kinds = sorted(REQUIRED_KINDS - found_kinds)
     if missing_kinds:
-        errors.append("inventory is missing required coupling kinds: " + ", ".join(missing_kinds))
+        errors.append(
+            "inventory is missing required coupling kinds: "
+            + ", ".join(missing_kinds)
+        )
     return tuple(errors)
 
 
@@ -393,9 +405,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path(__file__).resolve().parents[1],
         help="repository root to scan",
     )
-    parser.add_argument("--json", action="store_true", help="print the full JSON report")
+    parser.add_argument(
+        "--json", action="store_true", help="print the full JSON report"
+    )
     parser.add_argument("--output", type=Path, help="write the full JSON report")
-    parser.add_argument("--check", action="store_true", help="fail on an incomplete inventory")
+    parser.add_argument(
+        "--check", action="store_true", help="fail on an incomplete inventory"
+    )
     return parser
 
 
