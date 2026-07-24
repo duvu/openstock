@@ -379,7 +379,7 @@ class TestAnswerSynthesizer:
         assert "Current-symbol research status: PENDING." in pending_symbol.summary
         assert pending_symbol.research_metadata["fallback_used"] is False
 
-        groundedness_rejected = AnswerSynthesizer(
+        groundedness_repaired = AnswerSynthesizer(
             FakeLLMClient(
                 responses=[
                     (
@@ -396,13 +396,26 @@ class TestAnswerSynthesizer:
                             }
                         ),
                         {},
-                    )
+                    ),
+                    (
+                        json.dumps(
+                            {
+                                "summary": "Caveat: persisted regime score is available.",
+                                "basis": "Persisted market context.",
+                                "risks_caveats": "Research only.",
+                                "tool_trace_summary": "market.get_regime completed.",
+                                "missing_data": [],
+                                "grounded_source_refs": [
+                                    "tool:market.get_regime:step_1"
+                                ],
+                            }
+                        ),
+                        {},
+                    ),
                 ]
             )
         ).synthesize("thi truong hom nay", market_plan, market_output)
-        assert groundedness_rejected.research_metadata["degradation"]["category"] == (
-            "GROUNDEDNESS_OR_POLICY_REJECTED"
-        )
+        assert groundedness_repaired.research_metadata["fallback_used"] is False
 
         with pytest.raises(SynthesisError, match="failed closed"):
             AnswerSynthesizer(GatewayUnavailable()).synthesize(

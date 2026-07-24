@@ -60,10 +60,10 @@ def _assert_unsupported_handlers_fail_without_warehouse(tmp_path: Path) -> None:
         warehouse_path=warehouse_path,
         handlers=(),
     ).process_one()
+    assert not warehouse_path.exists()
     assert result is not None
     assert result.error == "UNSUPPORTED_GOAL_HANDLER"
     assert queue.get(submitted.job_id).status is ProvisioningJobStatus.FAILED
-    assert not warehouse_path.exists()
 
 
 def _assert_enrichment_stops_before_provider(

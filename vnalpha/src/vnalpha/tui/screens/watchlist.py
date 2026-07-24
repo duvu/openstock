@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Optional
+import json
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -17,6 +16,9 @@ from vnalpha.tui.error_boundary import (
     generic_load_error,
     literal_text,
 )
+from vnalpha.tui.research_date import resolve_tui_research_date
+from vnalpha.warehouse.connection import get_connection
+from vnalpha.warehouse.repositories import get_watchlist
 
 
 class WatchlistScreen(Screen):
@@ -39,9 +41,9 @@ class WatchlistScreen(Screen):
         Binding("enter", "select_symbol", "Detail"),
     ]
 
-    def __init__(self, target_date: Optional[str] = None, **kwargs):
+    def __init__(self, target_date: str | None = None, **kwargs):
         super().__init__(**kwargs)
-        self._target_date = target_date or str(date.today())
+        self._target_date = resolve_tui_research_date(target_date)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -67,9 +69,6 @@ class WatchlistScreen(Screen):
 
     def _load_data(self) -> None:
         try:
-            from vnalpha.warehouse.connection import get_connection
-            from vnalpha.warehouse.repositories import get_watchlist
-
             conn = get_connection()
             try:
                 rows = get_watchlist(conn, self._target_date)
@@ -87,8 +86,6 @@ class WatchlistScreen(Screen):
                 )
                 return
             for row in rows:
-                import json
-
                 risk_flags = json.loads(row.get("risk_flags_json") or "[]")
                 flags_str = ", ".join(risk_flags) if risk_flags else "—"
                 table.add_row(

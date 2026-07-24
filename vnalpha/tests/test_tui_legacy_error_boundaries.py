@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 from rich.text import Text
 
+from vnalpha.tui.screens.watchlist import WatchlistScreen
+
 
 def _assert_generic_literal(status: MagicMock, subject: str) -> None:
     value = status.update.call_args.args[0]
@@ -13,17 +15,15 @@ def _assert_generic_literal(status: MagicMock, subject: str) -> None:
 
 
 def test_watchlist_failure_closes_connection_and_renders_literal_error() -> None:
-    from vnalpha.tui.screens.watchlist import WatchlistScreen
-
     screen = WatchlistScreen(target_date="2026-07-17")
     status = MagicMock()
     connection = MagicMock()
 
     with (
         patch.object(screen, "query_one", return_value=status),
-        patch("vnalpha.warehouse.connection.get_connection", return_value=connection),
+        patch("vnalpha.tui.screens.watchlist.get_connection", return_value=connection),
         patch(
-            "vnalpha.warehouse.repositories.get_watchlist",
+            "vnalpha.tui.screens.watchlist.get_watchlist",
             side_effect=RuntimeError("api_key=raw-secret"),
         ),
         patch("vnalpha.tui.screens.watchlist.capture_tui_exception") as capture,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from threading import Event, Lock
 from unittest.mock import MagicMock
 
 import pytest
@@ -49,8 +50,21 @@ def _response(symbol: str, *, rows: int) -> OHLCVResponse:
 
 def test_mixed_batch_cannot_persist_all_success(conn) -> None:
     client = MagicMock()
+    concurrent_fetches = 0
+    max_concurrent_fetches = 0
+    two_downloads_started = Event()
+    fetch_lock = Lock()
 
     def fetch(*, symbol: str, **_kwargs):
+        nonlocal concurrent_fetches, max_concurrent_fetches
+        with fetch_lock:
+            concurrent_fetches += 1
+            max_concurrent_fetches = max(max_concurrent_fetches, concurrent_fetches)
+            if concurrent_fetches >= 2:
+                two_downloads_started.set()
+        assert two_downloads_started.wait(timeout=1)
+        with fetch_lock:
+            concurrent_fetches -= 1
         if symbol == "FPT":
             return _response(symbol, rows=1)
         if symbol == "VNM":
@@ -72,3 +86,4 @@ def test_mixed_batch_cannot_persist_all_success(conn) -> None:
         [result["run_id"]],
     ).fetchone()
     assert persisted == ("PARTIAL",)
+    assert max_concurrent_fetches == 2

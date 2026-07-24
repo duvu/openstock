@@ -93,6 +93,32 @@ class CompanyInfoRecord(BaseModel):
     stock_rating: str | None = None
 
 
+class EquityQuoteRecord(BaseModel):
+    symbol: str
+    close_price: float
+    volume_accumulated: float
+    open_price: float | None = None
+    high_price: float | None = None
+    low_price: float | None = None
+    reference_price: float | None = None
+
+
+class IntradayTradeRecord(BaseModel):
+    symbol: str
+    time: datetime
+    price: float
+    volume: float
+    match_type: str | None = None
+
+    @field_validator("match_type", mode="before")
+    @classmethod
+    def normalize_match_type(cls, value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip().casefold()
+        return normalized or None
+
+
 class SymbolsResponse(VnstockResponse):
     pass
 
@@ -121,6 +147,14 @@ class MembershipResponse(VnstockResponse):
 
 class CompanyInfoResponse(VnstockResponse):
     data: list[CompanyInfoRecord]
+
+
+class EquityQuoteResponse(VnstockResponse):
+    data: list[EquityQuoteRecord]
+
+
+class IntradayTradesResponse(VnstockResponse):
+    data: list[IntradayTradeRecord]
 
 
 class ProviderHealthResponse(BaseModel):

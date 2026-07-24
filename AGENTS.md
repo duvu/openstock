@@ -32,6 +32,26 @@ understand/specify the public contract
 
 Do not write failing tests as process ceremony or design production code around test-only seams.
 
+## Debugging evidence
+
+For every user-requested debugging, diagnosis, failure investigation, or log
+analysis task, an agent MUST collect current evidence with the repository log
+triage tool before source-level diagnosis:
+
+```bash
+python scripts/openstock-log-triage.py --max-lines 1000
+```
+
+- Include `--path <relevant-log>` whenever the failing surface or log location is
+  known.
+- For GitHub Actions failures, discover the relevant run and include
+  `--github-run <run-id>`; the tool reads only failed-job output through `gh`.
+- Treat the tool output as observed evidence, not a claimed root cause. Use it to
+  choose the bounded reproduction and then complete normal runtime/manual QA.
+- Re-run the relevant triage command after a fix when the original failure source
+  can be inspected again. Never use `--fail-on-findings` as a substitute for
+  diagnosis or testing.
+
 ## Coding rules for agents
 
 [`CODING.md`](CODING.md) is the single normative coding source. Read it when adding, changing or reviewing Python code. Do not duplicate the full policy in issues or implementation notes.

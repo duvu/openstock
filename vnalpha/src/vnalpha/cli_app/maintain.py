@@ -208,10 +208,10 @@ def daily(
                 f"failed={len(result.failed_symbols)} "
                 f"correlation_id={result.correlation_id}"
             )
-        if result.status is MaintenanceRunStatus.FAILED:
-            raise typer.Exit(code=1)
-        if result.status is MaintenanceRunStatus.PARTIAL:
-            raise typer.Exit(code=3)
+    if result.status is MaintenanceRunStatus.FAILED:
+        raise typer.Exit(code=1)
+    if result.status is MaintenanceRunStatus.PARTIAL:
+        raise typer.Exit(code=3)
 
 
 def _resolve_maintenance_policy(

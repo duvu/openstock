@@ -189,6 +189,11 @@ domain = "data"
 test = "tests/test_canonical_quarantine.py::test_bounded_canonical_promotion_leaves_outside_dates_unchanged"
 
 [[contract]]
+id = "company-context-test-company-context-preserves-current-revision-contract"
+domain = "research"
+test = "tests/test_company_context.py::test_company_context_preserves_current_revision_contract"
+
+[[contract]]
 id = "chat-context-testchatcontextdefaults-test-all-optional-fields-are-none-or-empty"
 domain = "application"
 test = "tests/test_chat_context.py::TestChatContextDefaults::test_all_optional_fields_are_none_or_empty"
@@ -624,11 +629,6 @@ domain = "application"
 test = "tests/test_p0_operations_truthfulness.py::test_daily_cli_persists_noop_invocation"
 
 [[contract]]
-id = "p0-operations-truthfulness-test-cli-records-effective-runtime-identity-in-metadata-mode"
-domain = "application"
-test = "tests/test_p0_operations_truthfulness.py::test_cli_records_effective_runtime_identity_in_metadata_mode"
-
-[[contract]]
 id = "persistence-testsaveandgetcandidatescore-test-save-then-get-returns-record"
 domain = "application"
 test = "tests/test_persistence.py::TestSaveAndGetCandidateScore::test_save_then_get_returns_record"
@@ -926,7 +926,7 @@ test = "tests/test_tui_workspace_context_lifecycle.py::test_tui_startup_displays
 [[contract]]
 id = "vnstock-client-test-get-symbols"
 domain = "data"
-test = "tests/test_vnstock_client.py::test_get_symbols"
+test = "tests/test_vnstock_client.py::test_get_symbols_handles_response_and_transport_outcomes"
 
 [[contract]]
 id = "vnstock-corporate-action-client-test-get-corporate-actions-uses-canonical-bounded-endpoint"

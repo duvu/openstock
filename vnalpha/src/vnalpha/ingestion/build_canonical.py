@@ -21,6 +21,7 @@ from vnalpha.ingestion.canonical_validation import (
     CanonicalCandidate,
     validate_candidate,
 )
+from vnalpha.ingestion.index_provider_policy import resolve_index_provider_conflict
 from vnalpha.observability.audit import log_audit
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
 from vnalpha.warehouse.transaction import warehouse_transaction
@@ -75,8 +76,13 @@ def build_canonical_ohlcv(
             rejected = 0
             upserted = 0
             for candidates in grouped.values():
-                selected_candidate = candidates[0]
-                rules = validate_candidate(selected_candidate, tuple(candidates[1:]))
+                selected_candidate = _select_canonical_candidate(tuple(candidates))
+                peer_candidates = tuple(
+                    candidate
+                    for candidate in candidates
+                    if candidate is not selected_candidate
+                )
+                rules = validate_candidate(selected_candidate, peer_candidates)
                 if rules:
                     persist_quarantine(conn, selected_candidate, rules)
                     delete_canonical_bar(conn, selected_candidate)
@@ -121,3 +127,25 @@ def build_canonical_ohlcv(
             },
         )
         raise
+
+
+def _select_canonical_candidate(
+    candidates: tuple[CanonicalCandidate, ...],
+) -> CanonicalCandidate:
+    provider_candidates = tuple(
+        candidate.provider for candidate in candidates if candidate.provider
+    )
+    resolution = resolve_index_provider_conflict(
+        candidates[0].symbol, provider_candidates
+    )
+    if resolution is None:
+        return candidates[0]
+    return next(
+        (
+            candidate
+            for candidate in candidates
+            if candidate.provider
+            and candidate.provider.strip().lower() == resolution.selected_provider
+        ),
+        candidates[0],
+    )

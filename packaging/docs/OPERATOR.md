@@ -300,6 +300,22 @@ held writer lock exits 75 without overlapping the active writer. The stable
 lock inode remains at `/run/openstock-pipeline.lock`; operators must not delete
 it to recover from contention.
 
+### Optional user-local TUI runtime
+
+For a user-owned TUI warehouse, use the packaged helpers rather than the
+system units above. They keep all runtime state below
+`<user-home>/.local/share/openstock`, reject `root`, and use distinct
+`openstock-user-daily-*` unit names so they cannot replace package-managed
+units:
+
+```bash
+sudo /usr/bin/openstock-enable-user-runtime-timer --dry-run
+sudo /usr/bin/openstock-enable-user-runtime-timer
+```
+
+The helper installs the runner and retry state under the user-local runtime;
+`--dry-run` never creates directories, units, or retry-state files.
+
 ---
 
 ## 8.5 Opening the TUI

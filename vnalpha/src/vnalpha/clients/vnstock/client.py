@@ -16,6 +16,8 @@ from vnalpha.clients.vnstock.errors import (
 )
 from vnalpha.clients.vnstock.schemas import (
     CompanyInfoResponse,
+    EquityQuoteResponse,
+    IntradayTradesResponse,
     MembershipResponse,
     OHLCVResponse,
     ProviderHealthResponse,
@@ -67,13 +69,13 @@ class VnstockClient:
             headers["X-Correlation-ID"] = correlation_id
         try:
             r = self._client.get(url, headers=headers)
-        except httpx.ConnectError as exc:
-            raise VnstockConnectionError(
-                f"Cannot connect to vnstock-service at {self._base_url}"
-            ) from exc
         except httpx.TimeoutException as exc:
             raise VnstockTimeoutError(
                 f"Timeout connecting to vnstock-service at {self._base_url}"
+            ) from exc
+        except httpx.TransportError as exc:
+            raise VnstockConnectionError(
+                f"Cannot connect to vnstock-service at {self._base_url}"
             ) from exc
         if r.status_code != 200:
             raise VnstockHTTPError(r.status_code, path, r.text)
@@ -159,14 +161,28 @@ class VnstockClient:
         self,
         symbol: str,
         source: Optional[str] = None,
-    ) -> VnstockResponse:
-        """GET /v1/equity/quote."""
+    ) -> EquityQuoteResponse:
         source = validate_persistence_source(source)
         params: dict[str, str] = {"symbol": symbol}
         if source:
             params["source"] = source
-        raw = self._get("/v1/equity/quote", params)
-        return VnstockResponse.model_validate(raw)
+        raw = self._get("/v1/equity/quote", _strict_persistence_params(params))
+        return EquityQuoteResponse.model_validate(raw)
+
+    def get_equity_intraday_trades(
+        self,
+        symbol: str,
+        source: Optional[str] = None,
+    ) -> IntradayTradesResponse:
+        source = validate_persistence_source(source)
+        params: dict[str, str] = {"symbol": symbol}
+        if source:
+            params["source"] = source
+        raw = self._get(
+            "/v1/equity/intraday-trades",
+            _strict_persistence_params(params),
+        )
+        return IntradayTradesResponse.model_validate(raw)
 
     def get_index_ohlcv(
         self,

@@ -5,6 +5,9 @@ from datetime import date
 from json import loads
 from pathlib import Path
 
+import duckdb
+
+from vnalpha.core.config import get_config
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
 from vnalpha.provisioning_queue._sqlite import DEFAULT_QUEUE_PATH
 from vnalpha.provisioning_queue.models import FinalizeMarketSessionGoal, goal_identity
@@ -112,12 +115,22 @@ def maybe_submit_finalization_for_terminal_job(
     warehouse_path: Path | str | None = None,
     queue_path: Path = DEFAULT_QUEUE_PATH,
 ) -> tuple[MaintenanceFinalizationResult, ...]:
+    configured_warehouse = (
+        Path(warehouse_path).expanduser()
+        if warehouse_path is not None
+        else get_config().warehouse.path.expanduser()
+    )
+    if not configured_warehouse.is_file():
+        return ()
     with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
-        rows = connection.execute(
-            "SELECT DISTINCT maintenance_run_id FROM maintenance_run_job "
-            "WHERE job_id = ? AND goal_type <> 'FINALIZE_MARKET_SESSION'",
-            [str(job_id)],
-        ).fetchall()
+        try:
+            rows = connection.execute(
+                "SELECT DISTINCT maintenance_run_id FROM maintenance_run_job "
+                "WHERE job_id = ? AND goal_type <> 'FINALIZE_MARKET_SESSION'",
+                [str(job_id)],
+            ).fetchall()
+        except duckdb.CatalogException:
+            return ()
     return tuple(
         maybe_submit_session_finalization(
             str(row[0]), warehouse_path=warehouse_path, queue_path=queue_path

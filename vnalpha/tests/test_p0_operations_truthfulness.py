@@ -9,7 +9,14 @@ from typer.testing import CliRunner
 
 from vnalpha.cli_app import common as cli_common
 from vnalpha.cli_app import maintain as maintain_cli
-from vnalpha.core.config import reset_config
+from vnalpha.core.config import (
+    AppConfig,
+    VnstockServiceConfig,
+    WarehouseConfig,
+    reset_config,
+)
+from vnalpha.data_provisioning.source_policy import SourcePolicyResolver
+from vnalpha.maintenance import runtime_identity
 from vnalpha.maintenance.models import (
     DailyMaintenanceResult,
     MaintenanceRunStatus,
@@ -47,13 +54,60 @@ def test_daily_cli_persists_noop_invocation(tmp_path, monkeypatch) -> None:
         ).fetchone()
         conn.close()
         assert row == ("NOOP", "1.2.3", "a" * 40, "clean")
+
+        partial_result = DailyMaintenanceResult(
+            status=MaintenanceRunStatus.PARTIAL,
+            requested_date="2026-07-23",
+            resolved_date="2026-07-23",
+            correlation_id="partial-symbol-results",
+            stages=(
+                MaintenanceStageResult(
+                    "incremental_ohlcv",
+                    MaintenanceStageStatus.PARTIAL,
+                    counts={"inserted": 1},
+                ),
+            ),
+            requested_symbols=("FPT", "MSN"),
+            successful_symbols=("FPT",),
+            failed_symbols=("MSN",),
+            diagnostics_refs=(),
+            mutated=True,
+        )
+
+        class PartialMaintenanceService:
+            def __init__(self, conn, **_kwargs) -> None:
+                self.conn = conn
+
+            def run(self, _request) -> DailyMaintenanceResult:
+                self.conn.execute("CREATE TABLE partial_run_probe (symbol VARCHAR)")
+                self.conn.execute("INSERT INTO partial_run_probe VALUES ('FPT')")
+                return partial_result
+
+        monkeypatch.setattr(
+            maintain_cli, "DailyMaintenanceService", PartialMaintenanceService
+        )
+        result = CliRunner().invoke(
+            maintain_cli.app,
+            ["daily", "--date", "2026-07-23", "--symbols", "FPT,MSN", "--json"],
+        )
+        assert result.exit_code == 3, result.output
+        conn = duckdb.connect(str(warehouse))
+        persisted_run = conn.execute(
+            "SELECT status, successful_symbol_count, failed_symbol_count "
+            "FROM maintenance_run ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        persisted_symbol = conn.execute(
+            "SELECT symbol FROM partial_run_probe"
+        ).fetchone()
+        conn.close()
+        assert persisted_run == ("PARTIAL", 1, 1)
+        assert persisted_symbol == ("FPT",)
+        _assert_cli_runtime_identity_metadata(tmp_path, monkeypatch)
     finally:
         reset_config()
 
 
-def test_cli_records_effective_runtime_identity_in_metadata_mode(
-    tmp_path, monkeypatch
-) -> None:
+def _assert_cli_runtime_identity_metadata(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         runtime_identity,
         "_source_checkout_commit",

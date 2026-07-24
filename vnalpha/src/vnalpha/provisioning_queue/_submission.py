@@ -66,7 +66,10 @@ def submit_or_join(
                 return QueueSubmitResult(job, joined_existing_job=True)
             job_id = ProvisioningJobId(uuid4().hex)
             connection.execute(
-                """INSERT INTO provision_job (job_id, goal_identity, goal_type, status, priority, stage, payload_version, payload_json, origin, correlation_id, created_at_ms, updated_at_ms) VALUES (?, ?, ?, 'QUEUED', ?, 'QUEUED', ?, ?, ?, ?, ?, ?)""",
+                "INSERT INTO provision_job (job_id, goal_identity, goal_type, "
+                "status, priority, stage, payload_version, payload_json, origin, "
+                "correlation_id, available_at_ms, created_at_ms, updated_at_ms) "
+                "VALUES (?, ?, ?, 'QUEUED', ?, 'QUEUED', ?, ?, ?, ?, ?, ?, ?)",
                 (
                     job_id,
                     identity,
@@ -76,6 +79,7 @@ def submit_or_join(
                     normalized_goal.payload_json(),
                     normalized_origin,
                     normalized_correlation_id,
+                    timestamp,
                     timestamp,
                     timestamp,
                 ),

@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING, Optional
 
-from vnalpha.core.dates import resolve_date
+from vnalpha.observability.audit import log_audit
+from vnalpha.tui.research_date import resolve_tui_research_date
 from vnalpha.tui.responsive_layout import ResponsiveLayoutController
 
 if TYPE_CHECKING:
@@ -16,11 +18,10 @@ if TYPE_CHECKING:
 def _load_dotenv() -> None:
     """Load .env from the workspace root (best-effort, never raises)."""
     try:
-        from dotenv import find_dotenv, load_dotenv
-
-        env_file = find_dotenv(usecwd=True)
+        dotenv = importlib.import_module("dotenv")
+        env_file = dotenv.find_dotenv(usecwd=True)
         if env_file:
-            load_dotenv(env_file, override=False)
+            dotenv.load_dotenv(env_file, override=False)
     except Exception:  # noqa: BLE001
         pass
 
@@ -29,8 +30,6 @@ def _emit_audit_event(event_name: str, detail: str) -> None:
     """Emit a best-effort audit event for the TUI."""
 
     try:
-        from vnalpha.observability.audit import log_audit
-
         log_audit(event_name, detail, module="vnalpha.tui.app")
     except Exception:  # noqa: BLE001
         pass
@@ -44,10 +43,16 @@ try:
     from textual.widgets import Static
 
     from vnalpha.tui.clipboard import TextualClipboardPort
+    from vnalpha.tui.input_router import TuiInputRouter
     from vnalpha.tui.widgets.composer_input import ComposerInput
     from vnalpha.tui.widgets.debug_log_drawer import DebugLogDrawer
     from vnalpha.tui.widgets.output_stream import OutputStream
     from vnalpha.tui.widgets.status_bar import StatusBar
+    from vnalpha.tui.workspace_presentation import (
+        initialize_workspace,
+        render_workspace_resume,
+        resume_summary_for,
+    )
 
     _TEXTUAL_AVAILABLE = True
 except ImportError:
@@ -161,7 +166,7 @@ if _TEXTUAL_AVAILABLE:
         ):
             _load_dotenv()
             super().__init__(**kwargs)
-            self.target_date: str = resolve_date(date)
+            self.target_date = resolve_tui_research_date(date)
             self.target_date_is_implicit = (
                 date is None or date.strip().lower() == "today"
             )
@@ -315,8 +320,6 @@ if _TEXTUAL_AVAILABLE:
                 pass
 
         def _setup_router(self) -> None:
-            from vnalpha.tui.input_router import TuiInputRouter
-
             output = self.query_one("#output-stream", OutputStream)
             status_bar = self.query_one("#status-bar", StatusBar)
             log_drawer = self.query_one("#debug-log-drawer", DebugLogDrawer)
@@ -342,22 +345,14 @@ if _TEXTUAL_AVAILABLE:
             )
 
         def _start_workspace_lifecycle(self) -> None:
-            from vnalpha.tui.workspace_presentation import (
-                initialize_workspace,
-            )
-
             self._workspace, summary = initialize_workspace()
             self._render_workspace_resume(summary)
 
         def _on_workspace_change(self, workspace: "WorkspaceState") -> None:
-            from vnalpha.tui.workspace_presentation import resume_summary_for
-
             self._workspace = workspace
             self._render_workspace_resume(resume_summary_for(workspace))
 
         def _render_workspace_resume(self, summary: "WorkspaceResumeSummary") -> None:
-            from vnalpha.tui.workspace_presentation import render_workspace_resume
-
             status_bar = self.query_one("#status-bar", StatusBar)
             output = self.query_one("#output-stream", OutputStream)
             render_workspace_resume(summary, status_bar, output)
@@ -462,7 +457,7 @@ else:
             **kwargs,
         ):
             del logging_warning, clipboard
-            self.target_date: str = resolve_date(date)
+            self.target_date = resolve_tui_research_date(date)
             self.target_date_is_implicit = (
                 date is None or date.strip().lower() == "today"
             )

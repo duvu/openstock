@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import duckdb
 
+from vnalpha.assistant import executor as executor_module
 from vnalpha.assistant.models import ToolPlanStep
 from vnalpha.evals.runtime_models import JsonValue, RuntimeReplayCase, SeededToolOutput
 from vnalpha.tools.models import ToolOutput, ToolSpec
@@ -82,11 +83,11 @@ def _skip_data_ensure(
 
 @contextmanager
 def seeded_assistant_executor(case: RuntimeReplayCase) -> Iterator[None]:
-    from vnalpha.assistant import executor as executor_module
-
     registry = build_seeded_tool_registry(case)
 
-    def build_registry(_conn: duckdb.DuckDBPyConnection) -> LocalToolRegistry:
+    def build_registry(
+        _conn: duckdb.DuckDBPyConnection, **_kwargs: object
+    ) -> LocalToolRegistry:
         return registry
 
     with (

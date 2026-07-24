@@ -129,12 +129,12 @@ def test_durable_provisioning_queue_contract(
     migrated_queue.initialize()
     assert not migrated_queue.list()
     with sqlite3.connect(migration_path) as connection:
-        connection.execute("PRAGMA user_version = 3")
+        connection.execute("PRAGMA user_version = 4")
     with pytest.raises(ProvisioningQueueStorageError):
         migrated_queue.initialize()
     unsupported_health = migrated_queue.health(now=now)
     assert not unsupported_health.can_claim
-    assert unsupported_health.schema_version == 3
+    assert unsupported_health.schema_version == 4
     with pytest.raises(ProvisioningQueueHealthError):
         migrated_queue.claim("worker-health", now=now)
     with pytest.raises(ProvisioningJobNotFoundError):
@@ -195,6 +195,32 @@ def test_durable_provisioning_queue_contract(
     checkpoint = queue.checkpoint(now=now)
     assert checkpoint.busy_readers == 0
     assert queue.health(now=now).last_checkpoint_at == now
+
+    retry_queue = ProvisioningQueue(tmp_path / "retry.sqlite3", max_attempts=2)
+    retry_queue.initialize()
+    retry_job = retry_queue.submit_or_join(symbol_goal, priority=1, now=now).job
+    retry_lease = retry_queue.claim("retry-worker", now=now)
+    assert retry_lease is not None
+    scheduled_retry = retry_queue.fail(
+        retry_job.job_id,
+        "retry-worker",
+        "provider unavailable",
+        now=now,
+        retryable=True,
+    )
+    assert scheduled_retry.status is ProvisioningJobStatus.QUEUED
+    assert retry_queue.claim("retry-worker", now=now + timedelta(minutes=59)) is None
+    second_retry_lease = retry_queue.claim("retry-worker", now=now + timedelta(hours=1))
+    assert second_retry_lease is not None
+    assert second_retry_lease.attempts == 2
+    exhausted_retry = retry_queue.fail(
+        retry_job.job_id,
+        "retry-worker",
+        "provider unavailable",
+        now=now + timedelta(hours=1),
+        retryable=True,
+    )
+    assert exhausted_retry.status is ProvisioningJobStatus.FAILED
 
     recovery_now = datetime(2020, 1, 1, tzinfo=UTC)
     recovery_queue = ProvisioningQueue(

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Optional
-
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -17,6 +14,8 @@ from vnalpha.tui.error_boundary import (
     generic_load_error,
     literal_text,
 )
+from vnalpha.tui.research_date import resolve_tui_research_date
+from vnalpha.warehouse.connection import get_connection
 
 
 class RejectedScreen(Screen):
@@ -25,9 +24,9 @@ class RejectedScreen(Screen):
     TITLE = "Rejected Symbols"
     BINDINGS = [Binding("r", "refresh", "Refresh")]
 
-    def __init__(self, target_date: Optional[str] = None, **kwargs):
+    def __init__(self, target_date: str | None = None, **kwargs):
         super().__init__(**kwargs)
-        self._target_date = target_date or str(date.today())
+        self._target_date = resolve_tui_research_date(target_date)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -48,8 +47,6 @@ class RejectedScreen(Screen):
 
     def _load_data(self) -> None:
         try:
-            from vnalpha.warehouse.connection import get_connection
-
             conn = get_connection()
             try:
                 rows = conn.execute(
