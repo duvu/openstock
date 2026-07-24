@@ -14,6 +14,7 @@ FILES ?=
         test-loop \
         eval-research-answers eval-research-runtime verify-hardening \
         verify-r2-ci repo-hygiene verify-repo-consistency \
+        storage-inventory verify-postgresql-storage-inventory \
         verify-vnalpha-package build-vnalpha-deb verify-vnalpha-deb
 
 help: ## Show this help message
@@ -100,6 +101,12 @@ test-vnalpha-research: ## Run canonical vnalpha research coverage
 test-vnalpha-application: ## Run canonical vnalpha application coverage
 	cd vnalpha && if command -v uv >/dev/null 2>&1; then uv run --extra dev python ../scripts/run-test-suite.py --domain application; else python ../scripts/run-test-suite.py --domain application; fi
 
+storage-inventory: ## Emit the current DuckDB/SQLite-to-PostgreSQL migration inventory as JSON
+	python scripts/postgresql_storage_inventory.py --json
+
+verify-postgresql-storage-inventory: ## Validate the machine-checkable PostgreSQL migration inventory
+	python scripts/postgresql_storage_inventory.py --check
+
 verify-r2-ci: ## Run static R2 deployment verification
 	packaging/tests/test_daily_pipeline_units.sh
 	packaging/scripts/openstock-verify --ci
@@ -138,6 +145,7 @@ repo-hygiene: ## Verify tracked paths and gitlinks against repository policy
 
 verify-repo-consistency: ## Check roadmap, OpenSpec, deployment and documentation invariants
 	python scripts/check-repo-consistency.py
+	$(MAKE) verify-postgresql-storage-inventory
 
 build-vnalpha-deb: ## Build the vnalpha Debian package
 	./packaging/build-deb.sh
