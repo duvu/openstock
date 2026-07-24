@@ -280,7 +280,9 @@ def github_lines(run_id: int, max_lines: int) -> tuple[tuple[str, ...], Finding 
     if result.timed_out:
         return (), _input_finding(source, "gh failed-log retrieval timed out")
     if result.returncode:
-        return (), _input_finding(source, result.output or "gh failed-log retrieval failed")
+        return (), _input_finding(
+            source, result.output or "gh failed-log retrieval failed"
+        )
     return tuple(result.output.splitlines()[-max_lines:]), None
 
 
@@ -319,7 +321,7 @@ def _bounded_command(command: tuple[str, ...]) -> _BoundedCommandResult:
                     continue
                 output.extend(chunk)
                 if len(output) > MAX_TAIL_BYTES:
-                    del output[: -MAX_TAIL_BYTES]
+                    del output[:-MAX_TAIL_BYTES]
     finally:
         selector.close()
     if process.poll() is None:
