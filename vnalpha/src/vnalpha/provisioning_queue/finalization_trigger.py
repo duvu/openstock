@@ -7,6 +7,7 @@ from pathlib import Path
 
 import duckdb
 
+from vnalpha.core.config import get_config
 from vnalpha.observability.context import get_correlation_id, set_correlation_id
 from vnalpha.provisioning_queue._sqlite import DEFAULT_QUEUE_PATH
 from vnalpha.provisioning_queue.models import FinalizeMarketSessionGoal, goal_identity
@@ -114,7 +115,12 @@ def maybe_submit_finalization_for_terminal_job(
     warehouse_path: Path | str | None = None,
     queue_path: Path = DEFAULT_QUEUE_PATH,
 ) -> tuple[MaintenanceFinalizationResult, ...]:
-    if warehouse_path is not None and not Path(warehouse_path).exists():
+    configured_warehouse = (
+        Path(warehouse_path).expanduser()
+        if warehouse_path is not None
+        else get_config().warehouse.path.expanduser()
+    )
+    if not configured_warehouse.is_file():
         return ()
     with WarehouseWriteCoordinator(path=warehouse_path).transaction() as connection:
         try:
