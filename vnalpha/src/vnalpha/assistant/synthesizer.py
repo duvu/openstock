@@ -19,6 +19,7 @@ from vnalpha.assistant.policy import (
     ResearchPolicyResult,
     validate_research_answer_policy,
 )
+from vnalpha.assistant.presentation_projection import attach_assistant_presentation
 from vnalpha.assistant.research_templates import (
     build_deterministic_research_answer,
     is_research_intent,
@@ -49,6 +50,24 @@ class AnswerSynthesizer:
         self.last_degradation: AssistantDegradation | None = None
 
     def synthesize(
+        self,
+        user_prompt: str,
+        plan: AssistantPlan,
+        tool_outputs: dict[str, Any],
+        *,
+        request: AssistantRequest | None = None,
+        session_id: str | None = None,
+    ) -> AssistantAnswer:
+        answer = self._synthesize_answer(
+            user_prompt,
+            plan,
+            tool_outputs,
+            request=request,
+            session_id=session_id,
+        )
+        return attach_assistant_presentation(answer, plan, tool_outputs)
+
+    def _synthesize_answer(
         self,
         user_prompt: str,
         plan: AssistantPlan,
